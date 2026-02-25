@@ -36,6 +36,13 @@ export class PondScene extends Phaser.Scene {
   private simStepsThisFrame = 0;
   private simCapHitCount = 0;
 
+  // resync / startup helpers
+  private hasReceivedFirstSnapshot = false;
+  private resyncCount = 0;
+  private pendingResyncReason: string | null = null;
+  private lastResyncReason: string | null = null;
+  private lastResyncAtMs = 0;
+
   private needsResync = false;
   private hitchCount = 0;
   private lastHitchMs = 0;
@@ -93,16 +100,21 @@ export class PondScene extends Phaser.Scene {
     const now = performance.now();
     this.lastFrameTimeMs = now;
     this.renderClockMs = now;
+    this.simAccumulatorMs = 0;
+    this.needsResync = true; // one-shot startup resync — handled in update() so same path as focus/visibility
+    this.pendingResyncReason = 'startup';
   }
 
   private onVisibilityChange = () => {
     if (document.hidden) {
       this.needsResync = true;
+      this.pendingResyncReason = this.pendingResyncReason ?? 'visibilitychange';
     }
   };
 
   private onBlur = () => {
     this.needsResync = true;
+    this.pendingResyncReason = this.pendingResyncReason ?? 'blur';
   };
 
   private onFocus = () => {
@@ -170,6 +182,13 @@ export class PondScene extends Phaser.Scene {
     this.latestSnapshotAtMs = now;
     this.snapshotReceiveTimes.push(now);
     this.snapshotReceiveTimes = this.snapshotReceiveTimes.filter((t) => t >= now - 1000);
+
+    // first-snapshot safety resync: ensure clocks and buffers align when data arrives
+    if (!this.hasReceivedFirstSnapshot) {
+      this.hasReceivedFirstSnapshot = true;
+      this.needsResync = true;
+      this.pendingResyncReason = this.pendingResyncReason ?? 'first-snapshot';
+    }
 
     for (const p of snapshot.players) {
       this.ensurePlayerView(p.id);
@@ -256,7 +275,8 @@ export class PondScene extends Phaser.Scene {
       `simStepsThisFrame=${this.simStepsThisFrame} capHitCount=${this.simCapHitCount}`,
       `lastSnapshotAge=${latestSnapshotAge.toFixed(1)}ms snapshotRate=${snapshotRate}/s`,
       `remote/local interpRange=${bufferRange.toFixed(1)}ms targetBehindNewest=${targetBehindNewest.toFixed(1)}ms`,
-      `hitchCount=${this.hitchCount} lastHitchMs=${this.lastHitchMs.toFixed(1)} needsResync=${this.needsResync}`
+      `hitchCount=${this.hitchCount} lastHitchMs=${this.lastHitchMs.toFixed(1)} needsResync=${this.needsResync}`,
+      `resyncCount=${this.resyncCount} lastResyncReason=${this.lastResyncReason ?? '-'} resyncAtMs=${this.lastResyncAtMs.toFixed(1)}`
     ].join('\n'));
   }
 
@@ -283,6 +303,15 @@ export class PondScene extends Phaser.Scene {
 
   update(_time: number, _deltaMs: number) {
     const now = performance.now();
+
+    if (this.lastFrameTimeMs === 0) {
+      // first-frame guard: ensure all clocks share the same timebase
+      this.lastFrameTimeMs = now;
+      this.renderClockMs = now;
+      this.simAccumulatorMs = 0;
+      return;
+    }
+
     let frameDtMs = now - this.lastFrameTimeMs;
     this.lastFrameTimeMs = now;
 
@@ -300,6 +329,20 @@ export class PondScene extends Phaser.Scene {
       this.simAccumulatorMs = 0;
 
       this.input.keyboard?.resetKeys();
+
+      // attempt to align interpolator sample ranges to the new render clock
+      for (const interp of this.remoteInterpolators.values()) {
+        const latest = interp.latest();
+        if (latest) interp.push(latest.value, t);
+      }
+      const localLatest = this.localBuffer.latest();
+      if (localLatest) this.localBuffer.push(localLatest.value, t);
+
+      // instrumentation
+      this.resyncCount += 1;
+      this.lastResyncReason = this.pendingResyncReason ?? this.lastResyncReason ?? 'resync';
+      this.pendingResyncReason = null;
+      this.lastResyncAtMs = t;
 
       // Do NOT return — keep rendering remote players even when not focused.
       frameDtMs = 0;
