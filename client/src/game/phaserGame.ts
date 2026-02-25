@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { PondScene } from './scenes/PondScene';
+import DebugUIScene from './debug/DebugUIScene';
 
 export function createPhaserGame(parent: HTMLElement) {
   return new Phaser.Game({
@@ -11,6 +12,6 @@ export function createPhaserGame(parent: HTMLElement) {
       mode: Phaser.Scale.RESIZE,
       autoCenter: Phaser.Scale.CENTER_BOTH
     },
-    scene: [PondScene]
+    scene: [PondScene, DebugUIScene]
   });
 }

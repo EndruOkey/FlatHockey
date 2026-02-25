@@ -35,11 +35,14 @@ const ZERO_INPUT: InputState = {
   aimAngle: 0
 };
 
-const ACCEL = 1900;
-const SPRINT_ACCEL = 2500;
-const BRAKE_DRAG = 7.5;
-const DRAG = 3.2;
-const MAX_SPEED = 560;
+// Competitive-control parameters (match client prediction)
+const MAX_SPEED = 540;
+const ACCEL = 2200;
+const SPRINT_ACCEL = 2800;
+const DRAG = 1.5;
+const BRAKE_DRAG = 11;
+const TURN_LOW_SPEED = 14;
+const TURN_HIGH_SPEED = 6.0;
 
 export class Room {
   readonly id: string;
@@ -164,13 +167,33 @@ function applyMovementStep(player: PlayerState, input: InputState, dt: number) {
     dirY /= len;
   }
 
+  const speedBefore = Math.hypot(player.vx, player.vy);
+
+  const desiredSpeed = MAX_SPEED * Math.hypot(input.moveX, input.moveY);
+  const desiredVx = dirX * desiredSpeed;
+  const desiredVy = dirY * desiredSpeed;
+
+  const t = Math.max(0, Math.min(1, speedBefore / MAX_SPEED));
+  const turnStrength = ((1 - t) * TURN_LOW_SPEED) + (t * TURN_HIGH_SPEED);
+
+  // steering blend
+  player.vx += (desiredVx - player.vx) * turnStrength * dt;
+  player.vy += (desiredVy - player.vy) * turnStrength * dt;
+
+  // forward acceleration punch
   const accel = input.sprint ? SPRINT_ACCEL : ACCEL;
   player.vx += dirX * accel * dt;
   player.vy += dirY * accel * dt;
 
-  const dragFactor = Math.max(0, 1 - (input.brake ? BRAKE_DRAG : DRAG) * dt);
-  player.vx *= dragFactor;
-  player.vy *= dragFactor;
+  // brake
+  if (input.brake) {
+    player.vx *= Math.max(0, 1 - BRAKE_DRAG * dt);
+    player.vy *= Math.max(0, 1 - BRAKE_DRAG * dt);
+  }
+
+  // ice drag
+  player.vx *= Math.max(0, 1 - DRAG * dt);
+  player.vy *= Math.max(0, 1 - DRAG * dt);
 
   const speed = Math.hypot(player.vx, player.vy);
   if (speed > MAX_SPEED) {

@@ -2,7 +2,8 @@ import Phaser from 'phaser';
 import type { InputMsg, PlayerStateMsg, ServerMessage, SnapshotMsg } from '@flathockey/shared';
 import { WsClient } from '../net/wsClient';
 import { Interpolator, lerpPlayer, type LerpPlayer } from '../net/interpolation';
-import { applyPredictedInput, CLIENT_FIXED_DT, type PredictedPlayerState } from '../net/prediction';
+import { applyPredictedInput, CLIENT_FIXED_DT, type PredictedPlayerState, lastTelemetry } from '../net/prediction';
+import { getTuning, usedTuning } from '../debug/movementTuning';
 import { reconcilePrediction } from '../net/reconciliation';
 import { PlayerView } from '../entities/playerView';
 
@@ -58,6 +59,14 @@ export class PondScene extends Phaser.Scene {
   private lastHudText = '';
   private hudAcc = 0;
   private perfSamples: DebugSample[] = [];
+  private movementTuner: any | null = null;
+  private debugAllowed = false;
+  
+  // telemetry for debug
+  private debugCurrentSpeed = 0;
+  private debugSteeringStrength = 0;
+  private debugSpeedRatio = 0;
+  private lastTuningVersion = 0;
 
   constructor() {
     super('PondScene');
@@ -103,6 +112,21 @@ export class PondScene extends Phaser.Scene {
     this.simAccumulatorMs = 0;
     this.needsResync = true; // one-shot startup resync — handled in update() so same path as focus/visibility
     this.pendingResyncReason = 'startup';
+    // Dev-only movement tuner: create only when allowed (DEV or ?debug=1)
+    try {
+      const url = new URL(location.href);
+      this.debugAllowed = import.meta.env.DEV === true || url.searchParams.get('debug') === '1';
+      if (this.debugAllowed) {
+        // Launch the in-canvas DebugUIScene (registered in game config)
+        try {
+          if (!this.scene.isActive('DebugUIScene')) {
+            this.scene.launch('DebugUIScene');
+          }
+          try { this.scene.bringToTop('DebugUIScene'); } catch {}
+        } catch {}
+        try { this.game.events.emit('debug:toggle', this.debugEnabled); } catch {}
+      }
+    } catch {}
   }
 
   private onVisibilityChange = () => {
@@ -268,6 +292,10 @@ export class PondScene extends Phaser.Scene {
     const bufferRange = oldest !== null && newest !== null ? newest - oldest : 0;
     const targetBehindNewest = newest !== null ? Math.max(0, newest - (this.renderClockMs - INTERP_DELAY_MS)) : 0;
 
+    const tuning = getTuning();
+    const used = usedTuning;
+    const telemetry = (lastTelemetry || {}) as Record<string, any>;
+
     this.debugOverlay.setText([
       'DEBUG [F3]',
       `FPS=${perf.fps.toFixed(1)} dtMax1s=${perf.dtMax.toFixed(2)}ms`,
@@ -276,7 +304,10 @@ export class PondScene extends Phaser.Scene {
       `lastSnapshotAge=${latestSnapshotAge.toFixed(1)}ms snapshotRate=${snapshotRate}/s`,
       `remote/local interpRange=${bufferRange.toFixed(1)}ms targetBehindNewest=${targetBehindNewest.toFixed(1)}ms`,
       `hitchCount=${this.hitchCount} lastHitchMs=${this.lastHitchMs.toFixed(1)} needsResync=${this.needsResync}`,
-      `resyncCount=${this.resyncCount} lastResyncReason=${this.lastResyncReason ?? '-'} resyncAtMs=${this.lastResyncAtMs.toFixed(1)}`
+      `resyncCount=${this.resyncCount} lastResyncReason=${this.lastResyncReason ?? '-'} resyncAtMs=${this.lastResyncAtMs.toFixed(1)}`,
+      `speed=${this.debugCurrentSpeed.toFixed(1)} drift=${(telemetry.driftAngle||0).toFixed(2)} speedRatio=${(this.debugSpeedRatio*100).toFixed(0)}%`,
+      `tuningVersion=${tuning.__version ?? 0} accel=${tuning.accel} maxSpeed=${tuning.maxSpeed} dragMove=${tuning.dragMove} dragIdle=${tuning.dragIdle} lateralGrip=${tuning.lateralGrip}`,
+      `USED speed=${(telemetry.currentSpeed ?? '-')} lat=${(telemetry.lateralSpeed ?? '-')} fwd=${(telemetry.forwardSpeed ?? '-')}`
     ].join('\n'));
   }
 
@@ -300,7 +331,7 @@ export class PondScene extends Phaser.Scene {
       this.hud.setText(next);
     }
   }
-
+  
   update(_time: number, _deltaMs: number) {
     const now = performance.now();
 
@@ -317,6 +348,18 @@ export class PondScene extends Phaser.Scene {
 
     if (Phaser.Input.Keyboard.JustDown(this.debugToggleKey)) {
       this.debugEnabled = !this.debugEnabled;
+      const state = this.debugEnabled ? 'ON' : 'OFF';
+      console.log(`[TUNING] toggle ${state}`);
+      console.log(`[TUNING] sceneKey=${this.scene.key}, cam=${this.cameras?.main ? 'main' : 'none'}, scale=${this.scale.width}x${this.scale.height}`);
+
+      // notify DebugUIScene to toggle its visibility
+      if (this.debugEnabled) {
+        try {
+          if (!this.scene.isActive('DebugUIScene')) this.scene.launch('DebugUIScene');
+          try { this.scene.bringToTop('DebugUIScene'); } catch {}
+        } catch {}
+      }
+      this.game.events.emit('debug:toggle', this.debugEnabled);
     }
 
     if (this.needsResync) {
@@ -377,7 +420,13 @@ export class PondScene extends Phaser.Scene {
           this.pendingInputs.splice(0, this.pendingInputs.length - 240);
         }
 
-        applyPredictedInput(this.predicted, input, CLIENT_FIXED_DT);
+        const telemetry = applyPredictedInput(this.predicted, input, CLIENT_FIXED_DT) as unknown as Record<string, any>;
+        if (telemetry) {
+          this.debugCurrentSpeed = telemetry.currentSpeed ?? this.debugCurrentSpeed;
+          // map driftAngle to steeringStrength for legacy display
+          this.debugSteeringStrength = telemetry.driftAngle ?? this.debugSteeringStrength;
+          this.debugSpeedRatio = telemetry.speedRatio ?? this.debugSpeedRatio;
+        }
         // push the predicted state using the per-step timestamp so the
         // interpolator sees properly spaced samples
         this.localBuffer.push({ x: this.predicted.x, y: this.predicted.y, rot: this.predicted.angle }, simStepTime);
