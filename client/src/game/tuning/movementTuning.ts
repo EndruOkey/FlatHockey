@@ -1,54 +1,91 @@
-export type MovementTuning = {
-  maxSpeed: number;
-  accel: number;
-  sprintAccel: number;
-  dragMove: number;
-  dragIdle: number;
-  brakeDrag: number;
-  lateralGrip: number;
-  reverseBrake: number;
-  turnAssist: number;
-  minSpeedForGrip: number;
-  diagonalNormalize?: boolean;
+﻿import type { MovementStepConfig } from '@flathockey/shared/sim/movementStep';
+import { BestNow } from '@flathockey/shared/tuning/movementPresets';
+
+export type MovementTuning = MovementStepConfig & {
   __version?: number;
 };
 
-const LOCAL_KEY = 'movementTuning_v1';
+export const LOCAL_KEY = 'movementTuning_v1';
 
 export const DEFAULTS: MovementTuning = {
-  maxSpeed: 540,
-  accel: 2200,
+  // legacy alias used by the local prediction/UI
+  maxSpeed: BestNow.maxSpeedNoPuck ?? 342.5,
+  maxSpeedNoPuck: BestNow.maxSpeedNoPuck ?? 342.5,
+  maxSpeedWithPuck: BestNow.maxSpeedWithPuck ?? 342.5,
+
+  accel: BestNow.accel ?? 1681.36,
   sprintAccel: 2800,
-  dragMove: 0.9,
-  dragIdle: 0.995,
+  dragMove: BestNow.dragMove ?? 2.75,
+  dragIdle: BestNow.dragIdle ?? 0.96909,
   brakeDrag: 11,
-  lateralGrip: 4.0,
-  reverseBrake: 6.0,
-  turnAssist: 0.0,
-  minSpeedForGrip: 6,
-  diagonalNormalize: true,
+
+  lateralGrip: BestNow.lateralGrip ?? 1.13636,
+  reverseBrake: BestNow.reverseBrake ?? 0,
+  brakeCurve: BestNow.brakeCurve ?? 0.7545,
+
+  headingModeEnabled: true,
+  maxTurnRateLowSpeed: 6,
+  maxTurnRateHighSpeed: 1.8,
+  lateralDamping: 0.12,
+
+  steeringEnabled: false,
+  steerStrength: 6,
+  brakeDecel: 20,
+  turnAssist: 0,
+  driftAssist: 0,
+
+  regimesEnabled: true,
+  speedSplit: 0.4,
+  splitBlendWidth: 0.12,
+
+  accel_lo: 1932.57,
+  dragMove_lo: 3.025,
+  dragIdle_lo: 0.96909,
+  lateralGrip_lo: 1.36363,
+  brakeCurve_lo: 0.7922,
+
+  accel_hi: 1429.156,
+  dragMove_hi: 2.3375,
+  dragIdle_hi: 0.920636,
+  lateralGrip_hi: 0.9659,
+  brakeCurve_hi: 0.71678,
+
   __version: 1
 };
 
-// Single source-of-truth object (mutable)
 export const movementTuning: MovementTuning = { ...DEFAULTS };
-
-// used tuning snapshot written by movement code for debug overlay
 export const usedTuning: Partial<MovementTuning> = {};
 
-function save() {
-  try { localStorage.setItem(LOCAL_KEY, JSON.stringify(movementTuning)); } catch {}
+function normalizeAliases() {
+  if (typeof movementTuning.maxSpeed === 'number') {
+    movementTuning.maxSpeedNoPuck = movementTuning.maxSpeed;
+    movementTuning.maxSpeedWithPuck = movementTuning.maxSpeed;
+  } else if (typeof movementTuning.maxSpeedNoPuck === 'number') {
+    movementTuning.maxSpeed = movementTuning.maxSpeedNoPuck;
+    if (typeof movementTuning.maxSpeedWithPuck !== 'number') {
+      movementTuning.maxSpeedWithPuck = movementTuning.maxSpeedNoPuck;
+    }
+  }
 }
 
-// load any saved values into the singleton
+function save() {
+  normalizeAliases();
+  try {
+    localStorage.setItem(LOCAL_KEY, JSON.stringify(movementTuning));
+  } catch {}
+}
+
 try {
   const raw = localStorage.getItem(LOCAL_KEY);
   if (raw) {
-    const parsed = JSON.parse(raw) as Partial<MovementTuning>;
+    const parsed = JSON.parse(raw) as Partial<MovementTuning> & Record<string, unknown>;
+    if ('syncEnabled' in parsed) delete parsed.syncEnabled;
     Object.assign(movementTuning, parsed);
-    movementTuning.__version = (movementTuning.__version ?? 0) || 1;
   }
 } catch {}
+
+normalizeAliases();
+movementTuning.__version = (movementTuning.__version ?? 0) || 1;
 
 export function getTuning() {
   return movementTuning;
@@ -56,6 +93,15 @@ export function getTuning() {
 
 export function setTuning(partial: Partial<MovementTuning>) {
   Object.assign(movementTuning, partial);
+  normalizeAliases();
+  movementTuning.__version = (movementTuning.__version ?? 0) + 1;
+  save();
+}
+
+export function replaceTuning(next: Partial<MovementTuning>) {
+  Object.keys(movementTuning).forEach((k) => delete (movementTuning as Record<string, unknown>)[k]);
+  Object.assign(movementTuning, { ...DEFAULTS, ...next });
+  normalizeAliases();
   movementTuning.__version = (movementTuning.__version ?? 0) + 1;
   save();
 }
@@ -65,23 +111,45 @@ export function applyMovementTuning(patch: Partial<MovementTuning>) {
 }
 
 export function resetTuning() {
-  Object.keys(movementTuning).forEach(k => delete (movementTuning as any)[k]);
-  Object.assign(movementTuning, { ...DEFAULTS });
-  movementTuning.__version = 1;
+  Object.keys(movementTuning).forEach((k) => delete (movementTuning as Record<string, unknown>)[k]);
+  Object.assign(movementTuning, { ...DEFAULTS, __version: 1 });
   save();
 }
 
+export function clearStoredTuning() {
+  try {
+    localStorage.removeItem(LOCAL_KEY);
+  } catch {}
+  resetTuning();
+}
+
 export function exportTuning() {
+  normalizeAliases();
   return JSON.stringify(movementTuning, null, 2);
 }
 
 export function importTuning(json: string) {
   try {
     const parsed = JSON.parse(json) as Partial<MovementTuning>;
-    Object.assign(movementTuning, { ...DEFAULTS, ...parsed });
-    movementTuning.__version = (movementTuning.__version ?? 0) + 1;
-    save();
+    replaceTuning(parsed);
   } catch {}
+}
+
+export function snapshotTuning(): Partial<MovementTuning> {
+  normalizeAliases();
+  const out: Partial<MovementTuning> = {};
+  const keys = new Set<string>([
+    ...Object.keys(DEFAULTS),
+    ...Object.keys(movementTuning)
+  ]);
+  for (const key of keys) {
+    if (key === '__version') continue;
+    const val = (movementTuning as Record<string, unknown>)[key];
+    if (typeof val === 'number' || typeof val === 'boolean') {
+      (out as Record<string, unknown>)[key] = val;
+    }
+  }
+  return out;
 }
 
 export default movementTuning;

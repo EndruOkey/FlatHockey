@@ -13,6 +13,15 @@ export class WsClient {
   private lastMsgAt = 0;
   private netReportTimer: number | null = null;
 
+  // tuning sync state conveyed by server welcome messages
+  public allowTuningSync = false;
+  public serverTuning: Partial<import('@flathockey/shared/sim/movementStep').MovementStepConfig> | null = null;
+
+  // helper used by callers to know whether it's safe to send immediately
+  public isConnected(): boolean {
+    return !!this.ws && this.ws.readyState === WebSocket.OPEN;
+  }
+
   private ensureNetReporter() {
     if (this.netReportTimer !== null) return;
 
@@ -40,6 +49,13 @@ export class WsClient {
 
       try {
         const msg = JSON.parse(String(ev.data)) as ServerMessage;
+        // store tuning information from welcome
+        if (msg.type === 'welcome') {
+          this.allowTuningSync = !!msg.allowTuningSync;
+          if (msg.movementTuning) {
+            this.serverTuning = msg.movementTuning as any;
+          }
+        }
         this.handlers.message?.(msg);
       } catch {}
     });
@@ -51,6 +67,10 @@ export class WsClient {
 
   send(msg: ClientMessage) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-    this.ws.send(JSON.stringify(msg));
+    try {
+      this.ws.send(JSON.stringify(msg));
+    } catch {
+      // ignore transient errors
+    }
   }
 }

@@ -30,7 +30,18 @@ export type WelcomeMsg = {
   clientId: string;
   roomId: string;
   serverTick: number;
+  // when present the server is advertising its default tuning and whether
+  // it will accept debug tuning updates from clients. the client may use
+  // this information to keep the dev panel in sync and to disable the
+  // "sync" toggle when not allowed.
+  movementTuning?: Partial<import('../sim/movementStep').MovementStepConfig>;
+  allowTuningSync?: boolean;
 };
 
-export type ClientMessage = InputMsg;
+export type DebugSetMovementTuningMsg = {
+  type: 'debug:setMovementTuning';
+  config: Partial<import('../sim/movementStep').MovementStepConfig>;
+};
+
+export type ClientMessage = InputMsg | DebugSetMovementTuningMsg;
 export type ServerMessage = WelcomeMsg | SnapshotMsg;

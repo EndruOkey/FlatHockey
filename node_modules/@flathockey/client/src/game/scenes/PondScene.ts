@@ -3,7 +3,8 @@ import type { InputMsg, PlayerStateMsg, ServerMessage, SnapshotMsg } from '@flat
 import { WsClient } from '../net/wsClient';
 import { Interpolator, lerpPlayer, type LerpPlayer } from '../net/interpolation';
 import { applyPredictedInput, CLIENT_FIXED_DT, type PredictedPlayerState, lastTelemetry } from '../net/prediction';
-import { getTuning, usedTuning } from '../debug/movementTuning';
+import { LOCAL_KEY, getTuning, usedTuning, setTuning } from '../debug/movementTuning';
+import { createMovementTuner, isDevMenuDragging } from '../debug/movementTunerUI';
 import { reconcilePrediction } from '../net/reconciliation';
 import { PlayerView } from '../entities/playerView';
 
@@ -59,7 +60,7 @@ export class PondScene extends Phaser.Scene {
   private lastHudText = '';
   private hudAcc = 0;
   private perfSamples: DebugSample[] = [];
-  private movementTuner: any | null = null;
+  private movementTuner: ReturnType<typeof createMovementTuner> | null = null;
   private debugAllowed = false;
   
   // telemetry for debug
@@ -100,6 +101,8 @@ export class PondScene extends Phaser.Scene {
       document.removeEventListener('visibilitychange', this.onVisibilityChange);
       window.removeEventListener('blur', this.onBlur);
       window.removeEventListener('focus', this.onFocus);
+      this.movementTuner?.destroy();
+      this.movementTuner = null;
     });
 
     const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -117,14 +120,8 @@ export class PondScene extends Phaser.Scene {
       const url = new URL(location.href);
       this.debugAllowed = import.meta.env.DEV === true || url.searchParams.get('debug') === '1';
       if (this.debugAllowed) {
-        // Launch the in-canvas DebugUIScene (registered in game config)
-        try {
-          if (!this.scene.isActive('DebugUIScene')) {
-            this.scene.launch('DebugUIScene');
-          }
-          try { this.scene.bringToTop('DebugUIScene'); } catch {}
-        } catch {}
-        try { this.game.events.emit('debug:toggle', this.debugEnabled); } catch {}
+        this.movementTuner = createMovementTuner(this.ws);
+        this.movementTuner.setVisible(this.debugEnabled);
       }
     } catch {}
   }
@@ -193,6 +190,21 @@ export class PondScene extends Phaser.Scene {
     if (msg.type === 'welcome') {
       this.clientId = msg.clientId;
       this.roomId = msg.roomId;
+
+      this.movementTuner?.onWelcome(msg);
+
+      // if server supplied its default tuning and we don't have any saved tuning,
+      // adopt it so the UI shows 'BestNow' on first load.
+      if (msg.movementTuning) {
+        try {
+          const hasSaved = !!localStorage.getItem(LOCAL_KEY);
+          if (!hasSaved) {
+            // copy server tuning into client storage, converting fields as needed
+            setTuning(msg.movementTuning as any);
+          }
+        } catch {}
+      }
+
       return;
     }
 
@@ -235,6 +247,18 @@ export class PondScene extends Phaser.Scene {
   }
 
   private buildInput(): InputMsg {
+    if (isDevMenuDragging()) {
+      return {
+        type: 'input',
+        clientId: this.clientId ?? '',
+        seq: ++this.seq,
+        moveX: 0,
+        moveY: 0,
+        sprint: 0,
+        brake: 0
+      };
+    }
+
     const moveX = ((this.keys.D.isDown ? 1 : 0) - (this.keys.A.isDown ? 1 : 0)) as -1 | 0 | 1;
     const moveY = ((this.keys.S.isDown ? 1 : 0) - (this.keys.W.isDown ? 1 : 0)) as -1 | 0 | 1;
 
@@ -351,15 +375,7 @@ export class PondScene extends Phaser.Scene {
       const state = this.debugEnabled ? 'ON' : 'OFF';
       console.log(`[TUNING] toggle ${state}`);
       console.log(`[TUNING] sceneKey=${this.scene.key}, cam=${this.cameras?.main ? 'main' : 'none'}, scale=${this.scale.width}x${this.scale.height}`);
-
-      // notify DebugUIScene to toggle its visibility
-      if (this.debugEnabled) {
-        try {
-          if (!this.scene.isActive('DebugUIScene')) this.scene.launch('DebugUIScene');
-          try { this.scene.bringToTop('DebugUIScene'); } catch {}
-        } catch {}
-      }
-      this.game.events.emit('debug:toggle', this.debugEnabled);
+      this.movementTuner?.setVisible(this.debugEnabled);
     }
 
     if (this.needsResync) {

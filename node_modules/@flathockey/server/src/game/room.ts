@@ -1,4 +1,5 @@
-import type { InputMsg, ServerMessage, SnapshotMsg } from '@flathockey/shared';
+﻿import type { InputMsg, ServerMessage, SnapshotMsg } from '@flathockey/shared';
+import { applyMovementStep, type MovementStepConfig, type MovementStepState } from '@flathockey/shared/sim/movementStep';
 import { WebSocket } from 'ws';
 
 type InputState = {
@@ -22,6 +23,8 @@ type PlayerState = {
   vx: number;
   vy: number;
   angle: number;
+  stamina: number;
+  heading?: number;
   lastProcessedSeq: number;
   lastInputState: InputState;
   inputBuffer: BufferedInput[];
@@ -35,23 +38,32 @@ const ZERO_INPUT: InputState = {
   aimAngle: 0
 };
 
-// Competitive-control parameters (match client prediction)
-const MAX_SPEED = 540;
-const ACCEL = 2200;
-const SPRINT_ACCEL = 2800;
-const DRAG = 1.5;
-const BRAKE_DRAG = 11;
-const TURN_LOW_SPEED = 14;
-const TURN_HIGH_SPEED = 6.0;
-
 export class Room {
   readonly id: string;
   readonly players = new Map<string, PlayerState>();
   readonly sockets = new Map<string, WebSocket>();
   serverTick = 0;
+  movementTuning: Partial<MovementStepConfig> = {};
 
   constructor(id: string) {
     this.id = id;
+  }
+
+  setMovementTuning(patch: Partial<MovementStepConfig>) {
+    if (!patch || typeof patch !== 'object') return;
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === undefined || v === null) continue;
+      (this.movementTuning as any)[k] = v;
+    }
+    try {
+      console.log('[TUNING_APPLIED]', {
+        headingModeEnabled: this.movementTuning.headingModeEnabled,
+        regimesEnabled: this.movementTuning.regimesEnabled,
+        maxSpeed: this.movementTuning.maxSpeed ?? this.movementTuning.maxSpeedNoPuck,
+        accel: this.movementTuning.accel,
+        speedSplit: this.movementTuning.speedSplit
+      });
+    } catch {}
   }
 
   addClient(clientId: string, ws: WebSocket, name = 'Player') {
@@ -64,6 +76,8 @@ export class Room {
       vx: 0,
       vy: 0,
       angle: 0,
+      stamina: 1,
+      heading: 0,
       lastProcessedSeq: 0,
       lastInputState: { ...ZERO_INPUT },
       inputBuffer: []
@@ -110,7 +124,40 @@ export class Room {
         player.lastProcessedSeq = next.seq;
       }
 
-      applyMovementStep(player, player.lastInputState, dt);
+      const state: MovementStepState = {
+        x: player.x,
+        y: player.y,
+        vx: player.vx,
+        vy: player.vy,
+        stamina: player.stamina,
+        aimAngle: player.angle,
+        heading: player.heading
+      };
+
+      applyMovementStep(
+        state,
+        {
+          moveX: player.lastInputState.moveX,
+          moveY: player.lastInputState.moveY,
+          aimAngle: player.lastInputState.aimAngle,
+          buttons: {
+            sprint: !!player.lastInputState.sprint,
+            brake: !!player.lastInputState.brake
+          }
+        },
+        dt,
+        this.movementTuning
+      );
+
+      player.x = state.x;
+      player.y = state.y;
+      player.vx = state.vx;
+      player.vy = state.vy;
+      player.stamina = state.stamina;
+      player.heading = state.heading;
+      player.angle = Number.isFinite(player.lastInputState.aimAngle)
+        ? player.lastInputState.aimAngle
+        : Math.atan2(player.vy, player.vx);
     }
   }
 
@@ -155,59 +202,5 @@ export class Room {
     for (const ws of this.sockets.values()) {
       if (ws.readyState === WebSocket.OPEN) ws.send(raw);
     }
-  }
-}
-
-function applyMovementStep(player: PlayerState, input: InputState, dt: number) {
-  let dirX = input.moveX;
-  let dirY = input.moveY;
-  const len = Math.hypot(dirX, dirY);
-  if (len > 0) {
-    dirX /= len;
-    dirY /= len;
-  }
-
-  const speedBefore = Math.hypot(player.vx, player.vy);
-
-  const desiredSpeed = MAX_SPEED * Math.hypot(input.moveX, input.moveY);
-  const desiredVx = dirX * desiredSpeed;
-  const desiredVy = dirY * desiredSpeed;
-
-  const t = Math.max(0, Math.min(1, speedBefore / MAX_SPEED));
-  const turnStrength = ((1 - t) * TURN_LOW_SPEED) + (t * TURN_HIGH_SPEED);
-
-  // steering blend
-  player.vx += (desiredVx - player.vx) * turnStrength * dt;
-  player.vy += (desiredVy - player.vy) * turnStrength * dt;
-
-  // forward acceleration punch
-  const accel = input.sprint ? SPRINT_ACCEL : ACCEL;
-  player.vx += dirX * accel * dt;
-  player.vy += dirY * accel * dt;
-
-  // brake
-  if (input.brake) {
-    player.vx *= Math.max(0, 1 - BRAKE_DRAG * dt);
-    player.vy *= Math.max(0, 1 - BRAKE_DRAG * dt);
-  }
-
-  // ice drag
-  player.vx *= Math.max(0, 1 - DRAG * dt);
-  player.vy *= Math.max(0, 1 - DRAG * dt);
-
-  const speed = Math.hypot(player.vx, player.vy);
-  if (speed > MAX_SPEED) {
-    const k = MAX_SPEED / speed;
-    player.vx *= k;
-    player.vy *= k;
-  }
-
-  player.x += player.vx * dt;
-  player.y += player.vy * dt;
-
-  if (Number.isFinite(input.aimAngle)) {
-    player.angle = input.aimAngle;
-  } else if (speed > 1) {
-    player.angle = Math.atan2(player.vy, player.vx);
   }
 }

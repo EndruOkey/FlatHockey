@@ -2,7 +2,12 @@ import Matter from 'matter-js';
 import { applyMovementStep } from '@flathockey/shared/sim/movementStep';
 import type { ServerPlayer } from '../entities/player';
 
-export function applyPlayerMovement(player: ServerPlayer, dt: number, hasPuck: boolean) {
+export function applyPlayerMovement(
+  player: ServerPlayer,
+  dt: number,
+  hasPuck: boolean,
+  tuningPatch: Partial<import('@flathockey/shared/sim/movementStep').MovementStepConfig> = {}
+) {
   const input = player.latestInput;
   const state = {
     x: player.body.position.x,
@@ -25,7 +30,7 @@ export function applyPlayerMovement(player: ServerPlayer, dt: number, hasPuck: b
       }
     },
     dt,
-    { hasPuck }
+    { hasPuck, ...tuningPatch }
   );
 
   Matter.Body.setVelocity(player.body, { x: state.vx, y: state.vy });
