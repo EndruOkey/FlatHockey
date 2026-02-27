@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import type { InputMsg, PlayerStateMsg, ServerMessage, SnapshotMsg } from '@flathockey/shared';
+import { SIM_HZ, type InputMsg, PlayerStateMsg, ServerMessage, SnapshotMsg } from '@flathockey/shared';
 import { WsClient } from '../net/wsClient';
 import { Interpolator, lerpPlayer, type LerpPlayer } from '../net/interpolation';
 import { applyPredictedInput, CLIENT_FIXED_DT, type PredictedPlayerState, lastTelemetry } from '../net/prediction';
@@ -14,6 +14,8 @@ const MAX_SIM_STEPS_PER_FRAME = 3;
 const DT_CLAMP_MS = 34;
 const HITCH_MS = 150;
 const INTERP_DELAY_MS = 180;
+const SERVER_TICK_MS = 1000 / SIM_HZ;
+const REMOTE_INTERP_DELAY_DEFAULT_MS = 120;
 
 type DebugSample = { t: number; dtMs: number };
 
@@ -51,6 +53,12 @@ export class PondScene extends Phaser.Scene {
 
   private latestSnapshotAtMs = 0;
   private snapshotReceiveTimes: number[] = [];
+  private newestSnapshotServerMs = 0;
+  private serverTimeOffsetMs = 0;
+  private hasServerClock = false;
+  private droppedSnapshots = 0;
+  private remoteLastSnapshotTick = new Map<string, number>();
+  private remoteInterpDelayMs = REMOTE_INTERP_DELAY_DEFAULT_MS;
 
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private debugToggleKey!: Phaser.Input.Keyboard.Key;
@@ -215,9 +223,18 @@ export class PondScene extends Phaser.Scene {
 
   private consumeSnapshot(snapshot: SnapshotMsg) {
     const now = performance.now();
+    const serverTimeMs = snapshot.serverTick * SERVER_TICK_MS;
     this.latestSnapshotAtMs = now;
+    this.newestSnapshotServerMs = Math.max(this.newestSnapshotServerMs, serverTimeMs);
     this.snapshotReceiveTimes.push(now);
     this.snapshotReceiveTimes = this.snapshotReceiveTimes.filter((t) => t >= now - 1000);
+    const observedOffset = now - serverTimeMs;
+    if (!this.hasServerClock) {
+      this.serverTimeOffsetMs = observedOffset;
+      this.hasServerClock = true;
+    } else {
+      this.serverTimeOffsetMs = this.serverTimeOffsetMs * 0.9 + observedOffset * 0.1;
+    }
 
     // first-snapshot safety resync: ensure clocks and buffers align when data arrives
     if (!this.hasReceivedFirstSnapshot) {
@@ -241,7 +258,13 @@ export class PondScene extends Phaser.Scene {
           this.localBuffer.push({ x: this.predicted.x, y: this.predicted.y, rot: this.predicted.angle }, now);
         }
       } else {
-        this.remoteInterpolators.get(p.id)?.push({ x: p.x, y: p.y, rot: p.angle }, now);
+        const lastTick = this.remoteLastSnapshotTick.get(p.id);
+        if (typeof lastTick === 'number' && snapshot.serverTick <= lastTick) {
+          this.droppedSnapshots += 1;
+          continue;
+        }
+        this.remoteLastSnapshotTick.set(p.id, snapshot.serverTick);
+        this.remoteInterpolators.get(p.id)?.push({ x: p.x, y: p.y, rot: p.angle }, serverTimeMs);
       }
     }
   }
@@ -286,6 +309,13 @@ export class PondScene extends Phaser.Scene {
     return interpolator.sample(clamped, lerpPlayer) ?? interpolator.latest()?.value ?? null;
   }
 
+  private estimateServerNowMs(nowMs: number): number {
+    if (this.hasServerClock) {
+      return nowMs - this.serverTimeOffsetMs;
+    }
+    return this.newestSnapshotServerMs;
+  }
+
   private getPerfStats() {
     this.perfSamples = this.perfSamples.filter((s) => s.t >= this.renderClockMs - 1000);
     if (this.perfSamples.length === 0) return { fps: 0, dtMax: 0 };
@@ -309,12 +339,18 @@ export class PondScene extends Phaser.Scene {
 
     this.debugOverlay.setVisible(true);
     const perf = this.getPerfStats();
-    const latestSnapshotAge = this.latestSnapshotAtMs > 0 ? performance.now() - this.latestSnapshotAtMs : -1;
+    const now = performance.now();
+    const rttMs = this.ws.getRttMs();
+    const latestSnapshotAge = this.latestSnapshotAtMs > 0 ? now - this.latestSnapshotAtMs : -1;
     const snapshotRate = this.snapshotReceiveTimes.length;
-    const oldest = this.localBuffer.oldestTime();
-    const newest = this.localBuffer.newestTime();
-    const bufferRange = oldest !== null && newest !== null ? newest - oldest : 0;
-    const targetBehindNewest = newest !== null ? Math.max(0, newest - (this.renderClockMs - INTERP_DELAY_MS)) : 0;
+    let remoteBufferLenAvg = 0;
+    let remoteBufferCount = 0;
+    for (const [id, interp] of this.remoteInterpolators.entries()) {
+      if (this.clientId && id === this.clientId) continue;
+      remoteBufferLenAvg += interp.size();
+      remoteBufferCount += 1;
+    }
+    remoteBufferLenAvg = remoteBufferCount > 0 ? remoteBufferLenAvg / remoteBufferCount : 0;
 
     const tuning = getTuning();
     const used = usedTuning;
@@ -322,11 +358,11 @@ export class PondScene extends Phaser.Scene {
 
     this.debugOverlay.setText([
       'DEBUG [F3]',
+      `RTT=${rttMs >= 0 ? rttMs.toFixed(1) : '-'}ms snapRate=${snapshotRate}/s interpDelay=${this.remoteInterpDelayMs.toFixed(0)}ms`,
+      `snapshotAgeMs=${latestSnapshotAge.toFixed(1)} bufferLenAvg=${remoteBufferLenAvg.toFixed(1)} droppedSnapshots=${this.droppedSnapshots}`,
       `FPS=${perf.fps.toFixed(1)} dtMax1s=${perf.dtMax.toFixed(2)}ms`,
       `seq=${this.seq} ack=${this.ackSeq} pending=${this.pendingInputs.length}`,
       `simStepsThisFrame=${this.simStepsThisFrame} capHitCount=${this.simCapHitCount}`,
-      `lastSnapshotAge=${latestSnapshotAge.toFixed(1)}ms snapshotRate=${snapshotRate}/s`,
-      `remote/local interpRange=${bufferRange.toFixed(1)}ms targetBehindNewest=${targetBehindNewest.toFixed(1)}ms`,
       `hitchCount=${this.hitchCount} lastHitchMs=${this.lastHitchMs.toFixed(1)} needsResync=${this.needsResync}`,
       `resyncCount=${this.resyncCount} lastResyncReason=${this.lastResyncReason ?? '-'} resyncAtMs=${this.lastResyncAtMs.toFixed(1)}`,
       `speed=${this.debugCurrentSpeed.toFixed(1)} drift=${(telemetry.driftAngle||0).toFixed(2)} speedRatio=${(this.debugSpeedRatio*100).toFixed(0)}%`,
@@ -389,11 +425,7 @@ export class PondScene extends Phaser.Scene {
 
       this.input.keyboard?.resetKeys();
 
-      // attempt to align interpolator sample ranges to the new render clock
-      for (const interp of this.remoteInterpolators.values()) {
-        const latest = interp.latest();
-        if (latest) interp.push(latest.value, t);
-      }
+      // keep remote buffers on server-time axis; do not rewrite with local-time timestamps
       const localLatest = this.localBuffer.latest();
       if (localLatest) this.localBuffer.push(localLatest.value, t);
 
@@ -457,6 +489,7 @@ export class PondScene extends Phaser.Scene {
     }
 
     const targetTime = this.renderClockMs - INTERP_DELAY_MS;
+    const remoteTargetServerTime = this.estimateServerNowMs(now) - this.remoteInterpDelayMs;
     for (const [id, view] of this.players.entries()) {
       let state: LerpPlayer | null = null;
       if (this.clientId && id === this.clientId) {
@@ -464,7 +497,7 @@ export class PondScene extends Phaser.Scene {
         if (!state && this.predicted) state = { x: this.predicted.x, y: this.predicted.y, rot: this.predicted.angle };
       } else {
         const interp = this.remoteInterpolators.get(id);
-        if (interp) state = this.sampleInterpolated(interp, targetTime);
+        if (interp) state = this.sampleInterpolated(interp, remoteTargetServerTime);
       }
 
       if (!state) continue;

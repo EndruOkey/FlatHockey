@@ -43,5 +43,15 @@ export type DebugSetMovementTuningMsg = {
   config: Partial<import('../sim/movementStep').MovementStepConfig>;
 };
 
-export type ClientMessage = InputMsg | DebugSetMovementTuningMsg;
-export type ServerMessage = WelcomeMsg | SnapshotMsg;
+export type NetPingMsg = {
+  type: 'net:ping';
+  nonce: number;
+};
+
+export type NetPongMsg = {
+  type: 'net:pong';
+  nonce: number;
+};
+
+export type ClientMessage = InputMsg | DebugSetMovementTuningMsg | NetPingMsg;
+export type ServerMessage = WelcomeMsg | SnapshotMsg | NetPongMsg;

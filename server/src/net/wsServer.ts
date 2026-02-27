@@ -3,7 +3,7 @@ import type { Server } from 'http';
 import type { RoomManager } from '../game/roomManager';
 import type { ServerMessage } from '@flathockey/shared';
 import { parseWsPayload } from './protocol';
-import { BestNow } from '@flathockey/shared/tuning/movementPresets';
+import { MOVEMENT_DEFAULTS } from '@flathockey/shared/tuning/movement.defaults';
 
 // runtime flag; default false unless explicitly enabled via env var
 const ALLOW_TUNING_SYNC =
@@ -25,9 +25,9 @@ export function createWsServer(server: Server, roomManager: RoomManager) {
     const room = roomManager.getOrCreateRoom('pond-1');
     room.addClient(clientId, ws, randomName());
 
-    // compute effective tuning to send; start from the official best preset
+    // compute effective tuning to send; start from movement defaults
     const effectiveTuning = {
-      ...BestNow,
+      ...MOVEMENT_DEFAULTS,
       ...(room as any).movementTuning || {}
     };
 
@@ -46,7 +46,10 @@ export function createWsServer(server: Server, roomManager: RoomManager) {
     ws.on('message', (buf) => {
       const msg = parseWsPayload(buf.toString());
       if (!msg) return;
-      if (msg.type === 'input') {
+      if (msg.type === 'net:ping') {
+        const pong: ServerMessage = { type: 'net:pong', nonce: msg.nonce };
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(pong));
+      } else if (msg.type === 'input') {
         room.enqueueInput(clientId, msg);
       } else if (msg.type === 'debug:setMovementTuning') {
         // crash-harden: nothing should ever call a missing method
@@ -78,7 +81,7 @@ export function createWsServer(server: Server, roomManager: RoomManager) {
             roomId: room.id,
             serverTick: room.serverTick,
             movementTuning: {
-              ...BestNow,
+              ...MOVEMENT_DEFAULTS,
               ...(room as any).movementTuning || {}
             },
             allowTuningSync: true

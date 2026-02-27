@@ -1,17 +1,18 @@
 import type { MovementStepConfig } from '../sim/movementStep';
+import { MOVEMENT_DEFAULTS } from './movement.defaults';
 
 // official "BestNow" tuning values as agreed, used by server defaults and client UI.
 export const BestNow: MovementStepConfig = {
-  accel: 1681.36,
-  maxSpeedNoPuck: 342.5,
-  maxSpeedWithPuck: 342.5,
-  dragMove: 2.75,
-  dragIdle: 0.96909,
-  lateralGrip: 1.13636,
-  gripCurve: 0,
-  reverseBrake: 0,
-  brakeCurve: 0.7545,
-  overspeedDamping: 1
+  accel: MOVEMENT_DEFAULTS.accel,
+  maxSpeedNoPuck: MOVEMENT_DEFAULTS.maxSpeedNoPuck,
+  maxSpeedWithPuck: MOVEMENT_DEFAULTS.maxSpeedWithPuck,
+  dragMove: MOVEMENT_DEFAULTS.dragMove,
+  dragIdle: MOVEMENT_DEFAULTS.dragIdle,
+  lateralGrip: MOVEMENT_DEFAULTS.lateralGrip,
+  gripCurve: MOVEMENT_DEFAULTS.gripCurve,
+  reverseBrake: MOVEMENT_DEFAULTS.reverseBrake,
+  brakeCurve: MOVEMENT_DEFAULTS.brakeCurve,
+  overspeedDamping: MOVEMENT_DEFAULTS.overspeedDamping
 };
 
 // other default values required by movementStep (not tuned by DevMenu)
@@ -23,23 +24,23 @@ export const PRESETS: Record<string, MovementStepConfig> = {
   BestNow_2Regime: {
     // two-regime version of BestNow: responsive start/control at low speed, stable glide at high
     regimesEnabled: true,
-    speedSplit: 0.40,
-    splitBlendWidth: 0.12,
+    speedSplit: MOVEMENT_DEFAULTS.speedSplit,
+    splitBlendWidth: MOVEMENT_DEFAULTS.splitBlendWidth,
     inputDeadzone: 0,
     inputExponent: 1,
     // low-speed (control) regime: 15-20% more responsive
-    accel_lo: 1932.57,
-    dragMove_lo: 3.025,
-    dragIdle_lo: 0.96909,
-    lateralGrip_lo: 1.36363,
-    brakeCurve_lo: 0.7922,
+    accel_lo: MOVEMENT_DEFAULTS.accel_lo,
+    dragMove_lo: MOVEMENT_DEFAULTS.dragMove_lo,
+    dragIdle_lo: MOVEMENT_DEFAULTS.dragIdle_lo,
+    lateralGrip_lo: MOVEMENT_DEFAULTS.lateralGrip_lo,
+    brakeCurve_lo: MOVEMENT_DEFAULTS.brakeCurve_lo,
     overspeedDamping_lo: 1,
     // high-speed (glide) regime: 15% less responsive, more inertia
-    accel_hi: 1429.156,
-    dragMove_hi: 2.3375,
-    dragIdle_hi: 0.920636,
-    lateralGrip_hi: 0.9659,
-    brakeCurve_hi: 0.71678,
+    accel_hi: MOVEMENT_DEFAULTS.accel_hi,
+    dragMove_hi: MOVEMENT_DEFAULTS.dragMove_hi,
+    dragIdle_hi: MOVEMENT_DEFAULTS.dragIdle_hi,
+    lateralGrip_hi: MOVEMENT_DEFAULTS.lateralGrip_hi,
+    brakeCurve_hi: MOVEMENT_DEFAULTS.brakeCurve_hi,
     overspeedDamping_hi: 1
   },
   IceReadable: {

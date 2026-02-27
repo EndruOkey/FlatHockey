@@ -1,5 +1,6 @@
-﻿import type { InputMsg, PlayerStateMsg } from '@flathockey/shared';
+import type { InputMsg, PlayerStateMsg } from '@flathockey/shared';
 import { applyMovementStep, type MovementStepConfig, type MovementStepState } from '@flathockey/shared/sim/movementStep';
+import { MOVEMENT_DEFAULTS } from '@flathockey/shared/tuning/movement.defaults';
 import { getTuning, usedTuning } from '../debug/movementTuning';
 
 export let lastTelemetry: Record<string, any> = {};
@@ -85,7 +86,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
 
   let blendT = 0;
   if (tuning.regimesEnabled) {
-    const split = tuning.speedSplit ?? 0.4;
+    const split = tuning.speedSplit ?? MOVEMENT_DEFAULTS.speedSplit ?? 0.55;
     const width = Math.max(0.0001, tuning.splitBlendWidth ?? 0.12);
     blendT = smoothstep(split - width * 0.5, split + width * 0.5, maxSpeed > 0 ? speed / maxSpeed : 0);
   }
@@ -96,7 +97,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     lateralSpeed,
     forwardSpeed,
     driftAngle,
-    gripApplied: Math.max(0, 1 - (tuning.lateralDamping ?? 0.12) * dt),
+    gripApplied: Math.max(0, 1 - (tuning.lateralDamping ?? MOVEMENT_DEFAULTS.lateralDamping ?? 0.98) * dt),
     brakeApplied: input.brake ? Math.max(0, prevSpeed - speed) / Math.max(prevSpeed, 1) : 0,
     blendT
   };
@@ -122,3 +123,4 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
 
   return telemetry;
 }
+

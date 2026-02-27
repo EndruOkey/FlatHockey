@@ -8,7 +8,8 @@ import {
   getTuning,
   replaceTuning,
   resetTuning,
-  setTuning,
+  setTuningKey,
+  subscribeTuning,
   type MovementTuning
 } from './movementTuning';
 import {
@@ -243,8 +244,13 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
   const rowByKey = new Map<string, HTMLElement[]>();
   const refreshers: Array<() => void> = [];
   let statusLineEl: HTMLElement | null = null;
+  let movementSummaryEl: HTMLElement | null = null;
   let statusFlashTimer: number | null = null;
   let statusFlashText = '';
+  const unsubscribeTuning = subscribeTuning(() => {
+    for (const refresh of refreshers) refresh();
+    refreshStatusLine();
+  });
 
   function allPresets() { return listAllPresets(presetState); }
   function selectedPreset() { return findPresetById(presetState, presetState.selectedPresetId); }
@@ -260,14 +266,18 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
   }
 
   function refreshStatusLine() {
-    if (!statusLineEl) return;
     const preset = selectedPreset();
     state.dirty = isPresetDirty(preset);
     const dirtyText = state.dirty ? 'Unsaved changes' : 'Saved';
     const presetName = preset?.name ?? 'n/a';
     const ver = getTuning().__version ?? 0;
     const extra = statusFlashText ? ` | ${statusFlashText}` : '';
-    statusLineEl.textContent = `Preset: ${presetName} | ${dirtyText} | v${ver}${extra}`;
+    if (statusLineEl) {
+      statusLineEl.textContent = `Preset: ${presetName} | ${dirtyText} | v${ver}${extra}`;
+    }
+    if (movementSummaryEl) {
+      movementSummaryEl.textContent = `Active preset: ${presetName} | Dirty: ${state.dirty ? 'yes' : 'no'} | v${ver}`;
+    }
   }
 
   function refreshPresetSelect() {
@@ -298,6 +308,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     rowByKey.clear();
     refreshers.length = 0;
     statusLineEl = null;
+    movementSummaryEl = null;
   }
 
   function registerRow(key: keyof MovementTuning, el: HTMLElement) {
@@ -374,7 +385,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
       checkbox.checked = Boolean((tuning as Record<string, unknown>)[meta.key as string]);
       checkbox.addEventListener('change', (e) => {
         e.stopPropagation();
-        setTuning({ [meta.key]: checkbox.checked } as Partial<MovementTuning>);
+        setTuningKey(meta.key, checkbox.checked as MovementTuning[typeof meta.key]);
         refreshStatusLine();
         if (meta.key === 'regimesEnabled' && state.activeTab === 'Movement') renderTab();
       });
@@ -383,7 +394,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
       resetBtn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        setTuning({ [meta.key]: Boolean(defaultValue) } as Partial<MovementTuning>);
+        setTuningKey(meta.key, Boolean(defaultValue) as MovementTuning[typeof meta.key]);
         checkbox.checked = Boolean(defaultValue);
         refreshStatusLine();
         if (meta.key === 'regimesEnabled' && state.activeTab === 'Movement') renderTab();
@@ -427,7 +438,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
 
     const applyNumber = (raw: number) => {
       const next = Math.max(min, Math.min(max, Number.isFinite(raw) ? raw : 0));
-      setTuning({ [meta.key]: next } as Partial<MovementTuning>);
+      setTuningKey(meta.key, next as MovementTuning[typeof meta.key]);
       valueInput.value = String(next);
       valueText.textContent = next.toFixed(decimals);
       const pct = max > min ? (next - min) / (max - min) : 0;
@@ -556,6 +567,27 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
 
   function renderMovementTab() {
     const tuning = getTuning();
+    const stateGroup = createGroup('State');
+    movementSummaryEl = document.createElement('div');
+    movementSummaryEl.className = 'subtle';
+    movementSummaryEl.style.marginBottom = '6px';
+    stateGroup.body.appendChild(movementSummaryEl);
+
+    const stateActions = document.createElement('div');
+    stateActions.className = 'net-actions';
+    const resetDefaultsBtn = document.createElement('button');
+    resetDefaultsBtn.className = 'action-btn';
+    resetDefaultsBtn.textContent = 'Reset to Defaults';
+    resetDefaultsBtn.addEventListener('click', () => {
+      resetTuning();
+      for (const refresh of refreshers) refresh();
+      refreshStatusLine();
+      postStatus('Movement reset to defaults');
+    });
+    stateActions.appendChild(resetDefaultsBtn);
+    stateGroup.body.appendChild(stateActions);
+    body.appendChild(stateGroup.root);
+
     const movementMetas = PARAM_REGISTRY.filter((m) => m.category === 'Movement');
     const reduced = movementMetas
       .filter((m) => isMovementContextualRecommended(m, tuning))
@@ -767,6 +799,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
       if (state.activeTab === 'NetDebug') renderTab();
     },
     destroy() {
+      unsubscribeTuning();
       setDragLock(false);
       root.remove();
     }

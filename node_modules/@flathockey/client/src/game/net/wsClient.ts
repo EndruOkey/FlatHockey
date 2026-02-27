@@ -12,6 +12,10 @@ export class WsClient {
   private msgCount = 0;
   private lastMsgAt = 0;
   private netReportTimer: number | null = null;
+  private pingTimer: number | null = null;
+  private pingNonce = 0;
+  private pendingPings = new Map<number, number>();
+  private rttMs = -1;
 
   // tuning sync state conveyed by server welcome messages
   public allowTuningSync = false;
@@ -20,6 +24,10 @@ export class WsClient {
   // helper used by callers to know whether it's safe to send immediately
   public isConnected(): boolean {
     return !!this.ws && this.ws.readyState === WebSocket.OPEN;
+  }
+
+  public getRttMs(): number {
+    return this.rttMs;
   }
 
   private ensureNetReporter() {
@@ -40,15 +48,32 @@ export class WsClient {
     }
 
     this.ws = new WebSocket(url);
-    this.ws.addEventListener('open', () => this.handlers.open?.());
-    this.ws.addEventListener('close', () => this.handlers.close?.());
-    this.ws.addEventListener('error', () => this.handlers.close?.());
+    this.ws.addEventListener('open', () => {
+      this.startPingLoop();
+      this.handlers.open?.();
+    });
+    this.ws.addEventListener('close', () => {
+      this.stopPingLoop();
+      this.handlers.close?.();
+    });
+    this.ws.addEventListener('error', () => {
+      this.stopPingLoop();
+      this.handlers.close?.();
+    });
     this.ws.addEventListener('message', (ev) => {
       this.msgCount++;
       this.lastMsgAt = performance.now();
 
       try {
         const msg = JSON.parse(String(ev.data)) as ServerMessage;
+        if (msg.type === 'net:pong') {
+          const sentAt = this.pendingPings.get(msg.nonce);
+          if (typeof sentAt === 'number') {
+            this.pendingPings.delete(msg.nonce);
+            this.rttMs = Math.max(0, performance.now() - sentAt);
+          }
+          return;
+        }
         // store tuning information from welcome
         if (msg.type === 'welcome') {
           this.allowTuningSync = !!msg.allowTuningSync;
@@ -72,5 +97,27 @@ export class WsClient {
     } catch {
       // ignore transient errors
     }
+  }
+
+  private startPingLoop() {
+    this.stopPingLoop();
+    this.pingTimer = window.setInterval(() => {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+      const nonce = ++this.pingNonce;
+      this.pendingPings.set(nonce, performance.now());
+      if (this.pendingPings.size > 64) {
+        const oldest = this.pendingPings.keys().next();
+        if (!oldest.done) this.pendingPings.delete(oldest.value);
+      }
+      this.send({ type: 'net:ping', nonce });
+    }, 1000);
+  }
+
+  private stopPingLoop() {
+    if (this.pingTimer !== null) {
+      window.clearInterval(this.pingTimer);
+      this.pingTimer = null;
+    }
+    this.pendingPings.clear();
   }
 }

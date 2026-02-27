@@ -1,4 +1,4 @@
-﻿import { BestNow } from '../tuning/movementPresets';
+import { MOVEMENT_DEFAULTS } from '../tuning/movement.defaults';
 
 export type MovementStepState = {
   x: number;
@@ -84,64 +84,10 @@ export type MovementStepConfig = {
   overspeedDamping_hi?: number;
 };
 
-const BASE_DEFAULTS: MovementStepConfig = {
-  hasPuck: false,
-  accel: 1681.36,
-  sprintAccel: 2800,
-  dragMove: 2.75,
-  dragIdle: 0.96909,
-  brakeDrag: 11,
-  maxSpeed: 342.5,
-  maxSpeedNoPuck: 342.5,
-  maxSpeedWithPuck: 342.5,
-  sprintMulNoPuck: 1,
-  sprintMulWithPuck: 1,
-  sprintMinStamina: 0.1,
-  staminaDrain: 0.38,
-  staminaRegen: 0.23,
-  staminaDrainMulWithPuck: 1.2,
-
-  headingModeEnabled: true,
-  maxTurnRateLowSpeed: 6.0,
-  maxTurnRateHighSpeed: 1.8,
-  lateralDamping: 0.12,
-
-  steeringEnabled: false,
-  steerStrength: 6,
-  brakeDecel: 20,
-  turnAssist: 0,
-  driftAssist: 0,
-
-  regimesEnabled: false,
-  speedSplit: 0.4,
-  splitBlendWidth: 0.12,
-
-  accel_lo: 1932.57,
-  dragMove_lo: 3.025,
-  dragIdle_lo: 0.96909,
-  lateralGrip_lo: 1.36363,
-  brakeCurve_lo: 0.7922,
-
-  accel_hi: 1429.156,
-  dragMove_hi: 2.3375,
-  dragIdle_hi: 0.920636,
-  lateralGrip_hi: 0.9659,
-  brakeCurve_hi: 0.71678,
-
-  lateralGrip: 1.13636,
-  gripCurve: 0,
-  brakeCurve: 0.7545,
-  reverseBrake: 0,
-  overspeedDamping: 1,
-  inputDeadzone: 0,
-  inputExponent: 1,
-  overspeedDamping_lo: 1,
-  overspeedDamping_hi: 1
-};
+const BASE_DEFAULTS: MovementStepConfig = { ...MOVEMENT_DEFAULTS };
 
 export const DEFAULTS: MovementStepConfig = {
-  ...BASE_DEFAULTS,
-  ...BestNow
+  ...BASE_DEFAULTS
 };
 
 function clamp(v: number, lo: number, hi: number): number {
@@ -324,3 +270,4 @@ export function applyMovementStep(
     state.aimAngle = input.aimAngle;
   }
 }
+

@@ -37,6 +37,14 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       } as ClientMessage;
     }
 
+    if (data.type === 'net:ping') {
+      if (typeof (data as any).nonce !== 'number') return null;
+      return {
+        type: 'net:ping',
+        nonce: Math.max(0, Math.floor((data as any).nonce))
+      } as ClientMessage;
+    }
+
     return null;
   } catch {
     return null;

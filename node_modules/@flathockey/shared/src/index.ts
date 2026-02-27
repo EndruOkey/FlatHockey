@@ -5,3 +5,5 @@ export * from './constants/ticks';
 export * from './types/entity';
 export * from './types/match';
 export * from './sim/movementStep';
+export * from './tuning/movement.defaults';
+export * from './tuning/movementTuningStore';
