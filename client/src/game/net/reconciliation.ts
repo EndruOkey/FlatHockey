@@ -16,6 +16,9 @@ export function reconcilePrediction(
   predicted.vx = authoritative.vx;
   predicted.vy = authoritative.vy;
   predicted.angle = authoritative.angle;
+  (predicted as any).moveAngle = (authoritative as any).moveAngle;
+  (predicted as any).aimAngle = (authoritative as any).aimAngle;
+  (predicted as any).aimAngleRaw = (authoritative as any).aimAngleRaw ?? (authoritative as any).aimAngle;
 
   for (const input of pendingInputs) {
     applyPredictedInput(predicted, input);

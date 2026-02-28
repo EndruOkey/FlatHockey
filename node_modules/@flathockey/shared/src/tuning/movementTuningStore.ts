@@ -72,7 +72,7 @@ export const movementTuningStore = {
     for (const key of keys) {
       if (key === '__version') continue;
       const val = (state as Record<string, unknown>)[key];
-      if (typeof val === 'number' || typeof val === 'boolean') {
+      if (typeof val === 'number' || typeof val === 'boolean' || typeof val === 'string') {
         (out as Record<string, unknown>)[key] = val;
       }
     }

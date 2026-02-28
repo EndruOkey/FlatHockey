@@ -6,7 +6,9 @@ export type InputMsg = {
   moveY: -1 | 0 | 1;
   sprint: 0 | 1;
   brake: 0 | 1;
+  shoot?: 0 | 1;
   aimAngle?: number;
+  aimAngleRaw?: number;
 };
 
 export type PlayerStateMsg = {
@@ -15,7 +17,10 @@ export type PlayerStateMsg = {
   y: number;
   vx: number;
   vy: number;
-  angle: number;
+  angle: number; // body facing (legacy alias)
+  moveAngle: number;
+  aimAngleRaw?: number;
+  aimAngle: number;
 };
 
 export type SnapshotMsg = {
@@ -23,6 +28,16 @@ export type SnapshotMsg = {
   serverTick: number;
   players: PlayerStateMsg[];
   ack: Record<string, number>;
+  puck?: PuckStateMsg;
+};
+
+export type PuckStateMsg = {
+  state: 'FREE' | 'HELD';
+  ownerId: string | null;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
 };
 
 export type WelcomeMsg = {

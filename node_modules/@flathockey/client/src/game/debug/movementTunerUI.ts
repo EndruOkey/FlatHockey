@@ -12,9 +12,9 @@ import {
   subscribeTuning,
   type MovementTuning
 } from './movementTuning';
+import { puckStickTuningStore, PUCK_STICK_DEFAULTS_LOCAL, type PuckStickTuning } from '../tuning/puckStickTuningStore';
 import {
   PARAM_REGISTRY,
-  type TuningCategory,
   type TuningParamMeta
 } from './tuningRegistry';
 import {
@@ -69,58 +69,157 @@ type TunerHandle = {
 
 type DevMenuState = {
   activeTab: MenuTab;
-  searchQuery: string;
   advancedExpandedByCategory: Record<string, boolean>;
   pinnedKeys: string[];
   dirty: boolean;
+  panelLocked: boolean;
+  autoLayoutEnabled: boolean;
+  fixedColumns: 1 | 2 | 3;
+  sectionCollapseOverrides: Partial<Record<MenuTab, Record<string, boolean>>>;
+};
+
+type DevPanelLayout = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  activeTab: MenuTab;
+  panelLocked: boolean;
+  autoLayoutEnabled?: boolean;
+  fixedColumns?: 1 | 2 | 3;
+  sectionCollapseOverrides?: Partial<Record<MenuTab, Record<string, boolean>>>;
+};
+
+type LayoutMode = 'NARROW' | 'MEDIUM' | 'WIDE';
+type HeightMode = 'SHORT' | 'TALL';
+
+type SectionModeRule = {
+  order: number;
+  columnSpan?: 1 | 2 | 3;
+  collapsed?: boolean;
+};
+
+type SectionMeta = {
+  id: string;
+  title: string;
+  priority: number;
+  collapsible?: boolean;
+  defaultCollapsed?: boolean;
+  tone?: 'core' | 'control' | 'aim' | 'shot' | 'debug' | 'advanced';
+  modeRules?: Partial<Record<LayoutMode, SectionModeRule>>;
 };
 
 const TAB_LABELS: Record<MenuTab, string> = {
   Home: 'Home',
   Movement: 'Movement',
-  NetDebug: 'Net/Debug',
   Rotation: 'Rotation',
-  Puck: 'Puck'
+  Puck: 'Puck',
+  NetDebug: 'Net/Debug'
 };
+const TAB_ORDER: MenuTab[] = ['Home', 'Movement', 'Rotation', 'Puck', 'NetDebug'];
 
-const COMING_SOON_TABS = new Set<MenuTab>(['Rotation', 'Puck']);
+const COMING_SOON_TABS = new Set<MenuTab>(['Rotation']);
+const DEVMENU_LAYOUT_KEY = 'fh_devmenu_layout_v1';
+const PANEL_MIN_WIDTH = 320;
+const PANEL_MIN_HEIGHT = 280;
+const PANEL_MARGIN = 8;
+
+const PUCK_UI_KEY_MAP: Partial<Record<keyof MovementTuning, keyof PuckStickTuning>> = {
+  stickOffsetX: 'stickOffsetX',
+  stickOffsetY: 'stickOffsetY',
+  stickLength: 'stickLength',
+  stickTipRadius: 'stickTipRadius',
+  stickVisualLag: 'stickVisualLag',
+  stickVisualLagMaxDeg: 'stickVisualLagMaxDeg',
+  drawStickTarget: 'drawStickTarget',
+  drawStickHitbox: 'drawStickHitbox',
+  puckRadius: 'puckRadius',
+  puckMaxSpeed: 'maxSpeed',
+  puckLinearDamping: 'linearDamping',
+  puckRestitution: 'restitution',
+  puckSurfaceDrag: 'surfaceDrag',
+  puckPickupRadius: 'pickupRadius',
+  puckPickupMaxSpeed: 'pickupMaxPuckSpeed',
+  puckPickupMaxRelativeSpeed: 'pickupMaxRelativeSpeed',
+  puckMagnetRadius: 'magnetRadius',
+  puckMagnetStrength: 'magnetStrength',
+  puckMagnetMaxForce: 'magnetMaxForce',
+  puckHoldSpringK: 'holdSpringK',
+  puckHoldDampingC: 'holdDampingC',
+  puckHoldMaxError: 'holdMaxError',
+  puckPickupCooldownMs: 'pickupCooldownMs',
+  puckShotBaseImpulse: 'shotBaseImpulse',
+  puckShotChargeRate: 'shotChargeRate',
+  puckShotChargeMult: 'shotChargeMult',
+  puckShotMaxImpulse: 'shotMaxImpulse',
+  puckShotMinHoldMs: 'shotMinHoldMs',
+  puckDrawPickupRadius: 'drawPickupRadius',
+  puckDrawMagnetRadius: 'drawMagnetRadius',
+  puckDrawState: 'drawPuckState',
+  puckDrawVelocity: 'drawPuckVelocity'
+};
 
 function createStyles() {
   if (document.getElementById('movement-devmenu-style-v2')) return;
   const style = document.createElement('style');
   style.id = 'movement-devmenu-style-v2';
   style.textContent = `
-    #movement-devmenu { --bg:#101317; --panel:#161b20; --line:#2a323b; --text:#d8dde5; --muted:#8f9baa; --accent:#4eb6a1; --warn:#cf9151; position:fixed; top:12px; right:12px; width:372px; max-height:calc(100vh - 24px); border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); z-index:12000; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; display:flex; flex-direction:column; pointer-events:auto; overflow:hidden; box-shadow:0 8px 26px rgba(0,0,0,.35);}
+    #movement-devmenu { --bg:#101317; --panel:#161b20; --line:#2a323b; --text:#d8dde5; --muted:#8f9baa; --accent:#4eb6a1; --warn:#cf9151; --panel-accent-core: 150,160,172; --panel-accent-control: 78,182,161; --panel-accent-aim: 94,146,221; --panel-accent-shot: 207,145,81; --panel-accent-debug: 130,136,149; --panel-accent-advanced: 122,113,158; position:fixed; top:12px; right:12px; width:372px; height:min(720px,calc(90vh)); border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); z-index:12000; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; display:flex; flex-direction:column; pointer-events:auto; overflow:hidden; box-shadow:0 8px 26px rgba(0,0,0,.35); min-height:0;}
+    #movement-devmenu.locked .head{cursor:default;}
     #movement-devmenu *{box-sizing:border-box;}
-    #movement-devmenu .head{background:var(--panel); border-bottom:1px solid var(--line); padding:10px 10px 8px; display:grid; gap:8px;}
+    #movement-devmenu .head{background:var(--panel); border-bottom:1px solid var(--line); padding:10px 10px 8px; display:grid; gap:8px; cursor:grab; user-select:none; touch-action:none; flex:0 0 auto; position:sticky; top:0; z-index:5;}
     #movement-devmenu .title-row{display:flex; justify-content:space-between; align-items:center; gap:8px;}
     #movement-devmenu .title{font-size:12px; letter-spacing:.04em; font-weight:700;}
     #movement-devmenu .subtle{color:var(--muted); font-size:10px;}
     #movement-devmenu .preset-row{display:grid; grid-template-columns:1fr auto; gap:6px; align-items:center;}
+    #movement-devmenu .header-actions{display:grid; grid-template-columns:repeat(4,1fr); gap:6px;}
     #movement-devmenu select, #movement-devmenu input[type="text"], #movement-devmenu input[type="number"]{height:24px; border:1px solid var(--line); background:#0d1115; color:var(--text); border-radius:4px; padding:0 6px; font-size:11px; min-width:0;}
     #movement-devmenu .tabs{display:grid; grid-template-columns:repeat(5,1fr); gap:4px;}
     #movement-devmenu .tab-btn{height:24px; border:1px solid var(--line); border-radius:4px; background:#11161b; color:var(--text); font-size:10px; cursor:pointer; padding:0;}
     #movement-devmenu .tab-btn.active{background:#1a2624; border-color:#2d5d53; color:#d6efe8;}
     #movement-devmenu .tab-btn:disabled{opacity:.5; cursor:default;}
-    #movement-devmenu .search-wrap{display:grid; gap:6px;}
-    #movement-devmenu .search-results{display:grid; gap:4px; max-height:130px; overflow-y:auto;}
-    #movement-devmenu .search-item{border:1px solid var(--line); background:#11161b; color:var(--text); border-radius:4px; padding:6px; text-align:left; cursor:pointer; font-size:10px;}
-    #movement-devmenu .search-item .meta{color:var(--muted); font-size:9px; margin-top:2px;}
-    #movement-devmenu .body{padding:8px 10px 10px; overflow-y:auto; display:grid; gap:8px; touch-action:pan-y; overscroll-behavior:contain;}
+    #movement-devmenu .body{padding:8px 10px 10px; overflow:auto; display:grid; gap:12px; touch-action:pan-y; overscroll-behavior:contain; flex:1 1 auto; min-height:0; align-content:start;}
+    #movement-devmenu .section-grid{display:grid; gap:12px; grid-template-columns:repeat(var(--section-cols,1), minmax(0,1fr)); align-items:start; align-content:start; grid-auto-flow:row dense;}
     #movement-devmenu .group{border:1px solid var(--line); border-radius:6px; background:#12171d; overflow:hidden;}
-    #movement-devmenu .group-head{border-bottom:1px solid var(--line); padding:6px 8px; font-size:10px; color:#f0f3f8; background:#171e25;}
-    #movement-devmenu .group-body{padding:4px 8px 6px; display:grid; gap:6px;}
-    #movement-devmenu .row{border:1px solid var(--line); border-radius:4px; background:#0f1419; padding:6px; display:grid; gap:5px;}
+    #movement-devmenu .group.card{min-width:0; border-left:3px solid rgba(var(--panel-accent-core), .5);}
+    #movement-devmenu .group.card[data-tone="control"]{border-left-color:rgba(var(--panel-accent-control), .6);}
+    #movement-devmenu .group.card[data-tone="aim"]{border-left-color:rgba(var(--panel-accent-aim), .6);}
+    #movement-devmenu .group.card[data-tone="shot"]{border-left-color:rgba(var(--panel-accent-shot), .6);}
+    #movement-devmenu .group.card[data-tone="debug"]{border-left-color:rgba(var(--panel-accent-debug), .55);}
+    #movement-devmenu .group.card[data-tone="advanced"]{border-left-color:rgba(var(--panel-accent-advanced), .55);}
+    #movement-devmenu .group-head{border-bottom:1px solid var(--line); padding:6px 8px; font-size:10px; color:#f0f3f8; background:rgba(var(--panel-accent-core), .06); position:sticky; top:0; z-index:2;}
+    #movement-devmenu .group.card[data-tone="control"] .group-head{background:rgba(var(--panel-accent-control), .07);}
+    #movement-devmenu .group.card[data-tone="aim"] .group-head{background:rgba(var(--panel-accent-aim), .07);}
+    #movement-devmenu .group.card[data-tone="shot"] .group-head{background:rgba(var(--panel-accent-shot), .08);}
+    #movement-devmenu .group.card[data-tone="debug"] .group-head{background:rgba(var(--panel-accent-debug), .07);}
+    #movement-devmenu .group.card[data-tone="advanced"] .group-head{background:rgba(var(--panel-accent-advanced), .08);}
+    #movement-devmenu .group-head.group-toggle{display:flex; justify-content:space-between; align-items:center; cursor:pointer; user-select:none;}
+    #movement-devmenu .group-head .head-actions{display:flex; align-items:center; gap:6px;}
+    #movement-devmenu .group-head .section-reset{height:18px; border:1px solid var(--line); background:#141a20; color:var(--muted); border-radius:4px; font-size:9px; padding:0 5px; cursor:pointer;}
+    #movement-devmenu .group-head .chev{color:var(--muted);}
+    #movement-devmenu .group-body{padding:6px 8px 8px; display:grid; gap:10px; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); align-items:start;}
+    #movement-devmenu .group-body.compact{grid-template-columns:1fr;}
+    #movement-devmenu .group.span-2{grid-column:span 2;}
+    #movement-devmenu .group.span-3{grid-column:span 3;}
+    #movement-devmenu .full-span{grid-column:1 / -1;}
+    #movement-devmenu .row{border:1px solid var(--line); border-radius:4px; background:#0f1419; padding:8px; display:grid; gap:7px; min-height:88px; align-content:start; min-width:0;}
+    #movement-devmenu .row.dirty{border-color:#5da08f; box-shadow:inset 0 0 0 1px rgba(78,182,161,.22);}
+    #movement-devmenu .row.row-bool{min-height:72px;}
+    #movement-devmenu .row.row-full{grid-column:1 / -1;}
     #movement-devmenu .row.highlight{animation:devmenu-highlight 1.2s ease; border-color:#5abfaa;}
     @keyframes devmenu-highlight{0%{background:#1a2b26;}100%{background:#0f1419;}}
-    #movement-devmenu .row-top{display:grid; grid-template-columns:1fr auto auto auto; gap:6px; align-items:center;}
+    #movement-devmenu .row-top{display:grid; grid-template-columns:minmax(0,1fr) auto auto auto; gap:6px; align-items:start; min-width:0;}
+    #movement-devmenu .row-label{display:grid; gap:2px; min-width:0;}
     #movement-devmenu .row-name{font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+    #movement-devmenu .row-dot{display:none; color:#6dd4bc; font-size:11px; line-height:1;}
+    #movement-devmenu .row.dirty .row-dot{display:inline;}
+    #movement-devmenu .row-key{font-size:9px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
     #movement-devmenu .badge{font-size:9px; color:var(--muted); border:1px solid var(--line); border-radius:8px; padding:1px 6px;}
     #movement-devmenu .icon-btn, #movement-devmenu .text-btn{height:20px; border:1px solid var(--line); background:#131a20; color:var(--muted); border-radius:4px; font-size:10px; cursor:pointer; padding:0 6px;}
     #movement-devmenu .icon-btn.pinned{color:#f4d16e;}
-    #movement-devmenu .row-val{display:grid; grid-template-columns:1fr auto; gap:6px; align-items:center;}
+    #movement-devmenu .row-val{display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px; align-items:center; min-width:0;}
     #movement-devmenu .bool-wrap{display:flex; align-items:center; justify-content:flex-end; gap:6px;}
-    #movement-devmenu .slider{height:16px; display:flex; align-items:center; touch-action:none; user-select:none;}
+    #movement-devmenu .slider{height:18px; display:flex; align-items:center; touch-action:none; user-select:none;}
     #movement-devmenu .track{position:relative; width:100%; height:6px; border-radius:6px; background:#29333d; overflow:hidden;}
     #movement-devmenu .fill{position:absolute; inset:0 auto 0 0; width:0%; background:var(--accent);}
     #movement-devmenu .thumb{position:absolute; top:50%; width:12px; height:12px; border-radius:50%; transform:translate(-50%, -50%); background:#e7ecf3; border:1px solid #6f7f8f; cursor:ew-resize;}
@@ -133,12 +232,14 @@ function createStyles() {
     #movement-devmenu .action-btn.warn{color:#ffbf84;}
     #movement-devmenu .action-btn:disabled{opacity:.45; cursor:default;}
     #movement-devmenu .status{font-size:10px; color:var(--muted); min-height:12px; text-align:right;}
-    @media (max-width:720px){#movement-devmenu{right:8px; left:8px; width:auto;}}
+    #movement-devmenu .resize-grip{position:absolute; right:0; bottom:0; width:14px; height:14px; cursor:nwse-resize; background:linear-gradient(135deg, transparent 50%, #3a4552 50%);}
+    #movement-devmenu.locked .resize-grip{display:none;}
+    @media (max-width:720px){#movement-devmenu{right:8px; width:min(calc(100vw - 16px),480px);}}
   `;
   document.head.appendChild(style);
 }
 
-function normalizeCategoryToTab(category: TuningCategory): MenuTab {
+function normalizeCategoryToTab(category: TuningParamMeta['category']): MenuTab {
   if (category === 'NetDebug') return 'NetDebug';
   if (category === 'Rotation') return 'Rotation';
   if (category === 'Puck') return 'Puck';
@@ -164,19 +265,92 @@ function isMovementContextualRecommended(meta: TuningParamMeta, tuning: Movement
   return true;
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function safeParseLayout(raw: string | null): Partial<DevPanelLayout> | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<DevPanelLayout>;
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function getViewportBounds() {
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const maxWidth = Math.max(PANEL_MIN_WIDTH, Math.floor(viewportWidth * 0.9));
+  const maxHeight = Math.max(PANEL_MIN_HEIGHT, Math.floor(viewportHeight * 0.9));
+  return { viewportWidth, viewportHeight, maxWidth, maxHeight };
+}
+
+function buildDefaultLayout(): DevPanelLayout {
+  const { viewportWidth, maxWidth, maxHeight } = getViewportBounds();
+  const width = clamp(372, PANEL_MIN_WIDTH, maxWidth);
+  const height = clamp(640, PANEL_MIN_HEIGHT, maxHeight);
+  const x = clamp(viewportWidth - width - 12, PANEL_MARGIN, Math.max(PANEL_MARGIN, viewportWidth - width - PANEL_MARGIN));
+  return { x, y: 12, width, height, activeTab: 'Movement', panelLocked: false, autoLayoutEnabled: true, fixedColumns: 2, sectionCollapseOverrides: {} };
+}
+
+function normalizeLayout(input: Partial<DevPanelLayout> | null): DevPanelLayout {
+  const base = buildDefaultLayout();
+  const { viewportWidth, viewportHeight, maxWidth, maxHeight } = getViewportBounds();
+  const width = clamp(Number(input?.width ?? base.width), PANEL_MIN_WIDTH, maxWidth);
+  const height = clamp(Number(input?.height ?? base.height), PANEL_MIN_HEIGHT, maxHeight);
+  const maxX = Math.max(PANEL_MARGIN, viewportWidth - width - PANEL_MARGIN);
+  const maxY = Math.max(PANEL_MARGIN, viewportHeight - height - PANEL_MARGIN);
+  const x = clamp(Number(input?.x ?? base.x), PANEL_MARGIN, maxX);
+  const y = clamp(Number(input?.y ?? base.y), PANEL_MARGIN, maxY);
+  const activeTab = (Object.keys(TAB_LABELS) as MenuTab[]).includes(input?.activeTab as MenuTab)
+    ? (input?.activeTab as MenuTab)
+    : base.activeTab;
+  const panelLocked = Boolean(input?.panelLocked ?? base.panelLocked);
+  const autoLayoutEnabled = Boolean(input?.autoLayoutEnabled ?? base.autoLayoutEnabled);
+  const fixedColumnsRaw = Number(input?.fixedColumns ?? base.fixedColumns);
+  const fixedColumns: 1 | 2 | 3 = fixedColumnsRaw === 3 ? 3 : fixedColumnsRaw === 1 ? 1 : 2;
+  const sectionCollapseOverrides = (input?.sectionCollapseOverrides && typeof input.sectionCollapseOverrides === 'object')
+    ? input.sectionCollapseOverrides
+    : {};
+  return { x, y, width, height, activeTab, panelLocked, autoLayoutEnabled, fixedColumns, sectionCollapseOverrides };
+}
+
+function getLayoutMode(width: number): LayoutMode {
+  if (width < 520) return 'NARROW';
+  if (width <= 860) return 'MEDIUM';
+  return 'WIDE';
+}
+
+function getHeightMode(height: number): HeightMode {
+  return height < 650 ? 'SHORT' : 'TALL';
+}
+
 export function createMovementTuner(wsClient?: WsClient): TunerHandle {
   createStyles();
   const root = document.createElement('div');
   root.id = 'movement-devmenu';
   root.addEventListener('pointerdown', (e) => e.stopPropagation());
+  let storedLayoutRaw: string | null = null;
+  try {
+    storedLayoutRaw = localStorage.getItem(DEVMENU_LAYOUT_KEY);
+  } catch {}
+  const savedLayout = normalizeLayout(safeParseLayout(storedLayoutRaw));
+  let layout = { ...savedLayout };
 
   const state: DevMenuState = {
-    activeTab: 'Movement',
-    searchQuery: '',
+    activeTab: layout.activeTab,
     advancedExpandedByCategory: { Movement: false },
     pinnedKeys: loadPinnedKeys(PARAM_REGISTRY.map((m) => String(m.key))),
-    dirty: false
+    dirty: false,
+    panelLocked: layout.panelLocked,
+    autoLayoutEnabled: layout.autoLayoutEnabled ?? true,
+    fixedColumns: layout.fixedColumns ?? 2,
+    sectionCollapseOverrides: layout.sectionCollapseOverrides ?? {}
   };
+  root.classList.toggle('locked', state.panelLocked);
 
   let allowTuningSync = false;
   let visible = true;
@@ -196,23 +370,40 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
   const title = document.createElement('div');
   title.className = 'title';
   title.textContent = 'MOVEMENT DEV MENU';
-  const f3Hint = document.createElement('div');
-  f3Hint.className = 'subtle';
-  f3Hint.textContent = 'F3 show/hide';
-  titleRow.append(title, f3Hint);
+  const headerMeta = document.createElement('div');
+  headerMeta.className = 'subtle';
+  headerMeta.textContent = 'F3 show/hide';
+  titleRow.append(title, headerMeta);
 
   const presetRow = document.createElement('div');
   presetRow.className = 'preset-row';
   const presetSelect = document.createElement('select');
-  const saveAsInlineBtn = document.createElement('button');
-  saveAsInlineBtn.className = 'text-btn';
-  saveAsInlineBtn.textContent = 'Save As';
-  presetRow.append(presetSelect, saveAsInlineBtn);
+  const f3Hint = document.createElement('div');
+  f3Hint.className = 'subtle';
+  f3Hint.style.textAlign = 'right';
+  f3Hint.textContent = 'F3';
+  presetRow.append(presetSelect, f3Hint);
+
+  const headerActions = document.createElement('div');
+  headerActions.className = 'header-actions';
+  const headerSaveBtn = document.createElement('button');
+  headerSaveBtn.className = 'text-btn';
+  headerSaveBtn.textContent = 'Save';
+  const headerSaveAsBtn = document.createElement('button');
+  headerSaveAsBtn.className = 'text-btn';
+  headerSaveAsBtn.textContent = 'Save As';
+  const headerResetBtn = document.createElement('button');
+  headerResetBtn.className = 'text-btn';
+  headerResetBtn.textContent = 'Reset';
+  const headerCloseBtn = document.createElement('button');
+  headerCloseBtn.className = 'text-btn';
+  headerCloseBtn.textContent = 'Close';
+  headerActions.append(headerSaveBtn, headerSaveAsBtn, headerResetBtn, headerCloseBtn);
 
   const tabs = document.createElement('div');
   tabs.className = 'tabs';
   const tabButtons = new Map<MenuTab, HTMLButtonElement>();
-  (Object.keys(TAB_LABELS) as MenuTab[]).forEach((tab) => {
+  TAB_ORDER.forEach((tab) => {
     const btn = document.createElement('button');
     btn.className = 'tab-btn';
     btn.textContent = TAB_LABELS[tab];
@@ -220,25 +411,21 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     if (btn.disabled) btn.title = 'Coming soon';
     btn.addEventListener('click', () => {
       state.activeTab = tab;
+      persistLayout();
       renderTab();
     });
     tabButtons.set(tab, btn);
     tabs.appendChild(btn);
   });
 
-  const searchWrap = document.createElement('div');
-  searchWrap.className = 'search-wrap';
-  const searchInput = document.createElement('input');
-  searchInput.type = 'text';
-  searchInput.placeholder = 'Search param: turn, damp, grip...';
-  const searchResults = document.createElement('div');
-  searchResults.className = 'search-results';
-  searchWrap.append(searchInput, searchResults);
-
-  head.append(titleRow, presetRow, tabs, searchWrap);
+  head.append(titleRow, presetRow, headerActions, tabs);
   const body = document.createElement('div');
   body.className = 'body';
+  const resizeGrip = document.createElement('div');
+  resizeGrip.className = 'resize-grip';
+  resizeGrip.title = 'Resize panel';
   root.append(head, body);
+  root.appendChild(resizeGrip);
   document.body.appendChild(root);
 
   const rowByKey = new Map<string, HTMLElement[]>();
@@ -251,6 +438,167 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     for (const refresh of refreshers) refresh();
     refreshStatusLine();
   });
+
+  const dragState = { active: false, pointerId: -1, startX: 0, startY: 0, startLeft: 0, startTop: 0 };
+  const resizeState = { active: false, pointerId: -1, startX: 0, startY: 0, startWidth: 0, startHeight: 0 };
+  let activeSliderDragCount = 0;
+  let layoutMode: LayoutMode = getLayoutMode(layout.width);
+  let heightMode: HeightMode = getHeightMode(layout.height);
+
+  function getColumnsForMode(mode: LayoutMode): 1 | 2 | 3 {
+    if (mode === 'WIDE') return 3;
+    if (mode === 'MEDIUM') return 2;
+    return 1;
+  }
+
+  function getActiveColumns(): 1 | 2 | 3 {
+    return state.autoLayoutEnabled ? getColumnsForMode(layoutMode) : state.fixedColumns;
+  }
+
+  function getSectionOverride(tab: MenuTab, id: string): boolean | null {
+    const tabMap = state.sectionCollapseOverrides[tab];
+    if (!tabMap) return null;
+    if (!(id in tabMap)) return null;
+    return !!tabMap[id];
+  }
+
+  function setSectionOverride(tab: MenuTab, id: string, collapsed: boolean) {
+    const existing = state.sectionCollapseOverrides[tab] ?? {};
+    state.sectionCollapseOverrides = {
+      ...state.sectionCollapseOverrides,
+      [tab]: { ...existing, [id]: collapsed }
+    };
+    persistLayout();
+  }
+
+  function resolveSectionCollapsed(tab: MenuTab, meta: SectionMeta): boolean {
+    const manual = getSectionOverride(tab, meta.id);
+    if (manual !== null) return manual;
+    const modeRule = meta.modeRules?.[layoutMode];
+    if (typeof modeRule?.collapsed === 'boolean') return modeRule.collapsed;
+    if (heightMode === 'SHORT' && meta.id.toLowerCase().includes('debug')) return true;
+    return !!meta.defaultCollapsed;
+  }
+
+  function persistLayout() {
+    layout = normalizeLayout({
+      ...layout,
+      activeTab: state.activeTab,
+      panelLocked: state.panelLocked,
+      autoLayoutEnabled: state.autoLayoutEnabled,
+      fixedColumns: state.fixedColumns,
+      sectionCollapseOverrides: state.sectionCollapseOverrides
+    });
+    try {
+      localStorage.setItem(DEVMENU_LAYOUT_KEY, JSON.stringify(layout));
+    } catch {}
+  }
+
+  function applyLayout(next: Partial<DevPanelLayout>, persist = true) {
+    layout = normalizeLayout({ ...layout, ...next, activeTab: state.activeTab, panelLocked: state.panelLocked });
+    root.style.left = `${layout.x}px`;
+    root.style.top = `${layout.y}px`;
+    root.style.right = 'auto';
+    root.style.width = `${layout.width}px`;
+    root.style.height = `${layout.height}px`;
+    const prevLayoutMode = layoutMode;
+    const prevHeightMode = heightMode;
+    layoutMode = getLayoutMode(layout.width);
+    heightMode = getHeightMode(layout.height);
+    root.style.setProperty('--section-cols', String(getActiveColumns()));
+    if ((prevLayoutMode !== layoutMode || prevHeightMode !== heightMode) && body.childElementCount > 0) {
+      const prevScrollTop = body.scrollTop;
+      renderTab();
+      body.scrollTop = Math.min(prevScrollTop, Math.max(0, body.scrollHeight - body.clientHeight));
+      return;
+    }
+    if (persist) persistLayout();
+  }
+
+  function applyLockUi() {
+    root.classList.toggle('locked', state.panelLocked);
+    head.style.cursor = state.panelLocked ? 'default' : 'grab';
+  }
+
+  const onDragMove = (e: PointerEvent) => {
+    if (!dragState.active || e.pointerId !== dragState.pointerId) return;
+    e.preventDefault();
+    const dx = e.clientX - dragState.startX;
+    const dy = e.clientY - dragState.startY;
+    applyLayout({ x: dragState.startLeft + dx, y: dragState.startTop + dy });
+  };
+
+  const stopDrag = (e?: PointerEvent) => {
+    if (!dragState.active) return;
+    if (e && e.pointerId !== dragState.pointerId) return;
+    dragState.active = false;
+    if (head.hasPointerCapture(dragState.pointerId)) head.releasePointerCapture(dragState.pointerId);
+    dragState.pointerId = -1;
+    setDragLock(false);
+    window.removeEventListener('pointermove', onDragMove);
+    window.removeEventListener('pointerup', stopDrag);
+    window.removeEventListener('pointercancel', stopDrag);
+  };
+
+  head.addEventListener('pointerdown', (e) => {
+    if (state.panelLocked) return;
+    const target = e.target as HTMLElement | null;
+    if (target?.closest('button, input, select, label')) return;
+    e.preventDefault();
+    dragState.active = true;
+    dragState.pointerId = e.pointerId;
+    dragState.startX = e.clientX;
+    dragState.startY = e.clientY;
+    dragState.startLeft = layout.x;
+    dragState.startTop = layout.y;
+    head.setPointerCapture(e.pointerId);
+    setDragLock(true);
+    window.addEventListener('pointermove', onDragMove);
+    window.addEventListener('pointerup', stopDrag);
+    window.addEventListener('pointercancel', stopDrag);
+  });
+
+  const onResizeMove = (e: PointerEvent) => {
+    if (!resizeState.active || e.pointerId !== resizeState.pointerId) return;
+    e.preventDefault();
+    const dx = e.clientX - resizeState.startX;
+    const dy = e.clientY - resizeState.startY;
+    applyLayout({ width: resizeState.startWidth + dx, height: resizeState.startHeight + dy });
+  };
+
+  const stopResize = (e?: PointerEvent) => {
+    if (!resizeState.active) return;
+    if (e && e.pointerId !== resizeState.pointerId) return;
+    resizeState.active = false;
+    if (resizeGrip.hasPointerCapture(resizeState.pointerId)) resizeGrip.releasePointerCapture(resizeState.pointerId);
+    resizeState.pointerId = -1;
+    setDragLock(false);
+    window.removeEventListener('pointermove', onResizeMove);
+    window.removeEventListener('pointerup', stopResize);
+    window.removeEventListener('pointercancel', stopResize);
+  };
+
+  resizeGrip.addEventListener('pointerdown', (e) => {
+    if (state.panelLocked) return;
+    e.preventDefault();
+    e.stopPropagation();
+    resizeState.active = true;
+    resizeState.pointerId = e.pointerId;
+    resizeState.startX = e.clientX;
+    resizeState.startY = e.clientY;
+    resizeState.startWidth = layout.width;
+    resizeState.startHeight = layout.height;
+    resizeGrip.setPointerCapture(e.pointerId);
+    setDragLock(true);
+    window.addEventListener('pointermove', onResizeMove);
+    window.addEventListener('pointerup', stopResize);
+    window.addEventListener('pointercancel', stopResize);
+  });
+
+  const onWindowResize = () => applyLayout({}, true);
+  window.addEventListener('resize', onWindowResize);
+  applyLayout(layout, false);
+  applyLockUi();
 
   function allPresets() { return listAllPresets(presetState); }
   function selectedPreset() { return findPresetById(presetState, presetState.selectedPresetId); }
@@ -275,6 +623,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     if (statusLineEl) {
       statusLineEl.textContent = `Preset: ${presetName} | ${dirtyText} | v${ver}${extra}`;
     }
+    headerMeta.textContent = `Preset: ${presetName} | Dirty: ${state.dirty ? 'yes' : 'no'} | v${ver}`;
     if (movementSummaryEl) {
       movementSummaryEl.textContent = `Active preset: ${presetName} | Dirty: ${state.dirty ? 'yes' : 'no'} | v${ver}`;
     }
@@ -291,6 +640,41 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     presetSelect.value = presetState.selectedPresetId;
   }
 
+  function handleSavePreset() {
+    const result = saveCurrentToSelected(presetState);
+    if (result.requiresSaveAs) {
+      const name = window.prompt('Built-in presets are read-only. Save As name:', 'MyPreset');
+      if (!name) return;
+      presetState = saveAsPreset(presetState, name);
+      savePresetState(presetState);
+      refreshPresetSelect();
+      renderTab();
+      postStatus(`Saved as ${name.trim()}`);
+      return;
+    }
+    presetState = result.state;
+    refreshPresetSelect();
+    renderTab();
+    refreshStatusLine();
+    postStatus('Preset saved');
+  }
+
+  function handleSaveAsPreset() {
+    const name = window.prompt('Save As preset name:', selectedPreset()?.name ?? 'MyPreset');
+    if (!name) return;
+    presetState = saveAsPreset(presetState, name);
+    refreshPresetSelect();
+    renderTab();
+    postStatus(`Saved as ${name.trim()}`);
+  }
+
+  function handleResetRuntime() {
+    resetTuning();
+    for (const refresh of refreshers) refresh();
+    refreshStatusLine();
+    postStatus('Reset runtime tuning');
+  }
+
   function togglePinned(key: keyof MovementTuning) {
     const sKey = String(key);
     if (state.pinnedKeys.includes(sKey)) state.pinnedKeys = state.pinnedKeys.filter((k) => k !== sKey);
@@ -301,6 +685,37 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
 
   function isPinned(key: keyof MovementTuning) {
     return state.pinnedKeys.includes(String(key));
+  }
+
+  function getCurrentValueForMeta(meta: TuningParamMeta): unknown {
+    const puckKey = PUCK_UI_KEY_MAP[meta.key];
+    if (meta.category === 'Puck' && puckKey) {
+      return (puckStickTuningStore.get() as Record<string, unknown>)[puckKey as string];
+    }
+    return (getTuning() as Record<string, unknown>)[meta.key as string];
+  }
+
+  function getBaselineValueForMeta(meta: TuningParamMeta): { value: unknown; source: 'preset' | 'default' } {
+    const preset = selectedPreset();
+    const presetVal = preset ? (preset.tuning as Record<string, unknown>)[meta.key as string] : undefined;
+    if (presetVal !== undefined) return { value: presetVal, source: 'preset' };
+    const puckKey = PUCK_UI_KEY_MAP[meta.key];
+    if (meta.category === 'Puck' && puckKey) {
+      return {
+        value: (PUCK_STICK_DEFAULTS_LOCAL as Record<string, unknown>)[puckKey as string],
+        source: 'default'
+      };
+    }
+    return { value: (DEFAULTS as Record<string, unknown>)[meta.key as string], source: 'default' };
+  }
+
+  function setMetaToValue(meta: TuningParamMeta, value: unknown) {
+    const puckKey = PUCK_UI_KEY_MAP[meta.key];
+    if (meta.category === 'Puck' && puckKey) {
+      puckStickTuningStore.set(puckKey, value as PuckStickTuning[typeof puckKey]);
+    } else {
+      setTuningKey(meta.key, value as MovementTuning[typeof meta.key]);
+    }
   }
 
   function clearBody() {
@@ -318,16 +733,6 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     rowByKey.set(k, arr);
   }
 
-  function highlightParam(key: keyof MovementTuning) {
-    const rows = rowByKey.get(String(key));
-    if (!rows?.length) return;
-    const target = rows[0];
-    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    target.classList.remove('highlight');
-    void target.offsetWidth;
-    target.classList.add('highlight');
-  }
-
   function createGroup(titleText: string): { root: HTMLDivElement; body: HTMLDivElement } {
     const group = document.createElement('div');
     group.className = 'group';
@@ -340,17 +745,98 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     return { root: group, body: bodyEl };
   }
 
-  function createParamRow(meta: TuningParamMeta, opts?: { showCategoryBadge?: boolean; allowPin?: boolean; onTogglePin?: () => void }) {
+  function createSectionGrid() {
+    const wrap = document.createElement('div');
+    wrap.className = 'section-grid';
+    wrap.style.setProperty('--section-cols', String(getActiveColumns()));
+    return wrap;
+  }
+
+  function createSectionCard(
+    tab: MenuTab,
+    meta: SectionMeta,
+    options?: { resetMetas?: TuningParamMeta[] }
+  ): { root: HTMLDivElement; body: HTMLDivElement; head: HTMLDivElement; collapsed: boolean } {
+    const group = document.createElement('div');
+    group.className = 'group card';
+    group.dataset.sectionId = meta.id;
+    group.dataset.tone = meta.tone ?? 'core';
+    const cols = getActiveColumns();
+    const modeRule = meta.modeRules?.[layoutMode];
+    const span = Math.max(1, Math.min(cols, Number(modeRule?.columnSpan ?? 1)));
+    if (span > 1) group.classList.add(`span-${span}`);
+    const order = Number(modeRule?.order ?? meta.priority ?? 0);
+    group.style.order = String(order);
+
+    const headEl = document.createElement('div');
+    const collapsed = resolveSectionCollapsed(tab, meta);
+    headEl.className = `group-head ${meta.collapsible ? 'group-toggle' : ''}`;
+    const titleEl = document.createElement('span');
+    titleEl.textContent = meta.title;
+    const actionsEl = document.createElement('span');
+    actionsEl.className = 'head-actions';
+    headEl.append(titleEl, actionsEl);
+    if (options?.resetMetas?.length) {
+      const sectionResetBtn = document.createElement('button');
+      sectionResetBtn.className = 'section-reset';
+      sectionResetBtn.textContent = 'Reset sekci';
+      sectionResetBtn.title = 'Reset this section to preset/default values';
+      sectionResetBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        for (const metaItem of options.resetMetas ?? []) {
+          const baseline = getBaselineValueForMeta(metaItem);
+          setMetaToValue(metaItem, baseline.value);
+        }
+        for (const refresh of refreshers) refresh();
+        refreshStatusLine();
+      });
+      actionsEl.appendChild(sectionResetBtn);
+    }
+    if (meta.collapsible) {
+      const chev = document.createElement('span');
+      chev.className = 'chev';
+      chev.textContent = collapsed ? '[+]' : '[-]';
+      actionsEl.appendChild(chev);
+      headEl.addEventListener('click', () => {
+        const next = !resolveSectionCollapsed(tab, meta);
+        setSectionOverride(tab, meta.id, next);
+        renderTab();
+      });
+    }
+
+    const bodyEl = document.createElement('div');
+    bodyEl.className = 'group-body';
+    if (heightMode === 'SHORT' && layoutMode === 'NARROW') bodyEl.classList.add('compact');
+    bodyEl.style.display = collapsed ? 'none' : 'grid';
+    group.append(headEl, bodyEl);
+    return { root: group, body: bodyEl, head: headEl, collapsed };
+  }
+
+  function createParamRow(
+    meta: TuningParamMeta,
+    opts?: { showCategoryBadge?: boolean; allowPin?: boolean; onTogglePin?: () => void; fullWidth?: boolean }
+  ) {
     const row = document.createElement('div');
     row.className = 'row';
+    if (opts?.fullWidth) row.classList.add('row-full');
     registerRow(meta.key, row);
 
     const rowTop = document.createElement('div');
     rowTop.className = 'row-top';
+    const rowLabel = document.createElement('div');
+    rowLabel.className = 'row-label';
     const name = document.createElement('div');
     name.className = 'row-name';
     name.textContent = meta.label;
     if (meta.hint) name.title = meta.hint;
+    const rowDot = document.createElement('span');
+    rowDot.className = 'row-dot';
+    rowDot.textContent = '●';
+    const keyText = document.createElement('div');
+    keyText.className = 'row-key';
+    keyText.textContent = `key: ${String(meta.key)}`;
+    rowLabel.append(name, rowDot, keyText);
     const badge = document.createElement('div');
     badge.className = 'badge';
     badge.textContent = meta.group;
@@ -368,13 +854,29 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     const resetBtn = document.createElement('button');
     resetBtn.className = 'icon-btn';
     resetBtn.textContent = 'Reset';
-    rowTop.append(name, badge, pinBtn, resetBtn);
+    rowTop.append(rowLabel, badge, pinBtn, resetBtn);
     row.append(rowTop);
 
-    const tuning = getTuning();
-    const defaultValue = (DEFAULTS as Record<string, unknown>)[meta.key as string];
+    const baseline = getBaselineValueForMeta(meta);
+    const currentValue = getCurrentValueForMeta(meta);
+    const defaultValue = baseline.value;
+    const isNumeric = meta.kind === 'number';
+    const updateDirtyState = () => {
+      const baselineNext = getBaselineValueForMeta(meta);
+      const live = getCurrentValueForMeta(meta);
+      const dirty = isNumeric
+        ? Math.abs(Number(live ?? 0) - Number(baselineNext.value ?? 0)) > 1e-6
+        : (meta.kind === 'boolean'
+            ? Boolean(live) !== Boolean(baselineNext.value)
+            : String(live ?? '') !== String(baselineNext.value ?? ''));
+      row.classList.toggle('dirty', dirty);
+      rowDot.style.display = dirty ? 'inline' : 'none';
+      resetBtn.title = `Reset to ${baselineNext.source} value`;
+    };
+    updateDirtyState();
 
     if (meta.kind === 'boolean') {
+      row.classList.add('row-bool');
       const boolWrap = document.createElement('div');
       boolWrap.className = 'bool-wrap';
       const boolLabel = document.createElement('span');
@@ -382,10 +884,10 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
       boolLabel.textContent = 'Enabled';
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
-      checkbox.checked = Boolean((tuning as Record<string, unknown>)[meta.key as string]);
+      checkbox.checked = Boolean(currentValue);
       checkbox.addEventListener('change', (e) => {
         e.stopPropagation();
-        setTuningKey(meta.key, checkbox.checked as MovementTuning[typeof meta.key]);
+        setMetaToValue(meta, checkbox.checked);
         refreshStatusLine();
         if (meta.key === 'regimesEnabled' && state.activeTab === 'Movement') renderTab();
       });
@@ -394,13 +896,78 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
       resetBtn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        setTuningKey(meta.key, Boolean(defaultValue) as MovementTuning[typeof meta.key]);
-        checkbox.checked = Boolean(defaultValue);
+        const nextBaseline = getBaselineValueForMeta(meta);
+        setMetaToValue(meta, Boolean(nextBaseline.value));
+        checkbox.checked = Boolean(nextBaseline.value);
         refreshStatusLine();
         if (meta.key === 'regimesEnabled' && state.activeTab === 'Movement') renderTab();
       });
       refreshers.push(() => {
-        checkbox.checked = Boolean((getTuning() as Record<string, unknown>)[meta.key as string]);
+        checkbox.checked = Boolean(getCurrentValueForMeta(meta));
+        updateDirtyState();
+      });
+      return row;
+    }
+
+    if (meta.kind === 'enum') {
+      const enumWrap = document.createElement('div');
+      enumWrap.className = 'row-val';
+      const select = document.createElement('select');
+      const options = meta.enumOptions ?? [];
+      for (const opt of options) {
+        const el = document.createElement('option');
+        el.value = opt.value;
+        el.textContent = opt.label;
+        select.appendChild(el);
+      }
+      const fallback = String(currentValue ?? defaultValue ?? '');
+      if (![...select.options].some((o) => o.value === fallback)) {
+        const el = document.createElement('option');
+        el.value = fallback;
+        el.textContent = fallback;
+        select.appendChild(el);
+      }
+      select.value = fallback;
+      const valueText = document.createElement('div');
+      valueText.className = 'subtle';
+      valueText.style.minWidth = '54px';
+      valueText.style.textAlign = 'right';
+      valueText.textContent = select.value;
+      enumWrap.append(select, valueText);
+      row.append(enumWrap);
+      select.addEventListener('change', () => {
+        setMetaToValue(meta, select.value);
+        valueText.textContent = select.value;
+        refreshStatusLine();
+        updateDirtyState();
+      });
+      resetBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const nextBaseline = String(getBaselineValueForMeta(meta).value ?? '');
+        if (![...select.options].some((o) => o.value === nextBaseline)) {
+          const el = document.createElement('option');
+          el.value = nextBaseline;
+          el.textContent = nextBaseline;
+          select.appendChild(el);
+        }
+        setMetaToValue(meta, nextBaseline);
+        select.value = nextBaseline;
+        valueText.textContent = nextBaseline;
+        refreshStatusLine();
+        updateDirtyState();
+      });
+      refreshers.push(() => {
+        const next = String(getCurrentValueForMeta(meta) ?? '');
+        if (![...select.options].some((o) => o.value === next)) {
+          const el = document.createElement('option');
+          el.value = next;
+          el.textContent = next;
+          select.appendChild(el);
+        }
+        select.value = next;
+        valueText.textContent = next;
+        updateDirtyState();
       });
       return row;
     }
@@ -417,7 +984,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     valueInput.min = String(min);
     valueInput.max = String(max);
     valueInput.step = String(step);
-    valueInput.value = String((tuning as Record<string, unknown>)[meta.key as string] ?? defaultValue ?? 0);
+    valueInput.value = String(currentValue ?? defaultValue ?? 0);
     const valueText = document.createElement('div');
     valueText.className = 'subtle';
     valueText.style.minWidth = '54px';
@@ -438,13 +1005,14 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
 
     const applyNumber = (raw: number) => {
       const next = Math.max(min, Math.min(max, Number.isFinite(raw) ? raw : 0));
-      setTuningKey(meta.key, next as MovementTuning[typeof meta.key]);
+      setMetaToValue(meta, next);
       valueInput.value = String(next);
       valueText.textContent = next.toFixed(decimals);
       const pct = max > min ? (next - min) / (max - min) : 0;
       fill.style.width = `${pct * 100}%`;
       thumb.style.left = `${pct * 100}%`;
       refreshStatusLine();
+      updateDirtyState();
     };
 
     const updateFromClientX = (clientX: number) => {
@@ -453,7 +1021,11 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
       applyNumber(min + (max - min) * t);
     };
 
-    const dragState = { dragging: false, pointerId: -1, captureEl: null as HTMLElement | null };
+    const dragState = { dragging: false, pointerId: -1, captureEl: null as HTMLElement | null, rafId: 0, pendingX: 0 };
+    const flushDrag = () => {
+      dragState.rafId = 0;
+      updateFromClientX(dragState.pendingX);
+    };
     const stopDrag = () => {
       if (!dragState.dragging) return;
       if (dragState.captureEl && dragState.captureEl.hasPointerCapture(dragState.pointerId)) {
@@ -462,6 +1034,9 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
       dragState.dragging = false;
       dragState.pointerId = -1;
       dragState.captureEl = null;
+      if (dragState.rafId) window.cancelAnimationFrame(dragState.rafId);
+      dragState.rafId = 0;
+      activeSliderDragCount = Math.max(0, activeSliderDragCount - 1);
       setDragLock(false);
       window.removeEventListener('pointerup', stopDrag);
     };
@@ -472,15 +1047,18 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
       dragState.pointerId = e.pointerId;
       dragState.captureEl = captureEl;
       captureEl.setPointerCapture(e.pointerId);
+      activeSliderDragCount += 1;
       setDragLock(true);
       window.addEventListener('pointerup', stopDrag);
-      updateFromClientX(e.clientX);
+      dragState.pendingX = e.clientX;
+      if (!dragState.rafId) dragState.rafId = window.requestAnimationFrame(flushDrag);
     };
     const moveDrag = (e: PointerEvent) => {
       if (!dragState.dragging || e.pointerId !== dragState.pointerId) return;
       e.preventDefault();
       e.stopPropagation();
-      updateFromClientX(e.clientX);
+      dragState.pendingX = e.clientX;
+      if (!dragState.rafId) dragState.rafId = window.requestAnimationFrame(flushDrag);
     };
     track.addEventListener('pointerdown', (e) => startDrag(e, track));
     thumb.addEventListener('pointerdown', (e) => startDrag(e, thumb));
@@ -490,58 +1068,121 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     thumb.addEventListener('pointerup', stopDrag);
     track.addEventListener('pointercancel', stopDrag);
     thumb.addEventListener('pointercancel', stopDrag);
+    slider.addEventListener('wheel', (e) => {
+      if (activeSliderDragCount > 0) e.preventDefault();
+    }, { passive: false });
 
+    let editStartValue = Number(currentValue ?? defaultValue ?? 0);
+    valueInput.addEventListener('focus', () => {
+      editStartValue = Number(valueInput.value);
+      valueInput.select();
+    });
+    valueInput.addEventListener('click', () => valueInput.select());
+    valueInput.addEventListener('keydown', (e) => {
+      const baseStep = step;
+      const jumpStep = step * 10;
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        applyNumber(Number(valueInput.value));
+        valueInput.blur();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        applyNumber(editStartValue);
+        valueInput.value = String(editStartValue);
+        valueInput.blur();
+      } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        const delta = (e.shiftKey ? jumpStep : baseStep) * (e.key === 'ArrowUp' ? 1 : -1);
+        applyNumber(Number(valueInput.value) + delta);
+      }
+    });
     valueInput.addEventListener('change', () => applyNumber(Number(valueInput.value)));
     resetBtn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      applyNumber(Number(defaultValue ?? 0));
+      const nextBaseline = getBaselineValueForMeta(meta);
+      applyNumber(Number(nextBaseline.value ?? 0));
     });
 
     refreshers.push(() => {
-      const v = Number((getTuning() as Record<string, unknown>)[meta.key as string] ?? defaultValue ?? 0);
+      const v = Number(getCurrentValueForMeta(meta) ?? getBaselineValueForMeta(meta).value ?? 0);
       valueInput.value = String(v);
       valueText.textContent = v.toFixed(decimals);
       const pct = max > min ? (v - min) / (max - min) : 0;
       fill.style.width = `${pct * 100}%`;
       thumb.style.left = `${pct * 100}%`;
+      updateDirtyState();
     });
     refreshers[refreshers.length - 1]();
     return row;
   }
 
-  function renderSearchResults() {
-    searchResults.innerHTML = '';
-    const q = state.searchQuery.trim().toLowerCase();
-    if (!q) return;
-    const matches = PARAM_REGISTRY.filter((meta) => {
-      const haystack = [String(meta.key), meta.label, meta.group, meta.category, ...(meta.keywords ?? [])].join(' ').toLowerCase();
-      return haystack.includes(q);
-    }).slice(0, 20);
-    if (matches.length === 0) {
-      const empty = document.createElement('div');
-      empty.className = 'empty';
-      empty.textContent = 'No matching parameters';
-      searchResults.appendChild(empty);
-      return;
-    }
-    for (const meta of matches) {
-      const btn = document.createElement('button');
-      btn.className = 'search-item';
-      btn.innerHTML = `<div>${meta.label}</div><div class="meta">${meta.category} / ${meta.group} / ${String(meta.key)}</div>`;
-      btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        state.activeTab = normalizeCategoryToTab(meta.category);
-        if (state.activeTab === 'Movement') state.advancedExpandedByCategory.Movement = true;
-        renderTab();
-        window.setTimeout(() => highlightParam(meta.key), 50);
-      });
-      searchResults.appendChild(btn);
-    }
-  }
-
   function renderHomeTab() {
+    const panelGroup = createGroup('Panel Settings');
+    const panelActions = document.createElement('div');
+    panelActions.className = 'net-actions';
+    panelActions.classList.add('full-span');
+    const lockBtn = document.createElement('button');
+    lockBtn.className = 'action-btn';
+    lockBtn.textContent = state.panelLocked ? 'Unlock Panel' : 'Lock Panel';
+    lockBtn.addEventListener('click', () => {
+      state.panelLocked = !state.panelLocked;
+      applyLockUi();
+      persistLayout();
+      renderTab();
+    });
+    const resetLayoutBtn = document.createElement('button');
+    resetLayoutBtn.className = 'action-btn';
+    resetLayoutBtn.textContent = 'Reset Panel Layout';
+    resetLayoutBtn.addEventListener('click', () => {
+      const defaults = buildDefaultLayout();
+      state.activeTab = defaults.activeTab;
+      state.panelLocked = false;
+      state.autoLayoutEnabled = defaults.autoLayoutEnabled ?? true;
+      state.fixedColumns = defaults.fixedColumns ?? 2;
+      state.sectionCollapseOverrides = defaults.sectionCollapseOverrides ?? {};
+      applyLockUi();
+      applyLayout(defaults);
+      renderTab();
+      postStatus('Panel layout reset');
+    });
+    panelActions.append(lockBtn, resetLayoutBtn);
+    panelGroup.body.appendChild(panelActions);
+
+    const layoutActions = document.createElement('div');
+    layoutActions.className = 'net-actions';
+    layoutActions.classList.add('full-span');
+    const autoLayoutBtn = document.createElement('button');
+    autoLayoutBtn.className = 'action-btn';
+    autoLayoutBtn.textContent = `Auto layout: ${state.autoLayoutEnabled ? 'ON' : 'OFF'}`;
+    autoLayoutBtn.addEventListener('click', () => {
+      state.autoLayoutEnabled = !state.autoLayoutEnabled;
+      persistLayout();
+      applyLayout({}, false);
+      renderTab();
+    });
+    const colsBtn = document.createElement('button');
+    colsBtn.className = 'action-btn';
+    colsBtn.textContent = `Columns: ${state.fixedColumns}`;
+    colsBtn.disabled = state.autoLayoutEnabled;
+    colsBtn.title = state.autoLayoutEnabled ? 'Disable auto layout to set fixed columns' : 'Cycle fixed columns';
+    colsBtn.addEventListener('click', () => {
+      if (state.autoLayoutEnabled) return;
+      state.fixedColumns = state.fixedColumns === 3 ? 1 : (state.fixedColumns + 1) as 1 | 2 | 3;
+      persistLayout();
+      applyLayout({}, false);
+      renderTab();
+    });
+    layoutActions.append(autoLayoutBtn, colsBtn);
+    panelGroup.body.appendChild(layoutActions);
+
+    const modeInfo = document.createElement('div');
+    modeInfo.className = 'subtle';
+    modeInfo.classList.add('full-span');
+    modeInfo.textContent = `Layout: ${layoutMode} | Height: ${heightMode} | Cols: ${getActiveColumns()}`;
+    panelGroup.body.appendChild(modeInfo);
+    body.appendChild(panelGroup.root);
+
     const pinnedMetas = state.pinnedKeys
       .map((k) => getMetaByKey(k as keyof MovementTuning))
       .filter((m): m is TuningParamMeta => !!m);
@@ -567,14 +1208,30 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
 
   function renderMovementTab() {
     const tuning = getTuning();
-    const stateGroup = createGroup('State');
+    const grid = createSectionGrid();
+    body.appendChild(grid);
+
+    const stateSectionMeta: SectionMeta = {
+      id: 'movement_state',
+      title: 'State',
+      priority: 100,
+      tone: 'core',
+      modeRules: {
+        NARROW: { order: 0, columnSpan: 1 },
+        MEDIUM: { order: 0, columnSpan: 2 },
+        WIDE: { order: 0, columnSpan: 3 }
+      }
+    };
+    const stateGroup = createSectionCard('Movement', stateSectionMeta);
     movementSummaryEl = document.createElement('div');
     movementSummaryEl.className = 'subtle';
     movementSummaryEl.style.marginBottom = '6px';
+    movementSummaryEl.classList.add('full-span');
     stateGroup.body.appendChild(movementSummaryEl);
 
     const stateActions = document.createElement('div');
     stateActions.className = 'net-actions';
+    stateActions.classList.add('full-span');
     const resetDefaultsBtn = document.createElement('button');
     resetDefaultsBtn.className = 'action-btn';
     resetDefaultsBtn.textContent = 'Reset to Defaults';
@@ -586,12 +1243,40 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     });
     stateActions.appendChild(resetDefaultsBtn);
     stateGroup.body.appendChild(stateActions);
-    body.appendChild(stateGroup.root);
+    grid.appendChild(stateGroup.root);
 
     const movementMetas = PARAM_REGISTRY.filter((m) => m.category === 'Movement');
+    const movementGroupPriority: Record<string, number> = {
+      Core: 90,
+      'Two-Regime': 85,
+      'Input / Controls': 83,
+      Movement: 82,
+      'Arc Movement': 80,
+      'Aim / Stick': 72,
+      'Assist / Start': 75,
+      'Grip & Turn': 70,
+      Aim: 65,
+      Crosshair: 60,
+      Brake: 55,
+      'Aim Debug': 20
+    };
+    const movementGroupTone: Record<string, SectionMeta['tone']> = {
+      Core: 'core',
+      'Two-Regime': 'control',
+      'Input / Controls': 'control',
+      Movement: 'control',
+      'Arc Movement': 'control',
+      'Aim / Stick': 'aim',
+      'Assist / Start': 'control',
+      'Grip & Turn': 'control',
+      Aim: 'aim',
+      Crosshair: 'aim',
+      Brake: 'control',
+      'Aim Debug': 'debug'
+    };
     const reduced = movementMetas
       .filter((m) => isMovementContextualRecommended(m, tuning))
-      .sort((a, b) => a.group.localeCompare(b.group) || a.label.localeCompare(b.label));
+      .sort((a, b) => (movementGroupPriority[b.group] ?? 0) - (movementGroupPriority[a.group] ?? 0) || a.label.localeCompare(b.label));
     const reducedGroups = new Map<string, TuningParamMeta[]>();
     for (const meta of reduced) {
       const arr = reducedGroups.get(meta.group) ?? [];
@@ -599,28 +1284,44 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
       reducedGroups.set(meta.group, arr);
     }
     for (const [groupName, metas] of reducedGroups) {
-      const group = createGroup(groupName);
-      for (const meta of metas) group.body.appendChild(createParamRow(meta));
-      body.appendChild(group.root);
+      const section = createSectionCard('Movement', {
+        id: `movement_${groupName.toLowerCase().replace(/\s+/g, '_')}`,
+        title: groupName,
+        priority: movementGroupPriority[groupName] ?? 50,
+        tone: movementGroupTone[groupName] ?? 'control',
+        collapsible: groupName.toLowerCase().includes('debug'),
+        defaultCollapsed: groupName.toLowerCase().includes('debug'),
+        modeRules: groupName.toLowerCase().includes('debug')
+          ? {
+              NARROW: { order: 980, collapsed: true },
+              MEDIUM: { order: 980, columnSpan: 2, collapsed: true },
+              WIDE: { order: 980, collapsed: true }
+            }
+          : undefined
+      }, { resetMetas: metas });
+      if (!section.collapsed) {
+        for (const meta of metas) section.body.appendChild(createParamRow(meta));
+      }
+      grid.appendChild(section.root);
     }
 
     const reducedKeys = new Set(reduced.map((m) => String(m.key)));
     const advancedMetas = movementMetas.filter((m) => !reducedKeys.has(String(m.key)));
-    const advWrap = document.createElement('div');
-    advWrap.className = 'advanced';
-    const advToggle = document.createElement('button');
-    const advOpen = !!state.advancedExpandedByCategory.Movement;
-    advToggle.textContent = advOpen ? 'Advanced [-]' : 'Advanced [+]';
-    advToggle.addEventListener('click', () => {
-      state.advancedExpandedByCategory.Movement = !state.advancedExpandedByCategory.Movement;
-      renderTab();
-    });
-    advWrap.appendChild(advToggle);
-    if (advOpen) {
-      const advBody = document.createElement('div');
-      advBody.style.display = 'grid';
-      advBody.style.gap = '8px';
-      advBody.style.padding = '8px';
+    const advSectionMeta: SectionMeta = {
+      id: 'movement_advanced',
+      title: 'Advanced',
+      priority: 5,
+      tone: 'advanced',
+      collapsible: true,
+      defaultCollapsed: true,
+      modeRules: {
+        NARROW: { order: 999, columnSpan: 1, collapsed: true },
+        MEDIUM: { order: 999, columnSpan: 2, collapsed: heightMode === 'SHORT' },
+        WIDE: { order: 999, columnSpan: 3, collapsed: heightMode === 'SHORT' }
+      }
+    };
+    const advancedSection = createSectionCard('Movement', advSectionMeta, { resetMetas: advancedMetas });
+    if (!advancedSection.collapsed) {
       const byGroup = new Map<string, TuningParamMeta[]>();
       for (const meta of advancedMetas) {
         const arr = byGroup.get(meta.group) ?? [];
@@ -632,17 +1333,150 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         for (const meta of metas.sort((a, b) => a.label.localeCompare(b.label))) {
           group.body.appendChild(createParamRow(meta));
         }
-        advBody.appendChild(group.root);
+        advancedSection.body.appendChild(group.root);
       }
-      advWrap.appendChild(advBody);
     }
-    body.appendChild(advWrap);
+    grid.appendChild(advancedSection.root);
+  }
+
+  function renderPuckTab() {
+    const grid = createSectionGrid();
+    body.appendChild(grid);
+
+    const stateSection = createSectionCard('Puck', {
+      id: 'puck_state',
+      title: 'State',
+      priority: 100,
+      tone: 'core',
+      modeRules: {
+        NARROW: { order: 0, columnSpan: 1 },
+        MEDIUM: { order: 0, columnSpan: 2 },
+        WIDE: { order: 0, columnSpan: 3 }
+      }
+    });
+    const resetDefaultsBtn = document.createElement('button');
+    resetDefaultsBtn.className = 'action-btn';
+    resetDefaultsBtn.classList.add('full-span');
+    resetDefaultsBtn.textContent = 'Reset to Puck Defaults';
+    resetDefaultsBtn.addEventListener('click', () => {
+      puckStickTuningStore.resetToDefaults();
+      for (const refresh of refreshers) refresh();
+      refreshStatusLine();
+      postStatus('Puck/Stick reset to defaults');
+    });
+    stateSection.body.appendChild(resetDefaultsBtn);
+    grid.appendChild(stateSection.root);
+
+    const puckMetas = PARAM_REGISTRY
+      .filter((m) => m.category === 'Puck')
+      .sort((a, b) => a.group.localeCompare(b.group) || a.label.localeCompare(b.label));
+    const byGroup = new Map<string, TuningParamMeta[]>();
+    for (const meta of puckMetas) {
+      const arr = byGroup.get(meta.group) ?? [];
+      arr.push(meta);
+      byGroup.set(meta.group, arr);
+    }
+
+    const sectionMetaByGroup = new Map<string, SectionMeta>([
+      ['Puk - fyzika', {
+        id: 'puck_core',
+        title: 'Puk - fyzika',
+        priority: 90,
+        tone: 'core',
+        modeRules: { NARROW: { order: 1 }, MEDIUM: { order: 1 }, WIDE: { order: 1 } }
+      }],
+      ['Vedeni puku', {
+        id: 'puck_control',
+        title: 'Vedeni puku',
+        priority: 80,
+        tone: 'control',
+        modeRules: { NARROW: { order: 2 }, MEDIUM: { order: 2 }, WIDE: { order: 2 } }
+      }],
+      ['Strela', {
+        id: 'puck_shot',
+        title: 'Strela',
+        priority: 70,
+        tone: 'shot',
+        modeRules: { NARROW: { order: 3 }, MEDIUM: { order: 3 }, WIDE: { order: 3 } }
+      }],
+      ['Hokejka', {
+        id: 'puck_stick',
+        title: 'Hokejka',
+        priority: 60,
+        tone: 'control',
+        collapsible: true,
+        defaultCollapsed: false,
+        modeRules: {
+          NARROW: { order: 4, collapsed: heightMode === 'SHORT' },
+          MEDIUM: { order: 4, collapsed: false },
+          WIDE: { order: 4, columnSpan: 2, collapsed: false }
+        }
+      }],
+      ['Debug puku', {
+        id: 'puck_debug',
+        title: 'Debug puku',
+        priority: 20,
+        tone: 'debug',
+        collapsible: true,
+        defaultCollapsed: true,
+        modeRules: {
+          NARROW: { order: 90, collapsed: true },
+          MEDIUM: { order: 90, columnSpan: 2, collapsed: true },
+          WIDE: { order: 90, columnSpan: 3, collapsed: true }
+        }
+      }],
+      ['Debug hokejky', {
+        id: 'stick_debug',
+        title: 'Debug hokejky',
+        priority: 15,
+        tone: 'debug',
+        collapsible: true,
+        defaultCollapsed: true,
+        modeRules: {
+          NARROW: { order: 91, collapsed: true },
+          MEDIUM: { order: 91, columnSpan: 2, collapsed: true },
+          WIDE: { order: 91, columnSpan: 3, collapsed: true }
+        }
+      }]
+    ]);
+
+    for (const [groupName, metas] of byGroup) {
+      const sectionMeta = sectionMetaByGroup.get(groupName) ?? {
+        id: `puck_${groupName.toLowerCase().replace(/\s+/g, '_')}`,
+        title: groupName,
+        priority: 10,
+        tone: groupName.toLowerCase().includes('debug') ? 'debug' : 'control',
+        collapsible: true,
+        defaultCollapsed: layoutMode === 'NARROW' && heightMode === 'SHORT',
+        modeRules: {
+          NARROW: { order: 95, collapsed: layoutMode === 'NARROW' && heightMode === 'SHORT' },
+          MEDIUM: { order: 95, columnSpan: 2 },
+          WIDE: { order: 95 }
+        }
+      };
+      const section = createSectionCard('Puck', sectionMeta, { resetMetas: metas });
+      if (!section.collapsed) {
+        for (const meta of metas) section.body.appendChild(createParamRow(meta));
+      }
+      grid.appendChild(section.root);
+    }
   }
 
   function renderNetDebugTab() {
-    const group = createGroup('Actions');
+    const group = createSectionCard('NetDebug', {
+      id: 'net_actions',
+      title: 'Actions',
+      priority: 100,
+      tone: 'debug',
+      modeRules: {
+        NARROW: { order: -100, columnSpan: 1 },
+        MEDIUM: { order: -100, columnSpan: 2 },
+        WIDE: { order: -100, columnSpan: 3 }
+      }
+    });
     const actions = document.createElement('div');
     actions.className = 'net-actions';
+    actions.classList.add('full-span');
 
     const applyLocalBtn = document.createElement('button');
     applyLocalBtn.className = 'action-btn primary';
@@ -677,6 +1511,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
 
     const status = document.createElement('div');
     status.className = 'status';
+    status.classList.add('full-span');
     group.body.appendChild(status);
     statusLineEl = status;
 
@@ -686,36 +1521,9 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
       wsClient.send({ type: 'debug:setMovementTuning', config: JSON.parse(exportTuning()) });
       postStatus('Sent to server');
     });
-    saveBtn.addEventListener('click', () => {
-      const result = saveCurrentToSelected(presetState);
-      if (result.requiresSaveAs) {
-        const name = window.prompt('Built-in presets are read-only. Save As name:', 'MyPreset');
-        if (!name) return;
-        presetState = saveAsPreset(presetState, name);
-        savePresetState(presetState);
-        refreshPresetSelect();
-        renderTab();
-        return postStatus(`Saved as ${name.trim()}`);
-      }
-      presetState = result.state;
-      refreshPresetSelect();
-      refreshStatusLine();
-      postStatus('Preset saved');
-    });
-    saveAsBtn.addEventListener('click', () => {
-      const name = window.prompt('Save As preset name:', selectedPreset()?.name ?? 'MyPreset');
-      if (!name) return;
-      presetState = saveAsPreset(presetState, name);
-      refreshPresetSelect();
-      renderTab();
-      postStatus(`Saved as ${name.trim()}`);
-    });
-    resetBtn.addEventListener('click', () => {
-      resetTuning();
-      for (const refresh of refreshers) refresh();
-      refreshStatusLine();
-      postStatus('Reset runtime tuning');
-    });
+    saveBtn.addEventListener('click', handleSavePreset);
+    saveAsBtn.addEventListener('click', handleSaveAsPreset);
+    resetBtn.addEventListener('click', handleResetRuntime);
     logBtn.addEventListener('click', () => {
       console.log(exportTuning());
       postStatus('JSON logged');
@@ -747,20 +1555,16 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
 
   function renderTab() {
     clearBody();
+    persistLayout();
     for (const [tab, btn] of tabButtons) btn.classList.toggle('active', tab === state.activeTab);
     if (state.activeTab === 'Home') renderHomeTab();
     else if (state.activeTab === 'Movement') renderMovementTab();
+    else if (state.activeTab === 'Puck') renderPuckTab();
     else if (state.activeTab === 'NetDebug') renderNetDebugTab();
     else renderPlaceholder(state.activeTab);
     for (const refresh of refreshers) refresh();
     refreshStatusLine();
-    renderSearchResults();
   }
-
-  searchInput.addEventListener('input', () => {
-    state.searchQuery = searchInput.value;
-    renderSearchResults();
-  });
 
   presetSelect.addEventListener('change', () => {
     presetState = applySelection(presetState, presetSelect.value);
@@ -772,13 +1576,12 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     postStatus(`Preset applied: ${selected?.name ?? 'n/a'}`);
   });
 
-  saveAsInlineBtn.addEventListener('click', () => {
-    const name = window.prompt('Save As preset name:', selectedPreset()?.name ?? 'MyPreset');
-    if (!name) return;
-    presetState = saveAsPreset(presetState, name);
-    refreshPresetSelect();
-    renderTab();
-    postStatus(`Saved as ${name.trim()}`);
+  headerSaveBtn.addEventListener('click', handleSavePreset);
+  headerSaveAsBtn.addEventListener('click', handleSaveAsPreset);
+  headerResetBtn.addEventListener('click', handleResetRuntime);
+  headerCloseBtn.addEventListener('click', () => {
+    visible = false;
+    root.style.display = 'none';
   });
 
   refreshPresetSelect();
@@ -789,7 +1592,8 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     setVisible(next: boolean) {
       visible = next;
       root.style.display = next ? 'flex' : 'none';
-      if (!next) setDragLock(false);
+      if (next) applyLayout({}, true);
+      else setDragLock(false);
     },
     isVisible() {
       return visible;
@@ -799,7 +1603,10 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
       if (state.activeTab === 'NetDebug') renderTab();
     },
     destroy() {
+      stopDrag();
+      stopResize();
       unsubscribeTuning();
+      window.removeEventListener('resize', onWindowResize);
       setDragLock(false);
       root.remove();
     }

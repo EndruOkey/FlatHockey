@@ -8,6 +8,17 @@ export let lastTelemetry: Record<string, any> = {};
 export type PredictedPlayerState = PlayerStateMsg & {
   stamina?: number;
   heading?: number;
+  moveAngle?: number;
+  aimAngle?: number;
+  aimAngleRaw?: number;
+  prevHasInput?: boolean;
+  brakeAssistLeft?: number;
+  startLinearActive?: boolean;
+  debugSnapFactor?: number;
+  debugBrakeAssistActive?: boolean;
+  debugStartModeActive?: boolean;
+  debugVelForward?: number;
+  debugVelSide?: number;
 };
 
 export const CLIENT_FIXED_DT = 1 / 60;
@@ -42,8 +53,19 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     vx: state.vx,
     vy: state.vy,
     stamina: state.stamina ?? 1,
-    aimAngle: state.angle,
-    heading: state.heading
+    aimAngle: state.aimAngle ?? state.angle,
+    aimAngleRaw: state.aimAngleRaw,
+    moveAngle: state.moveAngle,
+    bodyAngle: state.angle,
+    heading: state.heading,
+    prevHasInput: state.prevHasInput,
+    brakeAssistLeft: state.brakeAssistLeft,
+    startLinearActive: state.startLinearActive,
+    debugSnapFactor: state.debugSnapFactor,
+    debugBrakeAssistActive: state.debugBrakeAssistActive,
+    debugStartModeActive: state.debugStartModeActive,
+    debugVelForward: state.debugVelForward,
+    debugVelSide: state.debugVelSide
   };
 
   applyMovementStep(
@@ -51,7 +73,9 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     {
       moveX: input.moveX,
       moveY: input.moveY,
-      aimAngle: typeof input.aimAngle === 'number' ? input.aimAngle : state.angle,
+      aimAngleRaw: typeof input.aimAngleRaw === 'number'
+        ? input.aimAngleRaw
+        : (typeof input.aimAngle === 'number' ? input.aimAngle : (state.aimAngleRaw ?? state.angle)),
       buttons: {
         sprint: !!input.sprint,
         brake: !!input.brake
@@ -67,7 +91,21 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.vy = simState.vy;
   state.stamina = simState.stamina;
   state.heading = simState.heading;
+  state.moveAngle = simState.moveAngle;
+  state.aimAngleRaw = simState.aimAngleRaw;
+  state.aimAngle = simState.aimAngle;
   state.angle = simState.aimAngle;
+  if (Number.isFinite(simState.bodyAngle)) {
+    state.angle = simState.bodyAngle!;
+  }
+  state.prevHasInput = simState.prevHasInput;
+  state.brakeAssistLeft = simState.brakeAssistLeft;
+  state.startLinearActive = simState.startLinearActive;
+  state.debugSnapFactor = simState.debugSnapFactor;
+  state.debugBrakeAssistActive = simState.debugBrakeAssistActive;
+  state.debugStartModeActive = simState.debugStartModeActive;
+  state.debugVelForward = simState.debugVelForward;
+  state.debugVelSide = simState.debugVelSide;
 
   const speed = Math.hypot(state.vx, state.vy);
   const maxSpeed = (config.maxSpeed ?? config.maxSpeedNoPuck ?? 1);
@@ -79,7 +117,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     ? Math.hypot(state.vx - wishX * forwardSpeed, state.vy - wishY * forwardSpeed)
     : 0;
 
-  const beforeDir = prevSpeed > 0 ? Math.atan2(prevVy, prevVx) : 0;
+  const beforeDir = prevSpeed > 0 ? Math.atan2(prevVy, prevVx) : (state.moveAngle ?? 0);
   const afterDir = speed > 0 ? Math.atan2(state.vy, state.vx) : beforeDir;
   let driftAngle = Math.abs(afterDir - (wishLen > 0 ? Math.atan2(wishY, wishX) : afterDir));
   if (driftAngle > Math.PI) driftAngle = Math.PI * 2 - driftAngle;
@@ -99,7 +137,17 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     driftAngle,
     gripApplied: Math.max(0, 1 - (tuning.lateralDamping ?? MOVEMENT_DEFAULTS.lateralDamping ?? 0.98) * dt),
     brakeApplied: input.brake ? Math.max(0, prevSpeed - speed) / Math.max(prevSpeed, 1) : 0,
-    blendT
+    blendT,
+    snapFactor: simState.debugSnapFactor ?? 0,
+    brakeAssistActive: !!simState.debugBrakeAssistActive,
+    startModeActive: !!simState.debugStartModeActive,
+    velForward: simState.debugVelForward ?? 0,
+    velSide: simState.debugVelSide ?? 0,
+    moveAngle: simState.moveAngle ?? 0,
+    aimAngle: simState.aimAngle ?? state.aimAngle ?? state.angle,
+    aimAngleRaw: simState.aimAngleRaw ?? state.aimAngleRaw ?? state.angle,
+    aimDiffRaw: simState.debugAimDiffRaw ?? 0,
+    aimDiffClamped: simState.debugAimDiffClamped ?? 0
   };
 
   try {

@@ -15,7 +15,9 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       const moveY = data.moveY < 0 ? -1 : data.moveY > 0 ? 1 : 0;
       const sprint = data.sprint ? 1 : 0;
       const brake = data.brake ? 1 : 0;
+      const shoot = (data as any).shoot ? 1 : 0;
       const aimAngle = typeof data.aimAngle === 'number' ? data.aimAngle : undefined;
+      const aimAngleRaw = typeof (data as any).aimAngleRaw === 'number' ? (data as any).aimAngleRaw : undefined;
 
       return {
         type: 'input',
@@ -25,7 +27,9 @@ export function parseClientMessage(raw: string): ClientMessage | null {
         moveY,
         sprint,
         brake,
-        aimAngle
+        shoot,
+        aimAngle,
+        aimAngleRaw
       };
     }
 

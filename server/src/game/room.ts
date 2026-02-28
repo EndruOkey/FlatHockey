@@ -1,5 +1,6 @@
-﻿import type { InputMsg, ServerMessage, SnapshotMsg } from '@flathockey/shared';
+import type { InputMsg, ServerMessage, SnapshotMsg } from '@flathockey/shared';
 import { applyMovementStep, type MovementStepConfig, type MovementStepState } from '@flathockey/shared/sim/movementStep';
+import { resolvePuckStickTuning } from '@flathockey/shared/tuning/puckStickTuning';
 import { WebSocket } from 'ws';
 
 type InputState = {
@@ -7,7 +8,8 @@ type InputState = {
   moveY: -1 | 0 | 1;
   sprint: 0 | 1;
   brake: 0 | 1;
-  aimAngle: number;
+  shoot: 0 | 1;
+  aimAngleRaw: number;
 };
 
 type BufferedInput = {
@@ -23,11 +25,31 @@ type PlayerState = {
   vx: number;
   vy: number;
   angle: number;
+  moveAngle: number;
+  aimAngleRaw: number;
+  aimAngle: number;
   stamina: number;
   heading?: number;
+  prevHasInput?: boolean;
+  brakeAssistLeft?: number;
+  startLinearActive?: boolean;
+  prevShoot: boolean;
+  shotCharge: number;
   lastProcessedSeq: number;
   lastInputState: InputState;
   inputBuffer: BufferedInput[];
+};
+
+type Vec2 = { x: number; y: number };
+
+type PuckState = {
+  state: 'FREE' | 'HELD';
+  ownerId: string | null;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  pickupCooldownMs: number;
 };
 
 const ZERO_INPUT: InputState = {
@@ -35,8 +57,31 @@ const ZERO_INPUT: InputState = {
   moveY: 0,
   sprint: 0,
   brake: 0,
-  aimAngle: 0
+  shoot: 0,
+  aimAngleRaw: 0
 };
+
+const RINK = {
+  left: -560,
+  right: 560,
+  top: -320,
+  bottom: 320
+};
+
+function clamp(v: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, v));
+}
+
+function normalizeAngle(rad: number): number {
+  let a = rad;
+  while (a > Math.PI) a -= Math.PI * 2;
+  while (a < -Math.PI) a += Math.PI * 2;
+  return a;
+}
+
+function lerpAngle(a: number, b: number, t: number): number {
+  return normalizeAngle(a + normalizeAngle(b - a) * t);
+}
 
 export class Room {
   readonly id: string;
@@ -44,6 +89,15 @@ export class Room {
   readonly sockets = new Map<string, WebSocket>();
   serverTick = 0;
   movementTuning: Partial<MovementStepConfig> = {};
+  puck: PuckState = {
+    state: 'FREE',
+    ownerId: null,
+    x: 0,
+    y: 0,
+    vx: 0,
+    vy: 0,
+    pickupCooldownMs: 0
+  };
 
   constructor(id: string) {
     this.id = id;
@@ -76,8 +130,16 @@ export class Room {
       vx: 0,
       vy: 0,
       angle: 0,
+      moveAngle: 0,
+      aimAngleRaw: 0,
+      aimAngle: 0,
       stamina: 1,
       heading: 0,
+      prevHasInput: false,
+      brakeAssistLeft: 0,
+      startLinearActive: false,
+      prevShoot: false,
+      shotCharge: 0,
       lastProcessedSeq: 0,
       lastInputState: { ...ZERO_INPUT },
       inputBuffer: []
@@ -103,7 +165,10 @@ export class Room {
         moveY: input.moveY < 0 ? -1 : input.moveY > 0 ? 1 : 0,
         sprint: input.sprint ? 1 : 0,
         brake: input.brake ? 1 : 0,
-        aimAngle: typeof input.aimAngle === 'number' ? input.aimAngle : player.angle
+        shoot: input.shoot ? 1 : 0,
+        aimAngleRaw: typeof input.aimAngleRaw === 'number'
+          ? input.aimAngleRaw
+          : (typeof input.aimAngle === 'number' ? input.aimAngle : player.aimAngleRaw ?? player.aimAngle)
       }
     };
 
@@ -130,8 +195,14 @@ export class Room {
         vx: player.vx,
         vy: player.vy,
         stamina: player.stamina,
-        aimAngle: player.angle,
-        heading: player.heading
+        aimAngle: player.aimAngle,
+        aimAngleRaw: player.aimAngleRaw,
+        moveAngle: player.moveAngle,
+        bodyAngle: player.angle,
+        heading: player.heading,
+        prevHasInput: player.prevHasInput,
+        brakeAssistLeft: player.brakeAssistLeft,
+        startLinearActive: player.startLinearActive
       };
 
       applyMovementStep(
@@ -139,7 +210,7 @@ export class Room {
         {
           moveX: player.lastInputState.moveX,
           moveY: player.lastInputState.moveY,
-          aimAngle: player.lastInputState.aimAngle,
+          aimAngleRaw: player.lastInputState.aimAngleRaw,
           buttons: {
             sprint: !!player.lastInputState.sprint,
             brake: !!player.lastInputState.brake
@@ -155,10 +226,30 @@ export class Room {
       player.vy = state.vy;
       player.stamina = state.stamina;
       player.heading = state.heading;
-      player.angle = Number.isFinite(player.lastInputState.aimAngle)
-        ? player.lastInputState.aimAngle
-        : Math.atan2(player.vy, player.vx);
+      player.moveAngle = Number.isFinite(state.moveAngle) ? state.moveAngle! : (Number.isFinite(player.heading) ? player.heading! : player.moveAngle);
+      player.aimAngleRaw = Number.isFinite(state.aimAngleRaw) ? state.aimAngleRaw! : player.aimAngleRaw;
+      player.aimAngle = Number.isFinite(state.aimAngle) ? state.aimAngle : player.aimAngleRaw;
+      player.prevHasInput = state.prevHasInput;
+      player.brakeAssistLeft = state.brakeAssistLeft;
+      player.startLinearActive = state.startLinearActive;
+      if (Number.isFinite(state.bodyAngle)) {
+        player.angle = state.bodyAngle!;
+      } else {
+        const mode = this.movementTuning.bodyFacingMode ?? 'MOVE_LAST';
+        if (mode === 'AIM_WHEN_IDLE') {
+          const hasInput = Math.hypot(player.lastInputState.moveX, player.lastInputState.moveY) > 0.0001;
+          player.angle = hasInput ? player.moveAngle : player.aimAngle;
+        } else if (mode === 'BLEND') {
+          const maxSpeed = Math.max(1, this.movementTuning.maxSpeed ?? this.movementTuning.maxSpeedNoPuck ?? 1);
+          const speedNorm = clamp(Math.hypot(player.vx, player.vy) / maxSpeed, 0, 1);
+          player.angle = lerpAngle(player.aimAngle, player.moveAngle, speedNorm);
+        } else {
+          player.angle = player.moveAngle;
+        }
+      }
     }
+
+    this.updatePuck(dt);
   }
 
   broadcastSnapshot() {
@@ -169,17 +260,190 @@ export class Room {
       type: 'snapshot',
       serverTick: this.serverTick,
       ack,
+      puck: {
+        state: this.puck.state,
+        ownerId: this.puck.ownerId,
+        x: this.puck.x,
+        y: this.puck.y,
+        vx: this.puck.vx,
+        vy: this.puck.vy
+      },
       players: [...this.players.values()].map((p) => ({
         id: p.id,
         x: p.x,
         y: p.y,
         vx: p.vx,
         vy: p.vy,
-        angle: p.angle
+        angle: p.angle,
+        moveAngle: p.moveAngle,
+        aimAngleRaw: p.aimAngleRaw,
+        aimAngle: p.aimAngle
       }))
     };
 
     this.broadcast(msg);
+  }
+
+  private stickTarget(player: PlayerState): Vec2 {
+    const puckStick = resolvePuckStickTuning(this.movementTuning);
+    const ang = player.aimAngle;
+    const offsetX = puckStick.stickOffsetX;
+    const offsetY = puckStick.stickOffsetY;
+    const cos = Math.cos(ang);
+    const sin = Math.sin(ang);
+    return {
+      x: player.x + offsetX * cos - offsetY * sin,
+      y: player.y + offsetX * sin + offsetY * cos
+    };
+  }
+
+  private updatePuck(dt: number) {
+    const puckStick = resolvePuckStickTuning(this.movementTuning);
+    const pickupRadius = puckStick.pickupRadius;
+    const pickupMaxSpeed = puckStick.pickupMaxPuckSpeed;
+    const pickupMaxRelativeSpeed = puckStick.pickupMaxRelativeSpeed;
+    const magnetRadius = puckStick.magnetRadius;
+    const magnetStrength = puckStick.magnetStrength;
+    const magnetMaxForce = puckStick.magnetMaxForce;
+    const holdSpringK = puckStick.holdSpringK;
+    const holdDampingC = puckStick.holdDampingC;
+    const holdMaxError = puckStick.holdMaxError;
+    const pickupCooldownMs = puckStick.pickupCooldownMs;
+    const shotBaseImpulse = puckStick.shotBaseImpulse;
+    const shotChargeRate = puckStick.shotChargeRate;
+    const shotChargeMult = puckStick.shotChargeMult;
+    const shotMaxImpulse = puckStick.shotMaxImpulse;
+    const shotMinHoldMs = puckStick.shotMinHoldMs;
+    const maxSpeed = puckStick.maxSpeed;
+    const linearDamping = puckStick.linearDamping;
+    const restitution = puckStick.restitution;
+    const surfaceDrag = puckStick.surfaceDrag;
+
+    this.puck.pickupCooldownMs = Math.max(0, this.puck.pickupCooldownMs - dt * 1000);
+
+    if (this.puck.state === 'HELD' && this.puck.ownerId) {
+      const owner = this.players.get(this.puck.ownerId);
+      if (!owner) {
+        this.puck.state = 'FREE';
+        this.puck.ownerId = null;
+      } else {
+        const shooting = !!owner.lastInputState.shoot;
+        const justPressedShoot = shooting && !owner.prevShoot;
+        const justReleasedShoot = !shooting && owner.prevShoot;
+
+        if (justPressedShoot) owner.shotCharge = 0;
+        if (shooting) owner.shotCharge = clamp(owner.shotCharge + shotChargeRate * dt, 0, 1);
+
+        const target = this.stickTarget(owner);
+        const dx = target.x - this.puck.x;
+        const dy = target.y - this.puck.y;
+        const fx = dx * holdSpringK - this.puck.vx * holdDampingC;
+        const fy = dy * holdSpringK - this.puck.vy * holdDampingC;
+        this.puck.vx += fx * dt;
+        this.puck.vy += fy * dt;
+        this.puck.x += this.puck.vx * dt;
+        this.puck.y += this.puck.vy * dt;
+
+        const err = Math.hypot(dx, dy);
+        if (err > holdMaxError) {
+          this.puck.state = 'FREE';
+          this.puck.ownerId = null;
+          this.puck.pickupCooldownMs = Math.max(this.puck.pickupCooldownMs, 80);
+        }
+
+        if (justReleasedShoot && owner.shotCharge * 1000 >= shotMinHoldMs) {
+          const ang = owner.aimAngle;
+          const impulse = clamp(shotBaseImpulse + owner.shotCharge * shotChargeMult, 0, shotMaxImpulse);
+          this.puck.vx += Math.cos(ang) * impulse;
+          this.puck.vy += Math.sin(ang) * impulse;
+          this.puck.state = 'FREE';
+          this.puck.ownerId = null;
+          this.puck.pickupCooldownMs = pickupCooldownMs;
+          owner.shotCharge = 0;
+        }
+
+        owner.prevShoot = shooting;
+      }
+    }
+
+    if (this.puck.state === 'FREE') {
+      if (this.puck.pickupCooldownMs <= 0 && magnetRadius > 0 && magnetStrength > 0) {
+        let bestTarget: Vec2 | null = null;
+        let bestDist = Infinity;
+        for (const player of this.players.values()) {
+          const t = this.stickTarget(player);
+          const d = Math.hypot(this.puck.x - t.x, this.puck.y - t.y);
+          if (d < magnetRadius && d < bestDist) {
+            bestDist = d;
+            bestTarget = t;
+          }
+        }
+        if (bestTarget) {
+          const dx = bestTarget.x - this.puck.x;
+          const dy = bestTarget.y - this.puck.y;
+          const dist = Math.max(0.0001, Math.hypot(dx, dy));
+          const falloff = 1 - clamp(dist / magnetRadius, 0, 1);
+          const force = Math.min(magnetMaxForce, magnetStrength * falloff);
+          this.puck.vx += (dx / dist) * force * dt;
+          this.puck.vy += (dy / dist) * force * dt;
+        }
+      }
+
+      const damp = Math.exp(-linearDamping * dt);
+      this.puck.vx *= damp;
+      this.puck.vy *= damp;
+      this.puck.vx *= 1 - clamp(surfaceDrag, 0, 0.95) * dt * 60;
+      this.puck.vy *= 1 - clamp(surfaceDrag, 0, 0.95) * dt * 60;
+
+      const speed = Math.hypot(this.puck.vx, this.puck.vy);
+      if (speed > maxSpeed) {
+        const k = maxSpeed / Math.max(1, speed);
+        this.puck.vx *= k;
+        this.puck.vy *= k;
+      }
+
+      this.puck.x += this.puck.vx * dt;
+      this.puck.y += this.puck.vy * dt;
+
+      if (this.puck.x < RINK.left) {
+        this.puck.x = RINK.left;
+        this.puck.vx = Math.abs(this.puck.vx) * restitution;
+      } else if (this.puck.x > RINK.right) {
+        this.puck.x = RINK.right;
+        this.puck.vx = -Math.abs(this.puck.vx) * restitution;
+      }
+      if (this.puck.y < RINK.top) {
+        this.puck.y = RINK.top;
+        this.puck.vy = Math.abs(this.puck.vy) * restitution;
+      } else if (this.puck.y > RINK.bottom) {
+        this.puck.y = RINK.bottom;
+        this.puck.vy = -Math.abs(this.puck.vy) * restitution;
+      }
+
+      if (this.puck.pickupCooldownMs <= 0) {
+        let bestId: string | null = null;
+        let bestDist = Infinity;
+        for (const player of this.players.values()) {
+          const t = this.stickTarget(player);
+          const d = Math.hypot(this.puck.x - t.x, this.puck.y - t.y);
+          const relSpeed = Math.hypot(this.puck.vx - player.vx, this.puck.vy - player.vy);
+          const canCapture = relSpeed <= pickupMaxRelativeSpeed || speed <= pickupMaxSpeed;
+          if (d < pickupRadius && canCapture && d < bestDist) {
+            bestDist = d;
+            bestId = player.id;
+          }
+        }
+        if (bestId) {
+          this.puck.state = 'HELD';
+          this.puck.ownerId = bestId;
+          const owner = this.players.get(bestId);
+          if (owner) {
+            owner.shotCharge = 0;
+            owner.prevShoot = !!owner.lastInputState.shoot;
+          }
+        }
+      }
+    }
   }
 
   private consumeNextInput(player: PlayerState): BufferedInput | null {
@@ -204,3 +468,5 @@ export class Room {
     }
   }
 }
+
+

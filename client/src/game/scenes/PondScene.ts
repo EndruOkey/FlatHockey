@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { SIM_HZ, type InputMsg, PlayerStateMsg, ServerMessage, SnapshotMsg } from '@flathockey/shared';
+import { SIM_HZ, type InputMsg, PlayerStateMsg, ServerMessage, SnapshotMsg, wrapToPi, approachAngle } from '@flathockey/shared';
 import { WsClient } from '../net/wsClient';
 import { Interpolator, lerpPlayer, type LerpPlayer } from '../net/interpolation';
 import { applyPredictedInput, CLIENT_FIXED_DT, type PredictedPlayerState, lastTelemetry } from '../net/prediction';
@@ -7,6 +7,7 @@ import { LOCAL_KEY, getTuning, usedTuning, setTuning } from '../debug/movementTu
 import { createMovementTuner, isDevMenuDragging } from '../debug/movementTunerUI';
 import { reconcilePrediction } from '../net/reconciliation';
 import { PlayerView } from '../entities/playerView';
+import { puckStickTuningStore } from '../tuning/puckStickTuningStore';
 
 const CLIENT_SIM_HZ = 60;
 const FIXED_STEP_MS = 1000 / CLIENT_SIM_HZ;
@@ -28,6 +29,10 @@ export class PondScene extends Phaser.Scene {
   private players = new Map<string, PlayerView>();
   private remoteInterpolators = new Map<string, Interpolator<LerpPlayer>>();
   private localBuffer = new Interpolator<LerpPlayer>(256);
+  private puckFreeBuffer = new Interpolator<{ x: number; y: number; vx: number; vy: number }>(180);
+  private puckRender = { x: 0, y: 0, vx: 0, vy: 0, state: 'FREE' as 'FREE' | 'HELD', ownerId: null as string | null };
+  private puckSnapshot = { x: 0, y: 0, vx: 0, vy: 0, state: 'FREE' as 'FREE' | 'HELD', ownerId: null as string | null };
+  private puckGraphics!: Phaser.GameObjects.Graphics;
 
   private predicted: PredictedPlayerState | null = null;
   private pendingInputs: InputMsg[] = [];
@@ -70,6 +75,15 @@ export class PondScene extends Phaser.Scene {
   private perfSamples: DebugSample[] = [];
   private movementTuner: ReturnType<typeof createMovementTuner> | null = null;
   private debugAllowed = false;
+  private crosshairGraphics!: Phaser.GameObjects.Graphics;
+  private motionDebugGraphics!: Phaser.GameObjects.Graphics;
+  private aimCurrentAngle = 0;
+  private aimTargetAngle = 0;
+  private aimAngleDiff = 0;
+  private hasAimState = false;
+  private lastDesiredHeading = 0;
+  private lastMoveAngle = 0;
+  private lastAimAngle = 0;
   
   // telemetry for debug
   private debugCurrentSpeed = 0;
@@ -84,7 +98,7 @@ export class PondScene extends Phaser.Scene {
   create() {
     this.drawBackground();
 
-    this.keys = this.input.keyboard!.addKeys('W,A,S,D,SHIFT,SPACE,F3') as Record<string, Phaser.Input.Keyboard.Key>;
+    this.keys = this.input.keyboard!.addKeys('W,A,S,D,E,SHIFT,SPACE,F3') as Record<string, Phaser.Input.Keyboard.Key>;
     this.debugToggleKey = this.keys.F3;
 
     this.hud = this.add.text(12, 12, 'Connecting...', {
@@ -98,6 +112,9 @@ export class PondScene extends Phaser.Scene {
       fontSize: '13px',
       color: '#fff0aa'
     }).setScrollFactor(0).setDepth(1000);
+    this.puckGraphics = this.add.graphics().setDepth(900);
+    this.crosshairGraphics = this.add.graphics().setDepth(1300);
+    this.motionDebugGraphics = this.add.graphics().setDepth(1250);
 
     this.input.on('pointerdown', () => this.game.canvas?.focus());
     if (this.game.canvas) this.game.canvas.tabIndex = 1;
@@ -111,6 +128,10 @@ export class PondScene extends Phaser.Scene {
       window.removeEventListener('focus', this.onFocus);
       this.movementTuner?.destroy();
       this.movementTuner = null;
+      this.puckGraphics?.destroy();
+      this.crosshairGraphics?.destroy();
+      this.motionDebugGraphics?.destroy();
+      if (this.game.canvas) this.game.canvas.style.cursor = '';
     });
 
     const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -252,10 +273,16 @@ export class PondScene extends Phaser.Scene {
           this.predicted = { ...p };
           this.pendingInputs = [];
           this.localBuffer.clear();
-          this.localBuffer.push({ x: p.x, y: p.y, rot: p.angle }, now);
+          this.localBuffer.push({ x: p.x, y: p.y, rot: p.angle, aimRot: p.aimAngle, moveRot: p.moveAngle }, now);
         } else {
           reconcilePrediction(this.predicted, p, this.ackSeq, this.pendingInputs);
-          this.localBuffer.push({ x: this.predicted.x, y: this.predicted.y, rot: this.predicted.angle }, now);
+          this.localBuffer.push({
+            x: this.predicted.x,
+            y: this.predicted.y,
+            rot: this.predicted.angle,
+            aimRot: this.predicted.aimAngle ?? this.predicted.angle,
+            moveRot: this.predicted.moveAngle ?? this.predicted.angle
+          }, now);
         }
       } else {
         const lastTick = this.remoteLastSnapshotTick.get(p.id);
@@ -264,7 +291,24 @@ export class PondScene extends Phaser.Scene {
           continue;
         }
         this.remoteLastSnapshotTick.set(p.id, snapshot.serverTick);
-        this.remoteInterpolators.get(p.id)?.push({ x: p.x, y: p.y, rot: p.angle }, serverTimeMs);
+        this.remoteInterpolators.get(p.id)?.push({ x: p.x, y: p.y, rot: p.angle, aimRot: p.aimAngle, moveRot: p.moveAngle }, serverTimeMs);
+      }
+    }
+
+    if (snapshot.puck) {
+      this.puckSnapshot = {
+        x: snapshot.puck.x,
+        y: snapshot.puck.y,
+        vx: snapshot.puck.vx,
+        vy: snapshot.puck.vy,
+        state: snapshot.puck.state,
+        ownerId: snapshot.puck.ownerId
+      };
+      if (snapshot.puck.state === 'FREE') {
+        this.puckFreeBuffer.push(
+          { x: snapshot.puck.x, y: snapshot.puck.y, vx: snapshot.puck.vx, vy: snapshot.puck.vy },
+          serverTimeMs
+        );
       }
     }
   }
@@ -278,12 +322,23 @@ export class PondScene extends Phaser.Scene {
         moveX: 0,
         moveY: 0,
         sprint: 0,
-        brake: 0
+        brake: 0,
+        shoot: 0
       };
     }
 
+    const tuning = getTuning();
     const moveX = ((this.keys.D.isDown ? 1 : 0) - (this.keys.A.isDown ? 1 : 0)) as -1 | 0 | 1;
     const moveY = ((this.keys.S.isDown ? 1 : 0) - (this.keys.W.isDown ? 1 : 0)) as -1 | 0 | 1;
+    const moveLen = Math.hypot(moveX, moveY);
+    if (moveLen > 0.0001) this.lastMoveAngle = Math.atan2(moveY / moveLen, moveX / moveLen);
+    const aimAngle = this.computeMouseAimAngle(CLIENT_FIXED_DT, tuning);
+    if (typeof aimAngle === 'number' && Number.isFinite(aimAngle)) {
+      this.lastAimAngle = aimAngle;
+      this.lastDesiredHeading = aimAngle;
+    } else {
+      this.lastDesiredHeading = this.lastMoveAngle;
+    }
 
     return {
       type: 'input',
@@ -292,12 +347,19 @@ export class PondScene extends Phaser.Scene {
       moveX,
       moveY,
       sprint: this.keys.SHIFT.isDown ? 1 : 0,
-      brake: this.keys.SPACE.isDown ? 1 : 0
+      brake: this.keys.SPACE.isDown ? 1 : 0,
+      shoot: (this.keys.E.isDown || this.input.activePointer.leftButtonDown()) ? 1 : 0,
+      aimAngle,
+      aimAngleRaw: aimAngle
     };
   }
 
   private worldToScreen(x: number, y: number) {
     return { x: x + this.scale.width / 2, y: y + this.scale.height / 2 };
+  }
+
+  private screenToWorld(x: number, y: number) {
+    return { x: x - this.scale.width / 2, y: y - this.scale.height / 2 };
   }
 
   private sampleInterpolated(interpolator: Interpolator<LerpPlayer>, targetTime: number): LerpPlayer | null {
@@ -314,6 +376,296 @@ export class PondScene extends Phaser.Scene {
       return nowMs - this.serverTimeOffsetMs;
     }
     return this.newestSnapshotServerMs;
+  }
+
+  private lerpAngle(a: number, b: number, t: number): number {
+    const d = wrapToPi(b - a);
+    return wrapToPi(a + d * t);
+  }
+
+  private computeMouseAimAngle(dtSec: number, tuning = getTuning()): number | undefined {
+    if (!tuning.aimEnabled || !this.predicted) {
+      this.hasAimState = false;
+      return undefined;
+    }
+    const pointer = this.input.activePointer;
+    const mouseWorld = this.screenToWorld(pointer.x, pointer.y);
+    const deadzone = Math.max(0, tuning.aimDeadzonePx ?? 32);
+    const dx = mouseWorld.x - this.predicted.x;
+    const dy = mouseWorld.y - this.predicted.y;
+    if (Math.hypot(dx, dy) <= deadzone) {
+      return Number.isFinite(this.predicted.aimAngleRaw) ? this.predicted.aimAngleRaw : (Number.isFinite(this.predicted.aimAngle) ? this.predicted.aimAngle : undefined);
+    }
+
+    const rawTarget = Math.atan2(mouseWorld.y - this.predicted.y, mouseWorld.x - this.predicted.x);
+    if (!this.hasAimState) {
+      this.hasAimState = true;
+      this.aimCurrentAngle = Number.isFinite(this.predicted.aimAngleRaw) ? this.predicted.aimAngleRaw : (Number.isFinite(this.predicted.aimAngle) ? this.predicted.aimAngle : rawTarget);
+      this.aimTargetAngle = rawTarget;
+    }
+
+    const smoothing = Math.max(0, Math.min(1, tuning.aimSmoothing ?? 0));
+    this.aimTargetAngle = this.lerpAngle(this.aimTargetAngle, rawTarget, 1 - smoothing);
+    let turnRate = Math.max(0, tuning.aimMaxTurnRate ?? 10);
+    // Backward compatibility with older presets that stored deg/s.
+    if (turnRate > 60) turnRate = (turnRate * Math.PI) / 180;
+    const maxDelta = turnRate * dtSec;
+    this.aimCurrentAngle = approachAngle(this.aimCurrentAngle, this.aimTargetAngle, maxDelta);
+    this.aimAngleDiff = wrapToPi(this.aimTargetAngle - this.aimCurrentAngle);
+    return this.aimCurrentAngle;
+  }
+
+  private updateCrosshairAndCursor() {
+    const tuning = getTuning();
+    const pointer = this.input.activePointer;
+    const canvas = this.game.canvas;
+    const within = pointer.x >= 0 && pointer.y >= 0 && pointer.x <= this.scale.width && pointer.y <= this.scale.height;
+    if (canvas) {
+      canvas.style.cursor = (tuning.hideSystemCursor && within) ? 'none' : '';
+    }
+
+    this.crosshairGraphics.clear();
+    if (!tuning.crosshairEnabled || !within) return;
+    const size = Math.max(1, tuning.crosshairSize ?? 16);
+    const thick = Math.max(1, tuning.crosshairThickness ?? 2);
+    const gap = Math.max(0, tuning.crosshairCenterGap ?? 4);
+    const x = pointer.x;
+    const y = pointer.y;
+    this.crosshairGraphics.lineStyle(thick, 0xe8f5ff, 0.9);
+    this.crosshairGraphics.lineBetween(x - size, y, x - gap, y);
+    this.crosshairGraphics.lineBetween(x + gap, y, x + size, y);
+    this.crosshairGraphics.lineBetween(x, y - size, x, y - gap);
+    this.crosshairGraphics.lineBetween(x, y + gap, x, y + size);
+    this.crosshairGraphics.fillStyle(0xe8f5ff, 0.85);
+    this.crosshairGraphics.fillCircle(x, y, 1.5);
+  }
+
+  private drawMovementDebugVectors() {
+    const tuning = getTuning();
+    this.motionDebugGraphics.clear();
+    if (!this.predicted || !(tuning.drawVectors || tuning.debugDrawVectors || tuning.drawVelComponents || tuning.drawMoveVector || tuning.drawBodyVector || tuning.drawAimVector || tuning.drawAimVectorRaw || tuning.drawAimVectorClamped)) return;
+    const p = this.worldToScreen(this.predicted.x, this.predicted.y);
+    const speed = Math.hypot(this.predicted.vx, this.predicted.vy);
+    const velScale = 0.18;
+    const headingLen = 36;
+    const desiredLen = 30;
+    const moveAngle = Number.isFinite(this.predicted.moveAngle) ? this.predicted.moveAngle! : (Number.isFinite(this.predicted.heading) ? this.predicted.heading! : this.predicted.angle);
+    const aimAngle = Number.isFinite(this.predicted.aimAngle) ? this.predicted.aimAngle! : this.lastAimAngle;
+    const aimAngleRaw = Number.isFinite(this.predicted.aimAngleRaw) ? this.predicted.aimAngleRaw! : aimAngle;
+    const bodyAngle = this.predicted.angle;
+    const heading = moveAngle;
+
+    if (tuning.drawMoveVector || tuning.drawVectors || tuning.debugDrawVectors) {
+      this.motionDebugGraphics.lineStyle(2, 0x4cc9a8, 0.85);
+      this.motionDebugGraphics.lineBetween(
+        p.x,
+        p.y,
+        p.x + Math.cos(moveAngle) * headingLen,
+        p.y + Math.sin(moveAngle) * headingLen
+      );
+    }
+
+    this.motionDebugGraphics.lineStyle(2, 0x67b6ff, 0.85);
+    this.motionDebugGraphics.lineBetween(
+      p.x,
+      p.y,
+      p.x + this.predicted.vx * velScale,
+      p.y + this.predicted.vy * velScale
+    );
+
+    if (tuning.drawAimVector || tuning.drawVectors || tuning.debugDrawVectors) {
+      this.motionDebugGraphics.lineStyle(2, 0xf0d776, 0.9);
+      this.motionDebugGraphics.lineBetween(
+        p.x,
+        p.y,
+        p.x + Math.cos(aimAngle) * desiredLen,
+        p.y + Math.sin(aimAngle) * desiredLen
+      );
+    }
+    if (tuning.drawBodyVector) {
+      this.motionDebugGraphics.lineStyle(2, 0x8ed7ff, 0.9);
+      this.motionDebugGraphics.lineBetween(
+        p.x,
+        p.y,
+        p.x + Math.cos(bodyAngle) * desiredLen,
+        p.y + Math.sin(bodyAngle) * desiredLen
+      );
+    }
+    if (tuning.drawAimVectorRaw) {
+      this.motionDebugGraphics.lineStyle(2, 0xff9f70, 0.9);
+      this.motionDebugGraphics.lineBetween(
+        p.x,
+        p.y,
+        p.x + Math.cos(aimAngleRaw) * desiredLen,
+        p.y + Math.sin(aimAngleRaw) * desiredLen
+      );
+    }
+    if (tuning.drawAimVectorClamped) {
+      this.motionDebugGraphics.lineStyle(2, 0xfee06a, 0.95);
+      this.motionDebugGraphics.lineBetween(
+        p.x,
+        p.y,
+        p.x + Math.cos(aimAngle) * (desiredLen + 8),
+        p.y + Math.sin(aimAngle) * (desiredLen + 8)
+      );
+    }
+
+    if (tuning.drawVelComponents) {
+      const telemetry = (lastTelemetry || {}) as Record<string, any>;
+      const forward = Number(telemetry.velForward ?? 0);
+      const side = Number(telemetry.velSide ?? 0);
+      const compScale = 0.18;
+      this.motionDebugGraphics.lineStyle(2, 0x70f5d0, 0.9);
+      this.motionDebugGraphics.lineBetween(
+        p.x,
+        p.y,
+        p.x + Math.cos(heading) * forward * compScale,
+        p.y + Math.sin(heading) * forward * compScale
+      );
+      const rightX = -Math.sin(heading);
+      const rightY = Math.cos(heading);
+      this.motionDebugGraphics.lineStyle(2, 0xff8ab8, 0.9);
+      this.motionDebugGraphics.lineBetween(
+        p.x,
+        p.y,
+        p.x + rightX * side * compScale,
+        p.y + rightY * side * compScale
+      );
+    }
+
+    if (tuning.debugDrawArcPreview) {
+      const preview = this.worldToScreen(
+        this.predicted.x + this.predicted.vx * 0.2,
+        this.predicted.y + this.predicted.vy * 0.2
+      );
+      this.motionDebugGraphics.fillStyle(0xfff3a0, 0.9);
+      this.motionDebugGraphics.fillCircle(preview.x, preview.y, 2.5);
+      this.motionDebugGraphics.lineStyle(1, 0xfff3a0, 0.6);
+      this.motionDebugGraphics.lineBetween(p.x, p.y, preview.x, preview.y);
+    }
+
+    if (tuning.drawAimLine) {
+      const pointer = this.input.activePointer;
+      this.motionDebugGraphics.lineStyle(1.5, 0xfff67a, 0.8);
+      this.motionDebugGraphics.lineBetween(p.x, p.y, pointer.x, pointer.y);
+    }
+
+    if (speed < 0.001) {
+      this.motionDebugGraphics.fillStyle(0x67b6ff, 0.9);
+      this.motionDebugGraphics.fillCircle(p.x, p.y, 1.5);
+    }
+  }
+
+  private stickTargetScreen(view: PlayerView) {
+    const tuning = puckStickTuningStore.get();
+    const ox = tuning.stickOffsetX;
+    const oy = tuning.stickOffsetY;
+    const cos = Math.cos(view.aimRot);
+    const sin = Math.sin(view.aimRot);
+    return {
+      x: view.x + ox * cos - oy * sin,
+      y: view.y + ox * sin + oy * cos
+    };
+  }
+
+  private updateAndDrawPuck(dtSec: number, remoteTargetServerTime: number) {
+    const tuning = puckStickTuningStore.get();
+    const puckRadius = tuning.puckRadius;
+    const holdSpringK = tuning.holdSpringK;
+    const holdDampingC = tuning.holdDampingC;
+    const holdMaxError = tuning.holdMaxError;
+
+    if (this.puckSnapshot.state === 'FREE') {
+      const sample = this.puckFreeBuffer.sample(remoteTargetServerTime, (a, b, t) => ({
+        x: a.x + (b.x - a.x) * t,
+        y: a.y + (b.y - a.y) * t,
+        vx: a.vx + (b.vx - a.vx) * t,
+        vy: a.vy + (b.vy - a.vy) * t
+      })) ?? this.puckFreeBuffer.latest()?.value ?? this.puckSnapshot;
+      const s = this.worldToScreen(sample.x, sample.y);
+      this.puckRender.x = s.x;
+      this.puckRender.y = s.y;
+      this.puckRender.vx = sample.vx;
+      this.puckRender.vy = sample.vy;
+      this.puckRender.state = 'FREE';
+      this.puckRender.ownerId = null;
+    } else {
+      this.puckRender.state = 'HELD';
+      this.puckRender.ownerId = this.puckSnapshot.ownerId;
+      const owner = this.puckRender.ownerId ? this.players.get(this.puckRender.ownerId) : null;
+      const serverScreen = this.worldToScreen(this.puckSnapshot.x, this.puckSnapshot.y);
+      if (owner) {
+        const target = this.stickTargetScreen(owner);
+        const dx = target.x - this.puckRender.x;
+        const dy = target.y - this.puckRender.y;
+        this.puckRender.vx += (dx * holdSpringK - this.puckRender.vx * holdDampingC) * dtSec;
+        this.puckRender.vy += (dy * holdSpringK - this.puckRender.vy * holdDampingC) * dtSec;
+        this.puckRender.x += this.puckRender.vx * dtSec;
+        this.puckRender.y += this.puckRender.vy * dtSec;
+        const corrDx = serverScreen.x - this.puckRender.x;
+        const corrDy = serverScreen.y - this.puckRender.y;
+        const corrDist = Math.hypot(corrDx, corrDy);
+        if (corrDist > holdMaxError * 1.4) {
+          this.puckRender.x = serverScreen.x;
+          this.puckRender.y = serverScreen.y;
+          this.puckRender.vx = this.puckSnapshot.vx;
+          this.puckRender.vy = this.puckSnapshot.vy;
+        } else {
+          this.puckRender.x += corrDx * 0.12;
+          this.puckRender.y += corrDy * 0.12;
+        }
+      } else {
+        this.puckRender.x = serverScreen.x;
+        this.puckRender.y = serverScreen.y;
+      }
+    }
+
+    this.puckGraphics.clear();
+    this.puckGraphics.fillStyle(0x111111, 1);
+    this.puckGraphics.fillCircle(this.puckRender.x, this.puckRender.y, puckRadius);
+    this.puckGraphics.lineStyle(1, 0xffffff, 0.25);
+    this.puckGraphics.strokeCircle(this.puckRender.x, this.puckRender.y, puckRadius);
+
+    if (tuning.drawPuckVelocity) {
+      this.puckGraphics.lineStyle(2, 0xffe279, 0.8);
+      this.puckGraphics.lineBetween(
+        this.puckRender.x,
+        this.puckRender.y,
+        this.puckRender.x + this.puckRender.vx * 0.08,
+        this.puckRender.y + this.puckRender.vy * 0.08
+      );
+    }
+
+    if (tuning.drawStickTarget || tuning.drawStickHitbox || tuning.drawPickupRadius || tuning.drawMagnetRadius) {
+      for (const view of this.players.values()) {
+        const t = this.stickTargetScreen(view);
+        if (tuning.drawStickTarget) {
+          this.puckGraphics.fillStyle(0x59d1ff, 0.8);
+          this.puckGraphics.fillCircle(t.x, t.y, 3);
+        }
+        if (tuning.drawStickHitbox) {
+          this.puckGraphics.lineStyle(1, 0x59d1ff, 0.5);
+          this.puckGraphics.strokeCircle(t.x, t.y, tuning.stickTipRadius);
+        }
+      }
+    }
+
+    if (tuning.drawPickupRadius && this.clientId) {
+      const local = this.players.get(this.clientId);
+      if (local) {
+        const t = this.stickTargetScreen(local);
+        this.puckGraphics.lineStyle(1, 0x8cffb7, 0.45);
+        this.puckGraphics.strokeCircle(t.x, t.y, tuning.pickupRadius);
+      }
+    }
+    if (tuning.drawMagnetRadius && this.clientId) {
+      const local = this.players.get(this.clientId);
+      if (local) {
+        const t = this.stickTargetScreen(local);
+        this.puckGraphics.lineStyle(1, 0x67a5ff, 0.35);
+        this.puckGraphics.strokeCircle(t.x, t.y, tuning.magnetRadius);
+      }
+    }
   }
 
   private getPerfStats() {
@@ -353,8 +705,43 @@ export class PondScene extends Phaser.Scene {
     remoteBufferLenAvg = remoteBufferCount > 0 ? remoteBufferLenAvg / remoteBufferCount : 0;
 
     const tuning = getTuning();
+    const puckStick = puckStickTuningStore.get();
     const used = usedTuning;
     const telemetry = (lastTelemetry || {}) as Record<string, any>;
+
+    const puckStateLine = puckStick.drawPuckState ? `puckState=${this.puckSnapshot.state} owner=${this.puckSnapshot.ownerId ?? '-'}` : null;
+    const stickTargetLine = (() => {
+      if (!puckStick.drawStickTarget || !this.clientId) return null;
+      const local = this.players.get(this.clientId);
+      if (!local) return null;
+      const t = this.stickTargetScreen(local);
+      const wx = t.x - this.scale.width / 2;
+      const wy = t.y - this.scale.height / 2;
+      return `stickTarget=(${wx.toFixed(1)}, ${wy.toFixed(1)})`;
+    })();
+    const pickupRadiusLine = puckStick.drawPickupRadius ? `pickupRadius=${puckStick.pickupRadius.toFixed(1)}` : null;
+    const showTarget = Boolean(tuning.showTargetAngle ?? tuning.drawTargetAngle);
+    const showHeading = Boolean(tuning.showHeading ?? false);
+    const headingLine = showHeading && this.predicted
+      ? `body=${(this.predicted.angle * 180 / Math.PI).toFixed(1)} move=${((this.predicted.moveAngle ?? this.predicted.heading ?? 0) * 180 / Math.PI).toFixed(1)} aim=${((this.predicted.aimAngle ?? 0) * 180 / Math.PI).toFixed(1)}`
+      : null;
+    const targetAngleLine = showTarget
+      ? `aim cur=${(this.aimCurrentAngle * 180 / Math.PI).toFixed(1)} target=${(this.aimTargetAngle * 180 / Math.PI).toFixed(1)} diff=${(this.aimAngleDiff * 180 / Math.PI).toFixed(1)}`
+      : null;
+    const vectorsLine = (tuning.drawVectors || tuning.debugDrawVectors)
+      ? `vectors move=${Number(telemetry.moveAngle ?? this.lastMoveAngle).toFixed(2)} body=${Number(this.predicted?.angle ?? 0).toFixed(2)} aimRaw=${Number(telemetry.aimAngleRaw ?? this.lastAimAngle).toFixed(2)} aim=${Number(telemetry.aimAngle ?? this.lastAimAngle).toFixed(2)}`
+      : null;
+    const anglesLine = tuning.showAngles
+      ? `angles move=${(Number(telemetry.moveAngle ?? this.lastMoveAngle) * 180 / Math.PI).toFixed(1)} body=${(Number(this.predicted?.angle ?? 0) * 180 / Math.PI).toFixed(1)} aimRaw=${(Number(telemetry.aimAngleRaw ?? this.lastAimAngle) * 180 / Math.PI).toFixed(1)} aim=${(Number(telemetry.aimAngle ?? this.lastAimAngle) * 180 / Math.PI).toFixed(1)}`
+      : null;
+    const angleDiffLine = tuning.showAngleDiff
+      ? `angleDiff raw=${(Number(telemetry.aimDiffRaw ?? 0) * 180 / Math.PI).toFixed(1)} clamped=${(Number(telemetry.aimDiffClamped ?? 0) * 180 / Math.PI).toFixed(1)}`
+      : null;
+    const snapLine = tuning.showSnapFactor ? `snapFactor=${Number(telemetry.snapFactor ?? 0).toFixed(2)}` : null;
+    const brakeAssistLine = tuning.showBrakeActive ? `brakeAssist=${telemetry.brakeAssistActive ? 'on' : 'off'}` : null;
+    const startModeLine = tuning.showStartMode
+      ? `startMode=${telemetry.startModeActive ? 'on' : 'off'} fwd=${Number(telemetry.velForward ?? 0).toFixed(1)} side=${Number(telemetry.velSide ?? 0).toFixed(1)}`
+      : null;
 
     this.debugOverlay.setText([
       'DEBUG [F3]',
@@ -365,6 +752,17 @@ export class PondScene extends Phaser.Scene {
       `simStepsThisFrame=${this.simStepsThisFrame} capHitCount=${this.simCapHitCount}`,
       `hitchCount=${this.hitchCount} lastHitchMs=${this.lastHitchMs.toFixed(1)} needsResync=${this.needsResync}`,
       `resyncCount=${this.resyncCount} lastResyncReason=${this.lastResyncReason ?? '-'} resyncAtMs=${this.lastResyncAtMs.toFixed(1)}`,
+      ...(puckStateLine ? [puckStateLine] : []),
+      ...(stickTargetLine ? [stickTargetLine] : []),
+      ...(pickupRadiusLine ? [pickupRadiusLine] : []),
+      ...(headingLine ? [headingLine] : []),
+      ...(targetAngleLine ? [targetAngleLine] : []),
+      ...(vectorsLine ? [vectorsLine] : []),
+      ...(anglesLine ? [anglesLine] : []),
+      ...(angleDiffLine ? [angleDiffLine] : []),
+      ...(snapLine ? [snapLine] : []),
+      ...(brakeAssistLine ? [brakeAssistLine] : []),
+      ...(startModeLine ? [startModeLine] : []),
       `speed=${this.debugCurrentSpeed.toFixed(1)} drift=${(telemetry.driftAngle||0).toFixed(2)} speedRatio=${(this.debugSpeedRatio*100).toFixed(0)}%`,
       `tuningVersion=${tuning.__version ?? 0} accel=${tuning.accel} maxSpeed=${tuning.maxSpeed} dragMove=${tuning.dragMove} dragIdle=${tuning.dragIdle} lateralGrip=${tuning.lateralGrip}`,
       `USED speed=${(telemetry.currentSpeed ?? '-')} lat=${(telemetry.lateralSpeed ?? '-')} fwd=${(telemetry.forwardSpeed ?? '-')}`
@@ -383,7 +781,7 @@ export class PondScene extends Phaser.Scene {
       `Client: ${this.clientId ?? '-'}`,
       `Seq/Ack: ${this.seq}/${this.ackSeq}`,
       `Pending: ${this.pendingInputs.length}`,
-      'WASD move | SHIFT sprint | SPACE brake'
+      'WASD move | SHIFT sprint | SPACE brake | E/LMB shoot'
     ].join('\n');
 
     if (next !== this.lastHudText) {
@@ -477,7 +875,13 @@ export class PondScene extends Phaser.Scene {
         }
         // push the predicted state using the per-step timestamp so the
         // interpolator sees properly spaced samples
-        this.localBuffer.push({ x: this.predicted.x, y: this.predicted.y, rot: this.predicted.angle }, simStepTime);
+        this.localBuffer.push({
+          x: this.predicted.x,
+          y: this.predicted.y,
+          rot: this.predicted.angle,
+          aimRot: this.predicted.aimAngle ?? this.predicted.angle,
+          moveRot: this.predicted.moveAngle ?? this.predicted.angle
+        }, simStepTime);
         this.ws.send(input);
       }
     }
@@ -494,7 +898,13 @@ export class PondScene extends Phaser.Scene {
       let state: LerpPlayer | null = null;
       if (this.clientId && id === this.clientId) {
         state = this.sampleInterpolated(this.localBuffer, targetTime);
-        if (!state && this.predicted) state = { x: this.predicted.x, y: this.predicted.y, rot: this.predicted.angle };
+        if (!state && this.predicted) state = {
+          x: this.predicted.x,
+          y: this.predicted.y,
+          rot: this.predicted.angle,
+          aimRot: this.predicted.aimAngle ?? this.predicted.angle,
+          moveRot: this.predicted.moveAngle ?? this.predicted.angle
+        };
       } else {
         const interp = this.remoteInterpolators.get(id);
         if (interp) state = this.sampleInterpolated(interp, remoteTargetServerTime);
@@ -502,9 +912,12 @@ export class PondScene extends Phaser.Scene {
 
       if (!state) continue;
       const s = this.worldToScreen(state.x, state.y);
-      view.setState(s.x, s.y, state.rot);
+      view.setState(s.x, s.y, state.rot, state.aimRot ?? state.rot);
       view.draw();
     }
+    this.updateAndDrawPuck(clampedDtMs / 1000, remoteTargetServerTime);
+    this.drawMovementDebugVectors();
+    this.updateCrosshairAndCursor();
 
     this.perfSamples.push({ t: this.renderClockMs, dtMs: frameDtMs });
     this.updateOverlay();
