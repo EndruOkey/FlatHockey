@@ -1,0 +1,126 @@
+import express from 'express';
+import { createServer } from 'http';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { RoomManager } from './game/roomManager';
+import { createWsServer } from './net/wsServer';
+import { createWsServerV2 } from './net/wsServerV2';
+import { FixedLoop } from './game/loop';
+import { SNAPSHOT_HZ } from '@flathockey/shared';
+
+const PORT = Number(process.env.PORT ?? 8080);
+const TICK_RATE = Number(process.env.TICK_RATE ?? 60);
+const SNAPSHOT_RATE = Number(process.env.SNAPSHOT_RATE ?? SNAPSHOT_HZ);
+
+const app = express();
+const httpServer = createServer(app);
+const startedAt = Date.now();
+
+const legacyRoomManager = new RoomManager();
+const v2RoomManager = new RoomManager();
+const wsLegacy = createWsServer(httpServer, legacyRoomManager);
+const ws2 = createWsServerV2(httpServer, v2RoomManager, {
+  tickRate: TICK_RATE,
+  snapshotRate: SNAPSHOT_RATE
+});
+
+httpServer.on('upgrade', (req, socket, head) => {
+  const pathname = (req.url ?? '').split('?')[0];
+
+  if (pathname === '/ws') {
+    wsLegacy.handleUpgrade(req, socket, head, (ws) => {
+      wsLegacy.emit('connection', ws, req);
+    });
+    return;
+  }
+
+  if (pathname === '/ws2') {
+    ws2.wss.handleUpgrade(req, socket, head, (ws) => {
+      ws2.wss.emit('connection', ws, req);
+    });
+    return;
+  }
+
+  socket.destroy();
+});
+
+let tickCounter = 0;
+let snapshotCounter = 0;
+let lastReport = Date.now();
+let snapshotAccumulatorMs = 0;
+const SNAPSHOT_STEP_MS = 1000 / Math.max(1, SNAPSHOT_RATE);
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const clientDist = path.resolve(__dirname, '../../client/dist');
+app.use(express.static(clientDist));
+
+app.get('/health', (_req, res) => {
+  res.json({
+    ok: true,
+    uptimeSec: Math.floor((Date.now() - startedAt) / 1000),
+    config: {
+      tickRate: TICK_RATE,
+      snapshotRate: SNAPSHOT_RATE
+    },
+    legacy: {
+      rooms: legacyRoomManager.roomCount(),
+      players: legacyRoomManager.playerCount()
+    },
+    v2: ws2.getStats()
+  });
+});
+
+const loop = new FixedLoop(
+  (dt) => {
+    tickCounter += 1;
+    for (const room of legacyRoomManager.allRooms()) {
+      room.step(dt);
+    }
+    for (const room of v2RoomManager.allRooms()) {
+      room.step(dt);
+    }
+  },
+  (frameDtMs) => {
+    snapshotAccumulatorMs += Math.min(frameDtMs, 250);
+
+    while (snapshotAccumulatorMs >= SNAPSHOT_STEP_MS) {
+      snapshotAccumulatorMs -= SNAPSHOT_STEP_MS;
+      for (const room of legacyRoomManager.allRooms()) {
+        if (room.players.size === 0) continue;
+        room.broadcastSnapshot();
+        snapshotCounter += 1;
+      }
+      for (const room of v2RoomManager.allRooms()) {
+        if (room.players.size === 0) continue;
+        room.broadcastSnapshot();
+        snapshotCounter += 1;
+      }
+      legacyRoomManager.deleteEmptyRooms();
+      v2RoomManager.deleteEmptyRooms();
+    }
+
+    const now = Date.now();
+    if (now - lastReport >= 2000) {
+      const windowSec = (now - lastReport) / 1000;
+      const playersLegacy = legacyRoomManager.playerCount();
+      const playersV2 = v2RoomManager.playerCount();
+
+      console.log(
+        `[PERF] ticks/s=${(tickCounter / windowSec).toFixed(1)} snapshots/s=${(snapshotCounter / windowSec).toFixed(1)} playersLegacy=${playersLegacy} playersV2=${playersV2}`
+      );
+
+      tickCounter = 0;
+      snapshotCounter = 0;
+      lastReport = now;
+    }
+  }
+);
+
+loop.start();
+
+httpServer.listen(PORT, () => {
+  console.log(`[HTTP] listening on :${PORT}`);
+  console.log(`[WS] endpoint ws://localhost:${PORT}/ws`);
+  console.log(`[WS2] endpoint ws://localhost:${PORT}/ws2`);
+});
