@@ -13,16 +13,25 @@ git checkout "$BRANCH"
 git reset --hard "origin/${BRANCH}"
 git clean -fd
 
+PNPM_BIN=""
 if command -v pnpm >/dev/null 2>&1; then
+  PNPM_BIN="pnpm"
+elif [ -x /usr/bin/pnpm ]; then
+  PNPM_BIN="/usr/bin/pnpm"
+fi
+
+if [ -z "$PNPM_BIN" ]; then
+  echo "pnpm is required for workspace installs but was not found."
+  exit 1
+fi
+
+if [ -n "$PNPM_BIN" ]; then
   if [ -f pnpm-lock.yaml ]; then
-    pnpm install --frozen-lockfile
+    "$PNPM_BIN" install --frozen-lockfile
   else
-    pnpm install --no-frozen-lockfile
+    "$PNPM_BIN" install --no-frozen-lockfile
   fi
-  pnpm run build
-else
-  npm ci || npm install
-  npm run build
+  "$PNPM_BIN" run build
 fi
 
 SYSTEMD_UNIT="$SERVICE_NAME"
