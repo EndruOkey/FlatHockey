@@ -8,3 +8,7 @@ build/
 _backup/
 coverage/
 .DS_Store
+*.bak
+*.save
+*.tscat.save
+*.bak.*

@@ -12,6 +12,7 @@ jobs:
     env:
       DEV_PORT: ${{ secrets.DEV_PORT }}
       DEV_APP_DIR: ${{ secrets.DEV_APP_DIR }}
+      DEV_SERVICE_NAME: ${{ secrets.DEV_SERVICE_NAME }}
 
     steps:
       - name: Checkout
@@ -36,4 +37,30 @@ jobs:
       - name: Run deploy
         run: |
           APP_DIR="${DEV_APP_DIR:-/opt/flathockey-prod}"
-          ssh -p "${DEV_PORT:-22}" "${{ secrets.DEV_USER }}@${{ secrets.DEV_HOST }}" "chmod +x ${APP_DIR}/deploy/deploy.sh && APP_DIR=${APP_DIR} ${APP_DIR}/deploy/deploy.sh"
+          SERVICE_NAME="${DEV_SERVICE_NAME:-flathockey-ws2}"
+          ssh -p "${DEV_PORT:-22}" "${{ secrets.DEV_USER }}@${{ secrets.DEV_HOST }}" \
+            "chmod +x ${APP_DIR}/deploy/deploy.sh && APP_DIR=${APP_DIR} SERVICE_NAME=${SERVICE_NAME} ${APP_DIR}/deploy/deploy.sh" \
+            | tee deploy.log
+
+      - name: Deployment Summary
+        if: always()
+        run: |
+          APP_DIR="${DEV_APP_DIR:-/opt/flathockey-prod}"
+          SERVICE_NAME="${DEV_SERVICE_NAME:-flathockey-ws2}"
+          SYSTEMD_UNIT="$SERVICE_NAME"
+          if [[ "$SYSTEMD_UNIT" != *.service ]]; then
+            SYSTEMD_UNIT="${SYSTEMD_UNIT}.service"
+          fi
+          {
+            echo "## DEV Deploy Summary"
+            echo ""
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Target: \`${{ secrets.DEV_USER }}@${{ secrets.DEV_HOST }}:${APP_DIR}\`"
+            echo "- Service: \`${SERVICE_NAME}\`"
+            echo ""
+            echo "### systemd status tail"
+            echo '```'
+            ssh -p "${DEV_PORT:-22}" "${{ secrets.DEV_USER }}@${{ secrets.DEV_HOST }}" \
+              "systemctl --no-pager --full status ${SYSTEMD_UNIT} | tail -n 20" || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
