@@ -18,10 +18,7 @@ function randomName() {
 }
 
 export function createWsServer(server: Server, roomManager: RoomManager) {
-  const wss = new WebSocketServer({
-    noServer: true,
-    perMessageDeflate: false,
-  });
+  const wss = new WebSocketServer({ server, path: '/ws' });
 
   wss.on('connection', (ws, req) => {
     const ts = new Date().toISOString();
@@ -93,26 +90,12 @@ export function createWsServer(server: Server, roomManager: RoomManager) {
       } else if (msg.type === 'join') {
         console.log(`[WS] JOIN received client=${clientId} payload=${JSON.stringify(msg)}`);
         if (msg.room !== room.id) {
-          console.log(`[WS] JOIN forcing room client=${clientId} requested=${msg.room} forced=${room.id}`);
-        }
-
-        const roomAny = room as any;
-        const countCandidates: number[] = [];
-        if (typeof roomAny.getClientCount === 'function') {
-          const n = Number(roomAny.getClientCount());
-          if (Number.isFinite(n)) countCandidates.push(n);
-        }
-        if (roomAny.clients?.size != null) countCandidates.push(Number(roomAny.clients.size));
-        if (roomAny.players?.size != null) countCandidates.push(Number(roomAny.players.size));
-        if (roomAny.sockets?.size != null) countCandidates.push(Number(roomAny.sockets.size));
-        const count = countCandidates.find((n) => Number.isFinite(n)) ?? 0;
-        if (count >= 20) {
           const reject: ServerMessage = {
             type: 'join:reject',
-            reason: `room_full:${count}/20`
+            reason: `room_not_found:${msg.room}`
           };
           if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(reject));
-          console.warn(`[WS] JOIN rejected full client=${clientId} room=${room.id} count=${count}`);
+          console.warn(`[WS] JOIN rejected client=${clientId} room=${msg.room}`);
           return;
         }
 

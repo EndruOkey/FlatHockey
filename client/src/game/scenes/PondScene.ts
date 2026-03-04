@@ -21,6 +21,7 @@ const REMOTE_INTERP_DELAY_DEFAULT_MS = 120;
 type DebugSample = { t: number; dtMs: number };
 
 export class PondScene extends Phaser.Scene {
+  private static readonly PROD_WS2_URL = 'wss://flathockey.fun/ws2';
   private ws = new WsClient();
   private clientId: string | null = null;
   private roomId: string | null = null;
@@ -100,15 +101,12 @@ export class PondScene extends Phaser.Scene {
   }
 
   private resolveWsUrl() {
-    const envUrl = String(import.meta.env.VITE_WS_URL ?? '').trim();
-    if (envUrl) return envUrl;
-
     const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
     if (isLocal) {
-      return `ws://${location.hostname}:8080/ws`;
+      return `ws://${location.hostname}:8080/ws2`;
     }
 
-    throw new Error('Missing VITE_WS_URL for non-local host');
+    return PondScene.PROD_WS2_URL;
   }
 
   create() {
@@ -245,9 +243,9 @@ export class PondScene extends Phaser.Scene {
     return view;
   }
 
-  private applyWelcomeLike(msg: { clientId: string; roomId: string; movementTuning?: unknown }) {
+  private applyWelcomeLike(msg: { clientId: string; roomId?: string; room?: string; movementTuning?: unknown }) {
     this.clientId = msg.clientId;
-    this.roomId = msg.roomId;
+    this.roomId = msg.roomId ?? msg.room ?? this.roomId ?? 'pond-1';
 
     this.movementTuner?.onWelcome(msg as any);
 
@@ -273,14 +271,7 @@ export class PondScene extends Phaser.Scene {
       return;
     }
 
-    if (m.type === 'net:welcome') {
-      this.applyWelcomeLike(m as any);
-      return;
-    }
-
-    if (m.type === 'login:ok') {
-      const userId = typeof m.user?.id === 'string' ? m.user.id : null;
-      if (userId) this.clientId = userId;
+    if (m.type === 'join:ok') {
       const room = typeof m.room === 'string' ? m.room : 'pond-1';
       this.roomId = room;
       return;
@@ -292,8 +283,11 @@ export class PondScene extends Phaser.Scene {
       return;
     }
 
-    if (m.type === 'login:reject') {
-      this.hud.setText(`Offline (login rejected)\n${m.reason ?? 'unknown'}`);
+    if (m.type === 'error') {
+      const reason = typeof (m as any).code === 'string'
+        ? `${(m as any).code}: ${(m as any).message ?? 'unknown'}`
+        : String(m.reason ?? 'unknown');
+      this.hud.setText(`Offline (ws error)\n${reason}`);
       this.wsConnected = false;
       return;
     }

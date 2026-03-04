@@ -18,30 +18,10 @@ const startedAt = Date.now();
 
 const legacyRoomManager = new RoomManager();
 const v2RoomManager = new RoomManager();
-const wsLegacy = createWsServer(httpServer, legacyRoomManager);
+createWsServer(httpServer, legacyRoomManager);
 const ws2 = createWsServerV2(httpServer, v2RoomManager, {
   tickRate: TICK_RATE,
   snapshotRate: SNAPSHOT_RATE
-});
-
-httpServer.on('upgrade', (req, socket, head) => {
-  const pathname = (req.url ?? '').split('?')[0];
-
-  if (pathname === '/ws') {
-    wsLegacy.handleUpgrade(req, socket, head, (ws) => {
-      wsLegacy.emit('connection', ws, req);
-    });
-    return;
-  }
-
-  if (pathname === '/ws2') {
-    ws2.wss.handleUpgrade(req, socket, head, (ws) => {
-      ws2.wss.emit('connection', ws, req);
-    });
-    return;
-  }
-
-  socket.destroy();
 });
 
 let tickCounter = 0;

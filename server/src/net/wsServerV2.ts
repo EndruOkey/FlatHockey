@@ -204,10 +204,7 @@ function toInputMsg(clientId: string, msg: ClientInputV2, fallbackAim: number): 
 
 export function createWsServerV2(server: Server, roomManager: RoomManager, cfg: Partial<V2Config> = {}) {
   const config: V2Config = { ...DEFAULT_CONFIG, ...cfg };
-  const wss = new WebSocketServer({
-    noServer: true,
-    perMessageDeflate: false,
-  });
+  const wss = new WebSocketServer({ server, path: '/ws2' });
   const sessions = new Map<WebSocket, Session>();
 
   const heartbeat = setInterval(() => {
