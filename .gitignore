@@ -12,3 +12,4 @@ coverage/
 *.save
 *.tscat.save
 *.bak.*
+*.swp
