@@ -32,6 +32,7 @@ import {
   type PresetState
 } from './presetStore';
 import { lastTelemetry, lastAimInputRateLimited } from '../net/prediction';
+import { getNetDebugMetrics } from './netDebugState';
 
 let dragLockCount = 0;
 let canvasPointerBackup: string | null = null;
@@ -1692,6 +1693,36 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
   }
 
   function renderNetDebugTab() {
+    const metricsGroup = createSectionCard('NetDebug', {
+      id: 'net_live_metrics',
+      title: 'Live NET Metrics',
+      priority: 120,
+      tone: 'debug',
+      modeRules: {
+        NARROW: { order: -110, columnSpan: 1 },
+        MEDIUM: { order: -110, columnSpan: 2 },
+        WIDE: { order: -110, columnSpan: 3 }
+      }
+    });
+    const metricsText = document.createElement('div');
+    metricsText.className = 'subtle';
+    metricsText.style.whiteSpace = 'pre-line';
+    metricsText.classList.add('full-span');
+    metricsGroup.body.appendChild(metricsText);
+    refreshers.push(() => {
+      const m = getNetDebugMetrics();
+      metricsText.textContent = [
+        `ping: ${m.pingMs >= 0 ? m.pingMs.toFixed(1) : '-'} ms`,
+        `snapshotDelay: ${m.snapshotDelayMs.toFixed(1)} ms`,
+        `serverTick: ${m.serverTick}`,
+        `snapshotRate: ${m.snapshotRate}/s`,
+        `inputDelay: ${m.inputDelayMs.toFixed(1)} ms`,
+        `clientFps: ${m.clientFps.toFixed(1)}`,
+        `players: ${m.players}`
+      ].join('\n');
+    });
+    body.appendChild(metricsGroup.root);
+
     const group = createSectionCard('NetDebug', {
       id: 'net_actions',
       title: 'Actions',

@@ -38,6 +38,8 @@ app.use(express.static(clientDist));
 app.get('/health', (_req, res) => {
   res.json({
     ok: true,
+    uptime: process.uptime(),
+    ts: Date.now(),
     uptimeSec: Math.floor((Date.now() - startedAt) / 1000),
     config: {
       tickRate: TICK_RATE,

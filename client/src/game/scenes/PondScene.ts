@@ -5,6 +5,8 @@ import { Interpolator, lerpPlayer, type LerpPlayer } from '../net/interpolation'
 import { applyPredictedInput, CLIENT_FIXED_DT, type PredictedPlayerState, lastTelemetry, setAimInputRateLimited } from '../net/prediction';
 import { LOCAL_KEY, getTuning, getTuningApplyCount, usedTuning, setTuning } from '../debug/movementTuning';
 import { createMovementTuner, isDevMenuDragging } from '../debug/movementTunerUI';
+import { NetDebugOverlay } from '../debug/netDebugOverlay';
+import { setNetDebugMetrics } from '../debug/netDebugState';
 import { reconcilePrediction } from '../net/reconciliation';
 import { PlayerView } from '../entities/playerView';
 import { puckStickTuningStore } from '../tuning/puckStickTuningStore';
@@ -65,6 +67,7 @@ export class PondScene extends Phaser.Scene {
   private droppedSnapshots = 0;
   private remoteLastSnapshotTick = new Map<string, number>();
   private remoteInterpDelayMs = REMOTE_INTERP_DELAY_DEFAULT_MS;
+  private latestServerTick = 0;
 
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private debugToggleKey!: Phaser.Input.Keyboard.Key;
@@ -78,6 +81,7 @@ export class PondScene extends Phaser.Scene {
   private debugAllowed = false;
   private crosshairGraphics!: Phaser.GameObjects.Graphics;
   private motionDebugGraphics!: Phaser.GameObjects.Graphics;
+  private netDebugOverlay: NetDebugOverlay | null = null;
   private aimCurrentAngle = 0;
   private aimTargetAngle = 0;
   private aimAngleDiff = 0;
@@ -129,6 +133,7 @@ export class PondScene extends Phaser.Scene {
     this.puckGraphics = this.add.graphics().setDepth(900);
     this.crosshairGraphics = this.add.graphics().setDepth(1300);
     this.motionDebugGraphics = this.add.graphics().setDepth(1250);
+    this.netDebugOverlay = new NetDebugOverlay(this);
 
     this.input.on('pointerdown', () => this.game.canvas?.focus());
     if (this.game.canvas) this.game.canvas.tabIndex = 1;
@@ -145,6 +150,8 @@ export class PondScene extends Phaser.Scene {
       this.puckGraphics?.destroy();
       this.crosshairGraphics?.destroy();
       this.motionDebugGraphics?.destroy();
+      this.netDebugOverlay?.destroy();
+      this.netDebugOverlay = null;
       if (this.game.canvas) this.game.canvas.style.cursor = '';
     });
 
@@ -300,6 +307,7 @@ export class PondScene extends Phaser.Scene {
   private consumeSnapshot(snapshot: SnapshotMsg) {
     const now = performance.now();
     const serverTimeMs = snapshot.serverTick * SERVER_TICK_MS;
+    this.latestServerTick = snapshot.serverTick;
     this.latestSnapshotAtMs = now;
     this.newestSnapshotServerMs = Math.max(this.newestSnapshotServerMs, serverTimeMs);
     this.snapshotReceiveTimes.push(now);
@@ -757,12 +765,7 @@ export class PondScene extends Phaser.Scene {
   }
 
   private updateOverlay() {
-    if (!this.debugEnabled) {
-      this.debugOverlay.setVisible(false);
-      return;
-    }
-
-    this.debugOverlay.setVisible(true);
+    this.debugOverlay.setVisible(this.debugEnabled);
     const perf = this.getPerfStats();
     const now = performance.now();
     const applyNow = getTuningApplyCount();
@@ -828,33 +831,45 @@ export class PondScene extends Phaser.Scene {
       ? `startMode=${telemetry.startModeActive ? 'on' : 'off'} fwd=${Number(telemetry.velForward ?? 0).toFixed(1)} side=${Number(telemetry.velSide ?? 0).toFixed(1)}`
       : null;
 
-    this.debugOverlay.setText([
-      'DEBUG [F3]',
-      `RTT=${rttMs >= 0 ? rttMs.toFixed(1) : '-'}ms snapRate=${snapshotRate}/s interpDelay=${this.remoteInterpDelayMs.toFixed(0)}ms`,
-      `snapshotAgeMs=${latestSnapshotAge.toFixed(1)} bufferLenAvg=${remoteBufferLenAvg.toFixed(1)} droppedSnapshots=${this.droppedSnapshots}`,
-      `FPS=${perf.fps.toFixed(1)} dtMax1s=${perf.dtMax.toFixed(2)}ms`,
-      `devApplyCountPerSec=${this.tuningApplyCountPerSec.toFixed(1)}`,
-      `seq=${this.seq} ack=${this.ackSeq} pending=${this.pendingInputs.length}`,
-      `simStepsThisFrame=${this.simStepsThisFrame} capHitCount=${this.simCapHitCount}`,
-      `hitchCount=${this.hitchCount} lastHitchMs=${this.lastHitchMs.toFixed(1)} needsResync=${this.needsResync}`,
-      `resyncCount=${this.resyncCount} lastResyncReason=${this.lastResyncReason ?? '-'} resyncAtMs=${this.lastResyncAtMs.toFixed(1)}`,
-      ...(puckStateLine ? [puckStateLine] : []),
-      ...(stickTargetLine ? [stickTargetLine] : []),
-      ...(pickupRadiusLine ? [pickupRadiusLine] : []),
-      ...(headingLine ? [headingLine] : []),
-      ...(targetAngleLine ? [targetAngleLine] : []),
-      ...(vectorsLine ? [vectorsLine] : []),
-      ...(anglesLine ? [anglesLine] : []),
-      ...(angleDiffLine ? [angleDiffLine] : []),
-      ...(stickRuntimeLine ? [stickRuntimeLine] : []),
-      ...(stickLimitLine ? [stickLimitLine] : []),
-      ...(snapLine ? [snapLine] : []),
-      ...(brakeAssistLine ? [brakeAssistLine] : []),
-      ...(startModeLine ? [startModeLine] : []),
-      `speed=${this.debugCurrentSpeed.toFixed(1)} drift=${(telemetry.driftAngle||0).toFixed(2)} speedRatio=${(this.debugSpeedRatio*100).toFixed(0)}%`,
-      `tuningVersion=${tuning.__version ?? 0} accel=${tuning.accel} maxSpeed=${tuning.maxSpeed} dragMove=${tuning.dragMove} dragIdle=${tuning.dragIdle} lateralGrip=${tuning.lateralGrip}`,
-      `USED speed=${(telemetry.currentSpeed ?? '-')} lat=${(telemetry.lateralSpeed ?? '-')} fwd=${(telemetry.forwardSpeed ?? '-')}`
-    ].join('\n'));
+    if (this.debugEnabled) {
+      this.debugOverlay.setText([
+        'DEBUG [F3]',
+        `RTT=${rttMs >= 0 ? rttMs.toFixed(1) : '-'}ms snapRate=${snapshotRate}/s interpDelay=${this.remoteInterpDelayMs.toFixed(0)}ms`,
+        `snapshotAgeMs=${latestSnapshotAge.toFixed(1)} bufferLenAvg=${remoteBufferLenAvg.toFixed(1)} droppedSnapshots=${this.droppedSnapshots}`,
+        `FPS=${perf.fps.toFixed(1)} dtMax1s=${perf.dtMax.toFixed(2)}ms`,
+        `devApplyCountPerSec=${this.tuningApplyCountPerSec.toFixed(1)}`,
+        `seq=${this.seq} ack=${this.ackSeq} pending=${this.pendingInputs.length}`,
+        `simStepsThisFrame=${this.simStepsThisFrame} capHitCount=${this.simCapHitCount}`,
+        `hitchCount=${this.hitchCount} lastHitchMs=${this.lastHitchMs.toFixed(1)} needsResync=${this.needsResync}`,
+        `resyncCount=${this.resyncCount} lastResyncReason=${this.lastResyncReason ?? '-'} resyncAtMs=${this.lastResyncAtMs.toFixed(1)}`,
+        ...(puckStateLine ? [puckStateLine] : []),
+        ...(stickTargetLine ? [stickTargetLine] : []),
+        ...(pickupRadiusLine ? [pickupRadiusLine] : []),
+        ...(headingLine ? [headingLine] : []),
+        ...(targetAngleLine ? [targetAngleLine] : []),
+        ...(vectorsLine ? [vectorsLine] : []),
+        ...(anglesLine ? [anglesLine] : []),
+        ...(angleDiffLine ? [angleDiffLine] : []),
+        ...(stickRuntimeLine ? [stickRuntimeLine] : []),
+        ...(stickLimitLine ? [stickLimitLine] : []),
+        ...(snapLine ? [snapLine] : []),
+        ...(brakeAssistLine ? [brakeAssistLine] : []),
+        ...(startModeLine ? [startModeLine] : []),
+        `speed=${this.debugCurrentSpeed.toFixed(1)} drift=${(telemetry.driftAngle||0).toFixed(2)} speedRatio=${(this.debugSpeedRatio*100).toFixed(0)}%`,
+        `tuningVersion=${tuning.__version ?? 0} accel=${tuning.accel} maxSpeed=${tuning.maxSpeed} dragMove=${tuning.dragMove} dragIdle=${tuning.dragIdle} lateralGrip=${tuning.lateralGrip}`,
+        `USED speed=${(telemetry.currentSpeed ?? '-')} lat=${(telemetry.lateralSpeed ?? '-')} fwd=${(telemetry.forwardSpeed ?? '-')}`
+      ].join('\n'));
+    }
+
+    setNetDebugMetrics({
+      pingMs: rttMs,
+      serverTick: this.latestServerTick,
+      snapshotRate,
+      players: this.players.size,
+      snapshotDelayMs: Math.max(0, latestSnapshotAge),
+      inputDelayMs: this.pendingInputs.length * CLIENT_FIXED_DT * 1000,
+      clientFps: perf.fps
+    });
   }
 
   private updateHud(dtSec: number) {
@@ -1025,6 +1040,7 @@ export class PondScene extends Phaser.Scene {
 
     this.perfSamples.push({ t: this.renderClockMs, dtMs: frameDtMs });
     this.updateOverlay();
+    this.netDebugOverlay?.update();
     this.updateHud(clampedDtMs / 1000);
   }
 }

@@ -42,6 +42,12 @@ jobs:
             "chmod +x ${APP_DIR}/deploy/deploy.sh && APP_DIR=${APP_DIR} SERVICE_NAME=${SERVICE_NAME} ${APP_DIR}/deploy/deploy.sh" \
             | tee deploy.log
 
+      - name: Show server logs
+        run: |
+          SERVICE_NAME="${DEV_SERVICE_NAME:-flathockey-ws2}"
+          ssh -p "${DEV_PORT:-22}" "${{ secrets.DEV_USER }}@${{ secrets.DEV_HOST }}" \
+            "sudo journalctl -u ${SERVICE_NAME} -n 40 --no-pager"
+
       - name: Deployment Summary
         if: always()
         run: |
