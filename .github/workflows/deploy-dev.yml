@@ -4,12 +4,14 @@ on:
   push:
     branches:
       - dev
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+      DEV_PORT: ${{ secrets.DEV_PORT }}
+      DEV_APP_DIR: ${{ secrets.DEV_APP_DIR }}
 
     steps:
       - name: Checkout
@@ -18,17 +20,19 @@ jobs:
       - name: Setup SSH Agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+          ssh-private-key: ${{ secrets.DEV_SSH_KEY }}
 
       - name: Add Server to known_hosts
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -p "${DEPLOY_PORT:-22}" "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+          ssh-keyscan -p "${DEV_PORT:-22}" "${{ secrets.DEV_HOST }}" >> ~/.ssh/known_hosts
 
       - name: Upload deploy script
         run: |
-          scp -P "${DEPLOY_PORT:-22}" deploy/deploy.sh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/flathockey-prod/deploy.sh"
+          APP_DIR="${DEV_APP_DIR:-/opt/flathockey-prod}"
+          scp -P "${DEV_PORT:-22}" deploy/deploy.sh "${{ secrets.DEV_USER }}@${{ secrets.DEV_HOST }}:${APP_DIR}/deploy.sh"
 
       - name: Run deploy
         run: |
-          ssh -p "${DEPLOY_PORT:-22}" "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "chmod +x /opt/flathockey-prod/deploy.sh && /opt/flathockey-prod/deploy.sh"
+          APP_DIR="${DEV_APP_DIR:-/opt/flathockey-prod}"
+          ssh -p "${DEV_PORT:-22}" "${{ secrets.DEV_USER }}@${{ secrets.DEV_HOST }}" "chmod +x ${APP_DIR}/deploy.sh && APP_DIR=${APP_DIR} ${APP_DIR}/deploy.sh"
