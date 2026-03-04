@@ -1,73 +1,33 @@
-name: Deploy Dev
+name: Deploy DEV
 
 on:
   push:
     branches:
       - dev
-  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    env:
-      DEV_PORT: ${{ secrets.DEV_PORT }}
-      DEV_APP_DIR: ${{ secrets.DEV_APP_DIR }}
-      DEV_SERVICE_NAME: ${{ secrets.DEV_SERVICE_NAME }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup SSH Agent
+      - name: Setup SSH agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets.DEV_SSH_KEY }}
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Add Server to known_hosts
+      - name: Add server to known_hosts
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -p "${DEV_PORT:-22}" "${{ secrets.DEV_HOST }}" >> ~/.ssh/known_hosts
+          ssh-keyscan -H 130.162.52.94 >> ~/.ssh/known_hosts
 
-      - name: Upload deploy script
+      - name: Deploy to DEV server
         run: |
-          APP_DIR="${DEV_APP_DIR:-/opt/flathockey-prod}"
-          ssh -p "${DEV_PORT:-22}" "${{ secrets.DEV_USER }}@${{ secrets.DEV_HOST }}" "mkdir -p ${APP_DIR}/deploy"
-          scp -P "${DEV_PORT:-22}" deploy/deploy.sh "${{ secrets.DEV_USER }}@${{ secrets.DEV_HOST }}:${APP_DIR}/deploy/deploy.sh"
-
-      - name: Run deploy
-        run: |
-          APP_DIR="${DEV_APP_DIR:-/opt/flathockey-prod}"
-          SERVICE_NAME="${DEV_SERVICE_NAME:-flathockey-ws2}"
-          ssh -p "${DEV_PORT:-22}" "${{ secrets.DEV_USER }}@${{ secrets.DEV_HOST }}" \
-            "chmod +x ${APP_DIR}/deploy/deploy.sh && APP_DIR=${APP_DIR} SERVICE_NAME=${SERVICE_NAME} ${APP_DIR}/deploy/deploy.sh" \
-            | tee deploy.log
-
-      - name: Show server logs
-        run: |
-          SERVICE_NAME="${DEV_SERVICE_NAME:-flathockey-ws2}"
-          ssh -p "${DEV_PORT:-22}" "${{ secrets.DEV_USER }}@${{ secrets.DEV_HOST }}" \
-            "sudo journalctl -u ${SERVICE_NAME} -n 40 --no-pager"
-
-      - name: Deployment Summary
-        if: always()
-        run: |
-          APP_DIR="${DEV_APP_DIR:-/opt/flathockey-prod}"
-          SERVICE_NAME="${DEV_SERVICE_NAME:-flathockey-ws2}"
-          SYSTEMD_UNIT="$SERVICE_NAME"
-          if [[ "$SYSTEMD_UNIT" != *.service ]]; then
-            SYSTEMD_UNIT="${SYSTEMD_UNIT}.service"
-          fi
-          {
-            echo "## DEV Deploy Summary"
-            echo ""
-            echo "- Commit: \`${GITHUB_SHA}\`"
-            echo "- APP_DIR: \`${APP_DIR}\`"
-            echo "- Target: \`${{ secrets.DEV_USER }}@${{ secrets.DEV_HOST }}:${APP_DIR}\`"
-            echo "- Service: \`${SERVICE_NAME}\`"
-            echo ""
-            echo "### systemd status tail"
-            echo '```'
-            ssh -p "${DEV_PORT:-22}" "${{ secrets.DEV_USER }}@${{ secrets.DEV_HOST }}" \
-              "systemctl --no-pager --full status ${SYSTEMD_UNIT} | tail -n 30" || true
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          ssh ubuntu@130.162.52.94 << 'EOF'
+          cd /opt/flathockey-dev
+          git pull
+          pnpm install
+          pm2 restart flathockey-dev || pm2 start ecosystem.config.js --name flathockey-dev
+          EOF
