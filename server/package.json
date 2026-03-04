@@ -9,7 +9,7 @@
     "start": "tsx src/index.ts"
   },
   "dependencies": {
-    "@flathockey/shared": "*",
+    "@flathockey/shared": "workspace:*",
     "express": "^4.21.2",
     "matter-js": "^0.20.0",
     "ws": "^8.18.0"

@@ -13,8 +13,17 @@ git checkout "$BRANCH"
 git reset --hard "origin/${BRANCH}"
 git clean -fd
 
-npm ci || npm install
-npm run build
+if command -v pnpm >/dev/null 2>&1; then
+  if [ -f pnpm-lock.yaml ]; then
+    pnpm install --frozen-lockfile
+  else
+    pnpm install --no-frozen-lockfile
+  fi
+  pnpm run build
+else
+  npm ci || npm install
+  npm run build
+fi
 
 SYSTEMD_UNIT="$SERVICE_NAME"
 if [[ "$SYSTEMD_UNIT" != *.service ]]; then
