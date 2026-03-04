@@ -30,9 +30,10 @@ jobs:
       - name: Upload deploy script
         run: |
           APP_DIR="${DEV_APP_DIR:-/opt/flathockey-prod}"
-          scp -P "${DEV_PORT:-22}" deploy/deploy.sh "${{ secrets.DEV_USER }}@${{ secrets.DEV_HOST }}:${APP_DIR}/deploy.sh"
+          ssh -p "${DEV_PORT:-22}" "${{ secrets.DEV_USER }}@${{ secrets.DEV_HOST }}" "mkdir -p ${APP_DIR}/deploy"
+          scp -P "${DEV_PORT:-22}" deploy/deploy.sh "${{ secrets.DEV_USER }}@${{ secrets.DEV_HOST }}:${APP_DIR}/deploy/deploy.sh"
 
       - name: Run deploy
         run: |
           APP_DIR="${DEV_APP_DIR:-/opt/flathockey-prod}"
-          ssh -p "${DEV_PORT:-22}" "${{ secrets.DEV_USER }}@${{ secrets.DEV_HOST }}" "chmod +x ${APP_DIR}/deploy.sh && APP_DIR=${APP_DIR} ${APP_DIR}/deploy.sh"
+          ssh -p "${DEV_PORT:-22}" "${{ secrets.DEV_USER }}@${{ secrets.DEV_HOST }}" "chmod +x ${APP_DIR}/deploy/deploy.sh && APP_DIR=${APP_DIR} ${APP_DIR}/deploy/deploy.sh"
