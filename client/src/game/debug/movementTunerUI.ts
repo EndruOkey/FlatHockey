@@ -61,7 +61,7 @@ function setDragLock(locked: boolean) {
   }
 }
 
-type MenuTab = 'Home' | 'Movement' | 'Puck' | 'Network' | 'Debug';
+type MenuTab = 'Home' | 'Movement' | 'StickAim' | 'Puck' | 'NetworkDebug';
 
 type TunerHandle = {
   root: HTMLDivElement;
@@ -116,11 +116,11 @@ type SectionMeta = {
 const TAB_LABELS: Record<MenuTab, string> = {
   Home: 'Home',
   Movement: 'Movement',
+  StickAim: 'Stick / Aim',
   Puck: 'Puck',
-  Network: 'Network',
-  Debug: 'Debug'
+  NetworkDebug: 'Network / Debug'
 };
-const TAB_ORDER: MenuTab[] = ['Home', 'Movement', 'Puck', 'Network', 'Debug'];
+const TAB_ORDER: MenuTab[] = ['Home', 'Movement', 'StickAim', 'Puck', 'NetworkDebug'];
 
 const COMING_SOON_TABS = new Set<MenuTab>();
 const DEVMENU_LAYOUT_KEY = 'fh_devmenu_layout_v1';
@@ -168,10 +168,10 @@ function createStyles() {
   const style = document.createElement('style');
   style.id = 'movement-devmenu-style-v2';
   style.textContent = `
-    #movement-devmenu { --bg:#101317; --panel:#161b20; --line:#2a323b; --text:#d8dde5; --muted:#8f9baa; --accent:#4eb6a1; --warn:#cf9151; --panel-accent-core: 150,160,172; --panel-accent-control: 78,182,161; --panel-accent-aim: 94,146,221; --panel-accent-shot: 207,145,81; --panel-accent-debug: 130,136,149; --panel-accent-advanced: 122,113,158; position:fixed; top:12px; right:12px; width:372px; height:min(720px,calc(90vh)); border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); z-index:12000; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; display:flex; flex-direction:column; pointer-events:auto; overflow:hidden; box-shadow:0 8px 26px rgba(0,0,0,.35); min-height:0;}
+    #movement-devmenu { --bg:#101317; --panel:#161b20; --line:#2a323b; --text:#d8dde5; --muted:#8f9baa; --accent:#4eb6a1; --warn:#cf9151; --panel-accent-core: 150,160,172; --panel-accent-control: 78,182,161; --panel-accent-aim: 94,146,221; --panel-accent-shot: 207,145,81; --panel-accent-debug: 130,136,149; --panel-accent-advanced: 122,113,158; position:fixed; top:12px; right:12px; width:352px; height:min(680px,calc(90vh)); border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); z-index:12000; font-family:Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; display:flex; flex-direction:column; pointer-events:auto; overflow:hidden; box-shadow:0 8px 26px rgba(0,0,0,.35); min-height:0;}
     #movement-devmenu.locked .head{cursor:default;}
     #movement-devmenu *{box-sizing:border-box;}
-    #movement-devmenu .head{background:var(--panel); border-bottom:1px solid var(--line); padding:10px 10px 8px; display:grid; gap:8px; cursor:grab; user-select:none; touch-action:none; flex:0 0 auto; position:sticky; top:0; z-index:5;}
+    #movement-devmenu .head{background:var(--panel); border-bottom:1px solid var(--line); padding:8px; display:grid; gap:6px; cursor:grab; user-select:none; touch-action:none; flex:0 0 auto; position:sticky; top:0; z-index:5;}
     #movement-devmenu .title-row{display:flex; justify-content:space-between; align-items:center; gap:8px;}
     #movement-devmenu .title{font-size:12px; letter-spacing:.04em; font-weight:700;}
     #movement-devmenu .subtle{color:var(--muted); font-size:10px;}
@@ -182,7 +182,7 @@ function createStyles() {
     #movement-devmenu .tab-btn{height:24px; border:1px solid var(--line); border-radius:4px; background:#11161b; color:var(--text); font-size:10px; cursor:pointer; padding:0;}
     #movement-devmenu .tab-btn.active{background:#1a2624; border-color:#2d5d53; color:#d6efe8;}
     #movement-devmenu .tab-btn:disabled{opacity:.5; cursor:default;}
-    #movement-devmenu .body{padding:8px 10px 10px; overflow:auto; display:grid; gap:12px; touch-action:pan-y; overscroll-behavior:contain; flex:1 1 auto; min-height:0; align-content:start;}
+    #movement-devmenu .body{padding:8px; overflow:auto; display:grid; gap:10px; touch-action:pan-y; overscroll-behavior:contain; flex:1 1 auto; min-height:0; align-content:start;}
     #movement-devmenu .section-grid{display:grid; gap:12px; grid-template-columns:repeat(var(--section-cols,1), minmax(0,1fr)); align-items:start; align-content:start; grid-auto-flow:row dense;}
     #movement-devmenu .group{border:1px solid var(--line); border-radius:6px; background:#12171d; overflow:hidden;}
     #movement-devmenu .group.card{min-width:0; border-left:3px solid rgba(var(--panel-accent-core), .5);}
@@ -201,12 +201,12 @@ function createStyles() {
     #movement-devmenu .group-head .head-actions{display:flex; align-items:center; gap:6px;}
     #movement-devmenu .group-head .section-reset{height:18px; border:1px solid var(--line); background:#141a20; color:var(--muted); border-radius:4px; font-size:9px; padding:0 5px; cursor:pointer;}
     #movement-devmenu .group-head .chev{color:var(--muted);}
-    #movement-devmenu .group-body{padding:6px 8px 8px; display:grid; gap:10px; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); align-items:start;}
+    #movement-devmenu .group-body{padding:6px 8px 8px; display:grid; gap:8px; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); align-items:start;}
     #movement-devmenu .group-body.compact{grid-template-columns:1fr;}
     #movement-devmenu .group.span-2{grid-column:span 2;}
     #movement-devmenu .group.span-3{grid-column:span 3;}
     #movement-devmenu .full-span{grid-column:1 / -1;}
-    #movement-devmenu .row{border:1px solid var(--line); border-radius:4px; background:#0f1419; padding:8px; display:grid; gap:7px; min-height:88px; align-content:start; min-width:0;}
+    #movement-devmenu .row{border:1px solid var(--line); border-radius:4px; background:#0f1419; padding:7px; display:grid; gap:6px; min-height:80px; align-content:start; min-width:0;}
     #movement-devmenu .row.dirty{border-color:#5da08f; box-shadow:inset 0 0 0 1px rgba(78,182,161,.22);}
     #movement-devmenu .row.row-bool{min-height:72px;}
     #movement-devmenu .row.row-full{grid-column:1 / -1;}
@@ -244,8 +244,8 @@ function createStyles() {
 }
 
 function normalizeCategoryToTab(category: TuningParamMeta['category']): MenuTab {
-  if (category === 'NetDebug') return 'Network';
-  if (category === 'Rotation') return 'Debug';
+  if (category === 'NetDebug') return 'NetworkDebug';
+  if (category === 'Rotation') return 'StickAim';
   if (category === 'Puck') return 'Puck';
   return 'Movement';
 }
@@ -294,10 +294,10 @@ function getViewportBounds() {
 
 function buildDefaultLayout(): DevPanelLayout {
   const { viewportWidth, maxWidth, maxHeight } = getViewportBounds();
-  const width = clamp(372, PANEL_MIN_WIDTH, maxWidth);
-  const height = clamp(640, PANEL_MIN_HEIGHT, maxHeight);
+  const width = clamp(352, PANEL_MIN_WIDTH, maxWidth);
+  const height = clamp(620, PANEL_MIN_HEIGHT, maxHeight);
   const x = clamp(viewportWidth - width - 12, PANEL_MARGIN, Math.max(PANEL_MARGIN, viewportWidth - width - PANEL_MARGIN));
-  return { x, y: 12, width, height, activeTab: 'Home', panelLocked: false, autoLayoutEnabled: true, fixedColumns: 2, sectionCollapseOverrides: {} };
+  return { x, y: 12, width, height, activeTab: 'Home', panelLocked: false, autoLayoutEnabled: true, fixedColumns: 1, sectionCollapseOverrides: {} };
 }
 
 function normalizeLayout(input: Partial<DevPanelLayout> | null): DevPanelLayout {
@@ -1164,43 +1164,53 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
   }
 
   function renderHomeTab() {
-    const basicGroup = createGroup('Basic Tuning');
-    const basicKeys: Array<keyof MovementTuning> = [
+    const quick = createGroup('Quick Tuning');
+    const quickKeys: Array<keyof MovementTuning> = [
       'maxSpeed',
       'accel',
       'dragMove',
-      'handedness',
+      'bodyFacingMode',
       'bodyManualTurnRateDeg',
-      'maxBodyOffsetDeg',
-      'bodyReturnTauMs',
-      'stickTauMs',
-      'maxStickAngleFromBodyDeg',
+      'stickSnappiness',
       'stickMaxAngVelDeg',
-      'couplingEnabled',
-      'couplingStrength'
+      'puckMagnetStrength',
+      'puckShotBaseImpulse'
     ];
-    for (const key of basicKeys) {
+    for (const key of quickKeys) {
       const meta = getMetaByKey(key);
       if (!meta) continue;
-      const row = createParamRow(meta, { allowPin: false });
-      basicGroup.body.appendChild(row);
+      quick.body.appendChild(createParamRow(meta, { allowPin: false }));
     }
-    const basicActions = document.createElement('div');
-    basicActions.className = 'net-actions';
-    basicActions.classList.add('full-span');
-    const basicSaveBtn = document.createElement('button');
-    basicSaveBtn.className = 'action-btn';
-    basicSaveBtn.textContent = 'Save Preset';
-    basicSaveBtn.addEventListener('click', handleSavePreset);
-    const basicResetBtn = document.createElement('button');
-    basicResetBtn.className = 'action-btn warn';
-    basicResetBtn.textContent = 'Reset';
-    basicResetBtn.addEventListener('click', handleResetRuntime);
-    basicActions.append(basicSaveBtn, basicResetBtn);
-    basicGroup.body.appendChild(basicActions);
-    body.appendChild(basicGroup.root);
 
-    const panelGroup = createGroup('Panel Settings');
+    const statusLine = document.createElement('div');
+    statusLine.className = 'subtle';
+    statusLine.classList.add('full-span');
+    statusLine.textContent = 'F8 show/hide panel | F9 record | F10 replay';
+    quick.body.appendChild(statusLine);
+
+    const actions = document.createElement('div');
+    actions.className = 'net-actions';
+    actions.classList.add('full-span');
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'action-btn';
+    saveBtn.textContent = 'Save Config';
+    saveBtn.addEventListener('click', () => {
+      try {
+        localStorage.setItem(LOCAL_KEY, JSON.stringify(snapshotTuning()));
+        postStatus('Config saved to localStorage');
+      } catch {
+        postStatus('Save config failed');
+      }
+    });
+    const resetBtn = document.createElement('button');
+    resetBtn.className = 'action-btn warn';
+    resetBtn.textContent = 'Reset Defaults';
+    resetBtn.addEventListener('click', handleResetRuntime);
+    actions.append(saveBtn, resetBtn);
+    quick.body.appendChild(actions);
+    body.appendChild(quick.root);
+
+    const panelTools = createGroup('Panel');
     const panelActions = document.createElement('div');
     panelActions.className = 'net-actions';
     panelActions.classList.add('full-span');
@@ -1213,83 +1223,20 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
       persistLayout();
       renderTab();
     });
-    const resetLayoutBtn = document.createElement('button');
-    resetLayoutBtn.className = 'action-btn';
-    resetLayoutBtn.textContent = 'Reset Panel Layout';
-    resetLayoutBtn.addEventListener('click', () => {
-      const defaults = buildDefaultLayout();
-      state.activeTab = defaults.activeTab;
-      state.panelLocked = false;
-      state.autoLayoutEnabled = defaults.autoLayoutEnabled ?? true;
-      state.fixedColumns = defaults.fixedColumns ?? 2;
-      state.sectionCollapseOverrides = defaults.sectionCollapseOverrides ?? {};
-      applyLockUi();
-      applyLayout(defaults);
-      renderTab();
-      postStatus('Panel layout reset');
-    });
-    panelActions.append(lockBtn, resetLayoutBtn);
-    panelGroup.body.appendChild(panelActions);
-
-    const layoutActions = document.createElement('div');
-    layoutActions.className = 'net-actions';
-    layoutActions.classList.add('full-span');
-    const autoLayoutBtn = document.createElement('button');
-    autoLayoutBtn.className = 'action-btn';
-    autoLayoutBtn.textContent = `Auto layout: ${state.autoLayoutEnabled ? 'ON' : 'OFF'}`;
-    autoLayoutBtn.addEventListener('click', () => {
-      state.autoLayoutEnabled = !state.autoLayoutEnabled;
-      persistLayout();
-      applyLayout({}, false);
+    const clearBtn = document.createElement('button');
+    clearBtn.className = 'action-btn warn';
+    clearBtn.textContent = 'Clear Overrides';
+    clearBtn.addEventListener('click', () => {
+      clearStoredTuning();
+      postStatus('Local override cleared');
       renderTab();
     });
-    const colsBtn = document.createElement('button');
-    colsBtn.className = 'action-btn';
-    colsBtn.textContent = `Columns: ${state.fixedColumns}`;
-    colsBtn.disabled = state.autoLayoutEnabled;
-    colsBtn.title = state.autoLayoutEnabled ? 'Disable auto layout to set fixed columns' : 'Cycle fixed columns';
-    colsBtn.addEventListener('click', () => {
-      if (state.autoLayoutEnabled) return;
-      state.fixedColumns = state.fixedColumns === 3 ? 1 : (state.fixedColumns + 1) as 1 | 2 | 3;
-      persistLayout();
-      applyLayout({}, false);
-      renderTab();
-    });
-    layoutActions.append(autoLayoutBtn, colsBtn);
-    panelGroup.body.appendChild(layoutActions);
-
-    const modeInfo = document.createElement('div');
-    modeInfo.className = 'subtle';
-    modeInfo.classList.add('full-span');
-    modeInfo.textContent = `Layout: ${layoutMode} | Height: ${heightMode} | Cols: ${getActiveColumns()}`;
-    panelGroup.body.appendChild(modeInfo);
-    body.appendChild(panelGroup.root);
-
-    const pinnedMetas = state.pinnedKeys
-      .map((k) => getMetaByKey(k as keyof MovementTuning))
-      .filter((m): m is TuningParamMeta => !!m);
-    if (pinnedMetas.length === 0) {
-      const empty = document.createElement('div');
-      empty.className = 'empty';
-      empty.textContent = 'No favourites pinned yet. Pin parameters in Movement to see them here.';
-      body.appendChild(empty);
-    } else {
-      const group = createGroup('Pinned Favourites');
-      for (const meta of pinnedMetas) {
-        const row = createParamRow(meta, {
-          showCategoryBadge: true,
-          onTogglePin: () => togglePinned(meta.key)
-        });
-        const badge = row.querySelector('.badge') as HTMLElement | null;
-        if (badge) badge.textContent = TAB_LABELS[normalizeCategoryToTab(meta.category)];
-        group.body.appendChild(row);
-      }
-      body.appendChild(group.root);
-    }
+    panelActions.append(lockBtn, clearBtn);
+    panelTools.body.appendChild(panelActions);
+    body.appendChild(panelTools.root);
   }
 
   function renderMovementTab() {
-    const tuning = getTuning();
     const grid = createSectionGrid();
     body.appendChild(grid);
 
@@ -1327,108 +1274,60 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     stateGroup.body.appendChild(stateActions);
     grid.appendChild(stateGroup.root);
 
-    const movementMetas = PARAM_REGISTRY.filter((m) => m.category === 'Movement');
-    const movementGroupPriority: Record<string, number> = {
-      Core: 90,
-      'Two-Regime': 85,
-      'Input / Controls': 83,
-      Movement: 82,
-      'Arc Movement': 80,
-      'Aim / Stick': 72,
-      'Assist / Start': 75,
-      'Grip & Turn': 70,
-      Aim: 65,
-      Crosshair: 60,
-      Brake: 55,
-      'Aim Debug': 20
-    };
-    const movementGroupTone: Record<string, SectionMeta['tone']> = {
-      Core: 'core',
-      'Two-Regime': 'control',
-      'Input / Controls': 'control',
-      Movement: 'control',
-      'Arc Movement': 'control',
-      'Aim / Stick': 'aim',
-      'Assist / Start': 'control',
-      'Grip & Turn': 'control',
-      Aim: 'aim',
-      Crosshair: 'aim',
-      Brake: 'control',
-      'Aim Debug': 'debug'
-    };
-    const reduced = movementMetas
-      .filter((m) => isMovementContextualRecommended(m, tuning))
-      .sort((a, b) => (movementGroupPriority[b.group] ?? 0) - (movementGroupPriority[a.group] ?? 0) || a.label.localeCompare(b.label));
-    const reducedGroups = new Map<string, TuningParamMeta[]>();
-    for (const meta of reduced) {
-      const arr = reducedGroups.get(meta.group) ?? [];
-      arr.push(meta);
-      reducedGroups.set(meta.group, arr);
-    }
-    for (const [groupName, metas] of reducedGroups) {
+    const sections: Array<{ id: string; title: string; tone: SectionMeta['tone']; keys: Array<keyof MovementTuning> }> = [
+      {
+        id: 'movement_core',
+        title: 'Core Movement',
+        tone: 'control',
+        keys: ['maxSpeed', 'accel', 'dragMove', 'dragIdle', 'sprintAccel']
+      },
+      {
+        id: 'movement_turning',
+        title: 'Turn / Handling',
+        tone: 'control',
+        keys: ['maxTurnRateLowSpeed', 'maxTurnRateHighSpeed', 'lateralDamping', 'lateralGrip', 'brakeDrag', 'brakeCurve']
+      },
+      {
+        id: 'movement_regimes',
+        title: 'Speed Regimes',
+        tone: 'control',
+        keys: ['regimesEnabled', 'speedSplit', 'splitBlendWidth', 'accel_lo', 'accel_hi', 'dragMove_lo', 'dragMove_hi']
+      },
+      {
+        id: 'movement_assist',
+        title: 'Sprint / Assist',
+        tone: 'control',
+        keys: ['startLinearEnabled', 'startLinearOnThreshold', 'startLinearOffThreshold', 'brakeAssistEnabled', 'brakeAssistDurationMs']
+      }
+    ];
+
+    let priority = 90;
+    for (const sectionDef of sections) {
+      const metas = sectionDef.keys
+        .map((key) => getMetaByKey(key))
+        .filter((meta): meta is TuningParamMeta => !!meta);
+      if (metas.length === 0) continue;
       const section = createSectionCard('Movement', {
-        id: `movement_${groupName.toLowerCase().replace(/\s+/g, '_')}`,
-        title: groupName,
-        priority: movementGroupPriority[groupName] ?? 50,
-        tone: movementGroupTone[groupName] ?? 'control',
-        collapsible: groupName.toLowerCase().includes('debug'),
-        defaultCollapsed: groupName.toLowerCase().includes('debug'),
-        modeRules: groupName.toLowerCase().includes('debug')
-          ? {
-              NARROW: { order: 980, collapsed: true },
-              MEDIUM: { order: 980, columnSpan: 2, collapsed: true },
-              WIDE: { order: 980, collapsed: true }
-            }
-          : undefined
+        id: sectionDef.id,
+        title: sectionDef.title,
+        priority: priority--,
+        tone: sectionDef.tone
       }, { resetMetas: metas });
       if (!section.collapsed) {
         for (const meta of metas) section.body.appendChild(createParamRow(meta));
       }
       grid.appendChild(section.root);
     }
-
-    const reducedKeys = new Set(reduced.map((m) => String(m.key)));
-    const advancedMetas = movementMetas.filter((m) => !reducedKeys.has(String(m.key)));
-    const advSectionMeta: SectionMeta = {
-      id: 'movement_advanced',
-      title: 'Advanced',
-      priority: 5,
-      tone: 'advanced',
-      collapsible: true,
-      defaultCollapsed: true,
-      modeRules: {
-        NARROW: { order: 999, columnSpan: 1, collapsed: true },
-        MEDIUM: { order: 999, columnSpan: 2, collapsed: heightMode === 'SHORT' },
-        WIDE: { order: 999, columnSpan: 3, collapsed: heightMode === 'SHORT' }
-      }
-    };
-    const advancedSection = createSectionCard('Movement', advSectionMeta, { resetMetas: advancedMetas });
-    if (!advancedSection.collapsed) {
-      const byGroup = new Map<string, TuningParamMeta[]>();
-      for (const meta of advancedMetas) {
-        const arr = byGroup.get(meta.group) ?? [];
-        arr.push(meta);
-        byGroup.set(meta.group, arr);
-      }
-      for (const [groupName, metas] of byGroup) {
-        const group = createGroup(groupName);
-        for (const meta of metas.sort((a, b) => a.label.localeCompare(b.label))) {
-          group.body.appendChild(createParamRow(meta));
-        }
-        advancedSection.body.appendChild(group.root);
-      }
-    }
-    grid.appendChild(advancedSection.root);
   }
 
-  function renderRotationTab() {
+  function renderStickAimTab() {
     const grid = createSectionGrid();
     body.appendChild(grid);
-    const runtimeSection = createSectionCard('Debug', {
-      id: 'rotation_stick_runtime',
-      title: 'Stick Runtime',
+    const runtimeSection = createSectionCard('StickAim', {
+      id: 'stickaim_runtime',
+      title: 'Aim / Stick Runtime',
       priority: 100,
-      tone: 'debug',
+      tone: 'aim',
       modeRules: {
         NARROW: { order: 0, columnSpan: 1 },
         MEDIUM: { order: 0, columnSpan: 2 },
@@ -1442,132 +1341,63 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     runtimeSection.body.appendChild(runtimeText);
     refreshers.push(() => {
       const t = (lastTelemetry || {}) as Record<string, any>;
-      const mode = String(t.stickMode ?? 'APPROACH');
-      const stickDeltaDeg = Number(t.stickDeltaDeg ?? 0);
-      const stickAngVelDeg = Number(t.stickAngVelDeg ?? 0);
-      const stickAngVelClamped = Boolean(t.stickAngVelClamped);
-      const targetSlewActive = Boolean(t.targetSlewActive);
-      const aimInputRateLimited = Boolean(t.aimInputRateLimited ?? lastAimInputRateLimited);
+      const m = getMovementDebugMetrics();
       runtimeText.textContent = [
-        `mode: ${mode}`,
-        `stickDeltaDeg: ${stickDeltaDeg.toFixed(1)}`,
-        `stickAngVelDeg: ${stickAngVelDeg.toFixed(1)}`,
-        `stickAngVelClamped: ${stickAngVelClamped ? 'true' : 'false'}`,
-        `targetSlewActive: ${targetSlewActive ? 'true' : 'false'}`,
-        `aimInputRateLimited: ${aimInputRateLimited ? 'true' : 'false'}`
+        `aimAngle: ${(m.aimAngle * 180 / Math.PI).toFixed(1)} deg`,
+        `stickRotation: ${(m.stickRotation * 180 / Math.PI).toFixed(1)} deg`,
+        `pointerVector: ${m.pointerVector}`,
+        `inputVector: ${m.inputVector}`,
+        `stickMode: ${String(t.stickMode ?? 'APPROACH')}`,
+        `stickDeltaDeg: ${Number(t.stickDeltaDeg ?? 0).toFixed(1)}`,
+        `stickAngVelDeg: ${Number(t.stickAngVelDeg ?? 0).toFixed(1)}`,
+        `aimInputRateLimited: ${Boolean(t.aimInputRateLimited ?? lastAimInputRateLimited) ? 'true' : 'false'}`
       ].join('\n');
     });
     grid.appendChild(runtimeSection.root);
 
-    const rotationMetas = PARAM_REGISTRY
-      .filter((m) => m.category === 'Rotation')
-      .sort((a, b) => a.group.localeCompare(b.group) || a.label.localeCompare(b.label));
-    const byGroup = new Map<string, TuningParamMeta[]>();
-    for (const meta of rotationMetas) {
-      const arr = byGroup.get(meta.group) ?? [];
-      arr.push(meta);
-      byGroup.set(meta.group, arr);
-    }
-    const sectionMetaByGroup = new Map<string, SectionMeta>([
-      ['Body', {
-        id: 'rotation_body',
-        title: 'Body',
-        priority: 90,
+    const sections: Array<{ id: string; title: string; tone: SectionMeta['tone']; keys: Array<keyof MovementTuning> }> = [
+      {
+        id: 'stickaim_body',
+        title: 'Body Facing',
         tone: 'control',
-        modeRules: { NARROW: { order: 1 }, MEDIUM: { order: 1 }, WIDE: { order: 1 } }
-      }],
-      ['Body / Edge-Carve', {
-        id: 'rotation_body_edge_carve',
-        title: 'Body / Edge-Carve',
-        priority: 86,
-        tone: 'control',
-        modeRules: { NARROW: { order: 2 }, MEDIUM: { order: 2 }, WIDE: { order: 2 } }
-      }],
-      ['Body / Visual Lean', {
-        id: 'rotation_body_visual_lean',
-        title: 'Body / Visual Lean',
-        priority: 84,
-        tone: 'control',
-        modeRules: { NARROW: { order: 3 }, MEDIUM: { order: 3 }, WIDE: { order: 3 } }
-      }],
-      ['Aim Input Filter', {
-        id: 'rotation_aim',
-        title: 'Aim Input Filter',
-        priority: 80,
+        keys: ['bodyFacingMode', 'bodyTurnRate', 'bodyManualTurnRateDeg', 'maxBodyOffsetDeg', 'bodyReturnTauMs']
+      },
+      {
+        id: 'stickaim_aim_input',
+        title: 'Aim Input',
         tone: 'aim',
-        modeRules: { NARROW: { order: 4 }, MEDIUM: { order: 4 }, WIDE: { order: 4 } }
-      }],
-      ['Stick Clamp', {
-        id: 'rotation_stick_clamp',
-        title: 'Stick Clamp',
-        priority: 70,
+        keys: ['aimEnabled', 'aimMaxTurnRate', 'aimDeadzonePx', 'aimSmoothing', 'aimFromStickBaseEnabled']
+      },
+      {
+        id: 'stickaim_stick',
+        title: 'Stick Response',
         tone: 'aim',
-        modeRules: { NARROW: { order: 5 }, MEDIUM: { order: 5 }, WIDE: { order: 5 } }
-      }],
-      ['Stick Trick Boost', {
-        id: 'rotation_stick_trick_boost',
-        title: 'Stick Trick Boost',
-        priority: 65,
+        keys: ['stickAngleLimitEnabled', 'maxStickAngleFromBodyDeg', 'stickSnappiness', 'stickMaxAngVelDeg', 'stickClampSoftness', 'stickTargetSlewRateDeg']
+      },
+      {
+        id: 'stickaim_crosshair',
+        title: 'Crosshair / Cursor',
         tone: 'aim',
-        modeRules: { NARROW: { order: 6 }, MEDIUM: { order: 6 }, WIDE: { order: 6 } }
-      }],
-      ['Aim Pivot (Stick Base)', {
-        id: 'rotation_aim_pivot',
-        title: 'Aim Pivot (Stick Base)',
-        priority: 60,
-        tone: 'aim',
-        modeRules: { NARROW: { order: 7 }, MEDIUM: { order: 7 }, WIDE: { order: 7 } }
-      }],
-      ['Debug', {
-        id: 'rotation_debug',
-        title: 'Debug',
-        priority: 20,
-        tone: 'debug',
-        collapsible: true,
-        defaultCollapsed: true,
-        modeRules: {
-          NARROW: { order: 90, collapsed: true },
-          MEDIUM: { order: 90, columnSpan: 2, collapsed: true },
-          WIDE: { order: 90, columnSpan: 3, collapsed: true }
-        }
-      }]
-    ]);
-    for (const [groupName, metas] of byGroup) {
-      const baseMetas = metas.filter((m) => !m.advanced);
-      const advancedMetas = metas.filter((m) => !!m.advanced);
-      const visibleMetas = baseMetas.length > 0 ? baseMetas : metas;
-      const sectionMeta = sectionMetaByGroup.get(groupName) ?? {
-        id: `rotation_${groupName.toLowerCase().replace(/\s+/g, '_')}`,
-        title: groupName,
-        priority: 10,
-        tone: groupName.toLowerCase().includes('debug') ? 'debug' : 'control'
-      };
-      const section = createSectionCard('Debug', sectionMeta, { resetMetas: visibleMetas });
+        keys: ['crosshairEnabled', 'crosshairSize', 'crosshairThickness', 'crosshairCenterGap', 'hideSystemCursor']
+      }
+    ];
+
+    let priority = 90;
+    for (const sectionDef of sections) {
+      const metas = sectionDef.keys
+        .map((key) => getMetaByKey(key))
+        .filter((meta): meta is TuningParamMeta => !!meta);
+      if (metas.length === 0) continue;
+      const section = createSectionCard('StickAim', {
+        id: sectionDef.id,
+        title: sectionDef.title,
+        priority: priority--,
+        tone: sectionDef.tone
+      }, { resetMetas: metas });
       if (!section.collapsed) {
-        for (const meta of visibleMetas) section.body.appendChild(createParamRow(meta));
+        for (const meta of metas) section.body.appendChild(createParamRow(meta));
       }
       grid.appendChild(section.root);
-
-      if (advancedMetas.length > 0 && baseMetas.length > 0) {
-        const advancedSection = createSectionCard('Debug', {
-          id: `rotation_${groupName.toLowerCase().replace(/\s+/g, '_')}_advanced`,
-          title: `${groupName} Advanced`,
-          priority: (sectionMeta.priority ?? 10) - 1,
-          tone: 'advanced',
-          collapsible: true,
-          defaultCollapsed: true
-        }, { resetMetas: advancedMetas });
-        if (!advancedSection.collapsed) {
-          for (const meta of advancedMetas) advancedSection.body.appendChild(createParamRow(meta));
-        }
-        grid.appendChild(advancedSection.root);
-      }
-    }
-    if (rotationMetas.length === 0) {
-      const empty = document.createElement('div');
-      empty.className = 'empty';
-      empty.textContent = 'No rotation parameters registered.';
-      body.appendChild(empty);
     }
   }
 
@@ -1599,94 +1429,39 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     stateSection.body.appendChild(resetDefaultsBtn);
     grid.appendChild(stateSection.root);
 
-    const puckMetas = PARAM_REGISTRY
-      .filter((m) => m.category === 'Puck')
-      .sort((a, b) => a.group.localeCompare(b.group) || a.label.localeCompare(b.label));
-    const byGroup = new Map<string, TuningParamMeta[]>();
-    for (const meta of puckMetas) {
-      const arr = byGroup.get(meta.group) ?? [];
-      arr.push(meta);
-      byGroup.set(meta.group, arr);
-    }
-
-    const sectionMetaByGroup = new Map<string, SectionMeta>([
-      ['Puk - fyzika', {
+    const sections: Array<{ id: string; title: string; tone: SectionMeta['tone']; keys: Array<keyof MovementTuning> }> = [
+      {
         id: 'puck_core',
-        title: 'Puk - fyzika',
-        priority: 90,
+        title: 'Puck Core',
         tone: 'core',
-        modeRules: { NARROW: { order: 1 }, MEDIUM: { order: 1 }, WIDE: { order: 1 } }
-      }],
-      ['Vedeni puku', {
+        keys: ['puckRadius', 'puckMaxSpeed', 'puckLinearDamping', 'puckRestitution', 'puckSurfaceDrag']
+      },
+      {
         id: 'puck_control',
-        title: 'Vedeni puku',
-        priority: 80,
+        title: 'Puck Control',
         tone: 'control',
-        modeRules: { NARROW: { order: 2 }, MEDIUM: { order: 2 }, WIDE: { order: 2 } }
-      }],
-      ['Strela', {
+        keys: ['puckPickupRadius', 'puckMagnetRadius', 'puckMagnetStrength', 'puckHoldSpringK', 'puckHoldDampingC']
+      },
+      {
         id: 'puck_shot',
-        title: 'Strela',
-        priority: 70,
+        title: 'Shot Feel',
         tone: 'shot',
-        modeRules: { NARROW: { order: 3 }, MEDIUM: { order: 3 }, WIDE: { order: 3 } }
-      }],
-      ['Hokejka', {
-        id: 'puck_stick',
-        title: 'Hokejka',
-        priority: 60,
-        tone: 'control',
-        collapsible: true,
-        defaultCollapsed: false,
-        modeRules: {
-          NARROW: { order: 4, collapsed: heightMode === 'SHORT' },
-          MEDIUM: { order: 4, collapsed: false },
-          WIDE: { order: 4, columnSpan: 2, collapsed: false }
-        }
-      }],
-      ['Debug puku', {
-        id: 'puck_debug',
-        title: 'Debug puku',
-        priority: 20,
-        tone: 'debug',
-        collapsible: true,
-        defaultCollapsed: true,
-        modeRules: {
-          NARROW: { order: 90, collapsed: true },
-          MEDIUM: { order: 90, columnSpan: 2, collapsed: true },
-          WIDE: { order: 90, columnSpan: 3, collapsed: true }
-        }
-      }],
-      ['Debug hokejky', {
-        id: 'stick_debug',
-        title: 'Debug hokejky',
-        priority: 15,
-        tone: 'debug',
-        collapsible: true,
-        defaultCollapsed: true,
-        modeRules: {
-          NARROW: { order: 91, collapsed: true },
-          MEDIUM: { order: 91, columnSpan: 2, collapsed: true },
-          WIDE: { order: 91, columnSpan: 3, collapsed: true }
-        }
-      }]
-    ]);
+        keys: ['puckShotBaseImpulse', 'puckShotChargeRate', 'puckShotChargeMult', 'puckShotMaxImpulse', 'puckShotMinHoldMs']
+      }
+    ];
 
-    for (const [groupName, metas] of byGroup) {
-      const sectionMeta = sectionMetaByGroup.get(groupName) ?? {
-        id: `puck_${groupName.toLowerCase().replace(/\s+/g, '_')}`,
-        title: groupName,
-        priority: 10,
-        tone: groupName.toLowerCase().includes('debug') ? 'debug' : 'control',
-        collapsible: true,
-        defaultCollapsed: layoutMode === 'NARROW' && heightMode === 'SHORT',
-        modeRules: {
-          NARROW: { order: 95, collapsed: layoutMode === 'NARROW' && heightMode === 'SHORT' },
-          MEDIUM: { order: 95, columnSpan: 2 },
-          WIDE: { order: 95 }
-        }
-      };
-      const section = createSectionCard('Puck', sectionMeta, { resetMetas: metas });
+    let priority = 90;
+    for (const sectionDef of sections) {
+      const metas = sectionDef.keys
+        .map((key) => getMetaByKey(key))
+        .filter((meta): meta is TuningParamMeta => !!meta);
+      if (metas.length === 0) continue;
+      const section = createSectionCard('Puck', {
+        id: sectionDef.id,
+        title: sectionDef.title,
+        priority: priority--,
+        tone: sectionDef.tone
+      }, { resetMetas: metas });
       if (!section.collapsed) {
         for (const meta of metas) section.body.appendChild(createParamRow(meta));
       }
@@ -1694,10 +1469,10 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     }
   }
 
-  function renderNetworkTab() {
-    const metricsGroup = createSectionCard('Network', {
+  function renderNetworkDebugTab() {
+    const metricsGroup = createSectionCard('NetworkDebug', {
       id: 'net_live_metrics',
-      title: 'Live NET Metrics',
+      title: 'Network Telemetry',
       priority: 120,
       tone: 'debug',
       modeRules: {
@@ -1727,9 +1502,41 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     });
     body.appendChild(metricsGroup.root);
 
-    const group = createSectionCard('Network', {
+    const movementGroup = createSectionCard('NetworkDebug', {
+      id: 'movement_live_metrics',
+      title: 'Movement Telemetry (Read-only)',
+      priority: 110,
+      tone: 'debug',
+      modeRules: {
+        NARROW: { order: -105, columnSpan: 1 },
+        MEDIUM: { order: -105, columnSpan: 2 },
+        WIDE: { order: -105, columnSpan: 3 }
+      }
+    });
+    const movementText = document.createElement('div');
+    movementText.className = 'subtle';
+    movementText.style.whiteSpace = 'pre-line';
+    movementText.classList.add('full-span');
+    movementGroup.body.appendChild(movementText);
+    refreshers.push(() => {
+      const m = getMovementDebugMetrics();
+      movementText.textContent = [
+        `currentSpeed: ${m.currentSpeed.toFixed(2)}`,
+        `velocityX: ${m.velocityX.toFixed(2)}`,
+        `velocityY: ${m.velocityY.toFixed(2)}`,
+        `turnRate: ${m.turnRate.toFixed(2)}`,
+        `inputVector: ${m.inputVector}`,
+        `pointerVector: ${m.pointerVector}`,
+        `aimAngle: ${(m.aimAngle * 180 / Math.PI).toFixed(1)} deg`,
+        `stickRotation: ${(m.stickRotation * 180 / Math.PI).toFixed(1)} deg`,
+        `recorder: ${m.recorderState} (${m.recordedFrames} frames)`
+      ].join('\n');
+    });
+    body.appendChild(movementGroup.root);
+
+    const group = createSectionCard('NetworkDebug', {
       id: 'net_actions',
-      title: 'Actions',
+      title: 'Config',
       priority: 100,
       tone: 'debug',
       modeRules: {
@@ -1742,22 +1549,6 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     actions.className = 'net-actions';
     actions.classList.add('full-span');
 
-    const applyLocalBtn = document.createElement('button');
-    applyLocalBtn.className = 'action-btn primary';
-    applyLocalBtn.textContent = 'Apply (local)';
-    const applyServerBtn = document.createElement('button');
-    applyServerBtn.className = 'action-btn';
-    applyServerBtn.textContent = 'Apply to Server';
-    const serverEnabled = allowTuningSync && !!wsClient && wsClient.isConnected();
-    applyServerBtn.disabled = !serverEnabled;
-    applyServerBtn.title = serverEnabled ? 'Send active tuning to server' : 'Server tuning sync disabled';
-
-    const saveBtn = document.createElement('button');
-    saveBtn.className = 'action-btn';
-    saveBtn.textContent = 'Save';
-    const saveAsBtn = document.createElement('button');
-    saveAsBtn.className = 'action-btn';
-    saveAsBtn.textContent = 'Save As';
     const saveConfigBtn = document.createElement('button');
     saveConfigBtn.className = 'action-btn';
     saveConfigBtn.textContent = 'Save Config';
@@ -1773,7 +1564,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     const hideBtn = document.createElement('button');
     hideBtn.className = 'action-btn';
     hideBtn.textContent = 'Hide';
-    actions.append(applyLocalBtn, applyServerBtn, saveBtn, saveAsBtn, saveConfigBtn, resetBtn, logBtn, clearBtn, hideBtn);
+    actions.append(saveConfigBtn, resetBtn, logBtn, clearBtn, hideBtn);
     group.body.appendChild(actions);
 
     const status = document.createElement('div');
@@ -1782,14 +1573,6 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     group.body.appendChild(status);
     statusLineEl = status;
 
-    applyLocalBtn.addEventListener('click', () => postStatus('Applied locally'));
-    applyServerBtn.addEventListener('click', () => {
-      if (!wsClient || !allowTuningSync || !wsClient.isConnected()) return postStatus('Server sync unavailable');
-      wsClient.send({ type: 'debug:setMovementTuning', config: JSON.parse(exportTuning()) });
-      postStatus('Sent to server');
-    });
-    saveBtn.addEventListener('click', handleSavePreset);
-    saveAsBtn.addEventListener('click', handleSaveAsPreset);
     saveConfigBtn.addEventListener('click', () => {
       try {
         localStorage.setItem(LOCAL_KEY, JSON.stringify(snapshotTuning()));
@@ -1821,39 +1604,6 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     refreshStatusLine();
   }
 
-  function renderDebugTab() {
-    const movementGroup = createSectionCard('Debug', {
-      id: 'movement_live_metrics',
-      title: 'Movement Telemetry',
-      priority: 140,
-      tone: 'debug',
-      modeRules: {
-        NARROW: { order: -120, columnSpan: 1 },
-        MEDIUM: { order: -120, columnSpan: 2 },
-        WIDE: { order: -120, columnSpan: 3 }
-      }
-    });
-    const movementText = document.createElement('div');
-    movementText.className = 'subtle';
-    movementText.style.whiteSpace = 'pre-line';
-    movementText.classList.add('full-span');
-    movementGroup.body.appendChild(movementText);
-    refreshers.push(() => {
-      const m = getMovementDebugMetrics();
-      movementText.textContent = [
-        `currentSpeed: ${m.currentSpeed.toFixed(2)}`,
-        `velocityX: ${m.velocityX.toFixed(2)}`,
-        `velocityY: ${m.velocityY.toFixed(2)}`,
-        `turnRate: ${m.turnRate.toFixed(2)}`,
-        `inputVector: ${m.inputVector}`,
-        `recorder: ${m.recorderState} (${m.recordedFrames} frames)`
-      ].join('\n');
-    });
-    body.appendChild(movementGroup.root);
-
-    renderRotationTab();
-  }
-
   function renderPlaceholder(tab: MenuTab) {
     const empty = document.createElement('div');
     empty.className = 'empty';
@@ -1867,9 +1617,9 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     for (const [tab, btn] of tabButtons) btn.classList.toggle('active', tab === state.activeTab);
     if (state.activeTab === 'Home') renderHomeTab();
     else if (state.activeTab === 'Movement') renderMovementTab();
+    else if (state.activeTab === 'StickAim') renderStickAimTab();
     else if (state.activeTab === 'Puck') renderPuckTab();
-    else if (state.activeTab === 'Network') renderNetworkTab();
-    else if (state.activeTab === 'Debug') renderDebugTab();
+    else if (state.activeTab === 'NetworkDebug') renderNetworkDebugTab();
     else renderPlaceholder(state.activeTab);
     for (const refresh of refreshers) refresh();
     refreshStatusLine();
@@ -1909,7 +1659,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     },
     onWelcome(msg: WelcomeMsg) {
       allowTuningSync = !!msg.allowTuningSync;
-      if (state.activeTab === 'Network') renderTab();
+      if (state.activeTab === 'NetworkDebug') renderTab();
     },
     destroy() {
       stopDrag();

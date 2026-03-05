@@ -20,6 +20,7 @@ export class PlayerView {
   aimRot = 0;
   moveRot = 0;
   private stickVisualRot = 0;
+  private stickDrawRot = 0;
   private leanPx = 0;
   private leanVel = 0;
   private visualLeanEnabled = true;
@@ -208,6 +209,7 @@ export class PlayerView {
     this.stickVisualRot += delta * (1 - lag);
 
     const stickDrawRot = this.stickVisualRot + PlayerView.STICK_SPRITE_OFFSET_RAD;
+    this.stickDrawRot = stickDrawRot;
     const safeDt = PlayerView.clamp(dtSec, 1 / 240, 1 / 20);
     const edgeAngle = PlayerView.wrapToPi(this.rot - this.moveRot);
     const leanMaxAngleRad = Math.max(0.001, (this.visualLeanMaxAngleDeg * Math.PI) / 180);
@@ -282,6 +284,14 @@ export class PlayerView {
       this.stickRoot.x + Math.cos(stickDrawRot) * stickLenDbg,
       this.stickRoot.y + Math.sin(stickDrawRot) * stickLenDbg
     );
+  }
+
+  getStickRotation(): number {
+    return this.stickDrawRot;
+  }
+
+  getAimRotation(): number {
+    return this.aimRot;
   }
 
   destroy() {

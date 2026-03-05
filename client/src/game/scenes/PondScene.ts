@@ -125,6 +125,7 @@ export class PondScene extends Phaser.Scene {
   private tuningApplyCountPerSec = 0;
   private inputsSentTimesMs: number[] = [];
   private lastInputVector = { x: 0, y: 0 };
+  private lastPointerVector = { x: 0, y: 0 };
   private lastTurnRateDeg = 0;
   private lastPredictedAngle = 0;
   private inputRecorderEnabled = false;
@@ -549,6 +550,7 @@ export class PondScene extends Phaser.Scene {
     const deadzone = Math.max(0, tuning.aimDeadzonePx ?? 32);
     const dx = mouseWorld.x - this.predicted.x;
     const dy = mouseWorld.y - this.predicted.y;
+    this.lastPointerVector = { x: dx, y: dy };
     const dist = Math.hypot(dx, dy);
     const trickNearPx = Math.max(0, (tuning as any).stickTrickNearPx ?? 80);
     const trickFarPx = Math.max(trickNearPx + 1, (tuning as any).stickTrickFarPx ?? 320);
@@ -961,12 +963,18 @@ export class PondScene extends Phaser.Scene {
     const velX = this.predicted?.vx ?? 0;
     const velY = this.predicted?.vy ?? 0;
     const currentSpeed = Math.hypot(velX, velY);
+    const localView = this.clientId ? this.players.get(this.clientId) : null;
+    const localAimRot = localView?.getAimRotation() ?? (this.predicted?.aimAngle ?? this.lastAimAngle);
+    const localStickRot = localView?.getStickRotation() ?? localAimRot;
     setMovementDebugMetrics({
       currentSpeed,
       velocityX: velX,
       velocityY: velY,
       turnRate: this.lastTurnRateDeg,
       inputVector: `(${this.lastInputVector.x}, ${this.lastInputVector.y})`,
+      pointerVector: `(${this.lastPointerVector.x.toFixed(1)}, ${this.lastPointerVector.y.toFixed(1)})`,
+      aimAngle: localAimRot,
+      stickRotation: localStickRot,
       recorderState: this.replayEnabled ? 'replaying' : this.inputRecorderEnabled ? 'recording' : 'idle',
       recordedFrames: this.recordedInputs.length
     });
@@ -1127,20 +1135,22 @@ export class PondScene extends Phaser.Scene {
       this.simAccumulatorMs = Math.min(this.simAccumulatorMs, FIXED_STEP_MS);
     }
 
-    const targetTime = this.renderClockMs - INTERP_DELAY_MS;
     const remoteTargetServerTime = this.estimateServerNowMs(now) - this.remoteInterpDelayMs;
     const tuning = getTuning();
     for (const [id, view] of this.players.entries()) {
       let state: LerpPlayer | null = null;
       if (this.clientId && id === this.clientId) {
-        state = this.sampleInterpolated(this.localBuffer, targetTime);
-        if (!state && this.predicted) state = {
-          x: this.predicted.x,
-          y: this.predicted.y,
-          rot: this.predicted.angle,
-          aimRot: this.predicted.aimAngle ?? this.predicted.angle,
-          moveRot: this.predicted.moveAngle ?? this.predicted.angle
-        };
+        // Render local player from latest predicted state to keep mouse aim/stick responsive.
+        state = this.localBuffer.latest()?.value ?? null;
+        if (!state && this.predicted) {
+          state = {
+            x: this.predicted.x,
+            y: this.predicted.y,
+            rot: this.predicted.angle,
+            aimRot: this.predicted.aimAngle ?? this.predicted.angle,
+            moveRot: this.predicted.moveAngle ?? this.predicted.angle
+          };
+        }
       } else {
         const interp = this.remoteInterpolators.get(id);
         if (interp) state = this.sampleInterpolated(interp, remoteTargetServerTime);
