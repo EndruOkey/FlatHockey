@@ -29,6 +29,11 @@ jobs:
       - name: Inject build version
         run: |
           echo "VITE_BUILD_VERSION=${GITHUB_SHA}" >> $GITHUB_ENV
+          if [ "${GITHUB_REF_NAME}" = "dev" ]; then
+            echo "VITE_DEV_BUILD=true" >> $GITHUB_ENV
+          else
+            echo "VITE_DEV_BUILD=false" >> $GITHUB_ENV
+          fi
 
       - name: Build workspace
         run: pnpm -r build

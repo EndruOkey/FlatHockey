@@ -5,6 +5,8 @@ export type NetDebugMetrics = {
   players: number;
   snapshotDelayMs: number;
   inputDelayMs: number;
+  inputRate: number;
+  pendingInputs: number;
   clientFps: number;
 };
 
@@ -15,6 +17,8 @@ const DEFAULT_METRICS: NetDebugMetrics = {
   players: 0,
   snapshotDelayMs: 0,
   inputDelayMs: 0,
+  inputRate: 0,
+  pendingInputs: 0,
   clientFps: 0
 };
 

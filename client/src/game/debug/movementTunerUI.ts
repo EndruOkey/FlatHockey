@@ -8,6 +8,7 @@ import {
   getTuning,
   replaceTuning,
   resetTuning,
+  snapshotTuning,
   setTuningKey,
   subscribeTuning,
   type MovementTuning
@@ -33,6 +34,7 @@ import {
 } from './presetStore';
 import { lastTelemetry, lastAimInputRateLimited } from '../net/prediction';
 import { getNetDebugMetrics } from './netDebugState';
+import { getMovementDebugMetrics } from './devPanelTelemetryState';
 
 let dragLockCount = 0;
 let canvasPointerBackup: string | null = null;
@@ -59,7 +61,7 @@ function setDragLock(locked: boolean) {
   }
 }
 
-type MenuTab = 'Home' | 'Movement' | 'NetDebug' | 'Rotation' | 'Puck';
+type MenuTab = 'Home' | 'Movement' | 'Puck' | 'Network' | 'Debug';
 
 type TunerHandle = {
   root: HTMLDivElement;
@@ -114,11 +116,11 @@ type SectionMeta = {
 const TAB_LABELS: Record<MenuTab, string> = {
   Home: 'Home',
   Movement: 'Movement',
-  Rotation: 'Rotation',
   Puck: 'Puck',
-  NetDebug: 'Net/Debug'
+  Network: 'Network',
+  Debug: 'Debug'
 };
-const TAB_ORDER: MenuTab[] = ['Home', 'Movement', 'Rotation', 'Puck', 'NetDebug'];
+const TAB_ORDER: MenuTab[] = ['Home', 'Movement', 'Puck', 'Network', 'Debug'];
 
 const COMING_SOON_TABS = new Set<MenuTab>();
 const DEVMENU_LAYOUT_KEY = 'fh_devmenu_layout_v1';
@@ -242,8 +244,8 @@ function createStyles() {
 }
 
 function normalizeCategoryToTab(category: TuningParamMeta['category']): MenuTab {
-  if (category === 'NetDebug') return 'NetDebug';
-  if (category === 'Rotation') return 'Rotation';
+  if (category === 'NetDebug') return 'Network';
+  if (category === 'Rotation') return 'Debug';
   if (category === 'Puck') return 'Puck';
   return 'Movement';
 }
@@ -374,7 +376,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
   title.textContent = 'MOVEMENT DEV MENU';
   const headerMeta = document.createElement('div');
   headerMeta.className = 'subtle';
-  headerMeta.textContent = 'F3 show/hide';
+  headerMeta.textContent = 'F8 show/hide';
   titleRow.append(title, headerMeta);
 
   const presetRow = document.createElement('div');
@@ -383,7 +385,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
   const f3Hint = document.createElement('div');
   f3Hint.className = 'subtle';
   f3Hint.style.textAlign = 'right';
-  f3Hint.textContent = 'F3';
+  f3Hint.textContent = 'F8';
   presetRow.append(presetSelect, f3Hint);
 
   const headerActions = document.createElement('div');
@@ -1422,7 +1424,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
   function renderRotationTab() {
     const grid = createSectionGrid();
     body.appendChild(grid);
-    const runtimeSection = createSectionCard('Rotation', {
+    const runtimeSection = createSectionCard('Debug', {
       id: 'rotation_stick_runtime',
       title: 'Stick Runtime',
       priority: 100,
@@ -1540,14 +1542,14 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         priority: 10,
         tone: groupName.toLowerCase().includes('debug') ? 'debug' : 'control'
       };
-      const section = createSectionCard('Rotation', sectionMeta, { resetMetas: visibleMetas });
+      const section = createSectionCard('Debug', sectionMeta, { resetMetas: visibleMetas });
       if (!section.collapsed) {
         for (const meta of visibleMetas) section.body.appendChild(createParamRow(meta));
       }
       grid.appendChild(section.root);
 
       if (advancedMetas.length > 0 && baseMetas.length > 0) {
-        const advancedSection = createSectionCard('Rotation', {
+        const advancedSection = createSectionCard('Debug', {
           id: `rotation_${groupName.toLowerCase().replace(/\s+/g, '_')}_advanced`,
           title: `${groupName} Advanced`,
           priority: (sectionMeta.priority ?? 10) - 1,
@@ -1692,8 +1694,8 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     }
   }
 
-  function renderNetDebugTab() {
-    const metricsGroup = createSectionCard('NetDebug', {
+  function renderNetworkTab() {
+    const metricsGroup = createSectionCard('Network', {
       id: 'net_live_metrics',
       title: 'Live NET Metrics',
       priority: 120,
@@ -1716,6 +1718,8 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         `snapshotDelay: ${m.snapshotDelayMs.toFixed(1)} ms`,
         `serverTick: ${m.serverTick}`,
         `snapshotRate: ${m.snapshotRate}/s`,
+        `inputRate: ${m.inputRate.toFixed(1)}/s`,
+        `pendingInputs: ${m.pendingInputs}`,
         `inputDelay: ${m.inputDelayMs.toFixed(1)} ms`,
         `clientFps: ${m.clientFps.toFixed(1)}`,
         `players: ${m.players}`
@@ -1723,7 +1727,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     });
     body.appendChild(metricsGroup.root);
 
-    const group = createSectionCard('NetDebug', {
+    const group = createSectionCard('Network', {
       id: 'net_actions',
       title: 'Actions',
       priority: 100,
@@ -1754,6 +1758,9 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     const saveAsBtn = document.createElement('button');
     saveAsBtn.className = 'action-btn';
     saveAsBtn.textContent = 'Save As';
+    const saveConfigBtn = document.createElement('button');
+    saveConfigBtn.className = 'action-btn';
+    saveConfigBtn.textContent = 'Save Config';
     const resetBtn = document.createElement('button');
     resetBtn.className = 'action-btn';
     resetBtn.textContent = 'Reset';
@@ -1766,7 +1773,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     const hideBtn = document.createElement('button');
     hideBtn.className = 'action-btn';
     hideBtn.textContent = 'Hide';
-    actions.append(applyLocalBtn, applyServerBtn, saveBtn, saveAsBtn, resetBtn, logBtn, clearBtn, hideBtn);
+    actions.append(applyLocalBtn, applyServerBtn, saveBtn, saveAsBtn, saveConfigBtn, resetBtn, logBtn, clearBtn, hideBtn);
     group.body.appendChild(actions);
 
     const status = document.createElement('div');
@@ -1783,6 +1790,14 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     });
     saveBtn.addEventListener('click', handleSavePreset);
     saveAsBtn.addEventListener('click', handleSaveAsPreset);
+    saveConfigBtn.addEventListener('click', () => {
+      try {
+        localStorage.setItem(LOCAL_KEY, JSON.stringify(snapshotTuning()));
+        postStatus('Config saved to localStorage');
+      } catch {
+        postStatus('Save config failed');
+      }
+    });
     resetBtn.addEventListener('click', handleResetRuntime);
     logBtn.addEventListener('click', () => {
       console.log(exportTuning());
@@ -1806,6 +1821,39 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     refreshStatusLine();
   }
 
+  function renderDebugTab() {
+    const movementGroup = createSectionCard('Debug', {
+      id: 'movement_live_metrics',
+      title: 'Movement Telemetry',
+      priority: 140,
+      tone: 'debug',
+      modeRules: {
+        NARROW: { order: -120, columnSpan: 1 },
+        MEDIUM: { order: -120, columnSpan: 2 },
+        WIDE: { order: -120, columnSpan: 3 }
+      }
+    });
+    const movementText = document.createElement('div');
+    movementText.className = 'subtle';
+    movementText.style.whiteSpace = 'pre-line';
+    movementText.classList.add('full-span');
+    movementGroup.body.appendChild(movementText);
+    refreshers.push(() => {
+      const m = getMovementDebugMetrics();
+      movementText.textContent = [
+        `currentSpeed: ${m.currentSpeed.toFixed(2)}`,
+        `velocityX: ${m.velocityX.toFixed(2)}`,
+        `velocityY: ${m.velocityY.toFixed(2)}`,
+        `turnRate: ${m.turnRate.toFixed(2)}`,
+        `inputVector: ${m.inputVector}`,
+        `recorder: ${m.recorderState} (${m.recordedFrames} frames)`
+      ].join('\n');
+    });
+    body.appendChild(movementGroup.root);
+
+    renderRotationTab();
+  }
+
   function renderPlaceholder(tab: MenuTab) {
     const empty = document.createElement('div');
     empty.className = 'empty';
@@ -1819,9 +1867,9 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     for (const [tab, btn] of tabButtons) btn.classList.toggle('active', tab === state.activeTab);
     if (state.activeTab === 'Home') renderHomeTab();
     else if (state.activeTab === 'Movement') renderMovementTab();
-    else if (state.activeTab === 'Rotation') renderRotationTab();
     else if (state.activeTab === 'Puck') renderPuckTab();
-    else if (state.activeTab === 'NetDebug') renderNetDebugTab();
+    else if (state.activeTab === 'Network') renderNetworkTab();
+    else if (state.activeTab === 'Debug') renderDebugTab();
     else renderPlaceholder(state.activeTab);
     for (const refresh of refreshers) refresh();
     refreshStatusLine();
@@ -1861,7 +1909,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     },
     onWelcome(msg: WelcomeMsg) {
       allowTuningSync = !!msg.allowTuningSync;
-      if (state.activeTab === 'NetDebug') renderTab();
+      if (state.activeTab === 'Network') renderTab();
     },
     destroy() {
       stopDrag();

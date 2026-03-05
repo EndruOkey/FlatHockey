@@ -7,6 +7,7 @@ import { LOCAL_KEY, getTuning, getTuningApplyCount, usedTuning, setTuning } from
 import { createMovementTuner, isDevMenuDragging } from '../debug/movementTunerUI';
 import { NetDebugOverlay } from '../debug/netDebugOverlay';
 import { setNetDebugMetrics } from '../debug/netDebugState';
+import { setMovementDebugMetrics } from '../debug/devPanelTelemetryState';
 import { reconcilePrediction } from '../net/reconciliation';
 import { PlayerView } from '../entities/playerView';
 import { puckStickTuningStore } from '../tuning/puckStickTuningStore';
@@ -29,6 +30,10 @@ export function resolveWsUrl(): string {
 
   if (host === 'localhost' || host === '127.0.0.1') {
     return ENV.WS_LOCAL;
+  }
+
+  if (ENV.DEV_BUILD) {
+    return ENV.WS_DEV;
   }
 
   if (host.includes('flathockey-dev')) {
@@ -86,7 +91,11 @@ export class PondScene extends Phaser.Scene {
 
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private debugToggleKey!: Phaser.Input.Keyboard.Key;
+  private panelToggleKey!: Phaser.Input.Keyboard.Key;
+  private recorderToggleKey!: Phaser.Input.Keyboard.Key;
+  private replayToggleKey!: Phaser.Input.Keyboard.Key;
   private debugEnabled = true;
+  private panelVisible = false;
   private debugOverlay!: Phaser.GameObjects.Text;
   private hud!: Phaser.GameObjects.Text;
   private lastHudText = '';
@@ -114,6 +123,15 @@ export class PondScene extends Phaser.Scene {
   private tuningApplySampleLastTs = performance.now();
   private tuningApplySampleLastCount = 0;
   private tuningApplyCountPerSec = 0;
+  private inputsSentTimesMs: number[] = [];
+  private lastInputVector = { x: 0, y: 0 };
+  private lastTurnRateDeg = 0;
+  private lastPredictedAngle = 0;
+  private inputRecorderEnabled = false;
+  private replayEnabled = false;
+  private replayIndex = 0;
+  private recordedInputs: Array<{ tMs: number; input: InputMsg }> = [];
+  private readonly inputRecordWindowMs = 20_000;
 
   constructor() {
     super('PondScene');
@@ -127,8 +145,11 @@ export class PondScene extends Phaser.Scene {
   create() {
     this.drawBackground();
 
-    this.keys = this.input.keyboard!.addKeys('W,A,S,D,C,V,E,SHIFT,SPACE,F3') as Record<string, Phaser.Input.Keyboard.Key>;
+    this.keys = this.input.keyboard!.addKeys('W,A,S,D,C,V,E,SHIFT,SPACE,F3,F8,F9,F10') as Record<string, Phaser.Input.Keyboard.Key>;
     this.debugToggleKey = this.keys.F3;
+    this.panelToggleKey = this.keys.F8;
+    this.recorderToggleKey = this.keys.F9;
+    this.replayToggleKey = this.keys.F10;
 
     this.hud = this.add.text(12, 12, 'Connecting...', {
       fontFamily: 'monospace',
@@ -183,10 +204,11 @@ export class PondScene extends Phaser.Scene {
     // Dev-only movement tuner: create only when allowed (DEV or ?debug=1)
     try {
       const url = new URL(location.href);
-      this.debugAllowed = import.meta.env.DEV === true || url.searchParams.get('debug') === '1';
+      this.debugAllowed = ENV.DEV_BUILD === true || url.searchParams.get('debug') === '1';
       if (this.debugAllowed) {
         this.movementTuner = createMovementTuner(this.ws);
-        this.movementTuner.setVisible(this.debugEnabled);
+        this.panelVisible = true;
+        this.movementTuner.setVisible(this.panelVisible);
       }
     } catch {}
   }
@@ -408,6 +430,7 @@ export class PondScene extends Phaser.Scene {
     const tuning = getTuning();
     const moveX = ((this.keys.D.isDown ? 1 : 0) - (this.keys.A.isDown ? 1 : 0)) as -1 | 0 | 1;
     const moveY = ((this.keys.S.isDown ? 1 : 0) - (this.keys.W.isDown ? 1 : 0)) as -1 | 0 | 1;
+    this.lastInputVector = { x: moveX, y: moveY };
     const bodyTurn = ((this.keys.V.isDown ? 1 : 0) - (this.keys.C.isDown ? 1 : 0));
     const moveLen = Math.hypot(moveX, moveY);
     if (moveLen > 0.0001) this.lastMoveAngle = Math.atan2(moveY / moveLen, moveX / moveLen);
@@ -433,6 +456,52 @@ export class PondScene extends Phaser.Scene {
       aimDistance01: this.aimDistance01,
       bodyTurn
     };
+  }
+
+  private cloneInput(input: InputMsg): InputMsg {
+    return {
+      ...input,
+      clientId: this.clientId ?? '',
+      seq: ++this.seq
+    };
+  }
+
+  private recordInputSample(input: InputMsg, nowMs: number) {
+    if (!this.inputRecorderEnabled || this.replayEnabled) return;
+    this.recordedInputs.push({
+      tMs: nowMs,
+      input: {
+        ...input,
+        clientId: '',
+        seq: 0
+      }
+    });
+    const cutoff = nowMs - this.inputRecordWindowMs;
+    while (this.recordedInputs.length > 0 && this.recordedInputs[0].tMs < cutoff) {
+      this.recordedInputs.shift();
+    }
+  }
+
+  private startReplay() {
+    if (this.recordedInputs.length === 0) return;
+    this.replayEnabled = true;
+    this.replayIndex = 0;
+    this.inputRecorderEnabled = false;
+  }
+
+  private stopReplay() {
+    this.replayEnabled = false;
+    this.replayIndex = 0;
+  }
+
+  private nextReplayInput(): InputMsg | null {
+    if (!this.replayEnabled) return null;
+    if (this.replayIndex >= this.recordedInputs.length) {
+      this.stopReplay();
+      return null;
+    }
+    const sample = this.recordedInputs[this.replayIndex++];
+    return this.cloneInput(sample.input);
   }
 
   private worldToScreen(x: number, y: number) {
@@ -854,6 +923,7 @@ export class PondScene extends Phaser.Scene {
         `FPS=${perf.fps.toFixed(1)} dtMax1s=${perf.dtMax.toFixed(2)}ms`,
         `devApplyCountPerSec=${this.tuningApplyCountPerSec.toFixed(1)}`,
         `seq=${this.seq} ack=${this.ackSeq} pending=${this.pendingInputs.length}`,
+        `recorder=${this.replayEnabled ? 'replaying' : this.inputRecorderEnabled ? 'recording' : 'idle'} frames=${this.recordedInputs.length}`,
         `simStepsThisFrame=${this.simStepsThisFrame} capHitCount=${this.simCapHitCount}`,
         `hitchCount=${this.hitchCount} lastHitchMs=${this.lastHitchMs.toFixed(1)} needsResync=${this.needsResync}`,
         `resyncCount=${this.resyncCount} lastResyncReason=${this.lastResyncReason ?? '-'} resyncAtMs=${this.lastResyncAtMs.toFixed(1)}`,
@@ -883,7 +953,22 @@ export class PondScene extends Phaser.Scene {
       players: this.players.size,
       snapshotDelayMs: Math.max(0, latestSnapshotAge),
       inputDelayMs: this.pendingInputs.length * CLIENT_FIXED_DT * 1000,
+      inputRate: this.inputsSentTimesMs.length,
+      pendingInputs: this.pendingInputs.length,
       clientFps: perf.fps
+    });
+
+    const velX = this.predicted?.vx ?? 0;
+    const velY = this.predicted?.vy ?? 0;
+    const currentSpeed = Math.hypot(velX, velY);
+    setMovementDebugMetrics({
+      currentSpeed,
+      velocityX: velX,
+      velocityY: velY,
+      turnRate: this.lastTurnRateDeg,
+      inputVector: `(${this.lastInputVector.x}, ${this.lastInputVector.y})`,
+      recorderState: this.replayEnabled ? 'replaying' : this.inputRecorderEnabled ? 'recording' : 'idle',
+      recordedFrames: this.recordedInputs.length
     });
   }
 
@@ -928,8 +1013,27 @@ export class PondScene extends Phaser.Scene {
       const state = this.debugEnabled ? 'ON' : 'OFF';
       console.log(`[TUNING] toggle ${state}`);
       console.log(`[TUNING] sceneKey=${this.scene.key}, cam=${this.cameras?.main ? 'main' : 'none'}, scale=${this.scale.width}x${this.scale.height}`);
-      this.movementTuner?.setVisible(this.debugEnabled);
       for (const view of this.players.values()) view.setDebugDrawEnabled(this.debugEnabled);
+    }
+
+    if (this.debugAllowed && Phaser.Input.Keyboard.JustDown(this.panelToggleKey)) {
+      this.panelVisible = !this.panelVisible;
+      this.movementTuner?.setVisible(this.panelVisible);
+    }
+
+    if (Phaser.Input.Keyboard.JustDown(this.recorderToggleKey)) {
+      if (this.inputRecorderEnabled) {
+        this.inputRecorderEnabled = false;
+      } else {
+        this.stopReplay();
+        this.recordedInputs = [];
+        this.inputRecorderEnabled = true;
+      }
+    }
+
+    if (Phaser.Input.Keyboard.JustDown(this.replayToggleKey)) {
+      if (this.replayEnabled) this.stopReplay();
+      else this.startReplay();
     }
 
     if (this.needsResync) {
@@ -980,11 +1084,14 @@ export class PondScene extends Phaser.Scene {
       steps += 1;
 
       if (this.clientId && this.predicted && this.wsConnected) {
-        const input = this.buildInput();
+        let input = this.nextReplayInput();
+        if (!input) input = this.buildInput();
+
         this.pendingInputs.push(input);
         if (this.pendingInputs.length > 240) {
           this.pendingInputs.splice(0, this.pendingInputs.length - 240);
         }
+        this.recordInputSample(input, simStepTime);
 
         const telemetry = applyPredictedInput(this.predicted, input, CLIENT_FIXED_DT) as unknown as Record<string, any>;
         if (telemetry) {
@@ -992,6 +1099,11 @@ export class PondScene extends Phaser.Scene {
           // map driftAngle to steeringStrength for legacy display
           this.debugSteeringStrength = telemetry.driftAngle ?? this.debugSteeringStrength;
           this.debugSpeedRatio = telemetry.speedRatio ?? this.debugSpeedRatio;
+        }
+        if (Number.isFinite(this.predicted.angle)) {
+          const diff = wrapToPi(this.predicted.angle - this.lastPredictedAngle);
+          this.lastTurnRateDeg = (diff / CLIENT_FIXED_DT) * 180 / Math.PI;
+          this.lastPredictedAngle = this.predicted.angle;
         }
         // push the predicted state using the per-step timestamp so the
         // interpolator sees properly spaced samples
@@ -1003,6 +1115,9 @@ export class PondScene extends Phaser.Scene {
           moveRot: this.predicted.moveAngle ?? this.predicted.angle
         }, simStepTime);
         this.ws.send(input);
+        this.inputsSentTimesMs.push(simStepTime);
+        const cutoff = simStepTime - 1000;
+        this.inputsSentTimesMs = this.inputsSentTimesMs.filter((t) => t >= cutoff);
       }
     }
     this.simStepsThisFrame = steps;
