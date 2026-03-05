@@ -66,3 +66,11 @@ VITE_WS_URL=wss://flathockey.fun/ws2
 ```
 
 Deploy guide: [docs/backend-v2-deploy.md](/c:/Games/flathockey-move-rework/docs/backend-v2-deploy.md)
+
+## Prod sanity
+
+Run on the production server:
+
+```bash
+./scripts/prod-sanity.sh
+```
