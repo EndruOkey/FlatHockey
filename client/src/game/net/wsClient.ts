@@ -123,8 +123,51 @@ export class WsClient {
   send(msg: ClientMessage | any) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     try {
-      this.ws.send(JSON.stringify(msg));
+      const wireMsg = this.toV2WireMessage(msg);
+      this.ws.send(JSON.stringify(wireMsg));
     } catch {}
+  }
+
+  // Translate legacy/shared input payload to WS2 wire schema.
+  private toV2WireMessage(msg: any): any {
+    if (!msg || msg.type !== 'input') return msg;
+
+    const hasLegacyFields =
+      typeof msg.moveX === 'number' ||
+      typeof msg.moveY === 'number' ||
+      typeof msg.sprint === 'number' ||
+      typeof msg.brake === 'number' ||
+      typeof msg.shoot === 'number' ||
+      typeof msg.bodyTurn === 'number' ||
+      typeof msg.aimAngleRaw === 'number' ||
+      typeof msg.aimAngle === 'number';
+
+    if (!hasLegacyFields) return msg;
+
+    const moveX = Number(msg.moveX ?? 0);
+    const moveY = Number(msg.moveY ?? 0);
+    const bodyTurn = Number(msg.bodyTurn ?? 0);
+    const aim = typeof msg.aimAngleRaw === 'number'
+      ? msg.aimAngleRaw
+      : (typeof msg.aimAngle === 'number' ? msg.aimAngle : undefined);
+
+    return {
+      type: 'input',
+      seq: Number.isFinite(msg.seq) ? Math.max(0, Math.floor(msg.seq)) : 0,
+      dt: typeof msg.dt === 'number' && Number.isFinite(msg.dt) ? msg.dt : undefined,
+      pointer: typeof aim === 'number' ? { aim } : undefined,
+      keys: {
+        w: moveY < 0,
+        a: moveX < 0,
+        s: moveY > 0,
+        d: moveX > 0,
+        shift: !!msg.sprint,
+        space: !!msg.brake,
+        e: !!msg.shoot,
+        c: bodyTurn < 0,
+        v: bodyTurn > 0
+      }
+    };
   }
 
   private sendHelloJoin() {
