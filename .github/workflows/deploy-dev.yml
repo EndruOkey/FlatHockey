@@ -1,33 +1,10 @@
-name: Deploy DEV
+name: Deploy DEV (disabled)
 
 on:
-  push:
-    branches:
-      - dev
+  workflow_dispatch:
 
 jobs:
-  deploy:
+  info:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup SSH agent
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      - name: Add server to known_hosts
-        run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -H 130.162.52.94 >> ~/.ssh/known_hosts
-
-      - name: Deploy to DEV server
-        run: |
-          ssh ubuntu@130.162.52.94 << 'EOF'
-          cd /opt/flathockey-dev
-          git pull
-          pnpm install
-          pm2 restart flathockey-dev || pm2 start ecosystem.config.js --name flathockey-dev
-          EOF
+      - run: echo "DEV server instance is not configured. Use local dev."
