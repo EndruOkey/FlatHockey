@@ -17,15 +17,20 @@ jobs:
         with:
           node-version: 20
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Install dependencies
-        run: npm install
+        run: pnpm install --no-frozen-lockfile
 
       - name: Inject build version
         run: |
           echo "VITE_BUILD_VERSION=${GITHUB_SHA}" >> $GITHUB_ENV
 
       - name: Build client
-        run: npm run build:client
+        run: pnpm --filter client build
 
       - name: Setup Butler
         uses: remarkablegames/setup-butler@v2
