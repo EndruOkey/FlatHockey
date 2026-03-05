@@ -10,6 +10,8 @@ import { setNetDebugMetrics } from '../debug/netDebugState';
 import { reconcilePrediction } from '../net/reconciliation';
 import { PlayerView } from '../entities/playerView';
 import { puckStickTuningStore } from '../tuning/puckStickTuningStore';
+import { ENV } from '../../config/env';
+import { BUILD_VERSION } from '../../config/version';
 
 const CLIENT_SIM_HZ = 60;
 const FIXED_STEP_MS = 1000 / CLIENT_SIM_HZ;
@@ -22,8 +24,21 @@ const REMOTE_INTERP_DELAY_DEFAULT_MS = 120;
 
 type DebugSample = { t: number; dtMs: number };
 
+export function resolveWsUrl(): string {
+  const host = window.location.hostname;
+
+  if (host === 'localhost' || host === '127.0.0.1') {
+    return ENV.WS_LOCAL;
+  }
+
+  if (host.includes('flathockey-dev')) {
+    return ENV.WS_DEV;
+  }
+
+  return ENV.WS_PROD;
+}
+
 export class PondScene extends Phaser.Scene {
-  private static readonly PROD_WS2_URL = 'wss://flathockey.fun/ws';
   private ws = new WsClient();
   private clientId: string | null = null;
   private roomId: string | null = null;
@@ -104,15 +119,6 @@ export class PondScene extends Phaser.Scene {
     super('PondScene');
   }
 
-  private resolveWsUrl() {
-    const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-    if (isLocal) {
-      return `ws://${location.hostname}:8080/ws2`;
-    }
-
-    return PondScene.PROD_WS2_URL;
-  }
-
   create() {
     this.drawBackground();
 
@@ -156,7 +162,7 @@ export class PondScene extends Phaser.Scene {
     });
 
     try {
-      const wsUrl = this.resolveWsUrl();
+      const wsUrl = resolveWsUrl();
       this.connect(wsUrl);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -882,6 +888,7 @@ export class PondScene extends Phaser.Scene {
     const next = [
       `Room: ${this.roomId ?? '-'}`,
       `Client: ${this.clientId ?? '-'}`,
+      `Build: ${BUILD_VERSION || 'dev-local'}`,
       `Seq/Ack: ${this.seq}/${this.ackSeq}`,
       `Pending: ${this.pendingInputs.length}`,
       'WASD move | C/V body turn | SHIFT sprint | SPACE brake | E/LMB shoot'

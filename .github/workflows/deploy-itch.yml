@@ -17,27 +17,26 @@ jobs:
         with:
           node-version: 20
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: npm install
+
+      - name: Inject build version
+        run: |
+          echo "VITE_BUILD_VERSION=${GITHUB_SHA}" >> $GITHUB_ENV
 
       - name: Build client
-        run: pnpm --filter client build
+        run: npm run build:client
 
       - name: Setup Butler
         uses: remarkablegames/setup-butler@v2
 
-      - name: Decide itch channel
-        id: channel
+      - name: Decide itch target
+        id: target
         run: |
           if [ "${GITHUB_REF_NAME}" = "main" ]; then
-            echo "channel=web" >> $GITHUB_OUTPUT
+            echo "target=endruokey/flathockey:web" >> $GITHUB_OUTPUT
           elif [ "${GITHUB_REF_NAME}" = "dev" ]; then
-            echo "channel=dev" >> $GITHUB_OUTPUT
+            echo "target=endruokey/flathockey-dev:web" >> $GITHUB_OUTPUT
           else
             echo "Unsupported branch: ${GITHUB_REF_NAME}"
             exit 1
@@ -47,4 +46,4 @@ jobs:
         env:
           BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
         run: |
-          butler push ./client/dist endruokey/flathockey:${{ steps.channel.outputs.channel }} --userversion "${GITHUB_REF_NAME}-${GITHUB_SHA}"
+          butler push ./client/dist ${{ steps.target.outputs.target }} --userversion "${GITHUB_REF_NAME}-${GITHUB_SHA}"
