@@ -60,6 +60,7 @@ type Session = {
   lastSeenAtMs: number;
   inputWindowStartMs: number;
   inputCountInWindow: number;
+  inputRateLimitedInWindow: boolean;
 };
 
 type V2Config = {
@@ -78,7 +79,7 @@ const DEFAULT_CONFIG: V2Config = {
   snapshotRate: Number(process.env.SNAPSHOT_RATE ?? 20),
   tickRate: Number(process.env.TICK_RATE ?? 60),
   maxPlayers: Number(process.env.MAX_PLAYERS ?? 32),
-  inputRateLimitPerSec: Number(process.env.INPUT_RATE_LIMIT ?? 60),
+  inputRateLimitPerSec: Number(process.env.INPUT_RATE_LIMIT ?? 120),
   heartbeatTimeoutMs: Number(process.env.HEARTBEAT_TIMEOUT_MS ?? 10_000),
   heartbeatSweepMs: Number(process.env.HEARTBEAT_SWEEP_MS ?? 5_000),
   allowedOrigins: String(process.env.ALLOWED_ORIGINS ?? '')
@@ -237,7 +238,8 @@ export function createWsServerV2(server: Server, roomManager: RoomManager, cfg: 
       helloReceived: false,
       lastSeenAtMs: Date.now(),
       inputWindowStartMs: Date.now(),
-      inputCountInWindow: 0
+      inputCountInWindow: 0,
+      inputRateLimitedInWindow: false
     };
     sessions.set(ws, session);
     console.log(`[WS2] CONNECT ts=${ts} client=${clientId} ip=${remoteIp} origin=${origin} url=${reqUrl}`);
@@ -347,10 +349,16 @@ export function createWsServerV2(server: Server, roomManager: RoomManager, cfg: 
         if (now - active.inputWindowStartMs >= 1000) {
           active.inputWindowStartMs = now;
           active.inputCountInWindow = 0;
+          active.inputRateLimitedInWindow = false;
         }
         active.inputCountInWindow += 1;
         if (active.inputCountInWindow > config.inputRateLimitPerSec) {
-          send(ws, { type: 'error', code: 'RATE_LIMIT', message: 'too_many_input_messages' });
+          if (!active.inputRateLimitedInWindow) {
+            active.inputRateLimitedInWindow = true;
+            console.warn(
+              `[WS2] RATE_LIMIT drop client=${active.clientId} room=${active.roomId ?? '-'} count=${active.inputCountInWindow} limit=${config.inputRateLimitPerSec}`
+            );
+          }
           return;
         }
 

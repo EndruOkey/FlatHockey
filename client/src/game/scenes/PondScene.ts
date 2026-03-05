@@ -119,6 +119,11 @@ export class PondScene extends Phaser.Scene {
     super('PondScene');
   }
 
+  private resetPendingInputState() {
+    this.pendingInputs = [];
+    this.ackSeq = this.seq;
+  }
+
   create() {
     this.drawBackground();
 
@@ -219,6 +224,7 @@ export class PondScene extends Phaser.Scene {
       if (state === 'connected') this.wsConnected = true;
       if (state === 'disconnected') {
         this.wsConnected = false;
+        this.resetPendingInputState();
         this.hud.setText('Offline (retrying...)');
       }
     });
@@ -229,6 +235,7 @@ export class PondScene extends Phaser.Scene {
 
     this.ws.onClose(() => {
       this.wsConnected = false;
+      this.resetPendingInputState();
       this.hud.setText('Offline (retrying...)');
     });
 
@@ -293,6 +300,7 @@ export class PondScene extends Phaser.Scene {
     if (m.type === 'join:reject') {
       this.hud.setText(`Offline (join rejected)\n${m.reason ?? 'unknown'}`);
       this.wsConnected = false;
+      this.resetPendingInputState();
       return;
     }
 
@@ -302,6 +310,7 @@ export class PondScene extends Phaser.Scene {
         : String(m.reason ?? 'unknown');
       this.hud.setText(`Offline (ws error)\n${reason}`);
       this.wsConnected = false;
+      this.resetPendingInputState();
       return;
     }
 
@@ -970,7 +979,7 @@ export class PondScene extends Phaser.Scene {
       this.simAccumulatorMs -= FIXED_STEP_MS;
       steps += 1;
 
-      if (this.clientId && this.predicted) {
+      if (this.clientId && this.predicted && this.wsConnected) {
         const input = this.buildInput();
         this.pendingInputs.push(input);
         if (this.pendingInputs.length > 240) {
