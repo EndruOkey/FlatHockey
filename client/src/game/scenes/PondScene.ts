@@ -23,7 +23,7 @@ const REMOTE_INTERP_DELAY_DEFAULT_MS = 120;
 type DebugSample = { t: number; dtMs: number };
 
 export class PondScene extends Phaser.Scene {
-  private static readonly PROD_WS2_URL = 'wss://flathockey.fun/ws2';
+  private static readonly PROD_WS2_URL = 'wss://flathockey.fun/ws';
   private ws = new WsClient();
   private clientId: string | null = null;
   private roomId: string | null = null;

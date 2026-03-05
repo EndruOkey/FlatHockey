@@ -1,0 +1,45 @@
+name: Deploy to itch.io (branch channels)
+
+on:
+  push:
+    branches: [main, dev]
+  workflow_dispatch:
+
+jobs:
+  deploy_itch:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build client
+        run: npm run build:client
+
+      - name: Setup Butler
+        uses: remarkablegames/setup-butler@v2
+
+      - name: Decide itch channel
+        id: channel
+        run: |
+          if [ "${GITHUB_REF_NAME}" = "main" ]; then
+            echo "channel=web" >> $GITHUB_OUTPUT
+          elif [ "${GITHUB_REF_NAME}" = "dev" ]; then
+            echo "channel=dev" >> $GITHUB_OUTPUT
+          else
+            echo "Unsupported branch: ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+
+      - name: Upload build to itch.io
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+        run: |
+          butler push ./client/dist endruokey/flathockey:${{ steps.channel.outputs.channel }} --userversion "${GITHUB_REF_NAME}-${GITHUB_SHA}"
