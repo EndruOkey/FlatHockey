@@ -3,7 +3,6 @@ import { createServer } from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { RoomManager } from './game/roomManager';
-import { createWsServer } from './net/wsServer';
 import { createWsServerV2 } from './net/wsServerV2';
 import { FixedLoop } from './game/loop';
 import { SNAPSHOT_HZ } from '@flathockey/shared';
@@ -16,9 +15,7 @@ const app = express();
 const httpServer = createServer(app);
 const startedAt = Date.now();
 
-const legacyRoomManager = new RoomManager();
 const v2RoomManager = new RoomManager();
-createWsServer(httpServer, legacyRoomManager);
 const ws2 = createWsServerV2(httpServer, v2RoomManager, {
   tickRate: TICK_RATE,
   snapshotRate: SNAPSHOT_RATE
@@ -45,10 +42,6 @@ app.get('/health', (_req, res) => {
       tickRate: TICK_RATE,
       snapshotRate: SNAPSHOT_RATE
     },
-    legacy: {
-      rooms: legacyRoomManager.roomCount(),
-      players: legacyRoomManager.playerCount()
-    },
     v2: ws2.getStats()
   });
 });
@@ -56,9 +49,6 @@ app.get('/health', (_req, res) => {
 const loop = new FixedLoop(
   (dt) => {
     tickCounter += 1;
-    for (const room of legacyRoomManager.allRooms()) {
-      room.step(dt);
-    }
     for (const room of v2RoomManager.allRooms()) {
       room.step(dt);
     }
@@ -68,28 +58,21 @@ const loop = new FixedLoop(
 
     while (snapshotAccumulatorMs >= SNAPSHOT_STEP_MS) {
       snapshotAccumulatorMs -= SNAPSHOT_STEP_MS;
-      for (const room of legacyRoomManager.allRooms()) {
-        if (room.players.size === 0) continue;
-        room.broadcastSnapshot();
-        snapshotCounter += 1;
-      }
       for (const room of v2RoomManager.allRooms()) {
         if (room.players.size === 0) continue;
         room.broadcastSnapshot();
         snapshotCounter += 1;
       }
-      legacyRoomManager.deleteEmptyRooms();
       v2RoomManager.deleteEmptyRooms();
     }
 
     const now = Date.now();
     if (now - lastReport >= 2000) {
       const windowSec = (now - lastReport) / 1000;
-      const playersLegacy = legacyRoomManager.playerCount();
       const playersV2 = v2RoomManager.playerCount();
 
       console.log(
-        `[PERF] ticks/s=${(tickCounter / windowSec).toFixed(1)} snapshots/s=${(snapshotCounter / windowSec).toFixed(1)} playersLegacy=${playersLegacy} playersV2=${playersV2}`
+        `[PERF] ticks/s=${(tickCounter / windowSec).toFixed(1)} snapshots/s=${(snapshotCounter / windowSec).toFixed(1)} playersV2=${playersV2}`
       );
 
       tickCounter = 0;
@@ -103,6 +86,5 @@ loop.start();
 
 httpServer.listen(PORT, () => {
   console.log(`[HTTP] listening on :${PORT}`);
-  console.log(`[WS] endpoint ws://localhost:${PORT}/ws`);
   console.log(`[WS2] endpoint ws://localhost:${PORT}/ws2`);
 });
