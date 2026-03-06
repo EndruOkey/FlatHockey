@@ -86,8 +86,9 @@ export class PlayerView {
       1
     );
     this.supportHandSprite = scene.add.circle(0, 0, 3, PlayerView.HAND_COLOR_SUPPORT, 1);
-    // Layering in stick root: stick -> support hand -> lead hand.
-    this.stickRoot.add([this.stickGfx, this.supportHandSprite, this.leadHandSprite]);
+    // Layering: support hand rides the stick, lead hand stays anchored to the body socket.
+    this.stickRoot.add([this.stickGfx, this.supportHandSprite]);
+    this.bodyRig.add(this.leadHandSprite);
     this.g = scene.add.graphics();
     this.playerRoot.add([this.bodyRig, this.stickRoot, this.g]);
   }
@@ -300,6 +301,8 @@ export class PlayerView {
     const bodyLeanY = rightY * this.leanPx;
     this.bodyRig.setPosition(bodyLeanX, bodyLeanY);
     this.bodyRig.rotation = this.getBodyRenderRotation();
+    const handSocket = this.getActiveHandSocketLocal();
+    this.leadHandSprite.setPosition(handSocket.x, handSocket.y);
     const gripLocal = {
       x: gripLocalBase.x + bodyLeanX,
       y: gripLocalBase.y + bodyLeanY
@@ -307,7 +310,6 @@ export class PlayerView {
     const stickBaseLocalOffset = PlayerView.rotateLocal(stickOffsetX, stickOffsetY, stickWorldRot);
     this.stickRoot.setPosition(gripLocal.x + stickBaseLocalOffset.x, gripLocal.y + stickBaseLocalOffset.y);
     this.stickRoot.rotation = stickDrawRot;
-    this.leadHandSprite.setPosition(PlayerView.LEAD_HAND_LOCAL.x - stickOffsetX, PlayerView.LEAD_HAND_LOCAL.y - stickOffsetY);
     this.supportHandSprite.setPosition(supportDist - stickOffsetX, PlayerView.SUPPORT_HAND_Y_OFFSET - stickOffsetY);
 
     const shaftLen = Math.max(4, stickLen);
