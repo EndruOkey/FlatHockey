@@ -296,6 +296,13 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     usedTuning.dragIdle = config.dragIdle;
     usedTuning.brakeDrag = config.brakeDrag;
     usedTuning.maxSpeed = config.maxSpeed;
+    usedTuning.movementCoreModel = config.movementCoreModel as any;
+    usedTuning.inputVectorTauMs = config.inputVectorTauMs as any;
+    usedTuning.forwardAccel = config.forwardAccel as any;
+    usedTuning.lateralSteerForce = config.lateralSteerForce as any;
+    usedTuning.oppositeSteerScale = config.oppositeSteerScale as any;
+    usedTuning.carveStrength = config.carveStrength as any;
+    usedTuning.brakeSteerBoost = config.brakeSteerBoost as any;
     usedTuning.headingModeEnabled = config.headingModeEnabled;
     usedTuning.maxTurnRateLowSpeed = config.maxTurnRateLowSpeed;
     usedTuning.maxTurnRateHighSpeed = config.maxTurnRateHighSpeed;

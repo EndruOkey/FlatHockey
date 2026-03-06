@@ -1285,7 +1285,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         id: 'movement_core',
         title: 'Core Movement',
         tone: 'control',
-        keys: ['maxSpeed', 'accel', 'dragMove', 'dragIdle']
+        keys: ['movementCoreModel', 'maxSpeed', 'accel', 'dragMove', 'dragIdle']
       },
       {
         id: 'movement_turning',

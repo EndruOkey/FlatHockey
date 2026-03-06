@@ -96,6 +96,7 @@ export type MovementStepConfig = {
 
   // heading arc model
   headingModeEnabled?: boolean;
+  movementCoreModel?: 'LEGACY' | 'V3';
   maxTurnRateLowSpeed?: number; // rad/s
   maxTurnRateHighSpeed?: number; // rad/s
   inputDirectionTauMs?: number;
@@ -104,6 +105,7 @@ export type MovementStepConfig = {
   forwardAccel?: number;
   lateralSteerForce?: number;
   carveStrength?: number;
+  brakeSteerBoost?: number;
   velocityTurnResistance?: number;
   oppositeSteerScale?: number;
   oppositeTurnResistance?: number; // legacy/inactive compatibility
@@ -496,10 +498,12 @@ export function applyMovementStep(
   const bodyAimResponseTauMs = Math.max(1, config.bodyAimResponseTauMs ?? DEFAULTS.bodyAimResponseTauMs ?? 160);
   const bodyHybridDeadzoneDeg = Math.max(0, config.bodyHybridDeadzoneDeg ?? DEFAULTS.bodyHybridDeadzoneDeg ?? 18);
   const bodyHybridDeadzone = (bodyHybridDeadzoneDeg * Math.PI) / 180;
+  const movementCoreModel = (config.movementCoreModel ?? DEFAULTS.movementCoreModel ?? 'V3') === 'LEGACY' ? 'LEGACY' : 'V3';
   const inputVectorTauMs = Math.max(1, config.inputVectorTauMs ?? DEFAULTS.inputVectorTauMs ?? config.inputDirectionTauMs ?? DEFAULTS.inputDirectionTauMs ?? 110);
   const forwardAccel = Math.max(0, config.forwardAccel ?? DEFAULTS.forwardAccel ?? accel);
   const lateralSteerForce = Math.max(0, config.lateralSteerForce ?? DEFAULTS.lateralSteerForce ?? accel * 0.42);
   const carveStrength = Math.max(0, config.carveStrength ?? DEFAULTS.carveStrength ?? 1);
+  const brakeSteerBoost = Math.max(1, config.brakeSteerBoost ?? DEFAULTS.brakeSteerBoost ?? 1.25);
   const velocityTurnResistance = Math.max(0, config.velocityTurnResistance ?? DEFAULTS.velocityTurnResistance ?? 1.2);
   const oppositeSteerScale = clamp(config.oppositeSteerScale ?? DEFAULTS.oppositeSteerScale ?? 0.08, 0, 1);
   const bodyTurnInput = clamp(input.bodyTurn ?? 0, -1, 1);
@@ -533,75 +537,117 @@ export function applyMovementStep(
     ? wrapToPi((mouseDrivesMove && Number.isFinite(inputAimRaw)) ? inputAimRaw : Math.atan2(inputNy, inputNx))
     : state.moveAngle!;
   state.debugRawInputAngle = rawDesiredMoveAngle;
-  if (hasInput) {
-    const targetX = Math.cos(rawDesiredMoveAngle);
-    const targetY = Math.sin(rawDesiredMoveAngle);
-    const desiredRate = 1000 / inputVectorTauMs;
-    const desiredAlpha = expBlend(desiredRate, simDt);
-    state.desiredDirX = (state.desiredDirX ?? targetX) + (targetX - (state.desiredDirX ?? targetX)) * desiredAlpha;
-    state.desiredDirY = (state.desiredDirY ?? targetY) + (targetY - (state.desiredDirY ?? targetY)) * desiredAlpha;
-    const desiredMag = Math.hypot(state.desiredDirX, state.desiredDirY);
-    if (desiredMag > 0.0001) {
-      state.desiredDirX /= desiredMag;
-      state.desiredDirY /= desiredMag;
-    } else {
-      state.desiredDirX = targetX;
-      state.desiredDirY = targetY;
+  let turnIntentAngle = state.moveAngle!;
+  let turnResistance = 0;
+
+  if (movementCoreModel === 'LEGACY') {
+    const moveTurnRateLow = Math.max(0, config.maxTurnRateLowSpeed ?? DEFAULTS.maxTurnRateLowSpeed ?? bodyTurnRateBase);
+    const moveTurnRateHigh = Math.max(0, config.maxTurnRateHighSpeed ?? DEFAULTS.maxTurnRateHighSpeed ?? moveTurnRateLow);
+    const moveTurnRateBase = lerp(moveTurnRateLow, moveTurnRateHigh, speedNorm);
+    const desiredMoveAngle = rawDesiredMoveAngle;
+    state.inputAngle = desiredMoveAngle;
+    desiredMoveAngleDebug = desiredMoveAngle;
+    turnIntentAngle = desiredMoveAngle;
+    state.heading = desiredMoveAngle;
+    const velAngle = speed > 0.001 ? Math.atan2(state.vy, state.vx) : desiredMoveAngle;
+    const delta = Math.abs(wrapToPi(desiredMoveAngle - velAngle));
+    turnResistance = clamp(
+      smoothstep01((delta - Math.PI * 0.08) / (Math.PI * 0.92)) * speedNorm * velocityTurnResistance,
+      0,
+      1
+    );
+    const moveTurnRate = moveTurnRateBase * lerp(1, 0.12, turnResistance);
+    state.moveAngle = hasInput ? approachAngle(state.moveAngle!, desiredMoveAngle, moveTurnRate * simDt) : state.moveAngle!;
+    const hx = Math.cos(state.moveAngle!);
+    const hy = Math.sin(state.moveAngle!);
+    if (hasInput) {
+      state.vx += hx * accel * lerp(1, 0.08, turnResistance) * simDt;
+      state.vy += hy * accel * lerp(1, 0.08, turnResistance) * simDt;
     }
-    state.lastRawInputAngle = rawDesiredMoveAngle;
+    state.desiredDirX = Math.cos(desiredMoveAngle);
+    state.desiredDirY = Math.sin(desiredMoveAngle);
+    state.committedDirX = state.desiredDirX;
+    state.committedDirY = state.desiredDirY;
+    state.pendingDirX = state.desiredDirX;
+    state.pendingDirY = state.desiredDirY;
+    state.antiFlipTimer = 0;
+    state.debugAntiFlipActive = false;
+    state.debugDesiredInputX = state.desiredDirX;
+    state.debugDesiredInputY = state.desiredDirY;
+    state.debugAppliedForwardForce = hasInput ? accel : 0;
+    state.debugAppliedLateralForce = 0;
+    state.debugRedirectAccelScale = lerp(1, 0.08, turnResistance);
   } else {
-    const velMag = Math.hypot(state.vx, state.vy);
-    if (velMag > 0.001) {
-      state.desiredDirX = state.vx / velMag;
-      state.desiredDirY = state.vy / velMag;
+    if (hasInput) {
+      const targetX = Math.cos(rawDesiredMoveAngle);
+      const targetY = Math.sin(rawDesiredMoveAngle);
+      const desiredRate = 1000 / inputVectorTauMs;
+      const desiredAlpha = expBlend(desiredRate, simDt);
+      state.desiredDirX = (state.desiredDirX ?? targetX) + (targetX - (state.desiredDirX ?? targetX)) * desiredAlpha;
+      state.desiredDirY = (state.desiredDirY ?? targetY) + (targetY - (state.desiredDirY ?? targetY)) * desiredAlpha;
+      const desiredMag = Math.hypot(state.desiredDirX, state.desiredDirY);
+      if (desiredMag > 0.0001) {
+        state.desiredDirX /= desiredMag;
+        state.desiredDirY /= desiredMag;
+      } else {
+        state.desiredDirX = targetX;
+        state.desiredDirY = targetY;
+      }
+      state.lastRawInputAngle = rawDesiredMoveAngle;
+    } else {
+      const velMag = Math.hypot(state.vx, state.vy);
+      if (velMag > 0.001) {
+        state.desiredDirX = state.vx / velMag;
+        state.desiredDirY = state.vy / velMag;
+      }
     }
+    state.committedDirX = state.desiredDirX;
+    state.committedDirY = state.desiredDirY;
+    state.pendingDirX = state.desiredDirX;
+    state.pendingDirY = state.desiredDirY;
+    state.antiFlipTimer = 0;
+    state.debugAntiFlipActive = false;
+
+    const desiredMoveAngle = Math.atan2(state.desiredDirY!, state.desiredDirX!);
+    state.inputAngle = desiredMoveAngle;
+    desiredMoveAngleDebug = desiredMoveAngle;
+    state.debugDesiredInputX = state.desiredDirX;
+    state.debugDesiredInputY = state.desiredDirY;
+
+    const velocityAngleBeforeTurn = speed > 0.001 ? Math.atan2(state.vy, state.vx) : desiredMoveAngle;
+    turnIntentAngle = desiredMoveAngle;
+    state.heading = turnIntentAngle;
+
+    const desiredVsVelocity = Math.abs(wrapToPi(desiredMoveAngle - velocityAngleBeforeTurn));
+    turnResistance = clamp(
+      smoothstep01((desiredVsVelocity - Math.PI * 0.08) / (Math.PI * 0.92)) * speedNorm * velocityTurnResistance,
+      0,
+      1
+    );
+    const velRefAngle = speed > 0.001 ? velocityAngleBeforeTurn : desiredMoveAngle;
+    const fx = Math.cos(velRefAngle);
+    const fy = Math.sin(velRefAngle);
+    const sx = -fy;
+    const sy = fx;
+
+    const intentForward = fx * state.desiredDirX! + fy * state.desiredDirY!;
+    const intentSide = sx * state.desiredDirX! + sy * state.desiredDirY!;
+    const forwardInput = intentForward >= 0 ? intentForward : intentForward * oppositeSteerScale;
+    const lateralControlBase = lerp(0.75, 0.04, turnResistance);
+    const lateralControl = input.buttons.brake
+      ? Math.min(1, lateralControlBase * brakeSteerBoost)
+      : lateralControlBase;
+    const appliedForwardForce = forwardAccel * forwardInput;
+    const appliedLateralForce = lateralSteerForce * intentSide * lateralControl;
+
+    if (hasInput) {
+      state.vx += (fx * appliedForwardForce + sx * appliedLateralForce) * simDt;
+      state.vy += (fy * appliedForwardForce + sy * appliedLateralForce) * simDt;
+    }
+    state.debugAppliedForwardForce = hasInput ? appliedForwardForce : 0;
+    state.debugAppliedLateralForce = hasInput ? appliedLateralForce : 0;
+    state.debugRedirectAccelScale = lateralControl;
   }
-  // Keep these synced for networking/debug compatibility, but they are no longer movement authority.
-  state.committedDirX = state.desiredDirX;
-  state.committedDirY = state.desiredDirY;
-  state.pendingDirX = state.desiredDirX;
-  state.pendingDirY = state.desiredDirY;
-  state.antiFlipTimer = 0;
-  state.debugAntiFlipActive = false;
-
-  const desiredMoveAngle = Math.atan2(state.desiredDirY!, state.desiredDirX!);
-  state.inputAngle = desiredMoveAngle;
-  desiredMoveAngleDebug = desiredMoveAngle;
-  state.debugDesiredInputX = state.desiredDirX;
-  state.debugDesiredInputY = state.desiredDirY;
-
-  const velocityAngleBeforeTurn = speed > 0.001 ? Math.atan2(state.vy, state.vx) : desiredMoveAngle;
-  const turnIntentAngle = desiredMoveAngle;
-  state.heading = turnIntentAngle;
-
-  const desiredVsVelocity = Math.abs(wrapToPi(desiredMoveAngle - velocityAngleBeforeTurn));
-  const turnResistance = clamp(
-    smoothstep01((desiredVsVelocity - Math.PI * 0.08) / (Math.PI * 0.92)) * speedNorm * velocityTurnResistance,
-    0,
-    1
-  );
-  const velRefAngle = speed > 0.001 ? velocityAngleBeforeTurn : desiredMoveAngle;
-  const fx = Math.cos(velRefAngle);
-  const fy = Math.sin(velRefAngle);
-  const sx = -fy;
-  const sy = fx;
-
-  const intentForward = fx * state.desiredDirX! + fy * state.desiredDirY!;
-  const intentSide = sx * state.desiredDirX! + sy * state.desiredDirY!;
-  const forwardInput = intentForward >= 0 ? intentForward : intentForward * oppositeSteerScale;
-  const lateralControl = input.buttons.brake
-    ? lerp(0.8, 0.28, turnResistance)
-    : lerp(0.75, 0.04, turnResistance);
-  const appliedForwardForce = forwardAccel * forwardInput;
-  const appliedLateralForce = lateralSteerForce * intentSide * lateralControl;
-
-  if (hasInput) {
-    state.vx += (fx * appliedForwardForce + sx * appliedLateralForce) * simDt;
-    state.vy += (fy * appliedForwardForce + sy * appliedLateralForce) * simDt;
-  }
-  state.debugAppliedForwardForce = hasInput ? appliedForwardForce : 0;
-  state.debugAppliedLateralForce = hasInput ? appliedLateralForce : 0;
-  state.debugRedirectAccelScale = lateralControl;
 
   const baseDrag = hasInput ? dragMove : dragIdle;
   const dragFactor = Math.exp(-baseDrag * simDt);

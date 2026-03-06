@@ -22,6 +22,19 @@ export type TuningParamMeta = {
 };
 
 const BASE_REGISTRY: TuningParamMeta[] = [
+  {
+    key: 'movementCoreModel',
+    label: 'Movement Core Model',
+    category: 'Movement',
+    group: 'Arc Movement',
+    kind: 'enum',
+    enumOptions: [
+      { value: 'V3', label: 'V3 (Velocity Force)' },
+      { value: 'LEGACY', label: 'LEGACY (Angle Steering)' }
+    ],
+    recommended: true,
+    keywords: ['movement', 'core', 'model', 'v3', 'legacy']
+  },
   { key: 'headingModeEnabled', label: 'Legacy Heading Steering (inactive)', category: 'Movement', group: 'Legacy / Inactive', kind: 'boolean', advanced: true, keywords: ['legacy', 'inactive', 'heading', 'steer'] },
   { key: 'maxTurnRateLowSpeed', label: 'Legacy Turn Rate Low (inactive)', hint: 'Inactive with velocity-force movement core.', category: 'Movement', group: 'Legacy / Inactive', kind: 'number', min: 0, max: 20, step: 0.01, advanced: true, keywords: ['legacy', 'inactive', 'turn'] },
   { key: 'maxTurnRateHighSpeed', label: 'Legacy Turn Rate High (inactive)', hint: 'Inactive with velocity-force movement core.', category: 'Movement', group: 'Legacy / Inactive', kind: 'number', min: 0, max: 20, step: 0.01, advanced: true, keywords: ['legacy', 'inactive', 'turn'] },
