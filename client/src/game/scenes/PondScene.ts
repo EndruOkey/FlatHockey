@@ -900,13 +900,16 @@ export class PondScene extends Phaser.Scene {
       ? `vectors move=${Number(telemetry.moveAngle ?? this.lastMoveAngle).toFixed(2)} body=${Number(this.predicted?.angle ?? 0).toFixed(2)} aimRaw=${Number(telemetry.aimAngleRaw ?? this.lastAimAngle).toFixed(2)} aim=${Number(telemetry.aimAngle ?? this.lastAimAngle).toFixed(2)}`
       : null;
     const anglesLine = tuning.showAngles
-      ? `angles move=${(Number(telemetry.moveAngle ?? this.lastMoveAngle) * 180 / Math.PI).toFixed(1)} body=${(Number(this.predicted?.angle ?? 0) * 180 / Math.PI).toFixed(1)} aimRaw=${(Number(telemetry.aimAngleRaw ?? this.lastAimAngle) * 180 / Math.PI).toFixed(1)} aim=${(Number(telemetry.aimAngle ?? this.lastAimAngle) * 180 / Math.PI).toFixed(1)}`
+      ? `angles move=${(Number(telemetry.moveAngle ?? this.lastMoveAngle) * 180 / Math.PI).toFixed(1)} baseBody=${(Number(telemetry.baseBodyAngle ?? this.predicted?.baseBodyAngle ?? this.predicted?.angle ?? 0) * 180 / Math.PI).toFixed(1)} body=${(Number(this.predicted?.angle ?? 0) * 180 / Math.PI).toFixed(1)} aimRaw=${(Number(telemetry.aimAngleRaw ?? this.lastAimAngle) * 180 / Math.PI).toFixed(1)} aim=${(Number(telemetry.aimAngle ?? this.lastAimAngle) * 180 / Math.PI).toFixed(1)}`
       : null;
     const angleDiffLine = tuning.showAngleDiff
       ? `angleDiff raw=${(Number(telemetry.aimDiffRaw ?? 0) * 180 / Math.PI).toFixed(1)} clamped=${(Number(telemetry.aimDiffClamped ?? 0) * 180 / Math.PI).toFixed(1)}`
       : null;
     const stickRuntimeLine = tuning.showAngleDiff
-      ? `stick mode=${String(telemetry.stickMode ?? 'APPROACH')} deltaDeg=${Number(telemetry.stickDeltaDeg ?? 0).toFixed(1)} angVelDeg=${Number(telemetry.stickAngVelDeg ?? 0).toFixed(1)}`
+      ? `stick target=${(Number(telemetry.targetAimAngle ?? telemetry.aimAngle ?? this.lastAimAngle) * 180 / Math.PI).toFixed(1)} actual=${(Number(telemetry.aimAngle ?? this.lastAimAngle) * 180 / Math.PI).toFixed(1)} deltaDeg=${Number(telemetry.stickDeltaDeg ?? 0).toFixed(1)} angVelDeg=${Number(telemetry.stickAngVelDeg ?? 0).toFixed(1)} mode=${String(telemetry.stickMode ?? 'APPROACH')}`
+      : null;
+    const bodyYawLine = tuning.showAngleDiff
+      ? `bodyYaw base=${(Number(telemetry.baseBodyAngle ?? this.predicted?.baseBodyAngle ?? this.predicted?.angle ?? 0) * 180 / Math.PI).toFixed(1)} offset=${(Number(telemetry.bodyYawOffset ?? this.predicted?.bodyYawOffset ?? 0) * 180 / Math.PI).toFixed(1)} final=${(Number(this.predicted?.angle ?? 0) * 180 / Math.PI).toFixed(1)}`
       : null;
     const stickLimitLine = tuning.showAngleDiff
       ? `stick angVelClamped=${telemetry.stickAngVelClamped ? 'on' : 'off'} targetSlewActive=${telemetry.targetSlewActive ? 'on' : 'off'} aimInputRateLimited=${telemetry.aimInputRateLimited ? 'on' : 'off'}`
@@ -938,6 +941,7 @@ export class PondScene extends Phaser.Scene {
         ...(anglesLine ? [anglesLine] : []),
         ...(angleDiffLine ? [angleDiffLine] : []),
         ...(stickRuntimeLine ? [stickRuntimeLine] : []),
+        ...(bodyYawLine ? [bodyYawLine] : []),
         ...(stickLimitLine ? [stickLimitLine] : []),
         ...(snapLine ? [snapLine] : []),
         ...(brakeAssistLine ? [brakeAssistLine] : []),
@@ -974,7 +978,13 @@ export class PondScene extends Phaser.Scene {
       inputVector: `(${this.lastInputVector.x}, ${this.lastInputVector.y})`,
       pointerVector: `(${this.lastPointerVector.x.toFixed(1)}, ${this.lastPointerVector.y.toFixed(1)})`,
       aimAngle: localAimRot,
+      targetAimAngle: Number(telemetry.targetAimAngle ?? this.aimTargetAngle ?? localAimRot),
       stickRotation: localStickRot,
+      stickAngularSpeed: Number(telemetry.stickAngVelDeg ?? 0) * Math.PI / 180,
+      angleDelta: Number(telemetry.stickDeltaDeg ?? 0) * Math.PI / 180,
+      baseBodyAngle: Number(this.predicted?.baseBodyAngle ?? telemetry.baseBodyAngle ?? this.predicted?.angle ?? 0),
+      bodyYawOffset: Number(this.predicted?.bodyYawOffset ?? telemetry.bodyYawOffset ?? 0),
+      currentBodyAngle: Number(this.predicted?.angle ?? 0),
       recorderState: this.replayEnabled ? 'replaying' : this.inputRecorderEnabled ? 'recording' : 'idle',
       recordedFrames: this.recordedInputs.length
     });

@@ -10,6 +10,8 @@ export type MovementStepState = {
   aimAngleRaw?: number;
   stickAngVel?: number;
   moveAngle?: number;
+  baseBodyAngle?: number;
+  bodyYawOffset?: number;
   bodyAngle?: number;
   bodyManualAngVel?: number;
   stickSide?: -1 | 1;
@@ -32,6 +34,9 @@ export type MovementStepState = {
   debugStickAngVelClamped?: boolean;
   debugStickTargetSlewActive?: boolean;
   debugStickMode?: 'TAU' | 'SPRING' | 'APPROACH';
+  debugTargetAimAngle?: number;
+  debugBaseBodyAngle?: number;
+  debugBodyYawOffset?: number;
 };
 
 export type MovementStepInput = {
@@ -166,6 +171,9 @@ export type MovementStepConfig = {
   bodyManualUseVelBase?: boolean;
   bodyManualVelBaseThreshold?: number;
   maxBodyOffsetDeg?: number; // handling offset limit around base angle
+  maxBodyYawOffsetDeg?: number;
+  bodyYawSpeedDeg?: number;
+  bodyYawReturnSpeedDeg?: number;
   bodyReturnTauMs?: number; // return-to-base smoothing
   bodyBaseSpeedThreshold?: number; // speed threshold to use velocity as base angle
   aimEnabled?: boolean;
@@ -301,6 +309,12 @@ export function approachAngle(current: number, target: number, maxStep: number):
   return wrapToPi(current + Math.sign(d) * maxStep);
 }
 
+function approachScalar(current: number, target: number, maxStep: number): number {
+  const d = target - current;
+  if (Math.abs(d) <= maxStep) return target;
+  return current + Math.sign(d) * maxStep;
+}
+
 export function applyMovementStep(
   state: MovementStepState,
   input: MovementStepInput,
@@ -326,6 +340,9 @@ export function applyMovementStep(
   state.debugStickAngVelClamped = false;
   state.debugStickTargetSlewActive = false;
   state.debugStickMode = 'APPROACH';
+  state.debugTargetAimAngle = 0;
+  state.debugBaseBodyAngle = 0;
+  state.debugBodyYawOffset = 0;
 
   const rawX = clamp(input.moveX, -1, 1);
   const rawY = clamp(input.moveY, -1, 1);
@@ -338,6 +355,12 @@ export function applyMovementStep(
   }
   if (!Number.isFinite(state.bodyAngle)) {
     state.bodyAngle = Number.isFinite(state.heading) ? state.heading! : state.moveAngle;
+  }
+  if (!Number.isFinite(state.baseBodyAngle)) {
+    state.baseBodyAngle = state.bodyAngle!;
+  }
+  if (!Number.isFinite(state.bodyYawOffset)) {
+    state.bodyYawOffset = wrapToPi(state.bodyAngle! - state.baseBodyAngle!);
   }
   const inputAimRaw = Number.isFinite(input.aimAngleRaw)
     ? input.aimAngleRaw!
@@ -426,26 +449,35 @@ export function applyMovementStep(
   const bodyTurnRateBase = Math.max(0, config.bodyTurnRate ?? DEFAULTS.bodyTurnRate ?? DEFAULTS.maxTurnRateLowSpeed ?? 10);
   const bodyTurnRateLowSpeedMult = Math.max(0, config.bodyTurnRateLowSpeedMult ?? DEFAULTS.bodyTurnRateLowSpeedMult ?? 1);
   const bodyTurnRate = bodyTurnRateBase * lerp(bodyTurnRateLowSpeedMult, 1, speedNorm);
+  const moveTurnRateLow = Math.max(0, config.maxTurnRateLowSpeed ?? DEFAULTS.maxTurnRateLowSpeed ?? bodyTurnRateBase);
+  const moveTurnRateHigh = Math.max(0, config.maxTurnRateHighSpeed ?? DEFAULTS.maxTurnRateHighSpeed ?? moveTurnRateLow);
+  const moveTurnRate = lerp(moveTurnRateLow, moveTurnRateHigh, speedNorm);
   const bodyTurnInput = clamp(input.bodyTurn ?? 0, -1, 1);
-  const bodyManualTurnRateDeg = Math.max(0, config.bodyManualTurnRateDeg ?? DEFAULTS.bodyManualTurnRateDeg ?? 360);
-  const bodyManualTurnRate = (bodyManualTurnRateDeg * Math.PI) / 180;
-  const bodyManualTurnOverridesAutoFacing = config.bodyManualTurnOverridesAutoFacing ?? DEFAULTS.bodyManualTurnOverridesAutoFacing ?? true;
-  const bodyManualMaxOffsetDeg = Math.max(0, config.bodyManualMaxOffsetDeg ?? DEFAULTS.bodyManualMaxOffsetDeg ?? 85);
-  const bodyManualMaxOffset = (bodyManualMaxOffsetDeg * Math.PI) / 180;
-  const bodyManualTauMs = Math.max(1, config.bodyManualTauMs ?? DEFAULTS.bodyManualTauMs ?? 170);
-  const bodyManualTau = bodyManualTauMs / 1000;
-  const bodyManualDampingRatio = Math.max(0.01, config.bodyManualDampingRatio ?? DEFAULTS.bodyManualDampingRatio ?? 0.95);
-  const bodyManualMaxAngVelDeg = Math.max(0, config.bodyManualMaxAngVelDeg ?? DEFAULTS.bodyManualMaxAngVelDeg ?? 1600);
-  const bodyManualMaxAngVel = (bodyManualMaxAngVelDeg * Math.PI) / 180;
-  const bodyManualUseVelBase = config.bodyManualUseVelBase ?? DEFAULTS.bodyManualUseVelBase ?? true;
-  const bodyManualVelBaseThreshold = Math.max(0, config.bodyManualVelBaseThreshold ?? DEFAULTS.bodyManualVelBaseThreshold ?? 60);
-  const maxBodyOffsetDeg = Math.max(0, config.maxBodyOffsetDeg ?? DEFAULTS.maxBodyOffsetDeg ?? 35);
-  const maxBodyOffset = (maxBodyOffsetDeg * Math.PI) / 180;
-  const bodyReturnTauMs = Math.max(0, config.bodyReturnTauMs ?? DEFAULTS.bodyReturnTauMs ?? 180);
+  const bodyYawSpeedDeg = Math.max(
+    0,
+    config.bodyYawSpeedDeg
+      ?? config.bodyManualTurnRateDeg
+      ?? DEFAULTS.bodyYawSpeedDeg
+      ?? DEFAULTS.bodyManualTurnRateDeg
+      ?? 360
+  );
+  const bodyYawSpeed = (bodyYawSpeedDeg * Math.PI) / 180;
+  const maxBodyYawOffsetDeg = Math.max(
+    0,
+    config.maxBodyYawOffsetDeg
+      ?? config.maxBodyOffsetDeg
+      ?? config.bodyManualMaxOffsetDeg
+      ?? DEFAULTS.maxBodyYawOffsetDeg
+      ?? DEFAULTS.maxBodyOffsetDeg
+      ?? DEFAULTS.bodyManualMaxOffsetDeg
+      ?? 35
+  );
+  const maxBodyYawOffset = (maxBodyYawOffsetDeg * Math.PI) / 180;
+  const bodyYawReturnSpeedDeg = Math.max(0, config.bodyYawReturnSpeedDeg ?? DEFAULTS.bodyYawReturnSpeedDeg ?? 220);
+  const bodyYawReturnSpeed = (bodyYawReturnSpeedDeg * Math.PI) / 180;
   const couplingEnabled = config.couplingEnabled ?? DEFAULTS.couplingEnabled ?? true;
   const couplingStrength = clamp(config.couplingStrength ?? DEFAULTS.couplingStrength ?? 0.15, 0, 0.35);
   const manualTurningActive = Math.abs(bodyTurnInput) > 0.0001;
-  const manualOverrides = manualTurningActive && bodyManualTurnOverridesAutoFacing;
 
   if (headingOn) {
     const prevVelAngle = Math.atan2(state.vy, state.vx);
@@ -459,19 +491,11 @@ export function applyMovementStep(
         : (Number.isFinite(state.moveAngle) ? state.moveAngle : 0);
     }
     if (hasInput) {
-      const desiredMoveAngle = (mouseDrivesMove && Number.isFinite(inputAimRaw))
+      const desiredMoveAngle = wrapToPi((mouseDrivesMove && Number.isFinite(inputAimRaw))
         ? inputAimRaw
-        : Math.atan2(inputNy, inputNx);
-      state.moveAngle = wrapToPi(desiredMoveAngle);
-      const movementHeading = manualOverrides ? state.moveAngle! : state.bodyAngle!;
-      const maxDelta = Math.max(0, bodyTurnRate) * simDt;
-      if (!manualOverrides) {
-        if (bodyFacingMode === 'AIM_ALWAYS') {
-          state.bodyAngle = approachAngle(state.bodyAngle!, wrapToPi(inputAimRaw), maxDelta);
-        } else {
-          state.bodyAngle = approachAngle(state.bodyAngle!, state.moveAngle, maxDelta);
-        }
-      }
+        : Math.atan2(inputNy, inputNx));
+      state.moveAngle = approachAngle(state.moveAngle!, desiredMoveAngle, moveTurnRate * simDt);
+      const movementHeading = state.moveAngle!;
 
       const hx = Math.cos(movementHeading);
       const hy = Math.sin(movementHeading);
@@ -601,18 +625,11 @@ export function applyMovementStep(
   } else {
     // Legacy steering path for compatibility if heading mode is manually disabled.
     if (hasInput) {
-      const desiredMoveAngle = (mouseDrivesMove && Number.isFinite(inputAimRaw))
+      const desiredMoveAngle = wrapToPi((mouseDrivesMove && Number.isFinite(inputAimRaw))
         ? inputAimRaw
-        : Math.atan2(inputNy, inputNx);
-      state.moveAngle = wrapToPi(desiredMoveAngle);
-      if (!manualOverrides) {
-        if (bodyFacingMode === 'AIM_ALWAYS') {
-          state.bodyAngle = approachAngle(state.bodyAngle!, wrapToPi(inputAimRaw), Math.max(0, bodyTurnRate) * simDt);
-        } else {
-          state.bodyAngle = approachAngle(state.bodyAngle!, state.moveAngle, Math.max(0, bodyTurnRate) * simDt);
-        }
-      }
-      const movementHeading = manualOverrides ? state.moveAngle! : state.bodyAngle!;
+        : Math.atan2(inputNy, inputNx));
+      state.moveAngle = approachAngle(state.moveAngle!, desiredMoveAngle, moveTurnRate * simDt);
+      const movementHeading = state.moveAngle!;
       const accelVecBase = sprinting ? accelSprint : accel;
       let accelMul = 1;
       if (couplingEnabled) {
@@ -668,56 +685,40 @@ export function applyMovementStep(
   state.y += state.vy * simDt;
 
   if (!hasInput) {
-    if (!manualOverrides) {
-      if (bodyFacingMode === 'AIM_ALWAYS' && Number.isFinite(inputAimRaw)) {
-        state.bodyAngle = approachAngle(state.bodyAngle!, wrapToPi(inputAimRaw), Math.max(0, bodyTurnRate) * simDt);
-      } else if (bodyFacingMode === 'AIM_WHEN_IDLE' && Number.isFinite(inputAimRaw)) {
-        state.bodyAngle = approachAngle(state.bodyAngle!, wrapToPi(inputAimRaw), Math.max(0, bodyTurnRate) * simDt);
-      } else if (bodyFacingMode === 'BLEND' && Number.isFinite(inputAimRaw)) {
-        const blend = 1 - clamp(Math.hypot(state.vx, state.vy) / Math.max(1, maxSpeed), 0, 1);
-        const blendedTarget = lerpAngle(state.moveAngle!, wrapToPi(inputAimRaw), blend);
-        state.bodyAngle = approachAngle(state.bodyAngle!, blendedTarget, Math.max(0, bodyTurnRate) * simDt);
-      }
+    const speedNow = Math.hypot(state.vx, state.vy);
+    if (speedNow > 0.001) {
+      state.moveAngle = Math.atan2(state.vy, state.vx);
     }
   }
 
-  // Handling base angle follows WASD input (not velocity drift).
-  const baseAngle = hasInput
-    ? Math.atan2(inputNy, inputNx)
-    : (Number.isFinite(state.moveAngle) ? state.moveAngle! : state.bodyAngle!);
+  let baseBodyAngle = Number.isFinite(state.baseBodyAngle) ? state.baseBodyAngle! : state.bodyAngle!;
+  const bodyTurnStep = Math.max(0, bodyTurnRate) * simDt;
   const speedNow = Math.hypot(state.vx, state.vy);
-  const velocityAngle = speedNow > 0.001 ? Math.atan2(state.vy, state.vx) : baseAngle;
-  const manualBase = (bodyManualUseVelBase && speedNow >= bodyManualVelBaseThreshold) ? velocityAngle : baseAngle;
-  let handledBodyAngle = state.bodyAngle!;
-  let bodyManualAngVel = Number.isFinite(state.bodyManualAngVel) ? state.bodyManualAngVel! : 0;
-  if (manualTurningActive) {
-    const inputOffset = bodyTurnInput * bodyManualMaxOffset;
-    const rateOffset = bodyTurnInput * bodyManualTurnRate * simDt;
-    const targetAngle = wrapToPi(manualBase + clamp(inputOffset + rateOffset, -bodyManualMaxOffset, bodyManualMaxOffset));
-    const omega = 2 / Math.max(0.001, bodyManualTau);
-    const springK = omega * omega;
-    const springC = 2 * bodyManualDampingRatio * omega;
-    const err = wrapToPi(targetAngle - handledBodyAngle);
-    bodyManualAngVel += (err * springK - bodyManualAngVel * springC) * simDt;
-    if (bodyManualMaxAngVel > 0) {
-      bodyManualAngVel = clamp(bodyManualAngVel, -bodyManualMaxAngVel, bodyManualMaxAngVel);
-    }
-    handledBodyAngle = wrapToPi(handledBodyAngle + bodyManualAngVel * simDt);
+  const moveOrVelAngle = Number.isFinite(state.moveAngle)
+    ? state.moveAngle!
+    : (speedNow > 0.001 ? Math.atan2(state.vy, state.vx) : baseBodyAngle);
+  if (bodyFacingMode === 'AIM_ALWAYS' && Number.isFinite(inputAimRaw)) {
+    baseBodyAngle = approachAngle(baseBodyAngle, wrapToPi(inputAimRaw), bodyTurnStep);
+  } else if (bodyFacingMode === 'AIM_WHEN_IDLE' && Number.isFinite(inputAimRaw) && !hasInput) {
+    baseBodyAngle = approachAngle(baseBodyAngle, wrapToPi(inputAimRaw), bodyTurnStep);
+  } else if (bodyFacingMode === 'BLEND' && Number.isFinite(inputAimRaw)) {
+    const blend = 1 - clamp(speedNow / Math.max(1, maxSpeed), 0, 1);
+    const blendedTarget = lerpAngle(moveOrVelAngle, wrapToPi(inputAimRaw), clamp(blend, 0, 1));
+    baseBodyAngle = approachAngle(baseBodyAngle, blendedTarget, bodyTurnStep);
   } else {
-    const decay = Math.exp(-8 * simDt);
-    bodyManualAngVel *= decay;
-    if (Math.abs(bodyManualAngVel) < 0.0001) bodyManualAngVel = 0;
+    baseBodyAngle = approachAngle(baseBodyAngle, moveOrVelAngle, bodyTurnStep);
   }
-  let bodyOffset = wrapToPi(handledBodyAngle - baseAngle);
-  bodyOffset = clamp(bodyOffset, -maxBodyOffset, maxBodyOffset);
-  handledBodyAngle = wrapToPi(baseAngle + bodyOffset);
-  if (!manualTurningActive && bodyReturnTauMs > 0) {
-    const tauSec = bodyReturnTauMs / 1000;
-    const alpha = clamp(1 - Math.exp(-simDt / Math.max(0.0001, tauSec)), 0, 1);
-    handledBodyAngle = lerpAngle(handledBodyAngle, baseAngle, alpha);
+
+  let bodyYawOffset = clamp(Number.isFinite(state.bodyYawOffset) ? state.bodyYawOffset! : 0, -maxBodyYawOffset, maxBodyYawOffset);
+  if (manualTurningActive) {
+    bodyYawOffset = clamp(bodyYawOffset + bodyTurnInput * bodyYawSpeed * simDt, -maxBodyYawOffset, maxBodyYawOffset);
+  } else {
+    bodyYawOffset = approachScalar(bodyYawOffset, 0, bodyYawReturnSpeed * simDt);
   }
-  state.bodyAngle = handledBodyAngle;
-  state.bodyManualAngVel = bodyManualAngVel;
+  state.baseBodyAngle = baseBodyAngle;
+  state.bodyYawOffset = bodyYawOffset;
+  state.bodyAngle = wrapToPi(baseBodyAngle + bodyYawOffset);
+  state.bodyManualAngVel = manualTurningActive ? bodyTurnInput * bodyYawSpeed : 0;
 
   const aimAngleRaw = wrapToPi(inputAimRaw);
   const stickAngleLimitEnabled = config.stickAngleLimitEnabled ?? DEFAULTS.stickAngleLimitEnabled ?? true;
@@ -883,12 +884,15 @@ export function applyMovementStep(
   }
   state.aimAngleRaw = aimAngleRaw;
   state.aimAngle = aimAngle;
-  state.heading = state.bodyAngle;
+  state.heading = state.moveAngle;
   state.debugStickDeltaDeg = Math.abs(wrapToPi(targetAim - aimAngle)) * (180 / Math.PI);
   state.debugStickAngVelDeg = Math.abs(wrapToPi(aimAngle - prevAimAngle)) * (180 / Math.PI) / Math.max(0.0001, simDt);
   state.debugStickAngVelClamped = stickAngVelClamped;
   state.debugStickTargetSlewActive = targetSlewActive;
   state.debugStickMode = activeMode;
+  state.debugTargetAimAngle = targetAim;
+  state.debugBaseBodyAngle = state.baseBodyAngle;
+  state.debugBodyYawOffset = state.bodyYawOffset;
 
   const finalSpeedNow = Math.hypot(state.vx, state.vy);
   if (hasInput) {

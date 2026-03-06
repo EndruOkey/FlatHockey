@@ -14,6 +14,8 @@ export type PredictedPlayerState = PlayerStateMsg & {
   stamina?: number;
   heading?: number;
   moveAngle?: number;
+  baseBodyAngle?: number;
+  bodyYawOffset?: number;
   aimAngle?: number;
   aimAngleRaw?: number;
   stickAngVel?: number;
@@ -31,6 +33,9 @@ export type PredictedPlayerState = PlayerStateMsg & {
   debugStickAngVelClamped?: boolean;
   debugStickTargetSlewActive?: boolean;
   debugStickMode?: 'TAU' | 'SPRING' | 'APPROACH';
+  debugTargetAimAngle?: number;
+  debugBaseBodyAngle?: number;
+  debugBodyYawOffset?: number;
 };
 
 export const CLIENT_FIXED_DT = 1 / 60;
@@ -69,6 +74,8 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     aimAngleRaw: state.aimAngleRaw,
     stickAngVel: state.stickAngVel,
     moveAngle: state.moveAngle,
+    baseBodyAngle: state.baseBodyAngle,
+    bodyYawOffset: state.bodyYawOffset,
     bodyAngle: state.angle,
     heading: state.heading,
     prevHasInput: state.prevHasInput,
@@ -112,6 +119,8 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.stamina = simState.stamina;
   state.heading = simState.heading;
   state.moveAngle = simState.moveAngle;
+  state.baseBodyAngle = simState.baseBodyAngle;
+  state.bodyYawOffset = simState.bodyYawOffset;
   state.aimAngleRaw = simState.aimAngleRaw;
   state.aimAngle = simState.aimAngle;
   state.stickAngVel = simState.stickAngVel;
@@ -133,6 +142,9 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.debugStickAngVelClamped = simState.debugStickAngVelClamped;
   state.debugStickTargetSlewActive = simState.debugStickTargetSlewActive;
   state.debugStickMode = simState.debugStickMode;
+  state.debugTargetAimAngle = simState.debugTargetAimAngle;
+  state.debugBaseBodyAngle = simState.debugBaseBodyAngle;
+  state.debugBodyYawOffset = simState.debugBodyYawOffset;
 
   const speed = Math.hypot(state.vx, state.vy);
   const maxSpeed = (config.maxSpeed ?? config.maxSpeedNoPuck ?? 1);
@@ -173,6 +185,9 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     moveAngle: simState.moveAngle ?? 0,
     aimAngle: simState.aimAngle ?? state.aimAngle ?? state.angle,
     aimAngleRaw: simState.aimAngleRaw ?? state.aimAngleRaw ?? state.angle,
+    targetAimAngle: simState.debugTargetAimAngle ?? simState.aimAngle ?? state.aimAngle ?? state.angle,
+    baseBodyAngle: simState.debugBaseBodyAngle ?? simState.baseBodyAngle ?? state.baseBodyAngle ?? state.angle,
+    bodyYawOffset: simState.debugBodyYawOffset ?? simState.bodyYawOffset ?? state.bodyYawOffset ?? 0,
     aimDiffRaw: simState.debugAimDiffRaw ?? 0,
     aimDiffClamped: simState.debugAimDiffClamped ?? 0,
     stickDeltaDeg: simState.debugStickDeltaDeg ?? 0,

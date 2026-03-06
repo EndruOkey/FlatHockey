@@ -28,6 +28,8 @@ type PlayerState = {
   vy: number;
   angle: number;
   moveAngle: number;
+  baseBodyAngle: number;
+  bodyYawOffset: number;
   aimAngleRaw: number;
   aimAngle: number;
   stickAngVel?: number;
@@ -137,6 +139,8 @@ export class Room {
       vy: 0,
       angle: 0,
       moveAngle: 0,
+      baseBodyAngle: 0,
+      bodyYawOffset: 0,
       aimAngleRaw: 0,
       aimAngle: 0,
       stickAngVel: 0,
@@ -213,6 +217,8 @@ export class Room {
         aimAngleRaw: player.aimAngleRaw,
         stickAngVel: player.stickAngVel,
         moveAngle: player.moveAngle,
+        baseBodyAngle: player.baseBodyAngle,
+        bodyYawOffset: player.bodyYawOffset,
         bodyAngle: player.angle,
         heading: player.heading,
         prevHasInput: player.prevHasInput,
@@ -245,6 +251,8 @@ export class Room {
       player.stamina = state.stamina;
       player.heading = state.heading;
       player.moveAngle = Number.isFinite(state.moveAngle) ? state.moveAngle! : (Number.isFinite(player.heading) ? player.heading! : player.moveAngle);
+      player.baseBodyAngle = Number.isFinite(state.baseBodyAngle) ? state.baseBodyAngle! : player.baseBodyAngle;
+      player.bodyYawOffset = Number.isFinite(state.bodyYawOffset) ? state.bodyYawOffset! : player.bodyYawOffset;
       player.aimAngleRaw = Number.isFinite(state.aimAngleRaw) ? state.aimAngleRaw! : player.aimAngleRaw;
       player.aimAngle = Number.isFinite(state.aimAngle) ? state.aimAngle : player.aimAngleRaw;
       player.stickAngVel = state.stickAngVel;
@@ -297,6 +305,8 @@ export class Room {
         vy: p.vy,
         angle: p.angle,
         moveAngle: p.moveAngle,
+        baseBodyAngle: p.baseBodyAngle,
+        bodyYawOffset: p.bodyYawOffset,
         aimAngleRaw: p.aimAngleRaw,
         aimAngle: p.aimAngle
       }))

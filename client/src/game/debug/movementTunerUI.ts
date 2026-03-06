@@ -1344,7 +1344,13 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
       const m = getMovementDebugMetrics();
       runtimeText.textContent = [
         `aimAngle: ${(m.aimAngle * 180 / Math.PI).toFixed(1)} deg`,
+        `targetAimAngle: ${(m.targetAimAngle * 180 / Math.PI).toFixed(1)} deg`,
         `stickRotation: ${(m.stickRotation * 180 / Math.PI).toFixed(1)} deg`,
+        `stickAngularSpeed: ${(m.stickAngularSpeed * 180 / Math.PI).toFixed(1)} deg/s`,
+        `targetVsActualDelta: ${(m.angleDelta * 180 / Math.PI).toFixed(1)} deg`,
+        `baseBodyAngle: ${(m.baseBodyAngle * 180 / Math.PI).toFixed(1)} deg`,
+        `bodyYawOffset: ${(m.bodyYawOffset * 180 / Math.PI).toFixed(1)} deg`,
+        `currentBodyAngle: ${(m.currentBodyAngle * 180 / Math.PI).toFixed(1)} deg`,
         `pointerVector: ${m.pointerVector}`,
         `inputVector: ${m.inputVector}`,
         `stickMode: ${String(t.stickMode ?? 'APPROACH')}`,
@@ -1358,9 +1364,9 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     const sections: Array<{ id: string; title: string; tone: SectionMeta['tone']; keys: Array<keyof MovementTuning> }> = [
       {
         id: 'stickaim_body',
-        title: 'Body Facing',
+        title: 'Body Yaw',
         tone: 'control',
-        keys: ['bodyFacingMode', 'bodyTurnRate', 'bodyManualTurnRateDeg', 'maxBodyOffsetDeg', 'bodyReturnTauMs']
+        keys: ['bodyFacingMode', 'bodyTurnRate', 'maxBodyYawOffsetDeg', 'bodyYawSpeedDeg', 'bodyYawReturnSpeedDeg']
       },
       {
         id: 'stickaim_aim_input',
@@ -1528,7 +1534,13 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         `inputVector: ${m.inputVector}`,
         `pointerVector: ${m.pointerVector}`,
         `aimAngle: ${(m.aimAngle * 180 / Math.PI).toFixed(1)} deg`,
+        `targetAimAngle: ${(m.targetAimAngle * 180 / Math.PI).toFixed(1)} deg`,
         `stickRotation: ${(m.stickRotation * 180 / Math.PI).toFixed(1)} deg`,
+        `stickAngularSpeed: ${(m.stickAngularSpeed * 180 / Math.PI).toFixed(1)} deg/s`,
+        `angleDelta: ${(m.angleDelta * 180 / Math.PI).toFixed(1)} deg`,
+        `baseBodyAngle: ${(m.baseBodyAngle * 180 / Math.PI).toFixed(1)} deg`,
+        `bodyYawOffset: ${(m.bodyYawOffset * 180 / Math.PI).toFixed(1)} deg`,
+        `currentBodyAngle: ${(m.currentBodyAngle * 180 / Math.PI).toFixed(1)} deg`,
         `recorder: ${m.recorderState} (${m.recordedFrames} frames)`
       ].join('\n');
     });
