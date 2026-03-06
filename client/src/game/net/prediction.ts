@@ -220,6 +220,8 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     actualMoveAngle: simState.moveAngle ?? 0,
     turnRateAppliedDeg: simState.debugMoveTurnRateAppliedDeg ?? 0,
     velocityDesiredDeltaDeg: simState.debugVelocityDesiredDeltaDeg ?? 0,
+    turnResistance: simState.debugTurnResistance ?? 0,
+    redirectAccelScale: simState.debugRedirectAccelScale ?? 1,
     moveAngle: simState.moveAngle ?? 0,
     aimAngle: simState.aimAngle ?? state.aimAngle ?? state.angle,
     aimAngleRaw: simState.aimAngleRaw ?? state.aimAngleRaw ?? state.angle,
