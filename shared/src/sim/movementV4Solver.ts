@@ -202,6 +202,9 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
     ? 1
     : lerp(0.42, 0.02, smoothstep01(speedNorm));
   const reverseScale = oppositeScale * reverseNoBrakeScale;
+  const reverseEntryPenalty = intentForward < 0 && !input.buttons.brake
+    ? lerp(0.42, 0.08, smoothstep01(speedNorm))
+    : 1;
   const forwardInput = intentForward >= 0 ? intentForward : intentForward * reverseScale;
   const baseTurnAuthority = lerp(turnLowSpeed, turnHighSpeed, speedNorm);
   const turnAuthority = clamp(
@@ -211,7 +214,7 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
   );
   const alternatingPenalty = lerp(1, 0.55, clamp((1 - dotPendingCommitted) * 0.5 * speedNorm, 0, 1));
   const lateralAuthority = clamp(turnAuthority * alternatingPenalty * (chargeActive ? chargeTurnMul : 1), 0.02, 1);
-  const appliedForwardForce = forwardAccel * (chargeActive ? chargeAccelMul : 1) * forwardInput;
+  const appliedForwardForce = forwardAccel * (chargeActive ? chargeAccelMul : 1) * forwardInput * reverseEntryPenalty;
   const appliedLateralForce = lateralSteerForce * intentSide * lateralAuthority;
   state.debugAppliedForwardForce = hasInput ? appliedForwardForce : 0;
   state.debugAppliedLateralForce = hasInput ? appliedLateralForce : 0;
