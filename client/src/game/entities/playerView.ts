@@ -52,6 +52,12 @@ export class PlayerView {
     return a;
   }
 
+  private static approachAngle(current: number, target: number, maxStep: number) {
+    const d = PlayerView.wrapToPi(target - current);
+    if (Math.abs(d) <= maxStep) return target;
+    return PlayerView.wrapToPi(current + Math.sign(d) * maxStep);
+  }
+
   private static rotateLocal(localX: number, localY: number, rot: number) {
     const c = Math.cos(rot);
     const s = Math.sin(rot);
@@ -251,18 +257,27 @@ export class PlayerView {
     const lag = Math.max(0, Math.min(1, tuning.stickVisualLag));
     const lagMaxDeg = tuning.stickVisualLagMaxDeg;
     const lagMaxRad = (lagMaxDeg * Math.PI) / 180;
+    const safeDt = PlayerView.clamp(dtSec, 1 / 240, 1 / 20);
     let delta = this.aimRot - this.stickVisualRot;
     while (delta > Math.PI) delta -= Math.PI * 2;
     while (delta < -Math.PI) delta += Math.PI * 2;
-    delta = Math.max(-lagMaxRad, Math.min(lagMaxRad, delta));
-    const deltaNorm = PlayerView.clamp(Math.abs(delta) / Math.max(lagMaxRad, 0.0001), 0, 1);
-    const adaptiveLag = lag * (1 - 0.55 * deltaNorm);
-    this.stickVisualRot += delta * (1 - adaptiveLag);
+    const visualDeadzone = (0.18 * Math.PI) / 180;
+    if (Math.abs(delta) <= visualDeadzone) {
+      this.stickVisualRot = this.aimRot;
+    } else {
+      const clampedDelta = Math.max(-lagMaxRad, Math.min(lagMaxRad, delta));
+      const deltaNorm = PlayerView.clamp(Math.abs(clampedDelta) / Math.max(lagMaxRad, 0.0001), 0, 1);
+      const adaptiveLag = lag * (1 - 0.45 * deltaNorm);
+      const visualTauMs = PlayerView.clamp(28 + adaptiveLag * 120, 20, 180);
+      const alpha = 1 - Math.exp(-safeDt / (visualTauMs / 1000));
+      const targetVisualRot = this.stickVisualRot + clampedDelta * alpha;
+      const maxVisualSpeed = ((540 + 520 * deltaNorm) * Math.PI) / 180;
+      this.stickVisualRot = PlayerView.approachAngle(this.stickVisualRot, targetVisualRot, maxVisualSpeed * safeDt);
+    }
 
     const stickWorldRot = this.stickVisualRot;
     const stickDrawRot = stickWorldRot + PlayerView.STICK_SPRITE_OFFSET_RAD;
     this.stickDrawRot = stickDrawRot;
-    const safeDt = PlayerView.clamp(dtSec, 1 / 240, 1 / 20);
     const edgeAngle = PlayerView.wrapToPi(this.rot - this.moveRot);
     const leanMaxAngleRad = Math.max(0.001, (this.visualLeanMaxAngleDeg * Math.PI) / 180);
     const edgeNorm = PlayerView.clamp(edgeAngle / leanMaxAngleRad, -1, 1);
