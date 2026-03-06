@@ -564,11 +564,19 @@ export class PondScene extends Phaser.Scene {
     const aimFromStickBaseEnabled = Boolean((tuning as any).aimFromStickBaseEnabled ?? true);
     if (aimFromStickBaseEnabled) {
       const stick = puckStickTuningStore.get();
-      const cos = Math.cos(rawTarget);
-      const sin = Math.sin(rawTarget);
-      const baseX = this.predicted.x + stick.stickOffsetX * cos - stick.stickOffsetY * sin;
-      const baseY = this.predicted.y + stick.stickOffsetX * sin + stick.stickOffsetY * cos;
-      rawTarget = Math.atan2(mouseWorld.y - baseY, mouseWorld.x - baseX);
+      const handedness = tuning.handedness === 'L' ? 'L' : 'R';
+      for (let i = 0; i < 2; i += 1) {
+        const base = PlayerView.getStickBaseWorldFromPose(
+          this.predicted.x,
+          this.predicted.y,
+          this.predicted.angle,
+          handedness,
+          rawTarget,
+          stick.stickOffsetX,
+          stick.stickOffsetY
+        );
+        rawTarget = Math.atan2(mouseWorld.y - base.y, mouseWorld.x - base.x);
+      }
     }
     if (!this.hasAimState) {
       this.hasAimState = true;
@@ -892,7 +900,7 @@ export class PondScene extends Phaser.Scene {
     const showTarget = Boolean(tuning.showTargetAngle ?? tuning.drawTargetAngle);
     const showHeading = Boolean(tuning.showHeading ?? false);
     const headingLine = showHeading && this.predicted
-      ? `body=${(this.predicted.angle * 180 / Math.PI).toFixed(1)} move=${((this.predicted.moveAngle ?? this.predicted.heading ?? 0) * 180 / Math.PI).toFixed(1)} aim=${((this.predicted.aimAngle ?? 0) * 180 / Math.PI).toFixed(1)}`
+      ? `bodyWorld=${(this.predicted.angle * 180 / Math.PI).toFixed(1)} move=${((this.predicted.moveAngle ?? this.predicted.heading ?? 0) * 180 / Math.PI).toFixed(1)} aim=${((this.predicted.aimAngle ?? 0) * 180 / Math.PI).toFixed(1)}`
       : null;
     const targetAngleLine = showTarget
       ? `aim cur=${(this.aimCurrentAngle * 180 / Math.PI).toFixed(1)} target=${(this.aimTargetAngle * 180 / Math.PI).toFixed(1)} diff=${(this.aimAngleDiff * 180 / Math.PI).toFixed(1)}`
@@ -913,7 +921,7 @@ export class PondScene extends Phaser.Scene {
       ? `bodyYaw base=${(Number(telemetry.baseBodyAngle ?? this.predicted?.baseBodyAngle ?? this.predicted?.angle ?? 0) * 180 / Math.PI).toFixed(1)} offset=${(Number(telemetry.bodyYawOffset ?? this.predicted?.bodyYawOffset ?? 0) * 180 / Math.PI).toFixed(1)} final=${(Number(this.predicted?.angle ?? 0) * 180 / Math.PI).toFixed(1)}`
       : null;
     const stickLimitLine = tuning.showAngleDiff
-      ? `stick angVelClamped=${telemetry.stickAngVelClamped ? 'on' : 'off'} targetSlewActive=${telemetry.targetSlewActive ? 'on' : 'off'} aimInputRateLimited=${telemetry.aimInputRateLimited ? 'on' : 'off'}`
+      ? `stick angVelClamped=${telemetry.stickAngVelClamped ? 'on' : 'off'} targetSlewActive=${telemetry.targetSlewActive ? 'on' : 'off'} aimInputRateLimited=${telemetry.aimInputRateLimited ? 'on' : 'off'} rotSpace=${PlayerView.getStickRotationSpace()} spriteOffsetDeg=${PlayerView.getStickSpriteForwardOffsetDeg().toFixed(1)}`
       : null;
     const snapLine = tuning.showSnapFactor ? `snapFactor=${Number(telemetry.snapFactor ?? 0).toFixed(2)}` : null;
     const brakeAssistLine = tuning.showBrakeActive ? `brakeAssist=${telemetry.brakeAssistActive ? 'on' : 'off'}` : null;
@@ -970,6 +978,7 @@ export class PondScene extends Phaser.Scene {
     const currentSpeed = Math.hypot(velX, velY);
     const localAimRot = localView?.getAimRotation() ?? (this.predicted?.aimAngle ?? this.lastAimAngle);
     const localStickRot = localView?.getStickRotation() ?? localAimRot;
+    const localStickWorldAngle = localView?.getStickWorldAngle() ?? localAimRot;
     setMovementDebugMetrics({
       currentSpeed,
       velocityX: velX,
@@ -979,11 +988,15 @@ export class PondScene extends Phaser.Scene {
       inputVector: `(${this.lastInputVector.x}, ${this.lastInputVector.y})`,
       pointerVector: `(${this.lastPointerVector.x.toFixed(1)}, ${this.lastPointerVector.y.toFixed(1)})`,
       aimAngle: localAimRot,
+      bodyWorldAngle: Number(this.predicted?.angle ?? 0),
       targetAimAngle: Number(telemetry.targetAimAngle ?? this.aimTargetAngle ?? localAimRot),
       stickRotation: localStickRot,
-      actualStickAngle: localStickRot,
+      actualStickAngle: localStickWorldAngle,
       stickAngularSpeed: Number(telemetry.stickAngVelDeg ?? 0) * Math.PI / 180,
       angleDelta: Number(telemetry.stickDeltaDeg ?? 0) * Math.PI / 180,
+      stickAngleDeltaToTarget: wrapToPi(Number(telemetry.targetAimAngle ?? this.aimTargetAngle ?? localAimRot) - localStickWorldAngle),
+      stickSpriteForwardOffsetDeg: PlayerView.getStickSpriteForwardOffsetDeg(),
+      stickRotationSpace: PlayerView.getStickRotationSpace(),
       desiredMoveAngle: Number(telemetry.desiredMoveAngle ?? telemetry.moveAngle ?? this.lastMoveAngle),
       actualMoveAngle: Number(telemetry.actualMoveAngle ?? telemetry.moveAngle ?? this.lastMoveAngle),
       velocityDesiredDeltaDeg: Number(telemetry.velocityDesiredDeltaDeg ?? 0),

@@ -7,11 +7,15 @@ export type MovementDebugMetrics = {
   inputVector: string;
   pointerVector: string;
   aimAngle: number;
+  bodyWorldAngle: number;
   targetAimAngle: number;
   stickRotation: number;
   actualStickAngle: number;
   stickAngularSpeed: number;
   angleDelta: number;
+  stickAngleDeltaToTarget: number;
+  stickSpriteForwardOffsetDeg: number;
+  stickRotationSpace: string;
   desiredMoveAngle: number;
   actualMoveAngle: number;
   velocityDesiredDeltaDeg: number;
@@ -32,11 +36,15 @@ const DEFAULT_MOVEMENT: MovementDebugMetrics = {
   inputVector: '(0,0)',
   pointerVector: '(0,0)',
   aimAngle: 0,
+  bodyWorldAngle: 0,
   targetAimAngle: 0,
   stickRotation: 0,
   actualStickAngle: 0,
   stickAngularSpeed: 0,
   angleDelta: 0,
+  stickAngleDeltaToTarget: 0,
+  stickSpriteForwardOffsetDeg: 0,
+  stickRotationSpace: 'WORLD',
   desiredMoveAngle: 0,
   actualMoveAngle: 0,
   velocityDesiredDeltaDeg: 0,

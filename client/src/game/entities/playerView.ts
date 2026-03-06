@@ -32,8 +32,9 @@ export class PlayerView {
   private static readonly HAND_L_SOCKET_LOCAL = { x: 10, y: 4 };
   // Sprite art is authored "forward up", while gameplay angles use 0 rad = right.
   private static readonly SPRITE_FORWARD_OFFSET_RAD = Math.PI / 2;
-  // Use this if the stick art forward axis is not right (+X). Start at 0.
+  // Stick geometry is authored forward along +X, so no extra world-angle correction is needed.
   private static readonly STICK_SPRITE_OFFSET_RAD = 0;
+  private static readonly STICK_ROTATION_SPACE = 'WORLD';
   private static readonly LEAD_HAND_LOCAL = { x: 0, y: 0 };
   private static readonly SUPPORT_HAND_Y_OFFSET = 0;
   private static readonly SUPPORT_HAND_DIST_RATIO = 0.55;
@@ -49,6 +50,15 @@ export class PlayerView {
     while (a > Math.PI) a -= Math.PI * 2;
     while (a < -Math.PI) a += Math.PI * 2;
     return a;
+  }
+
+  private static rotateLocal(localX: number, localY: number, rot: number) {
+    const c = Math.cos(rot);
+    const s = Math.sin(rot);
+    return {
+      x: localX * c - localY * s,
+      y: localX * s + localY * c
+    };
   }
 
   constructor(scene: Phaser.Scene, id: string, team: 'A' | 'B') {
@@ -155,6 +165,41 @@ export class PlayerView {
     return this.rot + PlayerView.SPRITE_FORWARD_OFFSET_RAD;
   }
 
+  static getStickSpriteForwardOffsetDeg() {
+    return (PlayerView.STICK_SPRITE_OFFSET_RAD * 180) / Math.PI;
+  }
+
+  static getStickRotationSpace() {
+    return PlayerView.STICK_ROTATION_SPACE;
+  }
+
+  static getActiveHandWorldFromPose(x: number, y: number, bodyWorldAngle: number, handedness: 'L' | 'R') {
+    const bodyRenderRot = bodyWorldAngle + PlayerView.SPRITE_FORWARD_OFFSET_RAD;
+    const socket = handedness === 'L' ? PlayerView.HAND_L_SOCKET_LOCAL : PlayerView.HAND_R_SOCKET_LOCAL;
+    const rotated = PlayerView.rotateLocal(socket.x, socket.y, bodyRenderRot);
+    return {
+      x: x + rotated.x,
+      y: y + rotated.y
+    };
+  }
+
+  static getStickBaseWorldFromPose(
+    x: number,
+    y: number,
+    bodyWorldAngle: number,
+    handedness: 'L' | 'R',
+    aimRot: number,
+    stickOffsetX: number,
+    stickOffsetY: number
+  ) {
+    const hand = PlayerView.getActiveHandWorldFromPose(x, y, bodyWorldAngle, handedness);
+    const offset = PlayerView.rotateLocal(stickOffsetX, stickOffsetY, aimRot);
+    return {
+      x: hand.x + offset.x,
+      y: hand.y + offset.y
+    };
+  }
+
   private bodyLocalToWorld(localX: number, localY: number) {
     const r = this.getBodyRenderRotation();
     const c = Math.cos(r);
@@ -187,18 +232,22 @@ export class PlayerView {
   }
 
   getStickBaseWorld(aimRot: number, stickOffsetX: number, stickOffsetY: number) {
-    const hand = this.getActiveHandWorld();
-    const cos = Math.cos(aimRot);
-    const sin = Math.sin(aimRot);
-    return {
-      x: hand.x + stickOffsetX * cos - stickOffsetY * sin,
-      y: hand.y + stickOffsetX * sin + stickOffsetY * cos
-    };
+    return PlayerView.getStickBaseWorldFromPose(
+      this.x,
+      this.y,
+      this.rot,
+      this.handedness,
+      aimRot,
+      stickOffsetX,
+      stickOffsetY
+    );
   }
 
   draw(dtSec = 1 / 60) {
     const tuning = puckStickTuningStore.get();
     const stickLen = tuning.stickLength;
+    const stickOffsetX = tuning.stickOffsetX;
+    const stickOffsetY = tuning.stickOffsetY;
     const lag = Math.max(0, Math.min(1, tuning.stickVisualLag));
     const lagMaxDeg = tuning.stickVisualLagMaxDeg;
     const lagMaxRad = (lagMaxDeg * Math.PI) / 180;
@@ -208,7 +257,8 @@ export class PlayerView {
     delta = Math.max(-lagMaxRad, Math.min(lagMaxRad, delta));
     this.stickVisualRot += delta * (1 - lag);
 
-    const stickDrawRot = this.stickVisualRot + PlayerView.STICK_SPRITE_OFFSET_RAD;
+    const stickWorldRot = this.stickVisualRot;
+    const stickDrawRot = stickWorldRot + PlayerView.STICK_SPRITE_OFFSET_RAD;
     this.stickDrawRot = stickDrawRot;
     const safeDt = PlayerView.clamp(dtSec, 1 / 240, 1 / 20);
     const edgeAngle = PlayerView.wrapToPi(this.rot - this.moveRot);
@@ -231,10 +281,11 @@ export class PlayerView {
     const rightY = Math.sin(this.rot + Math.PI / 2);
     this.bodyRig.setPosition(rightX * this.leanPx, rightY * this.leanPx);
     this.bodyRig.rotation = this.getBodyRenderRotation();
-    this.stickRoot.setPosition(gripLocal.x, gripLocal.y);
+    const stickBaseLocalOffset = PlayerView.rotateLocal(stickOffsetX, stickOffsetY, stickWorldRot);
+    this.stickRoot.setPosition(gripLocal.x + stickBaseLocalOffset.x, gripLocal.y + stickBaseLocalOffset.y);
     this.stickRoot.rotation = stickDrawRot;
-    this.leadHandSprite.setPosition(PlayerView.LEAD_HAND_LOCAL.x, PlayerView.LEAD_HAND_LOCAL.y);
-    this.supportHandSprite.setPosition(supportDist, PlayerView.SUPPORT_HAND_Y_OFFSET);
+    this.leadHandSprite.setPosition(PlayerView.LEAD_HAND_LOCAL.x - stickOffsetX, PlayerView.LEAD_HAND_LOCAL.y - stickOffsetY);
+    this.supportHandSprite.setPosition(supportDist - stickOffsetX, PlayerView.SUPPORT_HAND_Y_OFFSET - stickOffsetY);
 
     const shaftLen = Math.max(4, stickLen);
     const shaftThickness = 4;
@@ -271,6 +322,8 @@ export class PlayerView {
     this.g.fillCircle(gripLocal.x, gripLocal.y, 2);
     this.g.fillStyle(0xffff00, 1);
     this.g.fillCircle(this.stickRoot.x, this.stickRoot.y, 2);
+    this.g.lineStyle(1, 0x66ffcc, 0.6);
+    this.g.lineBetween(gripLocal.x, gripLocal.y, this.stickRoot.x, this.stickRoot.y);
     // Rotation clarity lines.
     const bodyLen = 26;
     const stickLenDbg = 30;
@@ -288,6 +341,10 @@ export class PlayerView {
 
   getStickRotation(): number {
     return this.stickDrawRot;
+  }
+
+  getStickWorldAngle(): number {
+    return this.stickVisualRot;
   }
 
   getAimRotation(): number {
