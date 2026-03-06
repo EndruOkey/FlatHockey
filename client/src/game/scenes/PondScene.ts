@@ -990,6 +990,7 @@ export class PondScene extends Phaser.Scene {
       stickSpriteForwardOffsetDeg: PlayerView.getStickSpriteForwardOffsetDeg(),
       stickRotationSpace: PlayerView.getStickRotationSpace(),
       desiredMoveAngle: Number(telemetry.desiredMoveAngle ?? telemetry.moveAngle ?? this.lastMoveAngle),
+      turnIntentAngle: Number(telemetry.turnIntentAngle ?? telemetry.desiredMoveAngle ?? telemetry.moveAngle ?? this.lastMoveAngle),
       actualMoveAngle: Number(telemetry.actualMoveAngle ?? telemetry.moveAngle ?? this.lastMoveAngle),
       velocityAngle,
       forwardVelocity: Number(telemetry.velForward ?? 0),

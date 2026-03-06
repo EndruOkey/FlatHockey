@@ -1286,7 +1286,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         id: 'movement_turning',
         title: 'Turn / Handling',
         tone: 'control',
-        keys: ['maxTurnRateLowSpeed', 'maxTurnRateHighSpeed', 'lateralDamping', 'brakeTurnRateBoost', 'brakeLateralDamping']
+        keys: ['maxTurnRateLowSpeed', 'maxTurnRateHighSpeed', 'turnIntentTauMs', 'lateralDamping', 'brakeTurnRateBoost', 'brakeLateralDamping']
       },
       {
         id: 'movement_brake',
@@ -1349,6 +1349,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         `stickSpriteForwardOffsetDeg: ${m.stickSpriteForwardOffsetDeg.toFixed(1)}`,
         `stickRotationSpace: ${m.stickRotationSpace}`,
         `desiredMoveAngle: ${(m.desiredMoveAngle * 180 / Math.PI).toFixed(1)} deg`,
+        `turnIntentAngle: ${(m.turnIntentAngle * 180 / Math.PI).toFixed(1)} deg`,
         `actualMoveAngle: ${(m.actualMoveAngle * 180 / Math.PI).toFixed(1)} deg`,
         `velocityAngle: ${(m.velocityAngle * 180 / Math.PI).toFixed(1)} deg`,
         `forwardVelocity: ${m.forwardVelocity.toFixed(1)}`,
@@ -1553,6 +1554,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         `stickSpriteForwardOffsetDeg: ${m.stickSpriteForwardOffsetDeg.toFixed(1)}`,
         `stickRotationSpace: ${m.stickRotationSpace}`,
         `desiredMoveAngle: ${(m.desiredMoveAngle * 180 / Math.PI).toFixed(1)} deg`,
+        `turnIntentAngle: ${(m.turnIntentAngle * 180 / Math.PI).toFixed(1)} deg`,
         `actualMoveAngle: ${(m.actualMoveAngle * 180 / Math.PI).toFixed(1)} deg`,
         `velocityAngle: ${(m.velocityAngle * 180 / Math.PI).toFixed(1)} deg`,
         `forwardVelocity: ${m.forwardVelocity.toFixed(1)}`,

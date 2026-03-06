@@ -37,6 +37,7 @@ export type PredictedPlayerState = PlayerStateMsg & {
   debugStickMode?: 'TAU' | 'SPRING' | 'APPROACH';
   debugTargetAimAngle?: number;
   debugDesiredMoveAngle?: number;
+  debugTurnIntentAngle?: number;
   debugMoveTurnRateAppliedDeg?: number;
   debugVelocityDesiredDeltaDeg?: number;
   debugBaseBodyAngle?: number;
@@ -102,6 +103,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     debugStickMode: state.debugStickMode,
     debugTargetAimAngle: state.debugTargetAimAngle,
     debugDesiredMoveAngle: state.debugDesiredMoveAngle,
+    debugTurnIntentAngle: state.debugTurnIntentAngle,
     debugMoveTurnRateAppliedDeg: state.debugMoveTurnRateAppliedDeg,
     debugVelocityDesiredDeltaDeg: state.debugVelocityDesiredDeltaDeg,
     debugBaseBodyAngle: state.debugBaseBodyAngle,
@@ -161,6 +163,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.debugStickMode = simState.debugStickMode;
   state.debugTargetAimAngle = simState.debugTargetAimAngle;
   state.debugDesiredMoveAngle = simState.debugDesiredMoveAngle;
+  state.debugTurnIntentAngle = simState.debugTurnIntentAngle;
   state.debugMoveTurnRateAppliedDeg = simState.debugMoveTurnRateAppliedDeg;
   state.debugVelocityDesiredDeltaDeg = simState.debugVelocityDesiredDeltaDeg;
   state.debugBaseBodyAngle = simState.debugBaseBodyAngle;
@@ -204,6 +207,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     velForward: simState.debugVelForward ?? 0,
     velSide: simState.debugVelSide ?? 0,
     desiredMoveAngle: simState.debugDesiredMoveAngle ?? simState.moveAngle ?? 0,
+    turnIntentAngle: simState.debugTurnIntentAngle ?? simState.heading ?? simState.moveAngle ?? 0,
     actualMoveAngle: simState.moveAngle ?? 0,
     turnRateAppliedDeg: simState.debugMoveTurnRateAppliedDeg ?? 0,
     velocityDesiredDeltaDeg: simState.debugVelocityDesiredDeltaDeg ?? 0,

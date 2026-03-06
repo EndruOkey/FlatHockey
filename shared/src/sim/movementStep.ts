@@ -38,6 +38,7 @@ export type MovementStepState = {
   debugStickMode?: 'TAU' | 'SPRING' | 'APPROACH';
   debugTargetAimAngle?: number;
   debugDesiredMoveAngle?: number;
+  debugTurnIntentAngle?: number;
   debugMoveTurnRateAppliedDeg?: number;
   debugVelocityDesiredDeltaDeg?: number;
   debugBaseBodyAngle?: number;
@@ -79,6 +80,7 @@ export type MovementStepConfig = {
   headingModeEnabled?: boolean;
   maxTurnRateLowSpeed?: number; // rad/s
   maxTurnRateHighSpeed?: number; // rad/s
+  turnIntentTauMs?: number;
   lateralDamping?: number;
   brakeTurnRateBoost?: number;
   brakeLateralDamping?: number;
@@ -354,6 +356,7 @@ export function applyMovementStep(
   state.debugStickMode = 'APPROACH';
   state.debugTargetAimAngle = 0;
   state.debugDesiredMoveAngle = 0;
+  state.debugTurnIntentAngle = 0;
   state.debugMoveTurnRateAppliedDeg = 0;
   state.debugVelocityDesiredDeltaDeg = 0;
   state.debugBaseBodyAngle = 0;
@@ -368,6 +371,9 @@ export function applyMovementStep(
   const inputNy = hasInput ? rawY / inputLen : 0;
   if (!Number.isFinite(state.moveAngle)) {
     state.moveAngle = Math.hypot(state.vx, state.vy) > 0.01 ? Math.atan2(state.vy, state.vx) : 0;
+  }
+  if (!Number.isFinite(state.heading)) {
+    state.heading = state.moveAngle;
   }
   if (!Number.isFinite(state.bodyAngle)) {
     state.bodyAngle = Number.isFinite(state.heading) ? state.heading! : state.moveAngle;
@@ -426,6 +432,7 @@ export function applyMovementStep(
   const moveTurnRateLow = Math.max(0, config.maxTurnRateLowSpeed ?? DEFAULTS.maxTurnRateLowSpeed ?? bodyTurnRateBase);
   const moveTurnRateHigh = Math.max(0, config.maxTurnRateHighSpeed ?? DEFAULTS.maxTurnRateHighSpeed ?? moveTurnRateLow);
   const moveTurnRateBase = lerp(moveTurnRateLow, moveTurnRateHigh, speedNorm);
+  const turnIntentTauMs = Math.max(1, config.turnIntentTauMs ?? DEFAULTS.turnIntentTauMs ?? 145);
   const brakeTurnRateBoost = Math.max(1, config.brakeTurnRateBoost ?? DEFAULTS.brakeTurnRateBoost ?? 1);
   const bodyTurnInput = clamp(input.bodyTurn ?? 0, -1, 1);
   const bodyYawSpeedDeg = Math.max(
@@ -460,13 +467,23 @@ export function applyMovementStep(
     ? wrapToPi((mouseDrivesMove && Number.isFinite(inputAimRaw)) ? inputAimRaw : Math.atan2(inputNy, inputNx))
     : state.moveAngle!;
   desiredMoveAngleDebug = desiredMoveAngle;
+  if (hasInput) {
+    const desiredVsIntent = Math.abs(wrapToPi(desiredMoveAngle - state.heading!));
+    const largeTurn01 = smoothstep01(desiredVsIntent / Math.PI);
+    const turnIntentRate = (1000 / turnIntentTauMs) * lerp(1.4, input.buttons.brake ? 0.72 : 0.4, largeTurn01) * (input.buttons.brake ? 1.12 : 1);
+    const turnIntentAlpha = expBlend(turnIntentRate, simDt);
+    state.heading = lerpAngle(state.heading!, desiredMoveAngle, turnIntentAlpha);
+  } else {
+    state.heading = state.moveAngle!;
+  }
+  const turnIntentAngle = state.heading!;
   const velocityAngleBeforeTurn = speed > 0.001 ? Math.atan2(state.vy, state.vx) : state.moveAngle!;
-  const desiredVsVelocity = Math.abs(wrapToPi(desiredMoveAngle - velocityAngleBeforeTurn));
+  const desiredVsVelocity = Math.abs(wrapToPi(turnIntentAngle - velocityAngleBeforeTurn));
   const oppositeRedirect01 = clamp((desiredVsVelocity - Math.PI * 0.42) / (Math.PI * 0.58), 0, 1);
   const oppositeTurnPenalty = lerp(1, input.buttons.brake ? 0.78 : 0.42, oppositeRedirect01);
   const moveTurnRate = moveTurnRateBase * oppositeTurnPenalty * (input.buttons.brake ? brakeTurnRateBoost : 1);
   if (hasInput) {
-    state.moveAngle = approachAngle(state.moveAngle!, desiredMoveAngle, moveTurnRate * simDt);
+    state.moveAngle = approachAngle(state.moveAngle!, turnIntentAngle, moveTurnRate * simDt);
   }
   const movementHeading = state.moveAngle!;
   const hx = Math.cos(movementHeading);
@@ -659,6 +676,7 @@ export function applyMovementStep(
   state.debugAimDiffRaw = rawDiff;
   state.debugAimDiffClamped = wrapToPi(targetAim - state.aimAngle);
   state.debugDesiredMoveAngle = desiredMoveAngleDebug;
+  state.debugTurnIntentAngle = turnIntentAngle;
   state.debugMoveTurnRateAppliedDeg = moveTurnRate * (180 / Math.PI);
   state.debugVelocityDesiredDeltaDeg = wrapToPi(desiredMoveAngleDebug - debugVelocityAngle) * (180 / Math.PI);
 }

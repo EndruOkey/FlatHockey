@@ -17,6 +17,7 @@ export type MovementDebugMetrics = {
   stickSpriteForwardOffsetDeg: number;
   stickRotationSpace: string;
   desiredMoveAngle: number;
+  turnIntentAngle: number;
   actualMoveAngle: number;
   velocityAngle: number;
   forwardVelocity: number;
@@ -50,6 +51,7 @@ const DEFAULT_MOVEMENT: MovementDebugMetrics = {
   stickSpriteForwardOffsetDeg: 0,
   stickRotationSpace: 'WORLD',
   desiredMoveAngle: 0,
+  turnIntentAngle: 0,
   actualMoveAngle: 0,
   velocityAngle: 0,
   forwardVelocity: 0,
