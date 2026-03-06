@@ -12,40 +12,11 @@ export const DEFAULTS: MovementTuning = { ...MOVEMENT_DEFAULTS };
 
 export const usedTuning: Partial<MovementTuning> = {};
 export const movementTuning: MovementTuning = movementTuningStore.get();
-const SAVE_DEBOUNCE_MS = 700;
-let saveTimer: number | null = null;
 let tuningApplyCount = 0;
-
-function save() {
-  try {
-    localStorage.setItem(LOCAL_KEY, JSON.stringify(movementTuningStore.snapshot()));
-  } catch {}
-}
-
-function scheduleSave() {
-  if (saveTimer !== null) window.clearTimeout(saveTimer);
-  saveTimer = window.setTimeout(() => {
-    saveTimer = null;
-    save();
-  }, SAVE_DEBOUNCE_MS);
-}
 
 function markApply() {
   tuningApplyCount += 1;
 }
-
-function hydrateFromStorage() {
-  try {
-    const raw = localStorage.getItem(LOCAL_KEY);
-    if (!raw) return;
-    const parsed = JSON.parse(raw) as Partial<MovementTuning> & Record<string, unknown>;
-    if ('syncEnabled' in parsed) delete parsed.syncEnabled;
-    movementTuningStore.apply(parsed);
-  } catch {}
-}
-
-hydrateFromStorage();
-movementTuningStore.subscribe(() => scheduleSave());
 
 export function getTuning() {
   return movementTuningStore.get();
@@ -78,9 +49,6 @@ export function resetTuning() {
 }
 
 export function clearStoredTuning() {
-  try {
-    localStorage.removeItem(LOCAL_KEY);
-  } catch {}
   markApply();
   movementTuningStore.reset();
 }

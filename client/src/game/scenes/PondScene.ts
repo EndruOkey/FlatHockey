@@ -3,8 +3,7 @@ import { SIM_HZ, type InputMsg, PlayerStateMsg, ServerMessage, SnapshotMsg, wrap
 import { WsClient } from '../net/wsClient';
 import { Interpolator, lerpPlayer, type LerpPlayer } from '../net/interpolation';
 import { applyPredictedInput, CLIENT_FIXED_DT, type PredictedPlayerState, lastTelemetry, setAimInputRateLimited } from '../net/prediction';
-import { LOCAL_KEY, getTuning, getTuningApplyCount, usedTuning, setTuning } from '../debug/movementTuning';
-import { createMovementTuner, isDevMenuDragging } from '../debug/movementTunerUI';
+import { getTuning, getTuningApplyCount, usedTuning } from '../debug/movementTuning';
 import { NetDebugOverlay } from '../debug/netDebugOverlay';
 import { setNetDebugMetrics } from '../debug/netDebugState';
 import { setMovementDebugMetrics } from '../debug/devPanelTelemetryState';
@@ -91,18 +90,14 @@ export class PondScene extends Phaser.Scene {
 
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private debugToggleKey!: Phaser.Input.Keyboard.Key;
-  private panelToggleKey!: Phaser.Input.Keyboard.Key;
   private recorderToggleKey!: Phaser.Input.Keyboard.Key;
   private replayToggleKey!: Phaser.Input.Keyboard.Key;
   private debugEnabled = true;
-  private panelVisible = false;
   private debugOverlay!: Phaser.GameObjects.Text;
   private hud!: Phaser.GameObjects.Text;
   private lastHudText = '';
   private hudAcc = 0;
   private perfSamples: DebugSample[] = [];
-  private movementTuner: ReturnType<typeof createMovementTuner> | null = null;
-  private debugAllowed = false;
   private crosshairGraphics!: Phaser.GameObjects.Graphics;
   private motionDebugGraphics!: Phaser.GameObjects.Graphics;
   private netDebugOverlay: NetDebugOverlay | null = null;
@@ -151,9 +146,8 @@ export class PondScene extends Phaser.Scene {
   create() {
     this.drawBackground();
 
-    this.keys = this.input.keyboard!.addKeys('W,A,S,D,E,SPACE,F3,F8,F9,F10') as Record<string, Phaser.Input.Keyboard.Key>;
+    this.keys = this.input.keyboard!.addKeys('W,A,S,D,E,SPACE,F3,F9,F10') as Record<string, Phaser.Input.Keyboard.Key>;
     this.debugToggleKey = this.keys.F3;
-    this.panelToggleKey = this.keys.F8;
     this.recorderToggleKey = this.keys.F9;
     this.replayToggleKey = this.keys.F10;
 
@@ -183,8 +177,6 @@ export class PondScene extends Phaser.Scene {
       document.removeEventListener('visibilitychange', this.onVisibilityChange);
       window.removeEventListener('blur', this.onBlur);
       window.removeEventListener('focus', this.onFocus);
-      this.movementTuner?.destroy();
-      this.movementTuner = null;
       this.puckGraphics?.destroy();
       this.crosshairGraphics?.destroy();
       this.motionDebugGraphics?.destroy();
@@ -207,16 +199,6 @@ export class PondScene extends Phaser.Scene {
     this.simAccumulatorMs = 0;
     this.needsResync = true; // one-shot startup resync — handled in update() so same path as focus/visibility
     this.pendingResyncReason = 'startup';
-    // Dev-only movement tuner: create only when allowed (DEV or ?debug=1)
-    try {
-      const url = new URL(location.href);
-      this.debugAllowed = ENV.DEV_BUILD === true || url.searchParams.get('debug') === '1';
-      if (this.debugAllowed) {
-        this.movementTuner = createMovementTuner(this.ws);
-        this.panelVisible = true;
-        this.movementTuner.setVisible(this.panelVisible);
-      }
-    } catch {}
   }
 
   private onVisibilityChange = () => {
@@ -296,17 +278,6 @@ export class PondScene extends Phaser.Scene {
     this.resetPendingInputState(true);
     this.clientId = msg.clientId;
     this.roomId = msg.roomId ?? msg.room ?? this.roomId ?? 'pond-1';
-
-    this.movementTuner?.onWelcome(msg as any);
-
-    if (msg.movementTuning) {
-      try {
-        const hasSaved = !!localStorage.getItem(LOCAL_KEY);
-        if (!hasSaved) {
-          setTuning(msg.movementTuning as any);
-        }
-      } catch {}
-    }
   }
 
   private onServerMessage(msg: ServerMessage | { type?: string; [key: string]: unknown }) {
@@ -423,19 +394,6 @@ export class PondScene extends Phaser.Scene {
   }
 
   private buildInput(): InputMsg {
-    if (isDevMenuDragging()) {
-      return {
-        type: 'input',
-        clientId: this.clientId ?? '',
-        seq: ++this.seq,
-        moveX: 0,
-        moveY: 0,
-        sprint: 0,
-        brake: 0,
-        shoot: 0
-      };
-    }
-
     const tuning = getTuning();
     const moveX = ((this.keys.D.isDown ? 1 : 0) - (this.keys.A.isDown ? 1 : 0)) as -1 | 0 | 1;
     const moveY = ((this.keys.S.isDown ? 1 : 0) - (this.keys.W.isDown ? 1 : 0)) as -1 | 0 | 1;
@@ -1059,11 +1017,6 @@ export class PondScene extends Phaser.Scene {
       console.log(`[TUNING] toggle ${state}`);
       console.log(`[TUNING] sceneKey=${this.scene.key}, cam=${this.cameras?.main ? 'main' : 'none'}, scale=${this.scale.width}x${this.scale.height}`);
       for (const view of this.players.values()) view.setDebugDrawEnabled(this.debugEnabled);
-    }
-
-    if (this.debugAllowed && Phaser.Input.Keyboard.JustDown(this.panelToggleKey)) {
-      this.panelVisible = !this.panelVisible;
-      this.movementTuner?.setVisible(this.panelVisible);
     }
 
     if (Phaser.Input.Keyboard.JustDown(this.recorderToggleKey)) {
