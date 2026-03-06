@@ -974,6 +974,7 @@ export class PondScene extends Phaser.Scene {
       currentSpeed,
       velocityX: velX,
       velocityY: velY,
+      velocityVector: `(${velX.toFixed(2)}, ${velY.toFixed(2)})`,
       turnRate: this.lastTurnRateDeg,
       turnRateAppliedDeg: Number(telemetry.turnRateAppliedDeg ?? 0),
       inputVector: `(${this.lastInputVector.x}, ${this.lastInputVector.y})`,

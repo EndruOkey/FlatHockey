@@ -2,6 +2,7 @@ export type MovementDebugMetrics = {
   currentSpeed: number;
   velocityX: number;
   velocityY: number;
+  velocityVector: string;
   turnRate: number;
   turnRateAppliedDeg: number;
   inputVector: string;
@@ -47,6 +48,7 @@ const DEFAULT_MOVEMENT: MovementDebugMetrics = {
   currentSpeed: 0,
   velocityX: 0,
   velocityY: 0,
+  velocityVector: '(0,0)',
   turnRate: 0,
   turnRateAppliedDeg: 0,
   inputVector: '(0,0)',

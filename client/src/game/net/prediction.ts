@@ -308,6 +308,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     usedTuning.brakeDrag = config.brakeDrag;
     usedTuning.maxSpeed = config.maxSpeed;
     usedTuning.movementCoreModel = config.movementCoreModel as any;
+    usedTuning.inputVectorResponsiveness = config.inputVectorResponsiveness as any;
     usedTuning.inputVectorTauMs = config.inputVectorTauMs as any;
     usedTuning.forwardAccel = config.forwardAccel as any;
     usedTuning.forwardMaxSpeed = config.forwardMaxSpeed as any;

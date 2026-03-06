@@ -1285,13 +1285,13 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         id: 'movement_core',
         title: 'Core Movement',
         tone: 'control',
-        keys: ['movementCoreModel', 'maxSpeed', 'accel', 'dragMove', 'dragIdle']
+        keys: ['movementCoreModel', 'inputVectorResponsiveness', 'forwardAccel', 'forwardMaxSpeed', 'glideDrag', 'moveDrag']
       },
       {
         id: 'movement_turning',
         title: 'Turn / Handling',
         tone: 'control',
-        keys: ['inputVectorTauMs', 'forwardAccel', 'forwardMaxSpeed', 'sideMaxSpeed', 'reverseMaxSpeed', 'turnLowSpeed', 'turnHighSpeed', 'edgeTurnBonusMax', 'lateralSteerForce', 'velocityTurnResistance', 'oppositeSteerScale', 'brakeOppositeRecovery', 'baseLateralDamping', 'maxLateralDamping', 'brakeLateralDampingBonus', 'carveLossStrength']
+        keys: ['inputVectorResponsiveness', 'forwardAccel', 'forwardMaxSpeed', 'sideMaxSpeed', 'reverseMaxSpeed', 'turnLowSpeed', 'turnHighSpeed', 'edgeTurnBonusMax', 'lateralSteerForce', 'velocityTurnResistance', 'oppositeSteerScale', 'brakeOppositeRecovery', 'baseLateralDamping', 'maxLateralDamping', 'brakeLateralDampingBonus', 'carveLossStrength']
       },
       {
         id: 'movement_brake',
@@ -1559,6 +1559,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
       const m = getMovementDebugMetrics();
       movementText.textContent = [
         `currentSpeed: ${m.currentSpeed.toFixed(2)}`,
+        `velocityVector: ${m.velocityVector}`,
         `velocityX: ${m.velocityX.toFixed(2)}`,
         `velocityY: ${m.velocityY.toFixed(2)}`,
         `turnRate: ${m.turnRate.toFixed(2)}`,

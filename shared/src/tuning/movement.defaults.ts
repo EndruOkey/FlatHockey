@@ -30,6 +30,7 @@ export const MOVEMENT_DEFAULTS: MovementTuning = {
   maxTurnRateLowSpeed: 7.2,
   maxTurnRateHighSpeed: 0.62,
   inputDirectionTauMs: 110,
+  inputVectorResponsiveness: 95,
   inputVectorTauMs: 95,
   turnIntentTauMs: 170,
   forwardAccel: 1681.36,
