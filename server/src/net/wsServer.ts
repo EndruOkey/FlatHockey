@@ -5,11 +5,7 @@ import type { ServerMessage } from '@flathockey/shared';
 import { parseWsPayload } from './protocol';
 import { MOVEMENT_DEFAULTS } from '@flathockey/shared/tuning/movement.defaults';
 
-// runtime flag; default false unless explicitly enabled via env var
-const ALLOW_TUNING_SYNC =
-  process.env.ALLOW_TUNING_SYNC === '1' ||
-  process.env.ALLOW_TUNING_SYNC === 'true' ||
-  false;
+const ALLOW_TUNING_SYNC = false;
 
 let nextClientId = 1;
 
@@ -113,48 +109,8 @@ export function createWsServer(server: Server, roomManager: RoomManager) {
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(rewelcome));
         console.log(`[WS] JOIN accepted clientId=${clientId} room=${room.id}`);
       } else if (msg.type === 'debug:setMovementTuning') {
-        // crash-harden: nothing should ever call a missing method
-        if (!ALLOW_TUNING_SYNC) {
-          // quietly drop, maybe log in dev
-          if (process.env.NODE_ENV !== 'production') {
-            console.log('[WS] tuning-sync message dropped (gate disabled)');
-          }
-          return;
-        }
-
-        if (typeof (room as any).setMovementTuning !== 'function') {
-          console.warn('[WS] received tuning message but room lacks setter, ignoring');
-          return;
-        }
-
-        if (process.env.NODE_ENV === 'production') {
-          console.warn('[WS] ignoring tuning message from client in production');
-          return;
-        }
-
-        // Allowed: apply patch to room tuning
-        try {
-          (room as any).setMovementTuning(msg.config || {});
-          // broadcast updated tuning to clients in dev for UI verification
-          const updated: ServerMessage = {
-            type: 'welcome',
-            clientId,
-            roomId: room.id,
-            serverTick: room.serverTick,
-            movementTuning: {
-              ...MOVEMENT_DEFAULTS,
-              ...(room as any).movementTuning || {}
-            },
-            allowTuningSync: true
-          };
-          for (const ws2 of room.sockets.values()) {
-            if (ws2.readyState === WebSocket.OPEN) {
-              ws2.send(JSON.stringify(updated));
-            }
-          }
-        } catch (err) {
-          console.error('[WS] failed to apply tuning patch', err);
-        }
+        // Runtime gameplay tuning is intentionally disabled.
+        return;
       }
     });
 
