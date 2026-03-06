@@ -15,6 +15,12 @@ export type PredictedPlayerState = PlayerStateMsg & {
   heading?: number;
   moveAngle?: number;
   inputAngle?: number;
+  desiredDirX?: number;
+  desiredDirY?: number;
+  committedDirX?: number;
+  committedDirY?: number;
+  pendingDirX?: number;
+  pendingDirY?: number;
   lastRawInputAngle?: number;
   antiFlipTimer?: number;
   baseBodyAngle?: number;
@@ -91,6 +97,12 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     stickLocalAngle: state.stickLocalAngle,
     moveAngle: state.moveAngle,
     inputAngle: state.inputAngle,
+    desiredDirX: state.desiredDirX,
+    desiredDirY: state.desiredDirY,
+    committedDirX: state.committedDirX,
+    committedDirY: state.committedDirY,
+    pendingDirX: state.pendingDirX,
+    pendingDirY: state.pendingDirY,
     lastRawInputAngle: state.lastRawInputAngle,
     antiFlipTimer: state.antiFlipTimer,
     baseBodyAngle: state.baseBodyAngle,
@@ -153,6 +165,12 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.heading = simState.heading;
   state.moveAngle = simState.moveAngle;
   state.inputAngle = simState.inputAngle;
+  state.desiredDirX = simState.desiredDirX;
+  state.desiredDirY = simState.desiredDirY;
+  state.committedDirX = simState.committedDirX;
+  state.committedDirY = simState.committedDirY;
+  state.pendingDirX = simState.pendingDirX;
+  state.pendingDirY = simState.pendingDirY;
   state.lastRawInputAngle = simState.lastRawInputAngle;
   state.antiFlipTimer = simState.antiFlipTimer;
   state.baseBodyAngle = simState.baseBodyAngle;

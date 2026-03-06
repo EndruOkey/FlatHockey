@@ -29,6 +29,12 @@ type PlayerState = {
   angle: number;
   moveAngle: number;
   inputAngle: number;
+  desiredDirX: number;
+  desiredDirY: number;
+  committedDirX: number;
+  committedDirY: number;
+  pendingDirX: number;
+  pendingDirY: number;
   lastRawInputAngle: number;
   antiFlipTimer: number;
   baseBodyAngle: number;
@@ -146,6 +152,12 @@ export class Room {
       angle: 0,
       moveAngle: 0,
       inputAngle: 0,
+      desiredDirX: 1,
+      desiredDirY: 0,
+      committedDirX: 1,
+      committedDirY: 0,
+      pendingDirX: 1,
+      pendingDirY: 0,
       lastRawInputAngle: 0,
       antiFlipTimer: 0,
       baseBodyAngle: 0,
@@ -231,6 +243,12 @@ export class Room {
         stickAngVel: player.stickAngVel,
         moveAngle: player.moveAngle,
         inputAngle: player.inputAngle,
+        desiredDirX: player.desiredDirX,
+        desiredDirY: player.desiredDirY,
+        committedDirX: player.committedDirX,
+        committedDirY: player.committedDirY,
+        pendingDirX: player.pendingDirX,
+        pendingDirY: player.pendingDirY,
         lastRawInputAngle: player.lastRawInputAngle,
         antiFlipTimer: player.antiFlipTimer,
         baseBodyAngle: player.baseBodyAngle,
@@ -270,6 +288,12 @@ export class Room {
       player.heading = state.heading;
       player.moveAngle = Number.isFinite(state.moveAngle) ? state.moveAngle! : (Number.isFinite(player.heading) ? player.heading! : player.moveAngle);
       player.inputAngle = Number.isFinite(state.inputAngle) ? state.inputAngle! : player.inputAngle;
+      player.desiredDirX = Number.isFinite(state.desiredDirX) ? state.desiredDirX! : player.desiredDirX;
+      player.desiredDirY = Number.isFinite(state.desiredDirY) ? state.desiredDirY! : player.desiredDirY;
+      player.committedDirX = Number.isFinite(state.committedDirX) ? state.committedDirX! : player.committedDirX;
+      player.committedDirY = Number.isFinite(state.committedDirY) ? state.committedDirY! : player.committedDirY;
+      player.pendingDirX = Number.isFinite(state.pendingDirX) ? state.pendingDirX! : player.pendingDirX;
+      player.pendingDirY = Number.isFinite(state.pendingDirY) ? state.pendingDirY! : player.pendingDirY;
       player.lastRawInputAngle = Number.isFinite(state.lastRawInputAngle) ? state.lastRawInputAngle! : player.lastRawInputAngle;
       player.antiFlipTimer = Number.isFinite(state.antiFlipTimer) ? state.antiFlipTimer! : player.antiFlipTimer;
       player.baseBodyAngle = Number.isFinite(state.baseBodyAngle) ? state.baseBodyAngle! : player.baseBodyAngle;
@@ -330,6 +354,12 @@ export class Room {
         moveAngle: p.moveAngle,
         heading: p.heading,
         inputAngle: p.inputAngle,
+        desiredDirX: p.desiredDirX,
+        desiredDirY: p.desiredDirY,
+        committedDirX: p.committedDirX,
+        committedDirY: p.committedDirY,
+        pendingDirX: p.pendingDirX,
+        pendingDirY: p.pendingDirY,
         lastRawInputAngle: p.lastRawInputAngle,
         antiFlipTimer: p.antiFlipTimer,
         baseBodyAngle: p.baseBodyAngle,

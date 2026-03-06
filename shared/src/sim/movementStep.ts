@@ -18,6 +18,12 @@ export type MovementStepState = {
   bodyManualAngVel?: number;
   stickSide?: -1 | 1;
   stickLocalAngle?: number;
+  desiredDirX?: number;
+  desiredDirY?: number;
+  committedDirX?: number;
+  committedDirY?: number;
+  pendingDirX?: number;
+  pendingDirY?: number;
   lastRawInputAngle?: number;
   antiFlipTimer?: number;
   // internal heading used by heading-mode movement (radians)
@@ -398,6 +404,18 @@ export function applyMovementStep(
   if (!Number.isFinite(state.inputAngle)) {
     state.inputAngle = state.moveAngle;
   }
+  if (!Number.isFinite(state.desiredDirX) || !Number.isFinite(state.desiredDirY)) {
+    state.desiredDirX = Math.cos(state.moveAngle!);
+    state.desiredDirY = Math.sin(state.moveAngle!);
+  }
+  if (!Number.isFinite(state.committedDirX) || !Number.isFinite(state.committedDirY)) {
+    state.committedDirX = state.desiredDirX;
+    state.committedDirY = state.desiredDirY;
+  }
+  if (!Number.isFinite(state.pendingDirX) || !Number.isFinite(state.pendingDirY)) {
+    state.pendingDirX = state.desiredDirX;
+    state.pendingDirY = state.desiredDirY;
+  }
   if (!Number.isFinite(state.heading)) {
     state.heading = state.moveAngle;
   }
@@ -503,41 +521,39 @@ export function applyMovementStep(
   const manualTurningActive = Math.abs(bodyTurnInput) > 0.0001;
 
   let desiredMoveAngleDebug = Number.isFinite(state.moveAngle) ? state.moveAngle! : 0;
-  if (!headingOn) {
-    state.moveAngle = Math.hypot(state.vx, state.vy) > 0.01 ? Math.atan2(state.vy, state.vx) : state.moveAngle!;
-  }
+  const prevMoveAngle = state.moveAngle!;
   const rawDesiredMoveAngle = hasInput
     ? wrapToPi((mouseDrivesMove && Number.isFinite(inputAimRaw)) ? inputAimRaw : Math.atan2(inputNy, inputNx))
     : state.moveAngle!;
   state.debugRawInputAngle = rawDesiredMoveAngle;
-  const rawInputDelta = Math.abs(wrapToPi(rawDesiredMoveAngle - state.lastRawInputAngle!));
-  // At higher speed, even ~90deg alternating taps should be treated as anti-flip candidates.
-  const antiFlipDeltaThreshold = lerp(Math.PI * 0.62, Math.PI * 0.35, speedNorm);
-  const antiFlipTrigger = hasInput && rawInputDelta > antiFlipDeltaThreshold && speedNorm > 0.08;
-  if (antiFlipTrigger && antiFlipWindowMs > 0) {
-    state.antiFlipTimer = antiFlipWindowMs / 1000;
-  } else {
-    state.antiFlipTimer = Math.max(0, (state.antiFlipTimer ?? 0) - simDt);
-  }
-  const antiFlipActive = (state.antiFlipTimer ?? 0) > 0;
-  const antiFlipBlend = antiFlipWindowMs > 0
-    ? clamp((state.antiFlipTimer ?? 0) / (antiFlipWindowMs / 1000), 0, 1)
-    : 0;
-  const antiFlipRatePenalty = lerp(1, antiFlipPenalty, antiFlipBlend);
-  state.debugAntiFlipActive = antiFlipActive;
   if (hasInput) {
-    const rawVsFiltered = Math.abs(wrapToPi(rawDesiredMoveAngle - state.inputAngle!));
-    const largeInputJump01 = smoothstep01((rawVsFiltered - Math.PI * 0.12) / (Math.PI * 0.88));
-    const inputDirectionRate = (1000 / inputDirectionTauMs) * lerp(1.7, 0.18, largeInputJump01) * antiFlipRatePenalty;
-    const inputDirectionAlpha = expBlend(inputDirectionRate, simDt);
-    state.inputAngle = lerpAngle(state.inputAngle!, rawDesiredMoveAngle, inputDirectionAlpha);
+    const targetX = Math.cos(rawDesiredMoveAngle);
+    const targetY = Math.sin(rawDesiredMoveAngle);
+    const desiredRate = (1000 / inputDirectionTauMs) * (input.buttons.brake ? 1.08 : 1);
+    const desiredAlpha = expBlend(desiredRate, simDt);
+    state.desiredDirX = (state.desiredDirX ?? targetX) + (targetX - (state.desiredDirX ?? targetX)) * desiredAlpha;
+    state.desiredDirY = (state.desiredDirY ?? targetY) + (targetY - (state.desiredDirY ?? targetY)) * desiredAlpha;
+    const desiredMag = Math.hypot(state.desiredDirX, state.desiredDirY);
+    if (desiredMag > 0.0001) {
+      state.desiredDirX /= desiredMag;
+      state.desiredDirY /= desiredMag;
+    } else {
+      state.desiredDirX = targetX;
+      state.desiredDirY = targetY;
+    }
     state.lastRawInputAngle = rawDesiredMoveAngle;
   } else {
-    state.inputAngle = state.moveAngle!;
+    const velMag = Math.hypot(state.vx, state.vy);
+    if (velMag > 0.001) {
+      state.desiredDirX = state.vx / velMag;
+      state.desiredDirY = state.vy / velMag;
+    }
   }
-  const desiredMoveAngle = state.inputAngle!;
+  const desiredMoveAngle = Math.atan2(state.desiredDirY!, state.desiredDirX!);
+  state.inputAngle = desiredMoveAngle;
   desiredMoveAngleDebug = desiredMoveAngle;
-  const velocityAngleBeforeTurn = speed > 0.001 ? Math.atan2(state.vy, state.vx) : state.moveAngle!;
+
+  const velocityAngleBeforeTurn = speed > 0.001 ? Math.atan2(state.vy, state.vx) : desiredMoveAngle;
   const desiredVsVelocityRaw = Math.abs(wrapToPi(desiredMoveAngle - velocityAngleBeforeTurn));
   const velocityResistanceBase01 = smoothstep01((desiredVsVelocityRaw - Math.PI * 0.12) / (Math.PI * 0.88));
   const velocityTurnResistance01 = clamp(velocityResistanceBase01 * speedNorm * velocityTurnResistance, 0, 1);
@@ -546,28 +562,55 @@ export function applyMovementStep(
     0,
     1
   );
-  if (hasInput) {
-    const desiredVsIntent = Math.abs(wrapToPi(desiredMoveAngle - state.heading!));
-    const largeTurn01 = smoothstep01((desiredVsIntent - Math.PI * 0.16) / (Math.PI * 0.84));
-    const velocityIntentPenalty = input.buttons.brake
-      ? lerp(1, 0.62, velocityTurnResistance01)
-      : lerp(1, 0.2, velocityTurnResistance01);
-    const oppositeIntentPenalty = input.buttons.brake
-      ? lerp(1, 0.74, oppositeResistance01)
-      : lerp(1, 0.32, oppositeResistance01);
-    const antiFlipIntentPenalty = lerp(1, antiFlipPenalty, antiFlipBlend);
-    const turnIntentRate = (1000 / turnIntentTauMs)
-      * lerp(1.45, input.buttons.brake ? 0.58 : 0.22, largeTurn01)
-      * velocityIntentPenalty
-      * oppositeIntentPenalty
-      * antiFlipIntentPenalty
-      * (input.buttons.brake ? 1.08 : 1);
-    const turnIntentAlpha = expBlend(turnIntentRate, simDt);
-    state.heading = lerpAngle(state.heading!, desiredMoveAngle, turnIntentAlpha);
+
+  const desiredVsCommitted = Math.abs(wrapToPi(desiredMoveAngle - Math.atan2(state.committedDirY!, state.committedDirX!)));
+  const directionCommitThreshold = lerp(Math.PI * 0.62, Math.PI * 0.35, speedNorm);
+  const shouldStartCommit = hasInput && speedNorm > 0.08 && desiredVsCommitted > directionCommitThreshold;
+  if (shouldStartCommit && (state.antiFlipTimer ?? 0) <= 0 && antiFlipWindowMs > 0) {
+    state.antiFlipTimer = antiFlipWindowMs / 1000;
+    state.pendingDirX = state.desiredDirX;
+    state.pendingDirY = state.desiredDirY;
+  } else if ((state.antiFlipTimer ?? 0) > 0) {
+    state.antiFlipTimer = Math.max(0, (state.antiFlipTimer ?? 0) - simDt);
   } else {
-    state.heading = state.moveAngle!;
+    state.antiFlipTimer = 0;
   }
-  const turnIntentAngle = state.heading!;
+  const commitActive = (state.antiFlipTimer ?? 0) > 0;
+  const commitBlend = antiFlipWindowMs > 0
+    ? clamp((state.antiFlipTimer ?? 0) / (antiFlipWindowMs / 1000), 0, 1)
+    : 0;
+  const commitPenalty = lerp(1, antiFlipPenalty, commitBlend);
+  state.debugAntiFlipActive = commitActive;
+  if (commitActive) {
+    const followRate = (1000 / turnIntentTauMs) * lerp(0.15, 0.45, input.buttons.brake ? 1 : 0) * commitPenalty;
+    const followAlpha = expBlend(followRate, simDt);
+    state.pendingDirX = (state.pendingDirX ?? state.desiredDirX)! + (state.desiredDirX! - (state.pendingDirX ?? state.desiredDirX)!) * followAlpha;
+    state.pendingDirY = (state.pendingDirY ?? state.desiredDirY)! + (state.desiredDirY! - (state.pendingDirY ?? state.desiredDirY)!) * followAlpha;
+    const pendingMag = Math.hypot(state.pendingDirX, state.pendingDirY);
+    if (pendingMag > 0.0001) {
+      state.pendingDirX /= pendingMag;
+      state.pendingDirY /= pendingMag;
+    }
+    if ((state.antiFlipTimer ?? 0) <= 0.0001) {
+      state.committedDirX = state.pendingDirX;
+      state.committedDirY = state.pendingDirY;
+    }
+  } else {
+    const commitRate = (1000 / turnIntentTauMs) * (input.buttons.brake ? 1.08 : 1);
+    const commitAlpha = expBlend(commitRate, simDt);
+    state.committedDirX = state.committedDirX! + (state.desiredDirX! - state.committedDirX!) * commitAlpha;
+    state.committedDirY = state.committedDirY! + (state.desiredDirY! - state.committedDirY!) * commitAlpha;
+    const commitMag = Math.hypot(state.committedDirX, state.committedDirY);
+    if (commitMag > 0.0001) {
+      state.committedDirX /= commitMag;
+      state.committedDirY /= commitMag;
+    }
+    state.pendingDirX = state.committedDirX;
+    state.pendingDirY = state.committedDirY;
+  }
+  const turnIntentAngle = Math.atan2(state.committedDirY!, state.committedDirX!);
+  state.heading = turnIntentAngle;
+
   const desiredVsVelocity = Math.abs(wrapToPi(turnIntentAngle - velocityAngleBeforeTurn));
   const velocityHeadingResistance01 = clamp(
     smoothstep01((desiredVsVelocity - Math.PI * 0.12) / (Math.PI * 0.88)) * speedNorm * velocityTurnResistance,
@@ -580,36 +623,38 @@ export function applyMovementStep(
     1
   );
   const turnResistance = clamp(Math.max(velocityHeadingResistance01, oppositeRedirect01), 0, 1);
-  const oppositeTurnPenalty = input.buttons.brake
-    ? lerp(1, 0.52, turnResistance)
-    : lerp(1, 0.1, turnResistance);
-  const antiFlipTurnPenalty = lerp(1, antiFlipPenalty, antiFlipBlend);
-  const moveTurnRate = moveTurnRateBase * oppositeTurnPenalty * antiFlipTurnPenalty * (input.buttons.brake ? brakeTurnRateBoost : 1);
-  if (hasInput) {
-    state.moveAngle = approachAngle(state.moveAngle!, turnIntentAngle, moveTurnRate * simDt);
-  }
-  const movementHeading = state.moveAngle!;
-  const hx = Math.cos(movementHeading);
-  const hy = Math.sin(movementHeading);
-  const rx = -hy;
-  const ry = hx;
+  const velRefAngle = speed > 0.001 ? velocityAngleBeforeTurn : turnIntentAngle;
+  const fx = Math.cos(velRefAngle);
+  const fy = Math.sin(velRefAngle);
+  const sx = -fy;
+  const sy = fx;
 
+  const intentForward = fx * state.committedDirX! + fy * state.committedDirY!;
+  const intentSide = sx * state.committedDirX! + sy * state.committedDirY!;
+  const sideControl = input.buttons.brake
+    ? lerp(0.55, 0.22, turnResistance)
+    : lerp(0.92, 0.05, turnResistance);
+  const redirectPenalty01 = clamp((turnResistance * speedNorm * redirectAccelPenalty), 0, 1);
+  const redirectAccelFloor = input.buttons.brake ? 0.22 : 0.02;
+  const redirectAccelScale = lerp(1, redirectAccelFloor, redirectPenalty01) * commitPenalty;
+  const reverseAccelScale = input.buttons.brake ? 0.24 : 0.06;
+
+  let ax = 0;
+  let ay = 0;
   if (hasInput) {
-    const velocityAngle = speed > 0.001 ? Math.atan2(state.vy, state.vx) : movementHeading;
-    const headingVsVelocity = Math.abs(wrapToPi(movementHeading - velocityAngle));
-    const redirectResistance01 = clamp((headingVsVelocity - Math.PI * 0.35) / (Math.PI * 0.65), 0, 1);
-    const redirectPenalty01 = clamp(
-      (redirectResistance01 * speedNorm * redirectAccelPenalty) + oppositeRedirect01 * 0.35,
-      0,
-      1
-    );
-    const redirectAccelFloor = input.buttons.brake ? 0.22 : 0.015;
-    const antiFlipAccelPenalty = lerp(1, antiFlipPenalty, antiFlipBlend);
-    const redirectAccelScale = lerp(1, redirectAccelFloor, redirectPenalty01) * antiFlipAccelPenalty;
-    state.vx += hx * accel * redirectAccelScale * simDt;
-    state.vy += hy * accel * redirectAccelScale * simDt;
-    state.debugRedirectAccelScale = redirectAccelScale;
+    if (speed > 0.001) {
+      const forwardComponent = intentForward >= 0 ? intentForward : intentForward * reverseAccelScale;
+      const sideComponent = intentSide * sideControl;
+      ax = (fx * forwardComponent + sx * sideComponent) * accel * redirectAccelScale;
+      ay = (fy * forwardComponent + sy * sideComponent) * accel * redirectAccelScale;
+    } else {
+      ax = state.committedDirX! * accel * redirectAccelScale;
+      ay = state.committedDirY! * accel * redirectAccelScale;
+    }
+    state.vx += ax * simDt;
+    state.vy += ay * simDt;
   }
+  state.debugRedirectAccelScale = redirectAccelScale;
 
   const baseDrag = hasInput ? dragMove : dragIdle;
   const dragFactor = Math.exp(-baseDrag * simDt);
@@ -618,18 +663,15 @@ export function applyMovementStep(
 
   const velocityAngleAfterDrag = Math.hypot(state.vx, state.vy) > 0.001
     ? Math.atan2(state.vy, state.vx)
-    : movementHeading;
-  const slipBlendRedirect = smoothstep01(speedNorm * (desiredVsVelocity / Math.PI) * (input.buttons.brake ? 0.45 : 1.25));
-  const slipReferenceAngle = hasInput
-    ? lerpAngle(movementHeading, velocityAngleAfterDrag, slipBlendRedirect)
-    : velocityAngleAfterDrag;
-  const sx = Math.cos(slipReferenceAngle);
-  const sy = Math.sin(slipReferenceAngle);
-  const tx = -sy;
-  const ty = sx;
+    : turnIntentAngle;
+  const slipReferenceAngle = velocityAngleAfterDrag;
+  const sfx = Math.cos(slipReferenceAngle);
+  const sfy = Math.sin(slipReferenceAngle);
+  const stx = -sfy;
+  const sty = sfx;
 
-  let forward = state.vx * sx + state.vy * sy;
-  let side = state.vx * tx + state.vy * ty;
+  let forward = state.vx * sfx + state.vy * sfy;
+  let side = state.vx * stx + state.vy * sty;
   const sideDamping = input.buttons.brake ? brakeLateralDamping : lateralDamping;
   side *= Math.exp(-sideDamping * simDt);
 
@@ -639,8 +681,8 @@ export function applyMovementStep(
     side *= brakeFactor;
   }
 
-  state.vx = sx * forward + tx * side;
-  state.vy = sy * forward + ty * side;
+  state.vx = sfx * forward + stx * side;
+  state.vy = sfy * forward + sty * side;
 
   const finalSpeed = Math.hypot(state.vx, state.vy);
   if (finalSpeed > maxSpeed) {
@@ -652,12 +694,9 @@ export function applyMovementStep(
   state.x += state.vx * simDt;
   state.y += state.vy * simDt;
 
-  if (!hasInput) {
-    const speedNow = Math.hypot(state.vx, state.vy);
-    if (speedNow > 0.001) {
-      state.moveAngle = Math.atan2(state.vy, state.vx);
-    }
-  }
+  const speedAfterSolve = Math.hypot(state.vx, state.vy);
+  state.moveAngle = speedAfterSolve > 0.001 ? Math.atan2(state.vy, state.vx) : turnIntentAngle;
+  state.debugMoveTurnRateAppliedDeg = Math.abs(wrapToPi(state.moveAngle! - prevMoveAngle)) * (180 / Math.PI) / simDt;
 
   let baseBodyAngle = Number.isFinite(state.baseBodyAngle) ? state.baseBodyAngle! : state.bodyAngle!;
   const speedNow = Math.hypot(state.vx, state.vy);
@@ -801,7 +840,6 @@ export function applyMovementStep(
   state.debugAimDiffClamped = wrapToPi(targetAim - state.aimAngle);
   state.debugDesiredMoveAngle = desiredMoveAngleDebug;
   state.debugTurnIntentAngle = turnIntentAngle;
-  state.debugMoveTurnRateAppliedDeg = moveTurnRate * (180 / Math.PI);
   state.debugVelocityDesiredDeltaDeg = wrapToPi(desiredMoveAngleDebug - debugVelocityAngle) * (180 / Math.PI);
   state.debugTurnResistance = turnResistance;
 }

@@ -23,6 +23,12 @@ export type PlayerStateMsg = {
   moveAngle: number;
   heading?: number;
   inputAngle?: number;
+  desiredDirX?: number;
+  desiredDirY?: number;
+  committedDirX?: number;
+  committedDirY?: number;
+  pendingDirX?: number;
+  pendingDirY?: number;
   lastRawInputAngle?: number;
   antiFlipTimer?: number;
   baseBodyAngle?: number;
