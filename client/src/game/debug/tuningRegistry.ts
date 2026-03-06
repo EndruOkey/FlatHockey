@@ -79,6 +79,19 @@ const BASE_REGISTRY: TuningParamMeta[] = [
     keywords: ['hand', 'left', 'right', 'stick']
   },
   {
+    key: 'bodyOrientationModel',
+    label: 'Body Model',
+    category: 'Rotation',
+    group: 'Body',
+    kind: 'enum',
+    enumOptions: [
+      { value: 'B', label: 'B' },
+      { value: 'C', label: 'C' }
+    ],
+    recommended: true,
+    keywords: ['body', 'model', 'hybrid', 'experiment']
+  },
+  {
     key: 'bodyFacingMode',
     label: 'Body Facing Mode',
     category: 'Rotation',
@@ -95,6 +108,9 @@ const BASE_REGISTRY: TuningParamMeta[] = [
   },
   { key: 'bodyTurnRate', label: 'Body Turn Rate (rad/s)', category: 'Rotation', group: 'Body', kind: 'number', min: 0, max: 30, step: 0.1, recommended: true, keywords: ['body', 'turn'] },
   { key: 'bodyTurnRateLowSpeedMult', label: 'Body Turn LowSpeed Mult', category: 'Rotation', group: 'Body', kind: 'number', min: 0, max: 4, step: 0.05, advanced: true, keywords: ['body', 'turn', 'low'] },
+  { key: 'bodyAimBias', label: 'Body Aim Bias', category: 'Rotation', group: 'Body', kind: 'number', min: 0, max: 0.4, step: 0.01, recommended: true, keywords: ['body', 'aim', 'bias', 'hybrid'] },
+  { key: 'bodyAimResponseTauMs', label: 'Body Aim Response Tau (ms)', category: 'Rotation', group: 'Body', kind: 'number', min: 40, max: 400, step: 5, recommended: true, keywords: ['body', 'aim', 'tau', 'hybrid'] },
+  { key: 'bodyHybridDeadzoneDeg', label: 'Body Hybrid Deadzone Deg', category: 'Rotation', group: 'Body', kind: 'number', min: 0, max: 90, step: 1, recommended: true, keywords: ['body', 'aim', 'deadzone', 'hybrid'] },
   { key: 'maxBodyYawOffsetDeg', label: 'Max Body Yaw Offset Deg', category: 'Rotation', group: 'Body Yaw Offset', kind: 'number', min: 0, max: 90, step: 1, recommended: true, keywords: ['body', 'yaw', 'offset', 'max'] },
   { key: 'bodyYawSpeedDeg', label: 'Body Yaw Speed Deg/s', category: 'Rotation', group: 'Body Yaw Offset', kind: 'number', min: 30, max: 720, step: 5, recommended: true, keywords: ['body', 'yaw', 'speed'] },
   { key: 'bodyYawReturnSpeedDeg', label: 'Body Yaw Return Deg/s', category: 'Rotation', group: 'Body Yaw Offset', kind: 'number', min: 30, max: 720, step: 5, recommended: true, keywords: ['body', 'yaw', 'return'] },

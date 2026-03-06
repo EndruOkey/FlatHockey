@@ -10,6 +10,7 @@ export type MovementStepState = {
   aimAngleRaw?: number;
   stickAngVel?: number;
   moveAngle?: number;
+  inputAngle?: number;
   baseBodyAngle?: number;
   bodyYawOffset?: number;
   bodyAngle?: number;
@@ -17,7 +18,6 @@ export type MovementStepState = {
   bodyManualAngVel?: number;
   stickSide?: -1 | 1;
   stickLocalAngle?: number;
-  inputAngle?: number;
   // internal heading used by heading-mode movement (radians)
   heading?: number;
   prevHasInput?: boolean;
@@ -46,6 +46,7 @@ export type MovementStepState = {
   debugBaseBodyAngle?: number;
   debugBodyYawOffset?: number;
   debugBodyTurnInput?: number;
+  debugActiveBodyModel?: 'B' | 'C';
 };
 
 export type MovementStepInput = {
@@ -173,8 +174,12 @@ export type MovementStepConfig = {
   controlScheme?: 'WASD_MOVE_MOUSE_AIM' | 'MOUSE_DRIVES_MOVE';
   handedness?: 'R' | 'L';
   bodyFacingMode?: 'MOVE_LAST' | 'AIM_WHEN_IDLE' | 'BLEND' | 'AIM_ALWAYS';
+  bodyOrientationModel?: 'B' | 'C';
   bodyTurnRate?: number; // rad/s
   bodyTurnRateLowSpeedMult?: number;
+  bodyAimBias?: number; // 0..0.5
+  bodyAimResponseTauMs?: number;
+  bodyHybridDeadzoneDeg?: number;
   bodyManualTurnRateDeg?: number; // deg/s
   bodyManualTurnOverridesAutoFacing?: boolean;
   bodyManualMaxOffsetDeg?: number;
@@ -366,6 +371,7 @@ export function applyMovementStep(
   state.debugBaseBodyAngle = 0;
   state.debugBodyYawOffset = 0;
   state.debugBodyTurnInput = 0;
+  state.debugActiveBodyModel = 'B';
 
   const rawX = clamp(input.moveX, -1, 1);
   const rawY = clamp(input.moveY, -1, 1);
@@ -433,9 +439,14 @@ export function applyMovementStep(
   const headingOn = config.headingModeEnabled ?? DEFAULTS.headingModeEnabled!;
   const controlScheme = config.controlScheme ?? DEFAULTS.controlScheme ?? 'WASD_MOVE_MOUSE_AIM';
   const mouseDrivesMove = controlScheme === 'MOUSE_DRIVES_MOVE';
+  const bodyOrientationModel = (config.bodyOrientationModel ?? DEFAULTS.bodyOrientationModel ?? 'B') === 'C' ? 'C' : 'B';
   const bodyTurnRateBase = Math.max(0, config.bodyTurnRate ?? DEFAULTS.bodyTurnRate ?? DEFAULTS.maxTurnRateLowSpeed ?? 10);
   const bodyTurnRateLowSpeedMult = Math.max(0, config.bodyTurnRateLowSpeedMult ?? DEFAULTS.bodyTurnRateLowSpeedMult ?? 1);
   const bodyTurnRate = bodyTurnRateBase * lerp(bodyTurnRateLowSpeedMult, 1, speedNorm);
+  const bodyAimBias = clamp(config.bodyAimBias ?? DEFAULTS.bodyAimBias ?? 0.18, 0, 0.5);
+  const bodyAimResponseTauMs = Math.max(1, config.bodyAimResponseTauMs ?? DEFAULTS.bodyAimResponseTauMs ?? 160);
+  const bodyHybridDeadzoneDeg = Math.max(0, config.bodyHybridDeadzoneDeg ?? DEFAULTS.bodyHybridDeadzoneDeg ?? 18);
+  const bodyHybridDeadzone = (bodyHybridDeadzoneDeg * Math.PI) / 180;
   const moveTurnRateLow = Math.max(0, config.maxTurnRateLowSpeed ?? DEFAULTS.maxTurnRateLowSpeed ?? bodyTurnRateBase);
   const moveTurnRateHigh = Math.max(0, config.maxTurnRateHighSpeed ?? DEFAULTS.maxTurnRateHighSpeed ?? moveTurnRateLow);
   const moveTurnRateBase = lerp(moveTurnRateLow, moveTurnRateHigh, speedNorm);
@@ -574,11 +585,24 @@ export function applyMovementStep(
   const velocityAngleNow = speedNow > 0.001 ? Math.atan2(state.vy, state.vx) : baseBodyAngle;
   const moveTargetAngle = hasInput ? state.moveAngle! : baseBodyAngle;
   const velocityInfluence = smoothstep01((speedNow - bodyBaseSpeedThreshold) / Math.max(bodyBaseSpeedThreshold * 2.2, 1));
-  const rawBodyTargetAngle = lerpAngle(moveTargetAngle, velocityAngleNow, velocityInfluence);
+  const movementBodyTargetAngle = lerpAngle(moveTargetAngle, velocityAngleNow, velocityInfluence);
+  let rawBodyTargetAngle = movementBodyTargetAngle;
+  let effectiveAimBias = 0;
+  if (bodyOrientationModel === 'C') {
+    const hybridAimAngle = wrapToPi(inputAimRaw);
+    const aimDiff = Math.abs(wrapToPi(hybridAimAngle - movementBodyTargetAngle));
+    const aimFocus = clamp(input.aimDistance01 ?? 1, 0, 1);
+    const aimEngage = smoothstep01((aimDiff - bodyHybridDeadzone) / Math.max(Math.PI - bodyHybridDeadzone, 0.0001));
+    effectiveAimBias = bodyAimBias * lerp(0.35, 1, aimFocus) * aimEngage;
+    rawBodyTargetAngle = lerpAngle(movementBodyTargetAngle, hybridAimAngle, effectiveAimBias);
+  }
   if (!Number.isFinite(state.bodyTargetAngle)) {
     state.bodyTargetAngle = rawBodyTargetAngle;
   }
-  const bodyTargetAlpha = expBlend(bodyTurnRate * 0.65, simDt);
+  const bodyTargetRate = bodyOrientationModel === 'C'
+    ? lerp(bodyTurnRate * 0.65, 1000 / bodyAimResponseTauMs, effectiveAimBias / Math.max(bodyAimBias, 0.0001))
+    : bodyTurnRate * 0.65;
+  const bodyTargetAlpha = expBlend(bodyTargetRate, simDt);
   state.bodyTargetAngle = lerpAngle(state.bodyTargetAngle!, rawBodyTargetAngle, bodyTargetAlpha);
   const bodyTurnAlpha = expBlend(bodyTurnRate * 0.78, simDt);
   const bodyDeadzone = (1.5 * Math.PI) / 180;
@@ -676,6 +700,7 @@ export function applyMovementStep(
   state.debugBaseBodyAngle = state.baseBodyAngle;
   state.debugBodyYawOffset = state.bodyYawOffset;
   state.debugBodyTurnInput = bodyTurnInput;
+  state.debugActiveBodyModel = bodyOrientationModel;
 
   const finalSpeedNow = Math.hypot(state.vx, state.vy);
   state.prevHasInput = hasInput;

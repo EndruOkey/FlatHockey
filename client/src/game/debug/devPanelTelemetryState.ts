@@ -28,6 +28,7 @@ export type MovementDebugMetrics = {
   bodyYawOffset: number;
   currentBodyAngle: number;
   bodyTurnInput: number;
+  activeBodyModel: string;
   recorderState: 'idle' | 'recording' | 'replaying';
   recordedFrames: number;
 };
@@ -62,6 +63,7 @@ const DEFAULT_MOVEMENT: MovementDebugMetrics = {
   bodyYawOffset: 0,
   currentBodyAngle: 0,
   bodyTurnInput: 0,
+  activeBodyModel: 'B',
   recorderState: 'idle',
   recordedFrames: 0
 };

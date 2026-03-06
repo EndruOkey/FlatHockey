@@ -1357,6 +1357,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         `turnRateApplied: ${m.turnRateAppliedDeg.toFixed(1)} deg/s`,
         `velocityVsDesired: ${m.velocityDesiredDeltaDeg.toFixed(1)} deg`,
         `brakeActive: ${m.brakeActive ? 'true' : 'false'}`,
+        `activeBodyModel: ${m.activeBodyModel}`,
         `baseBodyAngle: ${(m.baseBodyAngle * 180 / Math.PI).toFixed(1)} deg`,
         `bodyYawOffset: ${(m.bodyYawOffset * 180 / Math.PI).toFixed(1)} deg`,
         `currentBodyAngle: ${(m.currentBodyAngle * 180 / Math.PI).toFixed(1)} deg`,
@@ -1376,7 +1377,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         id: 'stickaim_body',
         title: 'Body Yaw',
         tone: 'control',
-        keys: ['bodyTurnRate', 'maxBodyYawOffsetDeg', 'bodyYawSpeedDeg', 'bodyYawReturnSpeedDeg']
+        keys: ['bodyOrientationModel', 'bodyTurnRate', 'bodyAimBias', 'bodyAimResponseTauMs', 'bodyHybridDeadzoneDeg', 'maxBodyYawOffsetDeg', 'bodyYawSpeedDeg', 'bodyYawReturnSpeedDeg']
       },
       {
         id: 'stickaim_aim_input',
@@ -1562,6 +1563,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         `turnRateApplied: ${m.turnRateAppliedDeg.toFixed(1)} deg/s`,
         `velocityVsDesired: ${m.velocityDesiredDeltaDeg.toFixed(1)} deg`,
         `brakeActive: ${m.brakeActive ? 'true' : 'false'}`,
+        `activeBodyModel: ${m.activeBodyModel}`,
         `baseBodyAngle: ${(m.baseBodyAngle * 180 / Math.PI).toFixed(1)} deg`,
         `bodyYawOffset: ${(m.bodyYawOffset * 180 / Math.PI).toFixed(1)} deg`,
         `currentBodyAngle: ${(m.currentBodyAngle * 180 / Math.PI).toFixed(1)} deg`,

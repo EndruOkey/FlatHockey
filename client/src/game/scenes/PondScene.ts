@@ -1001,6 +1001,7 @@ export class PondScene extends Phaser.Scene {
       bodyYawOffset: Number(this.predicted?.bodyYawOffset ?? telemetry.bodyYawOffset ?? 0),
       currentBodyAngle: Number(this.predicted?.angle ?? 0),
       bodyTurnInput: Number(telemetry.bodyTurnInput ?? 0),
+      activeBodyModel: String(telemetry.activeBodyModel ?? 'B'),
       recorderState: this.replayEnabled ? 'replaying' : this.inputRecorderEnabled ? 'recording' : 'idle',
       recordedFrames: this.recordedInputs.length
     });
