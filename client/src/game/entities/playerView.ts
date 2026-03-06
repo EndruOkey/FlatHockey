@@ -255,7 +255,9 @@ export class PlayerView {
     while (delta > Math.PI) delta -= Math.PI * 2;
     while (delta < -Math.PI) delta += Math.PI * 2;
     delta = Math.max(-lagMaxRad, Math.min(lagMaxRad, delta));
-    this.stickVisualRot += delta * (1 - lag);
+    const deltaNorm = PlayerView.clamp(Math.abs(delta) / Math.max(lagMaxRad, 0.0001), 0, 1);
+    const adaptiveLag = lag * (1 - 0.55 * deltaNorm);
+    this.stickVisualRot += delta * (1 - adaptiveLag);
 
     const stickWorldRot = this.stickVisualRot;
     const stickDrawRot = stickWorldRot + PlayerView.STICK_SPRITE_OFFSET_RAD;

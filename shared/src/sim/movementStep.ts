@@ -302,6 +302,11 @@ function expBlend(rate: number, dt: number): number {
   return clamp(1 - Math.exp(-Math.max(0, rate) * dt), 0, 1);
 }
 
+function smoothstep01(x: number): number {
+  const t = clamp(x, 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
 export function wrapToPi(rad: number): number {
   let a = rad;
   while (a > Math.PI) a -= Math.PI * 2;
@@ -539,6 +544,15 @@ export function applyMovementStep(
   const stickAngleLimitEnabled = config.stickAngleLimitEnabled ?? DEFAULTS.stickAngleLimitEnabled ?? true;
   const maxStickAngleFromBodyDeg = Math.max(0, config.maxStickAngleFromBodyDeg ?? DEFAULTS.maxStickAngleFromBodyDeg ?? 95);
   const maxStickAngleFromBody = (maxStickAngleFromBodyDeg * Math.PI) / 180;
+  const stickClampSoftness = clamp(
+    config.stickClampSoftness
+      ?? config.stickAngleLimitSoftness
+      ?? DEFAULTS.stickClampSoftness
+      ?? DEFAULTS.stickAngleLimitSoftness
+      ?? 0.25,
+    0,
+    1
+  );
   const stickBodyBias = clamp(config.stickBodyBias ?? DEFAULTS.stickBodyBias ?? 0.12, 0, 0.35);
   const stickTauMs = Math.max(0, config.stickTauMs ?? DEFAULTS.stickTauMs ?? 180);
   const stickTauMinAlpha = clamp(config.stickTauMinAlpha ?? DEFAULTS.stickTauMinAlpha ?? 0.02, 0, 1);
@@ -557,17 +571,32 @@ export function applyMovementStep(
   );
   const rawDiff = wrapToPi(aimAngleRaw - state.bodyAngle!);
   const biasedTargetDiff = rawDiff * (1 - stickBodyBias);
-  const targetStickDiff = stickAngleLimitEnabled
-    ? clamp(biasedTargetDiff, -maxStickAngleFromBody, maxStickAngleFromBody)
-    : biasedTargetDiff;
+  let targetStickDiff = biasedTargetDiff;
+  if (stickAngleLimitEnabled) {
+    const sign = Math.sign(biasedTargetDiff || prevStickDiff || 1);
+    const mag = Math.abs(biasedTargetDiff);
+    const softZone = Math.max(0, Math.min(maxStickAngleFromBody * 0.35, maxStickAngleFromBody * stickClampSoftness));
+    const hardStart = Math.max(0, maxStickAngleFromBody - softZone);
+    if (mag <= hardStart || softZone <= 0.0001) {
+      targetStickDiff = sign * Math.min(mag, maxStickAngleFromBody);
+    } else {
+      const t = smoothstep01((mag - hardStart) / Math.max(softZone, 0.0001));
+      const curvedMag = hardStart + softZone * t;
+      targetStickDiff = sign * Math.min(curvedMag, maxStickAngleFromBody);
+    }
+  }
   const diffDelta = Math.abs(targetStickDiff - prevStickDiff);
   const diffNorm = clamp(diffDelta / Math.max((stickAngleLimitEnabled ? maxStickAngleFromBody : Math.PI), 0.0001), 0, 1);
+  const edgeNorm = stickAngleLimitEnabled
+    ? clamp(Math.abs(targetStickDiff) / Math.max(maxStickAngleFromBody, 0.0001), 0, 1)
+    : 0;
   const tauMsEffective = Math.max(24, lerp(stickTauMs * 1.15, stickTauMs * 0.55, diffNorm));
   const tauSec = tauMsEffective / 1000;
   const alphaRaw = 1 - Math.exp(-simDt / Math.max(0.0001, tauSec));
   const alpha = clamp(Math.max(alphaRaw, stickTauMinAlpha), 0, 1);
   const smoothedTargetDiff = prevStickDiff + (targetStickDiff - prevStickDiff) * alpha;
-  const stickAngularSpeedEffective = stickAngularSpeedDeg * lerp(0.9, 1.45, diffNorm);
+  const edgeSpeedPenalty = lerp(1, 0.82, smoothstep01((edgeNorm - 0.82) / 0.18));
+  const stickAngularSpeedEffective = stickAngularSpeedDeg * lerp(0.9, 1.45, diffNorm) * edgeSpeedPenalty;
   const stickMaxAngVel = (stickAngularSpeedEffective * Math.PI) / 180;
   const nextStickDiff = approachScalar(prevStickDiff, smoothedTargetDiff, stickMaxAngVel * simDt);
   const targetAim = wrapToPi(state.bodyAngle! + targetStickDiff);
