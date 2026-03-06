@@ -1384,7 +1384,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         id: 'stickaim_stick',
         title: 'Stick Response',
         tone: 'aim',
-        keys: ['stickTauMs', 'stickAngularSpeedDeg', 'stickBodyBias', 'maxStickAngleFromBodyDeg', 'stickVisualLag', 'stickVisualLagMaxDeg']
+        keys: ['stickTauMs', 'stickAngularSpeedDeg', 'stickBodyBias', 'maxStickAngleFromBodyDeg', 'stickLength', 'stickVisualLag', 'stickVisualLagMaxDeg']
       },
       {
         id: 'stickaim_crosshair',

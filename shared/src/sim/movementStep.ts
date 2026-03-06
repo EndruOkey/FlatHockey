@@ -13,6 +13,7 @@ export type MovementStepState = {
   baseBodyAngle?: number;
   bodyYawOffset?: number;
   bodyAngle?: number;
+  bodyTargetAngle?: number;
   bodyManualAngVel?: number;
   stickSide?: -1 | 1;
   stickLocalAngle?: number;
@@ -521,13 +522,18 @@ export function applyMovementStep(
   const speedNow = Math.hypot(state.vx, state.vy);
   const bodyBaseSpeedThreshold = Math.max(0, config.bodyBaseSpeedThreshold ?? DEFAULTS.bodyBaseSpeedThreshold ?? 51.375);
   const velocityAngleNow = speedNow > 0.001 ? Math.atan2(state.vy, state.vx) : baseBodyAngle;
-  const bodyTargetAngle = speedNow > bodyBaseSpeedThreshold
-    ? velocityAngleNow
-    : (hasInput ? state.moveAngle! : baseBodyAngle);
-  const bodyTurnAlpha = expBlend(bodyTurnRate, simDt);
-  const bodyDeadzone = (0.75 * Math.PI) / 180;
-  if (Math.abs(wrapToPi(bodyTargetAngle - baseBodyAngle)) > bodyDeadzone) {
-    baseBodyAngle = lerpAngle(baseBodyAngle, bodyTargetAngle, bodyTurnAlpha);
+  const moveTargetAngle = hasInput ? state.moveAngle! : baseBodyAngle;
+  const velocityInfluence = smoothstep01((speedNow - bodyBaseSpeedThreshold) / Math.max(bodyBaseSpeedThreshold * 2.2, 1));
+  const rawBodyTargetAngle = lerpAngle(moveTargetAngle, velocityAngleNow, velocityInfluence);
+  if (!Number.isFinite(state.bodyTargetAngle)) {
+    state.bodyTargetAngle = rawBodyTargetAngle;
+  }
+  const bodyTargetAlpha = expBlend(bodyTurnRate * 0.65, simDt);
+  state.bodyTargetAngle = lerpAngle(state.bodyTargetAngle!, rawBodyTargetAngle, bodyTargetAlpha);
+  const bodyTurnAlpha = expBlend(bodyTurnRate * 0.78, simDt);
+  const bodyDeadzone = (1.5 * Math.PI) / 180;
+  if (Math.abs(wrapToPi(state.bodyTargetAngle! - baseBodyAngle)) > bodyDeadzone) {
+    baseBodyAngle = lerpAngle(baseBodyAngle, state.bodyTargetAngle!, bodyTurnAlpha);
   }
 
   let bodyYawOffset = clamp(Number.isFinite(state.bodyYawOffset) ? state.bodyYawOffset! : 0, -maxBodyYawOffset, maxBodyYawOffset);
@@ -569,6 +575,7 @@ export function applyMovementStep(
     -maxStickAngleFromBody,
     maxStickAngleFromBody
   );
+  const bodyTurnDelta = Math.abs(wrapToPi(state.bodyAngle! - baseBodyAngle));
   const rawDiff = wrapToPi(aimAngleRaw - state.bodyAngle!);
   const biasedTargetDiff = rawDiff * (1 - stickBodyBias);
   let targetStickDiff = biasedTargetDiff;
@@ -590,13 +597,14 @@ export function applyMovementStep(
   const edgeNorm = stickAngleLimitEnabled
     ? clamp(Math.abs(targetStickDiff) / Math.max(maxStickAngleFromBody, 0.0001), 0, 1)
     : 0;
-  const tauMsEffective = Math.max(24, lerp(stickTauMs * 1.15, stickTauMs * 0.55, diffNorm));
+  const turnStabilityNorm = clamp(bodyTurnDelta / ((12 * Math.PI) / 180), 0, 1);
+  const tauMsEffective = Math.max(24, lerp(stickTauMs * 1.22, stickTauMs * 0.68, diffNorm) * lerp(1, 1.18, turnStabilityNorm));
   const tauSec = tauMsEffective / 1000;
   const alphaRaw = 1 - Math.exp(-simDt / Math.max(0.0001, tauSec));
   const alpha = clamp(Math.max(alphaRaw, stickTauMinAlpha), 0, 1);
   const smoothedTargetDiff = prevStickDiff + (targetStickDiff - prevStickDiff) * alpha;
   const edgeSpeedPenalty = lerp(1, 0.82, smoothstep01((edgeNorm - 0.82) / 0.18));
-  const stickAngularSpeedEffective = stickAngularSpeedDeg * lerp(0.9, 1.45, diffNorm) * edgeSpeedPenalty;
+  const stickAngularSpeedEffective = stickAngularSpeedDeg * lerp(0.88, 1.32, diffNorm) * edgeSpeedPenalty * lerp(1, 0.9, turnStabilityNorm);
   const stickMaxAngVel = (stickAngularSpeedEffective * Math.PI) / 180;
   const nextStickDiff = approachScalar(prevStickDiff, smoothedTargetDiff, stickMaxAngVel * simDt);
   const targetAim = wrapToPi(state.bodyAngle! + targetStickDiff);

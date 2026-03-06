@@ -16,6 +16,7 @@ export type PredictedPlayerState = PlayerStateMsg & {
   moveAngle?: number;
   baseBodyAngle?: number;
   bodyYawOffset?: number;
+  bodyTargetAngle?: number;
   aimAngle?: number;
   aimAngleRaw?: number;
   stickAngVel?: number;
@@ -81,6 +82,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     moveAngle: state.moveAngle,
     baseBodyAngle: state.baseBodyAngle,
     bodyYawOffset: state.bodyYawOffset,
+    bodyTargetAngle: state.bodyTargetAngle,
     bodyAngle: state.angle,
     heading: state.heading,
     prevHasInput: state.prevHasInput,
@@ -132,6 +134,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.moveAngle = simState.moveAngle;
   state.baseBodyAngle = simState.baseBodyAngle;
   state.bodyYawOffset = simState.bodyYawOffset;
+  state.bodyTargetAngle = simState.bodyTargetAngle;
   state.aimAngleRaw = simState.aimAngleRaw;
   state.aimAngle = simState.aimAngle;
   state.stickAngVel = simState.stickAngVel;
