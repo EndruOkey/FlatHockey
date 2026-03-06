@@ -1,4 +1,5 @@
 import type { InputMsg, PlayerStateMsg } from '@flathockey/shared';
+import { wrapToPi } from '@flathockey/shared';
 import { applyPredictedInput } from './prediction';
 
 export function reconcilePrediction(
@@ -19,8 +20,13 @@ export function reconcilePrediction(
   (predicted as any).moveAngle = (authoritative as any).moveAngle;
   (predicted as any).baseBodyAngle = (authoritative as any).baseBodyAngle ?? (authoritative as any).angle;
   (predicted as any).bodyYawOffset = (authoritative as any).bodyYawOffset ?? 0;
+  (predicted as any).bodyTargetAngle = (authoritative as any).baseBodyAngle ?? (authoritative as any).angle;
   (predicted as any).aimAngle = (authoritative as any).aimAngle;
   (predicted as any).aimAngleRaw = (authoritative as any).aimAngleRaw ?? (authoritative as any).aimAngle;
+  (predicted as any).stickAngVel = 0;
+  (predicted as any).stickLocalAngle = wrapToPi(
+    ((authoritative as any).aimAngle ?? (authoritative as any).angle) - ((authoritative as any).angle ?? 0)
+  );
 
   for (const input of pendingInputs) {
     applyPredictedInput(predicted, input);

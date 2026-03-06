@@ -565,24 +565,7 @@ export class PondScene extends Phaser.Scene {
       return Number.isFinite(this.predicted.aimAngleRaw) ? this.predicted.aimAngleRaw : (Number.isFinite(this.predicted.aimAngle) ? this.predicted.aimAngle : undefined);
     }
 
-    let rawTarget = Math.atan2(mouseWorld.y - this.predicted.y, mouseWorld.x - this.predicted.x);
-    const aimFromStickBaseEnabled = Boolean((tuning as any).aimFromStickBaseEnabled ?? true);
-    if (aimFromStickBaseEnabled) {
-      const stick = puckStickTuningStore.get();
-      const handedness = tuning.handedness === 'L' ? 'L' : 'R';
-      for (let i = 0; i < 2; i += 1) {
-        const base = PlayerView.getStickBaseWorldFromPose(
-          this.predicted.x,
-          this.predicted.y,
-          this.predicted.angle,
-          handedness,
-          rawTarget,
-          stick.stickOffsetX,
-          stick.stickOffsetY
-        );
-        rawTarget = Math.atan2(mouseWorld.y - base.y, mouseWorld.x - base.x);
-      }
-    }
+    const rawTarget = Math.atan2(mouseWorld.y - this.predicted.y, mouseWorld.x - this.predicted.x);
     if (!this.hasAimState) {
       this.hasAimState = true;
       this.aimCurrentAngle = rawTarget;

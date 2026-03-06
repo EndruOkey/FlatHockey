@@ -30,9 +30,11 @@ type PlayerState = {
   moveAngle: number;
   baseBodyAngle: number;
   bodyYawOffset: number;
+  bodyTargetAngle: number;
   aimAngleRaw: number;
   aimAngle: number;
   stickAngVel?: number;
+  stickLocalAngle?: number;
   stamina: number;
   heading?: number;
   prevHasInput?: boolean;
@@ -142,9 +144,11 @@ export class Room {
       moveAngle: 0,
       baseBodyAngle: 0,
       bodyYawOffset: 0,
+      bodyTargetAngle: 0,
       aimAngleRaw: 0,
       aimAngle: 0,
       stickAngVel: 0,
+      stickLocalAngle: 0,
       stamina: 1,
       heading: 0,
       prevHasInput: false,
@@ -222,12 +226,14 @@ export class Room {
         moveAngle: player.moveAngle,
         baseBodyAngle: player.baseBodyAngle,
         bodyYawOffset: player.bodyYawOffset,
+        bodyTargetAngle: player.bodyTargetAngle,
         bodyAngle: player.angle,
         heading: player.heading,
         prevHasInput: player.prevHasInput,
         brakeAssistLeft: player.brakeAssistLeft,
         startLinearActive: player.startLinearActive,
-        stickSide: player.stickSide
+        stickSide: player.stickSide,
+        stickLocalAngle: player.stickLocalAngle
       };
 
       applyMovementStep(
@@ -256,9 +262,11 @@ export class Room {
       player.moveAngle = Number.isFinite(state.moveAngle) ? state.moveAngle! : (Number.isFinite(player.heading) ? player.heading! : player.moveAngle);
       player.baseBodyAngle = Number.isFinite(state.baseBodyAngle) ? state.baseBodyAngle! : player.baseBodyAngle;
       player.bodyYawOffset = Number.isFinite(state.bodyYawOffset) ? state.bodyYawOffset! : player.bodyYawOffset;
+      player.bodyTargetAngle = Number.isFinite(state.bodyTargetAngle) ? state.bodyTargetAngle! : player.bodyTargetAngle;
       player.aimAngleRaw = Number.isFinite(state.aimAngleRaw) ? state.aimAngleRaw! : player.aimAngleRaw;
       player.aimAngle = Number.isFinite(state.aimAngle) ? state.aimAngle : player.aimAngleRaw;
       player.stickAngVel = state.stickAngVel;
+      player.stickLocalAngle = Number.isFinite(state.stickLocalAngle) ? state.stickLocalAngle! : player.stickLocalAngle;
       player.prevHasInput = state.prevHasInput;
       player.brakeAssistLeft = state.brakeAssistLeft;
       player.startLinearActive = state.startLinearActive;
