@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { SIM_HZ, type InputMsg, PlayerStateMsg, ServerMessage, SnapshotMsg, wrapToPi, approachAngle } from '@flathockey/shared';
+import { SIM_HZ, type InputMsg, PlayerStateMsg, ServerMessage, SnapshotMsg, wrapToPi } from '@flathockey/shared';
 import { WsClient } from '../net/wsClient';
 import { Interpolator, lerpPlayer, type LerpPlayer } from '../net/interpolation';
 import { applyPredictedInput, CLIENT_FIXED_DT, type PredictedPlayerState, lastTelemetry, setAimInputRateLimited } from '../net/prediction';
@@ -538,7 +538,7 @@ export class PondScene extends Phaser.Scene {
     return Math.max(lo, Math.min(hi, v));
   }
 
-  private computeMouseAimAngle(dtSec: number, tuning = getTuning()): number | undefined {
+  private computeMouseAimAngle(_dtSec: number, tuning = getTuning()): number | undefined {
     if (!tuning.aimEnabled || !this.predicted) {
       this.hasAimState = false;
       this.aimDistance01 = 1;
@@ -552,9 +552,7 @@ export class PondScene extends Phaser.Scene {
     const dy = mouseWorld.y - this.predicted.y;
     this.lastPointerVector = { x: dx, y: dy };
     const dist = Math.hypot(dx, dy);
-    const trickNearPx = Math.max(0, (tuning as any).stickTrickNearPx ?? 80);
-    const trickFarPx = Math.max(trickNearPx + 1, (tuning as any).stickTrickFarPx ?? 320);
-    this.aimDistance01 = this.clamp((dist - trickNearPx) / Math.max(1, trickFarPx - trickNearPx), 0, 1);
+    this.aimDistance01 = 1;
     if (dist <= deadzone) {
       setAimInputRateLimited(false);
       return Number.isFinite(this.predicted.aimAngleRaw) ? this.predicted.aimAngleRaw : (Number.isFinite(this.predicted.aimAngle) ? this.predicted.aimAngle : undefined);
@@ -580,21 +578,14 @@ export class PondScene extends Phaser.Scene {
     }
     if (!this.hasAimState) {
       this.hasAimState = true;
-      this.aimCurrentAngle = Number.isFinite(this.predicted.aimAngleRaw) ? this.predicted.aimAngleRaw : (Number.isFinite(this.predicted.aimAngle) ? this.predicted.aimAngle : rawTarget);
+      this.aimCurrentAngle = rawTarget;
       this.aimTargetAngle = rawTarget;
     }
-
-    const smoothing = Math.max(0, Math.min(1, tuning.aimSmoothing ?? 0));
-    this.aimTargetAngle = this.lerpAngle(this.aimTargetAngle, rawTarget, 1 - smoothing);
-    let turnRate = Math.max(0, tuning.aimMaxTurnRate ?? 10);
-    // Backward compatibility with older presets that stored deg/s.
-    if (turnRate > 60) turnRate = (turnRate * Math.PI) / 180;
-    const maxDelta = turnRate * dtSec;
-    const aimInputRateLimited = Math.abs(wrapToPi(this.aimTargetAngle - this.aimCurrentAngle)) > (maxDelta + 1e-6);
-    this.aimCurrentAngle = approachAngle(this.aimCurrentAngle, this.aimTargetAngle, maxDelta);
-    this.aimAngleDiff = wrapToPi(this.aimTargetAngle - this.aimCurrentAngle);
-    setAimInputRateLimited(aimInputRateLimited);
-    return this.aimCurrentAngle;
+    this.aimCurrentAngle = rawTarget;
+    this.aimTargetAngle = rawTarget;
+    this.aimAngleDiff = 0;
+    setAimInputRateLimited(false);
+    return rawTarget;
   }
 
   private updateCrosshairAndCursor() {

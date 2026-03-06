@@ -1169,10 +1169,11 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
       'maxSpeed',
       'accel',
       'dragMove',
-      'bodyFacingMode',
-      'bodyManualTurnRateDeg',
-      'stickSnappiness',
-      'stickMaxAngVelDeg',
+      'maxTurnRateHighSpeed',
+      'brakeTurnRateBoost',
+      'maxBodyYawOffsetDeg',
+      'stickAngularSpeedDeg',
+      'stickBodyBias',
       'puckMagnetStrength',
       'puckShotBaseImpulse'
     ];
@@ -1279,25 +1280,19 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         id: 'movement_core',
         title: 'Core Movement',
         tone: 'control',
-        keys: ['maxSpeed', 'accel', 'dragMove', 'dragIdle', 'sprintAccel']
+        keys: ['maxSpeed', 'accel', 'dragMove', 'dragIdle']
       },
       {
         id: 'movement_turning',
         title: 'Turn / Handling',
         tone: 'control',
-        keys: ['maxTurnRateLowSpeed', 'maxTurnRateHighSpeed', 'lateralDamping', 'lateralGrip_lo', 'lateralGrip_hi', 'brakeDrag', 'brakeCurve']
+        keys: ['maxTurnRateLowSpeed', 'maxTurnRateHighSpeed', 'lateralDamping', 'brakeTurnRateBoost', 'brakeLateralDamping']
       },
       {
-        id: 'movement_regimes',
-        title: 'Speed Regimes',
+        id: 'movement_brake',
+        title: 'Brake / Redirect',
         tone: 'control',
-        keys: ['regimesEnabled', 'speedSplit', 'splitBlendWidth', 'accel_lo', 'accel_hi', 'dragMove_lo', 'dragMove_hi']
-      },
-      {
-        id: 'movement_assist',
-        title: 'Sprint / Assist',
-        tone: 'control',
-        keys: ['snapEnabled', 'snapStrengthMax', 'alignStrength', 'startLinearEnabled', 'startLinearSideKill', 'startLinearAlignStrength', 'brakeAssistEnabled', 'brakeAssistDurationMs', 'brakeAssistDragMult']
+        keys: ['brakeDrag']
       }
     ];
 
@@ -1376,19 +1371,19 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         id: 'stickaim_body',
         title: 'Body Yaw',
         tone: 'control',
-        keys: ['bodyFacingMode', 'bodyTurnRate', 'maxBodyYawOffsetDeg', 'bodyYawSpeedDeg', 'bodyYawReturnSpeedDeg']
+        keys: ['bodyTurnRate', 'maxBodyYawOffsetDeg', 'bodyYawSpeedDeg', 'bodyYawReturnSpeedDeg']
       },
       {
         id: 'stickaim_aim_input',
         title: 'Aim Input',
         tone: 'aim',
-        keys: ['aimEnabled', 'aimMaxTurnRate', 'aimDeadzonePx', 'aimSmoothing', 'aimFromStickBaseEnabled']
+        keys: ['aimEnabled', 'aimDeadzonePx', 'aimFromStickBaseEnabled']
       },
       {
         id: 'stickaim_stick',
         title: 'Stick Response',
         tone: 'aim',
-        keys: ['stickAngleLimitEnabled', 'maxStickAngleFromBodyDeg', 'stickSnappiness', 'stickTauMs', 'stickMaxAngVelDeg', 'stickTargetSlewRateDeg', 'stickVisualLag', 'stickVisualLagMaxDeg', 'stickClampSoftness']
+        keys: ['stickTauMs', 'stickAngularSpeedDeg', 'stickBodyBias', 'stickVisualLag', 'stickVisualLagMaxDeg']
       },
       {
         id: 'stickaim_crosshair',
