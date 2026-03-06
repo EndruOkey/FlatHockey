@@ -21,6 +21,12 @@ function wrapToPi(rad: number): number {
   return a;
 }
 
+function approachAngle(current: number, target: number, maxStep: number): number {
+  const d = wrapToPi(target - current);
+  if (Math.abs(d) <= maxStep) return target;
+  return wrapToPi(current + Math.sign(d) * maxStep);
+}
+
 function expBlend(ratePerSec: number, dt: number): number {
   const rate = Math.max(0, ratePerSec);
   if (rate <= 0) return 0;
@@ -118,7 +124,9 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
     filteredY = rawTargetY;
   }
 
-  const speedBefore = Math.hypot(state.vx, state.vy);
+  const prevVx = state.vx;
+  const prevVy = state.vy;
+  const speedBefore = Math.hypot(prevVx, prevVy);
   const speedNorm = clamp(speedBefore / Math.max(forwardMaxSpeed, 1), 0, 1);
   state.pendingDirX = filteredX;
   state.pendingDirY = filteredY;
@@ -190,7 +198,11 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
   const oppositeScale = input.buttons.brake
     ? clamp(oppositeSteerScale + brakeOppositeRecovery, 0, 1)
     : oppositeSteerScale;
-  const forwardInput = intentForward >= 0 ? intentForward : intentForward * oppositeScale;
+  const reverseNoBrakeScale = input.buttons.brake
+    ? 1
+    : lerp(0.42, 0.02, smoothstep01(speedNorm));
+  const reverseScale = oppositeScale * reverseNoBrakeScale;
+  const forwardInput = intentForward >= 0 ? intentForward : intentForward * reverseScale;
   const baseTurnAuthority = lerp(turnLowSpeed, turnHighSpeed, speedNorm);
   const turnAuthority = clamp(
     (baseTurnAuthority + edgeTurnBonusMax * edgeFactor + (input.buttons.brake ? brakeTurnBonusValue : 0)) * (1 - turnResistance),
@@ -249,8 +261,30 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
 
   const carveLoss = Math.exp(-carveLossStrength * edgeFactor * simDt);
   forwardVel *= carveLoss;
-  state.vx = dfx * forwardVel + dsx * lateralVel;
-  state.vy = dfy * forwardVel + dsy * lateralVel;
+  const candidateVx = dfx * forwardVel + dsx * lateralVel;
+  const candidateVy = dfy * forwardVel + dsy * lateralVel;
+
+  // Velocity-first anti-flip guard: even with strong input alternation, travel direction
+  // can only rotate by a bounded amount per step. This preserves visible carve arcs.
+  const prevSpeed = speedBefore;
+  const candidateSpeed = Math.hypot(candidateVx, candidateVy);
+  if (prevSpeed > 0.001 && candidateSpeed > 0.001) {
+    const prevDir = Math.atan2(prevVy, prevVx);
+    const candDir = Math.atan2(candidateVy, candidateVx);
+    const delta = Math.abs(wrapToPi(candDir - prevDir));
+    const bigFlipNorm = smoothstep01((delta - (120 * Math.PI) / 180) / ((Math.PI - (120 * Math.PI) / 180)));
+    const speedTurnBase = lerp(turnLowSpeed, turnHighSpeed, speedNorm);
+    const brakeBoost = input.buttons.brake ? brakeTurnBonusValue : 0;
+    const antiFlipSlowdown = input.buttons.brake ? lerp(1, 0.85, bigFlipNorm) : lerp(1, 0.25, bigFlipNorm);
+    const maxTurnRate = Math.max(0.08, (speedTurnBase + edgeTurnBonusMax * edgeFactor + brakeBoost) * antiFlipSlowdown);
+    const steppedDir = approachAngle(prevDir, candDir, maxTurnRate * simDt);
+    const steppedSpeed = candidateSpeed;
+    state.vx = Math.cos(steppedDir) * steppedSpeed;
+    state.vy = Math.sin(steppedDir) * steppedSpeed;
+  } else {
+    state.vx = candidateVx;
+    state.vy = candidateVy;
+  }
 
   const finalSpeed = Math.hypot(state.vx, state.vy);
   const finalMaxSpeed = Math.max(1, forwardMaxSpeed * (chargeActive ? chargeSpeedMul : 1));
