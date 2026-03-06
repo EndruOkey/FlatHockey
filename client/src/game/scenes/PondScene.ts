@@ -967,6 +967,9 @@ export class PondScene extends Phaser.Scene {
     const velX = this.predicted?.vx ?? 0;
     const velY = this.predicted?.vy ?? 0;
     const currentSpeed = Math.hypot(velX, velY);
+    const velocityAngle = currentSpeed > 0.001
+      ? Math.atan2(velY, velX)
+      : Number(telemetry.actualMoveAngle ?? telemetry.moveAngle ?? this.lastMoveAngle);
     const localAimRot = localView?.getAimRotation() ?? (this.predicted?.aimAngle ?? this.lastAimAngle);
     const localStickRot = localView?.getStickRotation() ?? localAimRot;
     const localStickWorldAngle = localView?.getStickWorldAngle() ?? localAimRot;
@@ -990,6 +993,7 @@ export class PondScene extends Phaser.Scene {
       stickRotationSpace: PlayerView.getStickRotationSpace(),
       desiredMoveAngle: Number(telemetry.desiredMoveAngle ?? telemetry.moveAngle ?? this.lastMoveAngle),
       actualMoveAngle: Number(telemetry.actualMoveAngle ?? telemetry.moveAngle ?? this.lastMoveAngle),
+      velocityAngle,
       velocityDesiredDeltaDeg: Number(telemetry.velocityDesiredDeltaDeg ?? 0),
       brakeActive: Number(telemetry.brakeApplied ?? 0) > 0.0001,
       baseBodyAngle: Number(this.predicted?.baseBodyAngle ?? telemetry.baseBodyAngle ?? this.predicted?.angle ?? 0),

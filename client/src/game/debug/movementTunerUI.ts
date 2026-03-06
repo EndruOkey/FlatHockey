@@ -1350,6 +1350,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         `stickRotationSpace: ${m.stickRotationSpace}`,
         `desiredMoveAngle: ${(m.desiredMoveAngle * 180 / Math.PI).toFixed(1)} deg`,
         `actualMoveAngle: ${(m.actualMoveAngle * 180 / Math.PI).toFixed(1)} deg`,
+        `velocityAngle: ${(m.velocityAngle * 180 / Math.PI).toFixed(1)} deg`,
         `turnRateApplied: ${m.turnRateAppliedDeg.toFixed(1)} deg/s`,
         `velocityVsDesired: ${m.velocityDesiredDeltaDeg.toFixed(1)} deg`,
         `brakeActive: ${m.brakeActive ? 'true' : 'false'}`,
@@ -1383,7 +1384,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         id: 'stickaim_stick',
         title: 'Stick Response',
         tone: 'aim',
-        keys: ['stickTauMs', 'stickAngularSpeedDeg', 'stickBodyBias', 'stickVisualLag', 'stickVisualLagMaxDeg']
+        keys: ['stickTauMs', 'stickAngularSpeedDeg', 'stickBodyBias', 'maxStickAngleFromBodyDeg', 'stickVisualLag', 'stickVisualLagMaxDeg']
       },
       {
         id: 'stickaim_crosshair',
@@ -1550,6 +1551,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         `stickRotationSpace: ${m.stickRotationSpace}`,
         `desiredMoveAngle: ${(m.desiredMoveAngle * 180 / Math.PI).toFixed(1)} deg`,
         `actualMoveAngle: ${(m.actualMoveAngle * 180 / Math.PI).toFixed(1)} deg`,
+        `velocityAngle: ${(m.velocityAngle * 180 / Math.PI).toFixed(1)} deg`,
         `turnRateApplied: ${m.turnRateAppliedDeg.toFixed(1)} deg/s`,
         `velocityVsDesired: ${m.velocityDesiredDeltaDeg.toFixed(1)} deg`,
         `brakeActive: ${m.brakeActive ? 'true' : 'false'}`,

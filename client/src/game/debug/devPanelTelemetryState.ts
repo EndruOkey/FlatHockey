@@ -18,6 +18,7 @@ export type MovementDebugMetrics = {
   stickRotationSpace: string;
   desiredMoveAngle: number;
   actualMoveAngle: number;
+  velocityAngle: number;
   velocityDesiredDeltaDeg: number;
   brakeActive: boolean;
   baseBodyAngle: number;
@@ -47,6 +48,7 @@ const DEFAULT_MOVEMENT: MovementDebugMetrics = {
   stickRotationSpace: 'WORLD',
   desiredMoveAngle: 0,
   actualMoveAngle: 0,
+  velocityAngle: 0,
   velocityDesiredDeltaDeg: 0,
   brakeActive: false,
   baseBodyAngle: 0,
