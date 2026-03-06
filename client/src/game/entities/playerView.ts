@@ -274,15 +274,21 @@ export class PlayerView {
     this.leanVel += (leanErr * springK - this.leanVel * springC) * safeDt;
     this.leanPx += this.leanVel * safeDt;
 
-    const gripLocal = this.getActiveHandLocalInRoot();
+    const gripLocalBase = this.getActiveHandLocalInRoot();
     const supportDist = Math.max(6, stickLen * PlayerView.SUPPORT_HAND_DIST_RATIO);
 
     // Update order: player root position -> body rotation -> stick rotation.
     this.playerRoot.setPosition(this.x, this.y);
     const rightX = Math.cos(this.rot + Math.PI / 2);
     const rightY = Math.sin(this.rot + Math.PI / 2);
-    this.bodyRig.setPosition(rightX * this.leanPx, rightY * this.leanPx);
+    const bodyLeanX = rightX * this.leanPx;
+    const bodyLeanY = rightY * this.leanPx;
+    this.bodyRig.setPosition(bodyLeanX, bodyLeanY);
     this.bodyRig.rotation = this.getBodyRenderRotation();
+    const gripLocal = {
+      x: gripLocalBase.x + bodyLeanX,
+      y: gripLocalBase.y + bodyLeanY
+    };
     const stickBaseLocalOffset = PlayerView.rotateLocal(stickOffsetX, stickOffsetY, stickWorldRot);
     this.stickRoot.setPosition(gripLocal.x + stickBaseLocalOffset.x, gripLocal.y + stickBaseLocalOffset.y);
     this.stickRoot.rotation = stickDrawRot;
