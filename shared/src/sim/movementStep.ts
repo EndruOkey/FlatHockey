@@ -15,6 +15,7 @@ export type MovementStepState = {
   bodyAngle?: number;
   bodyManualAngVel?: number;
   stickSide?: -1 | 1;
+  stickLocalAngle?: number;
   // internal heading used by heading-mode movement (radians)
   heading?: number;
   prevHasInput?: boolean;
@@ -375,6 +376,10 @@ export function applyMovementStep(
   if (state.stickSide !== -1 && state.stickSide !== 1) {
     state.stickSide = (wrapToPi(inputAimRaw - state.bodyAngle!) >= 0 ? 1 : -1);
   }
+  if (!Number.isFinite(state.stickLocalAngle)) {
+    const fallbackAim = Number.isFinite(state.aimAngle) ? state.aimAngle! : state.bodyAngle!;
+    state.stickLocalAngle = wrapToPi(fallbackAim - state.bodyAngle!);
+  }
 
   if (input.buttons.sprint) {
     const drainMul = hasPuck ? (config.staminaDrainMulWithPuck ?? DEFAULTS.staminaDrainMulWithPuck!) : 1;
@@ -545,8 +550,11 @@ export function applyMovementStep(
       ?? DEFAULTS.stickMaxAngVelDeg
       ?? 900
   );
-  const prevAimAngle = Number.isFinite(state.aimAngle) ? state.aimAngle : state.bodyAngle!;
-  const prevStickDiff = clamp(wrapToPi(prevAimAngle - state.bodyAngle!), -maxStickAngleFromBody, maxStickAngleFromBody);
+  const prevStickDiff = clamp(
+    Number.isFinite(state.stickLocalAngle) ? state.stickLocalAngle! : 0,
+    -maxStickAngleFromBody,
+    maxStickAngleFromBody
+  );
   const rawDiff = wrapToPi(aimAngleRaw - state.bodyAngle!);
   const biasedTargetDiff = rawDiff * (1 - stickBodyBias);
   const targetStickDiff = stickAngleLimitEnabled
@@ -567,6 +575,7 @@ export function applyMovementStep(
   const stickAngVel = (nextStickDiff - prevStickDiff) / Math.max(0.0001, simDt);
   const stickAngVelClamped = Math.abs(smoothedTargetDiff - nextStickDiff) > 1e-6;
   state.stickAngVel = stickAngVel;
+  state.stickLocalAngle = nextStickDiff;
   state.aimAngleRaw = aimAngleRaw;
   state.aimAngle = aimAngle;
   state.heading = state.moveAngle;
