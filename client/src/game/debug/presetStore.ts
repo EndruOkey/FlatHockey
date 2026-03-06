@@ -40,7 +40,7 @@ function sanitizeTuning(input: Partial<MovementTuning>): Partial<MovementTuning>
   for (const key of validKeys) {
     if (key === '__version') continue;
     const val = (input as Record<string, unknown>)[key];
-    if (typeof val === 'number' || typeof val === 'boolean') {
+    if (typeof val === 'number' || typeof val === 'boolean' || typeof val === 'string') {
       (out as Record<string, unknown>)[key] = val;
     }
   }

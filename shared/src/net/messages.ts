@@ -24,6 +24,7 @@ export type PlayerStateMsg = {
   heading?: number;
   inputAngle?: number;
   baseBodyAngle?: number;
+  bodyTargetAngle?: number;
   bodyYawOffset?: number;
   aimAngleRaw?: number;
   aimAngle: number;

@@ -1273,6 +1273,11 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
     });
     stateActions.appendChild(resetDefaultsBtn);
     stateGroup.body.appendChild(stateActions);
+    const legacyNote = document.createElement('div');
+    legacyNote.className = 'subtle';
+    legacyNote.classList.add('full-span');
+    legacyNote.textContent = 'Legacy/inactive movement knobs and presets are not part of the active solver path. They are marked as legacy/inactive in advanced tooling.';
+    stateGroup.body.appendChild(legacyNote);
     grid.appendChild(stateGroup.root);
 
     const sections: Array<{ id: string; title: string; tone: SectionMeta['tone']; keys: Array<keyof MovementTuning> }> = [

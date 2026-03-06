@@ -21,7 +21,7 @@ export const BestNow: MovementStepConfig = {
 
 export const PRESETS: Record<string, MovementStepConfig> = {
   BestNow,
-  BestNow_2Regime: {
+  LEGACY_BestNow_2Regime_Inactive: {
     // two-regime version of BestNow: responsive start/control at low speed, stable glide at high
     regimesEnabled: true,
     speedSplit: MOVEMENT_DEFAULTS.speedSplit,
@@ -43,7 +43,7 @@ export const PRESETS: Record<string, MovementStepConfig> = {
     brakeCurve_hi: MOVEMENT_DEFAULTS.brakeCurve_hi,
     overspeedDamping_hi: 1
   },
-  IceReadable: {
+  LEGACY_IceReadable_Inactive: {
     // keep base BestNow movement but add gentle steering/drift
     steeringEnabled: true,
     steerStrength: 6,
@@ -51,21 +51,21 @@ export const PRESETS: Record<string, MovementStepConfig> = {
     turnAssist: 0.12,
     driftAssist: 0.5
   },
-  ArcadeSnap: {
+  LEGACY_ArcadeSnap_Inactive: {
     steeringEnabled: true,
     steerStrength: 14,
     brakeDecel: 60,
     turnAssist: 0.3,
     driftAssist: 0.1
   },
-  PureIce: {
+  LEGACY_PureIce_Inactive: {
     steeringEnabled: true,
     steerStrength: 2,
     brakeDecel: 8,
     turnAssist: 0.02,
     driftAssist: 0.05
   },
-  MouseCompetitive: {
+  LEGACY_MouseCompetitive_Inactive: {
     aimSmoothing: 0.02,
     aimMaxTurnRate: 120,
     bodyFacingMode: 'AIM_ALWAYS',
