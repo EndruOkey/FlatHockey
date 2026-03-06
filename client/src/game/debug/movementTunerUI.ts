@@ -1286,7 +1286,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         id: 'movement_turning',
         title: 'Turn / Handling',
         tone: 'control',
-        keys: ['maxTurnRateLowSpeed', 'maxTurnRateHighSpeed', 'turnIntentTauMs', 'lateralDamping', 'brakeTurnRateBoost', 'brakeLateralDamping']
+        keys: ['maxTurnRateLowSpeed', 'maxTurnRateHighSpeed', 'inputDirectionTauMs', 'turnIntentTauMs', 'lateralDamping', 'brakeTurnRateBoost', 'brakeLateralDamping']
       },
       {
         id: 'movement_brake',

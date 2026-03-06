@@ -14,6 +14,7 @@ export type PredictedPlayerState = PlayerStateMsg & {
   stamina?: number;
   heading?: number;
   moveAngle?: number;
+  inputAngle?: number;
   baseBodyAngle?: number;
   bodyYawOffset?: number;
   bodyTargetAngle?: number;
@@ -36,6 +37,7 @@ export type PredictedPlayerState = PlayerStateMsg & {
   debugStickTargetSlewActive?: boolean;
   debugStickMode?: 'TAU' | 'SPRING' | 'APPROACH';
   debugTargetAimAngle?: number;
+  debugRawInputAngle?: number;
   debugDesiredMoveAngle?: number;
   debugTurnIntentAngle?: number;
   debugMoveTurnRateAppliedDeg?: number;
@@ -82,6 +84,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     stickAngVel: state.stickAngVel,
     stickLocalAngle: state.stickLocalAngle,
     moveAngle: state.moveAngle,
+    inputAngle: state.inputAngle,
     baseBodyAngle: state.baseBodyAngle,
     bodyYawOffset: state.bodyYawOffset,
     bodyTargetAngle: state.bodyTargetAngle,
@@ -102,6 +105,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     debugStickTargetSlewActive: state.debugStickTargetSlewActive,
     debugStickMode: state.debugStickMode,
     debugTargetAimAngle: state.debugTargetAimAngle,
+    debugRawInputAngle: state.debugRawInputAngle,
     debugDesiredMoveAngle: state.debugDesiredMoveAngle,
     debugTurnIntentAngle: state.debugTurnIntentAngle,
     debugMoveTurnRateAppliedDeg: state.debugMoveTurnRateAppliedDeg,
@@ -136,6 +140,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.stamina = simState.stamina;
   state.heading = simState.heading;
   state.moveAngle = simState.moveAngle;
+  state.inputAngle = simState.inputAngle;
   state.baseBodyAngle = simState.baseBodyAngle;
   state.bodyYawOffset = simState.bodyYawOffset;
   state.bodyTargetAngle = simState.bodyTargetAngle;
@@ -162,6 +167,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.debugStickTargetSlewActive = simState.debugStickTargetSlewActive;
   state.debugStickMode = simState.debugStickMode;
   state.debugTargetAimAngle = simState.debugTargetAimAngle;
+  state.debugRawInputAngle = simState.debugRawInputAngle;
   state.debugDesiredMoveAngle = simState.debugDesiredMoveAngle;
   state.debugTurnIntentAngle = simState.debugTurnIntentAngle;
   state.debugMoveTurnRateAppliedDeg = simState.debugMoveTurnRateAppliedDeg;

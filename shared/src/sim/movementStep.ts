@@ -17,6 +17,7 @@ export type MovementStepState = {
   bodyManualAngVel?: number;
   stickSide?: -1 | 1;
   stickLocalAngle?: number;
+  inputAngle?: number;
   // internal heading used by heading-mode movement (radians)
   heading?: number;
   prevHasInput?: boolean;
@@ -37,6 +38,7 @@ export type MovementStepState = {
   debugStickTargetSlewActive?: boolean;
   debugStickMode?: 'TAU' | 'SPRING' | 'APPROACH';
   debugTargetAimAngle?: number;
+  debugRawInputAngle?: number;
   debugDesiredMoveAngle?: number;
   debugTurnIntentAngle?: number;
   debugMoveTurnRateAppliedDeg?: number;
@@ -80,6 +82,7 @@ export type MovementStepConfig = {
   headingModeEnabled?: boolean;
   maxTurnRateLowSpeed?: number; // rad/s
   maxTurnRateHighSpeed?: number; // rad/s
+  inputDirectionTauMs?: number;
   turnIntentTauMs?: number;
   lateralDamping?: number;
   brakeTurnRateBoost?: number;
@@ -355,6 +358,7 @@ export function applyMovementStep(
   state.debugStickTargetSlewActive = false;
   state.debugStickMode = 'APPROACH';
   state.debugTargetAimAngle = 0;
+  state.debugRawInputAngle = 0;
   state.debugDesiredMoveAngle = 0;
   state.debugTurnIntentAngle = 0;
   state.debugMoveTurnRateAppliedDeg = 0;
@@ -371,6 +375,9 @@ export function applyMovementStep(
   const inputNy = hasInput ? rawY / inputLen : 0;
   if (!Number.isFinite(state.moveAngle)) {
     state.moveAngle = Math.hypot(state.vx, state.vy) > 0.01 ? Math.atan2(state.vy, state.vx) : 0;
+  }
+  if (!Number.isFinite(state.inputAngle)) {
+    state.inputAngle = state.moveAngle;
   }
   if (!Number.isFinite(state.heading)) {
     state.heading = state.moveAngle;
@@ -432,6 +439,7 @@ export function applyMovementStep(
   const moveTurnRateLow = Math.max(0, config.maxTurnRateLowSpeed ?? DEFAULTS.maxTurnRateLowSpeed ?? bodyTurnRateBase);
   const moveTurnRateHigh = Math.max(0, config.maxTurnRateHighSpeed ?? DEFAULTS.maxTurnRateHighSpeed ?? moveTurnRateLow);
   const moveTurnRateBase = lerp(moveTurnRateLow, moveTurnRateHigh, speedNorm);
+  const inputDirectionTauMs = Math.max(1, config.inputDirectionTauMs ?? DEFAULTS.inputDirectionTauMs ?? 110);
   const turnIntentTauMs = Math.max(1, config.turnIntentTauMs ?? DEFAULTS.turnIntentTauMs ?? 145);
   const brakeTurnRateBoost = Math.max(1, config.brakeTurnRateBoost ?? DEFAULTS.brakeTurnRateBoost ?? 1);
   const bodyTurnInput = clamp(input.bodyTurn ?? 0, -1, 1);
@@ -463,9 +471,20 @@ export function applyMovementStep(
   if (!headingOn) {
     state.moveAngle = Math.hypot(state.vx, state.vy) > 0.01 ? Math.atan2(state.vy, state.vx) : state.moveAngle!;
   }
-  const desiredMoveAngle = hasInput
+  const rawDesiredMoveAngle = hasInput
     ? wrapToPi((mouseDrivesMove && Number.isFinite(inputAimRaw)) ? inputAimRaw : Math.atan2(inputNy, inputNx))
     : state.moveAngle!;
+  state.debugRawInputAngle = rawDesiredMoveAngle;
+  if (hasInput) {
+    const rawVsFiltered = Math.abs(wrapToPi(rawDesiredMoveAngle - state.inputAngle!));
+    const largeInputJump01 = smoothstep01((rawVsFiltered - Math.PI * 0.12) / (Math.PI * 0.88));
+    const inputDirectionRate = (1000 / inputDirectionTauMs) * lerp(1.7, 0.18, largeInputJump01);
+    const inputDirectionAlpha = expBlend(inputDirectionRate, simDt);
+    state.inputAngle = lerpAngle(state.inputAngle!, rawDesiredMoveAngle, inputDirectionAlpha);
+  } else {
+    state.inputAngle = state.moveAngle!;
+  }
+  const desiredMoveAngle = state.inputAngle!;
   desiredMoveAngleDebug = desiredMoveAngle;
   if (hasInput) {
     const desiredVsIntent = Math.abs(wrapToPi(desiredMoveAngle - state.heading!));

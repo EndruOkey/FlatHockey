@@ -28,6 +28,7 @@ export const MOVEMENT_DEFAULTS: MovementTuning = {
   headingModeEnabled: true,
   maxTurnRateLowSpeed: 7.2,
   maxTurnRateHighSpeed: 0.62,
+  inputDirectionTauMs: 110,
   turnIntentTauMs: 170,
   lateralDamping: 0.18,
   brakeTurnRateBoost: 1.5,
