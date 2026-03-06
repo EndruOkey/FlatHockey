@@ -541,7 +541,6 @@ export function applyMovementStep(
       state.desiredDirX = targetX;
       state.desiredDirY = targetY;
     }
-    state.lastRawInputAngle = rawDesiredMoveAngle;
   } else {
     const velMag = Math.hypot(state.vx, state.vy);
     if (velMag > 0.001) {
@@ -552,6 +551,9 @@ export function applyMovementStep(
   const desiredMoveAngle = Math.atan2(state.desiredDirY!, state.desiredDirX!);
   state.inputAngle = desiredMoveAngle;
   desiredMoveAngleDebug = desiredMoveAngle;
+  const rawInputDelta = hasInput
+    ? Math.abs(wrapToPi(rawDesiredMoveAngle - (state.lastRawInputAngle ?? rawDesiredMoveAngle)))
+    : 0;
 
   const velocityAngleBeforeTurn = speed > 0.001 ? Math.atan2(state.vy, state.vx) : desiredMoveAngle;
   const desiredVsVelocityRaw = Math.abs(wrapToPi(desiredMoveAngle - velocityAngleBeforeTurn));
@@ -565,7 +567,9 @@ export function applyMovementStep(
 
   const desiredVsCommitted = Math.abs(wrapToPi(desiredMoveAngle - Math.atan2(state.committedDirY!, state.committedDirX!)));
   const directionCommitThreshold = lerp(Math.PI * 0.62, Math.PI * 0.35, speedNorm);
-  const shouldStartCommit = hasInput && speedNorm > 0.08 && desiredVsCommitted > directionCommitThreshold;
+  const rawFlipThreshold = lerp(Math.PI * 0.6, Math.PI * 0.33, speedNorm);
+  const rawFlipTrigger = hasInput && rawInputDelta > rawFlipThreshold;
+  const shouldStartCommit = hasInput && speedNorm > 0.04 && (desiredVsCommitted > directionCommitThreshold || rawFlipTrigger);
   if (shouldStartCommit && (state.antiFlipTimer ?? 0) <= 0 && antiFlipWindowMs > 0) {
     state.antiFlipTimer = antiFlipWindowMs / 1000;
     state.pendingDirX = state.desiredDirX;
@@ -608,6 +612,9 @@ export function applyMovementStep(
     state.pendingDirX = state.committedDirX;
     state.pendingDirY = state.committedDirY;
   }
+  if (hasInput) {
+    state.lastRawInputAngle = rawDesiredMoveAngle;
+  }
   const turnIntentAngle = Math.atan2(state.committedDirY!, state.committedDirX!);
   state.heading = turnIntentAngle;
 
@@ -634,17 +641,19 @@ export function applyMovementStep(
   const sideControl = input.buttons.brake
     ? lerp(0.55, 0.22, turnResistance)
     : lerp(0.92, 0.05, turnResistance);
+  const antiFlipControlPenalty = lerp(1, 0.35, commitBlend);
+  const sideControlEffective = sideControl * antiFlipControlPenalty;
   const redirectPenalty01 = clamp((turnResistance * speedNorm * redirectAccelPenalty), 0, 1);
   const redirectAccelFloor = input.buttons.brake ? 0.22 : 0.02;
   const redirectAccelScale = lerp(1, redirectAccelFloor, redirectPenalty01) * commitPenalty;
-  const reverseAccelScale = input.buttons.brake ? 0.24 : 0.06;
+  const reverseAccelScale = (input.buttons.brake ? 0.24 : 0.06) * antiFlipControlPenalty;
 
   let ax = 0;
   let ay = 0;
   if (hasInput) {
     if (speed > 0.001) {
       const forwardComponent = intentForward >= 0 ? intentForward : intentForward * reverseAccelScale;
-      const sideComponent = intentSide * sideControl;
+      const sideComponent = intentSide * sideControlEffective;
       ax = (fx * forwardComponent + sx * sideComponent) * accel * redirectAccelScale;
       ay = (fy * forwardComponent + sy * sideComponent) * accel * redirectAccelScale;
     } else {
