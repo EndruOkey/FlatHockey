@@ -1291,7 +1291,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         id: 'movement_turning',
         title: 'Turn / Handling',
         tone: 'control',
-        keys: ['inputVectorTauMs', 'forwardAccel', 'lateralSteerForce', 'velocityTurnResistance', 'oppositeSteerScale', 'carveStrength', 'lateralDamping', 'brakeLateralDamping']
+        keys: ['inputVectorTauMs', 'forwardAccel', 'lateralSteerForce', 'velocityTurnResistance', 'oppositeSteerScale', 'lateralDamping', 'brakeLateralDamping', 'brakeSteerBoost']
       },
       {
         id: 'movement_brake',

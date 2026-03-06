@@ -29,6 +29,7 @@ const BASE_REGISTRY: TuningParamMeta[] = [
     group: 'Arc Movement',
     kind: 'enum',
     enumOptions: [
+      { value: 'V4', label: 'V4 (Clean Skate)' },
       { value: 'V3', label: 'V3 (Velocity Force)' },
       { value: 'LEGACY', label: 'LEGACY (Angle Steering)' }
     ],
@@ -45,7 +46,7 @@ const BASE_REGISTRY: TuningParamMeta[] = [
   { key: 'lateralSteerForce', label: 'Lateral Steer Force', hint: 'Side steering force before velocity resistance.', category: 'Movement', group: 'Arc Movement', kind: 'number', min: 0, max: 3000, step: 1, recommended: true, keywords: ['lateral', 'steer', 'force'] },
   { key: 'velocityTurnResistance', label: 'Velocity Steer Resistance', hint: 'How strongly speed/angle delta limits steering.', category: 'Movement', group: 'Arc Movement', kind: 'number', min: 0, max: 4, step: 0.01, recommended: true, keywords: ['velocity', 'resistance', 'steer'] },
   { key: 'oppositeSteerScale', label: 'Opposite Input Scale', hint: 'How much reverse input is allowed into force solve.', category: 'Movement', group: 'Arc Movement', kind: 'number', min: 0, max: 1, step: 0.01, recommended: true, keywords: ['opposite', 'reverse', 'scale'] },
-  { key: 'carveStrength', label: 'Carve Strength', hint: 'Extra speed-scaled damping of lateral slip.', category: 'Movement', group: 'Arc Movement', kind: 'number', min: 0, max: 3, step: 0.01, recommended: true, keywords: ['carve', 'lateral', 'damping'] },
+  { key: 'carveStrength', label: 'Legacy Carve Strength (V3 only)', hint: 'Only used by V3 model.', category: 'Movement', group: 'Legacy / Inactive', kind: 'number', min: 0, max: 3, step: 0.01, advanced: true, keywords: ['legacy', 'v3', 'carve'] },
   { key: 'oppositeTurnResistance', label: 'Legacy Opposite Turn Resistance (inactive)', hint: 'Inactive with velocity-force movement core.', category: 'Movement', group: 'Legacy / Inactive', kind: 'number', min: 0, max: 3, step: 0.01, advanced: true, keywords: ['legacy', 'inactive', 'opposite', 'turn'] },
   { key: 'redirectAccelPenalty', label: 'Legacy Redirect Accel Penalty (inactive)', hint: 'Inactive with velocity-force movement core.', category: 'Movement', group: 'Legacy / Inactive', kind: 'number', min: 0, max: 3, step: 0.01, advanced: true, keywords: ['legacy', 'inactive', 'redirect'] },
   { key: 'antiFlipWindowMs', label: 'Legacy Anti-Flip Window (inactive)', hint: 'Inactive with velocity-force movement core.', category: 'Movement', group: 'Legacy / Inactive', kind: 'number', min: 0, max: 400, step: 5, advanced: true, keywords: ['legacy', 'inactive', 'anti-flip'] },
