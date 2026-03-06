@@ -19,6 +19,8 @@ export type MovementDebugMetrics = {
   desiredMoveAngle: number;
   actualMoveAngle: number;
   velocityAngle: number;
+  forwardVelocity: number;
+  lateralVelocity: number;
   velocityDesiredDeltaDeg: number;
   brakeActive: boolean;
   baseBodyAngle: number;
@@ -50,6 +52,8 @@ const DEFAULT_MOVEMENT: MovementDebugMetrics = {
   desiredMoveAngle: 0,
   actualMoveAngle: 0,
   velocityAngle: 0,
+  forwardVelocity: 0,
+  lateralVelocity: 0,
   velocityDesiredDeltaDeg: 0,
   brakeActive: false,
   baseBodyAngle: 0,

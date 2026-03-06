@@ -992,6 +992,8 @@ export class PondScene extends Phaser.Scene {
       desiredMoveAngle: Number(telemetry.desiredMoveAngle ?? telemetry.moveAngle ?? this.lastMoveAngle),
       actualMoveAngle: Number(telemetry.actualMoveAngle ?? telemetry.moveAngle ?? this.lastMoveAngle),
       velocityAngle,
+      forwardVelocity: Number(telemetry.velForward ?? 0),
+      lateralVelocity: Number(telemetry.velSide ?? 0),
       velocityDesiredDeltaDeg: Number(telemetry.velocityDesiredDeltaDeg ?? 0),
       brakeActive: Number(telemetry.brakeApplied ?? 0) > 0.0001,
       baseBodyAngle: Number(this.predicted?.baseBodyAngle ?? telemetry.baseBodyAngle ?? this.predicted?.angle ?? 0),

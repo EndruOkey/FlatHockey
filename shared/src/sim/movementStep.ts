@@ -462,8 +462,8 @@ export function applyMovementStep(
   desiredMoveAngleDebug = desiredMoveAngle;
   const velocityAngleBeforeTurn = speed > 0.001 ? Math.atan2(state.vy, state.vx) : state.moveAngle!;
   const desiredVsVelocity = Math.abs(wrapToPi(desiredMoveAngle - velocityAngleBeforeTurn));
-  const oppositeRedirect01 = clamp((desiredVsVelocity - Math.PI * 0.5) / (Math.PI * 0.5), 0, 1);
-  const oppositeTurnPenalty = lerp(1, input.buttons.brake ? 0.82 : 0.55, oppositeRedirect01);
+  const oppositeRedirect01 = clamp((desiredVsVelocity - Math.PI * 0.42) / (Math.PI * 0.58), 0, 1);
+  const oppositeTurnPenalty = lerp(1, input.buttons.brake ? 0.78 : 0.42, oppositeRedirect01);
   const moveTurnRate = moveTurnRateBase * oppositeTurnPenalty * (input.buttons.brake ? brakeTurnRateBoost : 1);
   if (hasInput) {
     state.moveAngle = approachAngle(state.moveAngle!, desiredMoveAngle, moveTurnRate * simDt);
@@ -478,7 +478,7 @@ export function applyMovementStep(
     const velocityAngle = speed > 0.001 ? Math.atan2(state.vy, state.vx) : movementHeading;
     const headingVsVelocity = Math.abs(wrapToPi(movementHeading - velocityAngle));
     const redirectResistance01 = clamp((headingVsVelocity - Math.PI * 0.35) / (Math.PI * 0.65), 0, 1);
-    const redirectAccelFloor = input.buttons.brake ? 0.45 : 0.15;
+    const redirectAccelFloor = input.buttons.brake ? 0.36 : 0.06;
     const redirectAccelScale = lerp(1, redirectAccelFloor, redirectResistance01 * speedNorm);
     state.vx += hx * accel * redirectAccelScale * simDt;
     state.vy += hy * accel * redirectAccelScale * simDt;
@@ -489,8 +489,20 @@ export function applyMovementStep(
   state.vx *= dragFactor;
   state.vy *= dragFactor;
 
-  let forward = state.vx * hx + state.vy * hy;
-  let side = state.vx * rx + state.vy * ry;
+  const velocityAngleAfterDrag = Math.hypot(state.vx, state.vy) > 0.001
+    ? Math.atan2(state.vy, state.vx)
+    : movementHeading;
+  const slipBlendRedirect = smoothstep01(speedNorm * (desiredVsVelocity / Math.PI) * (input.buttons.brake ? 0.45 : 1.25));
+  const slipReferenceAngle = hasInput
+    ? lerpAngle(movementHeading, velocityAngleAfterDrag, slipBlendRedirect)
+    : velocityAngleAfterDrag;
+  const sx = Math.cos(slipReferenceAngle);
+  const sy = Math.sin(slipReferenceAngle);
+  const tx = -sy;
+  const ty = sx;
+
+  let forward = state.vx * sx + state.vy * sy;
+  let side = state.vx * tx + state.vy * ty;
   const sideDamping = input.buttons.brake ? brakeLateralDamping : lateralDamping;
   side *= Math.exp(-sideDamping * simDt);
 
@@ -500,8 +512,8 @@ export function applyMovementStep(
     side *= brakeFactor;
   }
 
-  state.vx = hx * forward + rx * side;
-  state.vy = hy * forward + ry * side;
+  state.vx = sx * forward + tx * side;
+  state.vy = sy * forward + ty * side;
 
   const finalSpeed = Math.hypot(state.vx, state.vy);
   if (finalSpeed > maxSpeed) {
