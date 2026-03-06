@@ -1285,7 +1285,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         id: 'movement_turning',
         title: 'Turn / Handling',
         tone: 'control',
-        keys: ['maxTurnRateLowSpeed', 'maxTurnRateHighSpeed', 'lateralDamping', 'lateralGrip', 'brakeDrag', 'brakeCurve']
+        keys: ['maxTurnRateLowSpeed', 'maxTurnRateHighSpeed', 'lateralDamping', 'lateralGrip_lo', 'lateralGrip_hi', 'brakeDrag', 'brakeCurve']
       },
       {
         id: 'movement_regimes',
@@ -1297,7 +1297,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         id: 'movement_assist',
         title: 'Sprint / Assist',
         tone: 'control',
-        keys: ['startLinearEnabled', 'startLinearOnThreshold', 'startLinearOffThreshold', 'brakeAssistEnabled', 'brakeAssistDurationMs']
+        keys: ['snapEnabled', 'snapStrengthMax', 'alignStrength', 'startLinearEnabled', 'startLinearSideKill', 'startLinearAlignStrength', 'brakeAssistEnabled', 'brakeAssistDurationMs', 'brakeAssistDragMult']
       }
     ];
 
@@ -1345,9 +1345,15 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
       runtimeText.textContent = [
         `aimAngle: ${(m.aimAngle * 180 / Math.PI).toFixed(1)} deg`,
         `targetAimAngle: ${(m.targetAimAngle * 180 / Math.PI).toFixed(1)} deg`,
+        `actualStickAngle: ${(m.actualStickAngle * 180 / Math.PI).toFixed(1)} deg`,
         `stickRotation: ${(m.stickRotation * 180 / Math.PI).toFixed(1)} deg`,
         `stickAngularSpeed: ${(m.stickAngularSpeed * 180 / Math.PI).toFixed(1)} deg/s`,
         `targetVsActualDelta: ${(m.angleDelta * 180 / Math.PI).toFixed(1)} deg`,
+        `desiredMoveAngle: ${(m.desiredMoveAngle * 180 / Math.PI).toFixed(1)} deg`,
+        `actualMoveAngle: ${(m.actualMoveAngle * 180 / Math.PI).toFixed(1)} deg`,
+        `turnRateApplied: ${m.turnRateAppliedDeg.toFixed(1)} deg/s`,
+        `velocityVsDesired: ${m.velocityDesiredDeltaDeg.toFixed(1)} deg`,
+        `brakeActive: ${m.brakeActive ? 'true' : 'false'}`,
         `baseBodyAngle: ${(m.baseBodyAngle * 180 / Math.PI).toFixed(1)} deg`,
         `bodyYawOffset: ${(m.bodyYawOffset * 180 / Math.PI).toFixed(1)} deg`,
         `currentBodyAngle: ${(m.currentBodyAngle * 180 / Math.PI).toFixed(1)} deg`,
@@ -1378,7 +1384,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         id: 'stickaim_stick',
         title: 'Stick Response',
         tone: 'aim',
-        keys: ['stickAngleLimitEnabled', 'maxStickAngleFromBodyDeg', 'stickSnappiness', 'stickMaxAngVelDeg', 'stickClampSoftness', 'stickTargetSlewRateDeg']
+        keys: ['stickAngleLimitEnabled', 'maxStickAngleFromBodyDeg', 'stickSnappiness', 'stickTauMs', 'stickMaxAngVelDeg', 'stickTargetSlewRateDeg', 'stickVisualLag', 'stickVisualLagMaxDeg', 'stickClampSoftness']
       },
       {
         id: 'stickaim_crosshair',
@@ -1535,9 +1541,15 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         `pointerVector: ${m.pointerVector}`,
         `aimAngle: ${(m.aimAngle * 180 / Math.PI).toFixed(1)} deg`,
         `targetAimAngle: ${(m.targetAimAngle * 180 / Math.PI).toFixed(1)} deg`,
+        `actualStickAngle: ${(m.actualStickAngle * 180 / Math.PI).toFixed(1)} deg`,
         `stickRotation: ${(m.stickRotation * 180 / Math.PI).toFixed(1)} deg`,
         `stickAngularSpeed: ${(m.stickAngularSpeed * 180 / Math.PI).toFixed(1)} deg/s`,
         `angleDelta: ${(m.angleDelta * 180 / Math.PI).toFixed(1)} deg`,
+        `desiredMoveAngle: ${(m.desiredMoveAngle * 180 / Math.PI).toFixed(1)} deg`,
+        `actualMoveAngle: ${(m.actualMoveAngle * 180 / Math.PI).toFixed(1)} deg`,
+        `turnRateApplied: ${m.turnRateAppliedDeg.toFixed(1)} deg/s`,
+        `velocityVsDesired: ${m.velocityDesiredDeltaDeg.toFixed(1)} deg`,
+        `brakeActive: ${m.brakeActive ? 'true' : 'false'}`,
         `baseBodyAngle: ${(m.baseBodyAngle * 180 / Math.PI).toFixed(1)} deg`,
         `bodyYawOffset: ${(m.bodyYawOffset * 180 / Math.PI).toFixed(1)} deg`,
         `currentBodyAngle: ${(m.currentBodyAngle * 180 / Math.PI).toFixed(1)} deg`,

@@ -34,6 +34,9 @@ export type PredictedPlayerState = PlayerStateMsg & {
   debugStickTargetSlewActive?: boolean;
   debugStickMode?: 'TAU' | 'SPRING' | 'APPROACH';
   debugTargetAimAngle?: number;
+  debugDesiredMoveAngle?: number;
+  debugMoveTurnRateAppliedDeg?: number;
+  debugVelocityDesiredDeltaDeg?: number;
   debugBaseBodyAngle?: number;
   debugBodyYawOffset?: number;
 };
@@ -91,7 +94,13 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     debugStickAngVelDeg: state.debugStickAngVelDeg,
     debugStickAngVelClamped: state.debugStickAngVelClamped,
     debugStickTargetSlewActive: state.debugStickTargetSlewActive,
-    debugStickMode: state.debugStickMode
+    debugStickMode: state.debugStickMode,
+    debugTargetAimAngle: state.debugTargetAimAngle,
+    debugDesiredMoveAngle: state.debugDesiredMoveAngle,
+    debugMoveTurnRateAppliedDeg: state.debugMoveTurnRateAppliedDeg,
+    debugVelocityDesiredDeltaDeg: state.debugVelocityDesiredDeltaDeg,
+    debugBaseBodyAngle: state.debugBaseBodyAngle,
+    debugBodyYawOffset: state.debugBodyYawOffset
   };
 
   applyMovementStep(
@@ -143,6 +152,9 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.debugStickTargetSlewActive = simState.debugStickTargetSlewActive;
   state.debugStickMode = simState.debugStickMode;
   state.debugTargetAimAngle = simState.debugTargetAimAngle;
+  state.debugDesiredMoveAngle = simState.debugDesiredMoveAngle;
+  state.debugMoveTurnRateAppliedDeg = simState.debugMoveTurnRateAppliedDeg;
+  state.debugVelocityDesiredDeltaDeg = simState.debugVelocityDesiredDeltaDeg;
   state.debugBaseBodyAngle = simState.debugBaseBodyAngle;
   state.debugBodyYawOffset = simState.debugBodyYawOffset;
 
@@ -182,6 +194,10 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     startModeActive: !!simState.debugStartModeActive,
     velForward: simState.debugVelForward ?? 0,
     velSide: simState.debugVelSide ?? 0,
+    desiredMoveAngle: simState.debugDesiredMoveAngle ?? simState.moveAngle ?? 0,
+    actualMoveAngle: simState.moveAngle ?? 0,
+    turnRateAppliedDeg: simState.debugMoveTurnRateAppliedDeg ?? 0,
+    velocityDesiredDeltaDeg: simState.debugVelocityDesiredDeltaDeg ?? 0,
     moveAngle: simState.moveAngle ?? 0,
     aimAngle: simState.aimAngle ?? state.aimAngle ?? state.angle,
     aimAngleRaw: simState.aimAngleRaw ?? state.aimAngleRaw ?? state.angle,

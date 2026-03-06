@@ -876,6 +876,7 @@ export class PondScene extends Phaser.Scene {
     const puckStick = puckStickTuningStore.get();
     const used = usedTuning;
     const telemetry = (lastTelemetry || {}) as Record<string, any>;
+    const localView = this.clientId ? this.players.get(this.clientId) : null;
 
     const puckStateLine = puckStick.drawPuckState ? `puckState=${this.puckSnapshot.state} owner=${this.puckSnapshot.ownerId ?? '-'}` : null;
     const stickTargetLine = (() => {
@@ -900,13 +901,13 @@ export class PondScene extends Phaser.Scene {
       ? `vectors move=${Number(telemetry.moveAngle ?? this.lastMoveAngle).toFixed(2)} body=${Number(this.predicted?.angle ?? 0).toFixed(2)} aimRaw=${Number(telemetry.aimAngleRaw ?? this.lastAimAngle).toFixed(2)} aim=${Number(telemetry.aimAngle ?? this.lastAimAngle).toFixed(2)}`
       : null;
     const anglesLine = tuning.showAngles
-      ? `angles move=${(Number(telemetry.moveAngle ?? this.lastMoveAngle) * 180 / Math.PI).toFixed(1)} baseBody=${(Number(telemetry.baseBodyAngle ?? this.predicted?.baseBodyAngle ?? this.predicted?.angle ?? 0) * 180 / Math.PI).toFixed(1)} body=${(Number(this.predicted?.angle ?? 0) * 180 / Math.PI).toFixed(1)} aimRaw=${(Number(telemetry.aimAngleRaw ?? this.lastAimAngle) * 180 / Math.PI).toFixed(1)} aim=${(Number(telemetry.aimAngle ?? this.lastAimAngle) * 180 / Math.PI).toFixed(1)}`
+      ? `angles desiredMove=${(Number(telemetry.desiredMoveAngle ?? telemetry.moveAngle ?? this.lastMoveAngle) * 180 / Math.PI).toFixed(1)} actualMove=${(Number(telemetry.actualMoveAngle ?? telemetry.moveAngle ?? this.lastMoveAngle) * 180 / Math.PI).toFixed(1)} baseBody=${(Number(telemetry.baseBodyAngle ?? this.predicted?.baseBodyAngle ?? this.predicted?.angle ?? 0) * 180 / Math.PI).toFixed(1)} body=${(Number(this.predicted?.angle ?? 0) * 180 / Math.PI).toFixed(1)} aimRaw=${(Number(telemetry.aimAngleRaw ?? this.lastAimAngle) * 180 / Math.PI).toFixed(1)} aim=${(Number(telemetry.aimAngle ?? this.lastAimAngle) * 180 / Math.PI).toFixed(1)}`
       : null;
     const angleDiffLine = tuning.showAngleDiff
-      ? `angleDiff raw=${(Number(telemetry.aimDiffRaw ?? 0) * 180 / Math.PI).toFixed(1)} clamped=${(Number(telemetry.aimDiffClamped ?? 0) * 180 / Math.PI).toFixed(1)}`
+      ? `angleDiff raw=${(Number(telemetry.aimDiffRaw ?? 0) * 180 / Math.PI).toFixed(1)} clamped=${(Number(telemetry.aimDiffClamped ?? 0) * 180 / Math.PI).toFixed(1)} velVsDesired=${Number(telemetry.velocityDesiredDeltaDeg ?? 0).toFixed(1)}`
       : null;
     const stickRuntimeLine = tuning.showAngleDiff
-      ? `stick target=${(Number(telemetry.targetAimAngle ?? telemetry.aimAngle ?? this.lastAimAngle) * 180 / Math.PI).toFixed(1)} actual=${(Number(telemetry.aimAngle ?? this.lastAimAngle) * 180 / Math.PI).toFixed(1)} deltaDeg=${Number(telemetry.stickDeltaDeg ?? 0).toFixed(1)} angVelDeg=${Number(telemetry.stickAngVelDeg ?? 0).toFixed(1)} mode=${String(telemetry.stickMode ?? 'APPROACH')}`
+      ? `stick target=${(Number(telemetry.targetAimAngle ?? telemetry.aimAngle ?? this.lastAimAngle) * 180 / Math.PI).toFixed(1)} simActual=${(Number(telemetry.aimAngle ?? this.lastAimAngle) * 180 / Math.PI).toFixed(1)} renderActual=${(Number(localView?.getStickRotation() ?? (telemetry.aimAngle ?? this.lastAimAngle)) * 180 / Math.PI).toFixed(1)} deltaDeg=${Number(telemetry.stickDeltaDeg ?? 0).toFixed(1)} angVelDeg=${Number(telemetry.stickAngVelDeg ?? 0).toFixed(1)} mode=${String(telemetry.stickMode ?? 'APPROACH')}`
       : null;
     const bodyYawLine = tuning.showAngleDiff
       ? `bodyYaw base=${(Number(telemetry.baseBodyAngle ?? this.predicted?.baseBodyAngle ?? this.predicted?.angle ?? 0) * 180 / Math.PI).toFixed(1)} offset=${(Number(telemetry.bodyYawOffset ?? this.predicted?.bodyYawOffset ?? 0) * 180 / Math.PI).toFixed(1)} final=${(Number(this.predicted?.angle ?? 0) * 180 / Math.PI).toFixed(1)}`
@@ -917,7 +918,7 @@ export class PondScene extends Phaser.Scene {
     const snapLine = tuning.showSnapFactor ? `snapFactor=${Number(telemetry.snapFactor ?? 0).toFixed(2)}` : null;
     const brakeAssistLine = tuning.showBrakeActive ? `brakeAssist=${telemetry.brakeAssistActive ? 'on' : 'off'}` : null;
     const startModeLine = tuning.showStartMode
-      ? `startMode=${telemetry.startModeActive ? 'on' : 'off'} fwd=${Number(telemetry.velForward ?? 0).toFixed(1)} side=${Number(telemetry.velSide ?? 0).toFixed(1)}`
+      ? `startMode=${telemetry.startModeActive ? 'on' : 'off'} brake=${telemetry.brakeApplied > 0 ? 'on' : 'off'} turnRateApplied=${Number(telemetry.turnRateAppliedDeg ?? 0).toFixed(1)} fwd=${Number(telemetry.velForward ?? 0).toFixed(1)} side=${Number(telemetry.velSide ?? 0).toFixed(1)}`
       : null;
 
     if (this.debugEnabled) {
@@ -967,7 +968,6 @@ export class PondScene extends Phaser.Scene {
     const velX = this.predicted?.vx ?? 0;
     const velY = this.predicted?.vy ?? 0;
     const currentSpeed = Math.hypot(velX, velY);
-    const localView = this.clientId ? this.players.get(this.clientId) : null;
     const localAimRot = localView?.getAimRotation() ?? (this.predicted?.aimAngle ?? this.lastAimAngle);
     const localStickRot = localView?.getStickRotation() ?? localAimRot;
     setMovementDebugMetrics({
@@ -975,13 +975,19 @@ export class PondScene extends Phaser.Scene {
       velocityX: velX,
       velocityY: velY,
       turnRate: this.lastTurnRateDeg,
+      turnRateAppliedDeg: Number(telemetry.turnRateAppliedDeg ?? 0),
       inputVector: `(${this.lastInputVector.x}, ${this.lastInputVector.y})`,
       pointerVector: `(${this.lastPointerVector.x.toFixed(1)}, ${this.lastPointerVector.y.toFixed(1)})`,
       aimAngle: localAimRot,
       targetAimAngle: Number(telemetry.targetAimAngle ?? this.aimTargetAngle ?? localAimRot),
       stickRotation: localStickRot,
+      actualStickAngle: localStickRot,
       stickAngularSpeed: Number(telemetry.stickAngVelDeg ?? 0) * Math.PI / 180,
       angleDelta: Number(telemetry.stickDeltaDeg ?? 0) * Math.PI / 180,
+      desiredMoveAngle: Number(telemetry.desiredMoveAngle ?? telemetry.moveAngle ?? this.lastMoveAngle),
+      actualMoveAngle: Number(telemetry.actualMoveAngle ?? telemetry.moveAngle ?? this.lastMoveAngle),
+      velocityDesiredDeltaDeg: Number(telemetry.velocityDesiredDeltaDeg ?? 0),
+      brakeActive: Number(telemetry.brakeApplied ?? 0) > 0.0001,
       baseBodyAngle: Number(this.predicted?.baseBodyAngle ?? telemetry.baseBodyAngle ?? this.predicted?.angle ?? 0),
       bodyYawOffset: Number(this.predicted?.bodyYawOffset ?? telemetry.bodyYawOffset ?? 0),
       currentBodyAngle: Number(this.predicted?.angle ?? 0),

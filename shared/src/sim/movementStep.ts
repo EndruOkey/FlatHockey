@@ -35,6 +35,9 @@ export type MovementStepState = {
   debugStickTargetSlewActive?: boolean;
   debugStickMode?: 'TAU' | 'SPRING' | 'APPROACH';
   debugTargetAimAngle?: number;
+  debugDesiredMoveAngle?: number;
+  debugMoveTurnRateAppliedDeg?: number;
+  debugVelocityDesiredDeltaDeg?: number;
   debugBaseBodyAngle?: number;
   debugBodyYawOffset?: number;
 };
@@ -341,6 +344,9 @@ export function applyMovementStep(
   state.debugStickTargetSlewActive = false;
   state.debugStickMode = 'APPROACH';
   state.debugTargetAimAngle = 0;
+  state.debugDesiredMoveAngle = 0;
+  state.debugMoveTurnRateAppliedDeg = 0;
+  state.debugVelocityDesiredDeltaDeg = 0;
   state.debugBaseBodyAngle = 0;
   state.debugBodyYawOffset = 0;
 
@@ -479,6 +485,7 @@ export function applyMovementStep(
   const couplingStrength = clamp(config.couplingStrength ?? DEFAULTS.couplingStrength ?? 0.15, 0, 0.35);
   const manualTurningActive = Math.abs(bodyTurnInput) > 0.0001;
 
+  let desiredMoveAngleDebug = Number.isFinite(state.moveAngle) ? state.moveAngle! : 0;
   if (headingOn) {
     const prevVelAngle = Math.atan2(state.vy, state.vx);
     const prevSpeed = Math.hypot(state.vx, state.vy);
@@ -494,6 +501,7 @@ export function applyMovementStep(
       const desiredMoveAngle = wrapToPi((mouseDrivesMove && Number.isFinite(inputAimRaw))
         ? inputAimRaw
         : Math.atan2(inputNy, inputNx));
+      desiredMoveAngleDebug = desiredMoveAngle;
       state.moveAngle = approachAngle(state.moveAngle!, desiredMoveAngle, moveTurnRate * simDt);
       const movementHeading = state.moveAngle!;
 
@@ -628,6 +636,7 @@ export function applyMovementStep(
       const desiredMoveAngle = wrapToPi((mouseDrivesMove && Number.isFinite(inputAimRaw))
         ? inputAimRaw
         : Math.atan2(inputNy, inputNx));
+      desiredMoveAngleDebug = desiredMoveAngle;
       state.moveAngle = approachAngle(state.moveAngle!, desiredMoveAngle, moveTurnRate * simDt);
       const movementHeading = state.moveAngle!;
       const accelVecBase = sprinting ? accelSprint : accel;
@@ -909,11 +918,15 @@ export function applyMovementStep(
     : (hasInput ? Math.atan2(inputNy, inputNx) : Math.atan2(state.vy, state.vx));
   const dhx = Math.cos(debugHeading);
   const dhy = Math.sin(debugHeading);
+  const velocityAngleNow = finalSpeedNow > 0.001 ? Math.atan2(state.vy, state.vx) : debugHeading;
   state.debugVelForward = state.vx * dhx + state.vy * dhy;
   state.debugVelSide = state.vx * (-dhy) + state.vy * dhx;
   state.debugAimAngleRaw = state.aimAngleRaw;
   state.debugAimAngleClamped = state.aimAngle;
   state.debugAimDiffRaw = rawDiff;
   state.debugAimDiffClamped = wrapToPi(state.aimAngle - state.bodyAngle!);
+  state.debugDesiredMoveAngle = desiredMoveAngleDebug;
+  state.debugMoveTurnRateAppliedDeg = moveTurnRate * (180 / Math.PI);
+  state.debugVelocityDesiredDeltaDeg = wrapToPi(desiredMoveAngleDebug - velocityAngleNow) * (180 / Math.PI);
 }
 
