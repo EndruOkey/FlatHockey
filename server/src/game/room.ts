@@ -567,6 +567,7 @@ export class Room {
     if (players.length < 2) return;
 
     const playerRadius = 18;
+    const bumpForce = 110;
     const minHitSpeed = Number(this.movementTuning.minHitSpeed ?? MOVEMENT_DEFAULTS.minHitSpeed ?? 290);
     const hitForce = Number(this.movementTuning.hitForce ?? MOVEMENT_DEFAULTS.hitForce ?? 420);
     const hitCooldownTime = Number(this.movementTuning.hitCooldownTime ?? MOVEMENT_DEFAULTS.hitCooldownTime ?? 0.35);
@@ -584,10 +585,20 @@ export class Room {
         const dy = b.y - a.y;
         const dist = Math.hypot(dx, dy);
         const minDist = playerRadius * 2;
-        if (dist <= 0 || dist > minDist) continue;
+        if (dist > minDist) continue;
+        const safeDist = Math.max(dist, 0.0001);
+        const nx = dx / safeDist;
+        const ny = dy / safeDist;
+        const overlap = minDist - safeDist;
+        if (overlap > 0) {
+          // Always resolve penetration to keep non-charge contacts readable as bumps.
+          const push = overlap * 0.5;
+          a.x -= nx * push;
+          a.y -= ny * push;
+          b.x += nx * push;
+          b.y += ny * push;
+        }
 
-        const nx = dx / dist;
-        const ny = dy / dist;
         const relVx = a.vx - b.vx;
         const relVy = a.vy - b.vy;
         const closingSpeed = Math.abs(relVx * nx + relVy * ny);
@@ -595,7 +606,14 @@ export class Room {
         const aCanHit = a.chargeActive && a.hitCooldownLeft <= 0 && a.stunLeft <= 0;
         const bCanHit = b.chargeActive && b.hitCooldownLeft <= 0 && b.stunLeft <= 0;
         const shouldHit = closingSpeed >= minHitSpeed && (aCanHit || bCanHit);
-        if (!shouldHit) continue;
+        if (!shouldHit) {
+          // Normal movement collision = soft bump.
+          a.vx -= nx * bumpForce;
+          a.vy -= ny * bumpForce;
+          b.vx += nx * bumpForce;
+          b.vy += ny * bumpForce;
+          continue;
+        }
 
         if (aCanHit && bCanHit) {
           a.vx -= nx * hitForce * 0.8;
@@ -628,6 +646,7 @@ export class Room {
     const boardStunDuration = Number(this.movementTuning.boardStunDuration ?? MOVEMENT_DEFAULTS.boardStunDuration ?? 0.55);
 
     for (const p of this.players.values()) {
+      const preImpactSpeed = Math.hypot(p.vx, p.vy);
       let hitBoard = false;
       if (p.x < RINK.left + playerRadius) {
         p.x = RINK.left + playerRadius;
@@ -649,8 +668,7 @@ export class Room {
       }
       if (!hitBoard) continue;
 
-      const speed = Math.hypot(p.vx, p.vy);
-      if (p.chargeActive && speed >= boardStunMinSpeed) {
+      if (p.chargeActive && preImpactSpeed >= boardStunMinSpeed) {
         p.stunLeft = Math.max(p.stunLeft, boardStunDuration);
         p.chargeActive = false;
         p.vx *= 0.35;
