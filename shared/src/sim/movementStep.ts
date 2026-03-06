@@ -469,8 +469,8 @@ export function applyMovementStep(
   desiredMoveAngleDebug = desiredMoveAngle;
   if (hasInput) {
     const desiredVsIntent = Math.abs(wrapToPi(desiredMoveAngle - state.heading!));
-    const largeTurn01 = smoothstep01(desiredVsIntent / Math.PI);
-    const turnIntentRate = (1000 / turnIntentTauMs) * lerp(1.4, input.buttons.brake ? 0.72 : 0.4, largeTurn01) * (input.buttons.brake ? 1.12 : 1);
+    const largeTurn01 = smoothstep01((desiredVsIntent - Math.PI * 0.16) / (Math.PI * 0.84));
+    const turnIntentRate = (1000 / turnIntentTauMs) * lerp(1.45, input.buttons.brake ? 0.58 : 0.22, largeTurn01) * (input.buttons.brake ? 1.08 : 1);
     const turnIntentAlpha = expBlend(turnIntentRate, simDt);
     state.heading = lerpAngle(state.heading!, desiredMoveAngle, turnIntentAlpha);
   } else {
@@ -479,8 +479,8 @@ export function applyMovementStep(
   const turnIntentAngle = state.heading!;
   const velocityAngleBeforeTurn = speed > 0.001 ? Math.atan2(state.vy, state.vx) : state.moveAngle!;
   const desiredVsVelocity = Math.abs(wrapToPi(turnIntentAngle - velocityAngleBeforeTurn));
-  const oppositeRedirect01 = clamp((desiredVsVelocity - Math.PI * 0.42) / (Math.PI * 0.58), 0, 1);
-  const oppositeTurnPenalty = lerp(1, input.buttons.brake ? 0.78 : 0.42, oppositeRedirect01);
+  const oppositeRedirect01 = clamp((desiredVsVelocity - Math.PI * 0.32) / (Math.PI * 0.68), 0, 1);
+  const oppositeTurnPenalty = lerp(1, input.buttons.brake ? 0.64 : 0.24, oppositeRedirect01);
   const moveTurnRate = moveTurnRateBase * oppositeTurnPenalty * (input.buttons.brake ? brakeTurnRateBoost : 1);
   if (hasInput) {
     state.moveAngle = approachAngle(state.moveAngle!, turnIntentAngle, moveTurnRate * simDt);
@@ -495,7 +495,7 @@ export function applyMovementStep(
     const velocityAngle = speed > 0.001 ? Math.atan2(state.vy, state.vx) : movementHeading;
     const headingVsVelocity = Math.abs(wrapToPi(movementHeading - velocityAngle));
     const redirectResistance01 = clamp((headingVsVelocity - Math.PI * 0.35) / (Math.PI * 0.65), 0, 1);
-    const redirectAccelFloor = input.buttons.brake ? 0.36 : 0.06;
+    const redirectAccelFloor = input.buttons.brake ? 0.3 : 0.035;
     const redirectAccelScale = lerp(1, redirectAccelFloor, redirectResistance01 * speedNorm);
     state.vx += hx * accel * redirectAccelScale * simDt;
     state.vy += hy * accel * redirectAccelScale * simDt;
