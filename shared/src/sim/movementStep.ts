@@ -511,7 +511,9 @@ export function applyMovementStep(
     : state.moveAngle!;
   state.debugRawInputAngle = rawDesiredMoveAngle;
   const rawInputDelta = Math.abs(wrapToPi(rawDesiredMoveAngle - state.lastRawInputAngle!));
-  const antiFlipTrigger = hasInput && rawInputDelta > Math.PI * 0.62 && speedNorm > 0.12;
+  // At higher speed, even ~90deg alternating taps should be treated as anti-flip candidates.
+  const antiFlipDeltaThreshold = lerp(Math.PI * 0.62, Math.PI * 0.35, speedNorm);
+  const antiFlipTrigger = hasInput && rawInputDelta > antiFlipDeltaThreshold && speedNorm > 0.08;
   if (antiFlipTrigger && antiFlipWindowMs > 0) {
     state.antiFlipTimer = antiFlipWindowMs / 1000;
   } else {
@@ -532,7 +534,6 @@ export function applyMovementStep(
     state.lastRawInputAngle = rawDesiredMoveAngle;
   } else {
     state.inputAngle = state.moveAngle!;
-    state.lastRawInputAngle = state.moveAngle!;
   }
   const desiredMoveAngle = state.inputAngle!;
   desiredMoveAngleDebug = desiredMoveAngle;
