@@ -44,6 +44,7 @@ type PlayerState = {
   lastProcessedSeq: number;
   lastInputState: InputState;
   inputBuffer: BufferedInput[];
+  inputGapTicks: number;
 };
 
 type Vec2 = { x: number; y: number };
@@ -154,7 +155,8 @@ export class Room {
       shotCharge: 0,
       lastProcessedSeq: 0,
       lastInputState: { ...ZERO_INPUT },
-      inputBuffer: []
+      inputBuffer: [],
+      inputGapTicks: 0
     });
     this.sockets.set(clientId, ws);
   }
@@ -205,6 +207,7 @@ export class Room {
       if (next) {
         player.lastInputState = next.state;
         player.lastProcessedSeq = next.seq;
+        player.inputGapTicks = 0;
       }
 
       const state: MovementStepState = {
@@ -486,6 +489,15 @@ export class Room {
     if (player.inputBuffer.length === 0) return null;
 
     if (player.inputBuffer[0].seq === player.lastProcessedSeq + 1) {
+      return player.inputBuffer.shift() ?? null;
+    }
+
+    // Recover from reconnect/session resets or any stale gap instead of deadlocking ack forever.
+    if (player.lastProcessedSeq === 0) {
+      return player.inputBuffer.shift() ?? null;
+    }
+    player.inputGapTicks += 1;
+    if (player.inputGapTicks >= 10) {
       return player.inputBuffer.shift() ?? null;
     }
 

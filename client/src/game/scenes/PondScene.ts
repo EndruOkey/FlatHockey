@@ -138,8 +138,13 @@ export class PondScene extends Phaser.Scene {
     super('PondScene');
   }
 
-  private resetPendingInputState() {
+  private resetPendingInputState(resetSeq = false) {
     this.pendingInputs = [];
+    if (resetSeq) {
+      this.seq = 0;
+      this.ackSeq = 0;
+      return;
+    }
     this.ackSeq = this.seq;
   }
 
@@ -253,6 +258,7 @@ export class PondScene extends Phaser.Scene {
     });
     this.ws.onOpen(() => {
       this.wsConnected = true;
+      this.resetPendingInputState(true);
       if (!this.roomId) this.roomId = 'pond-1';
     });
 
@@ -287,6 +293,7 @@ export class PondScene extends Phaser.Scene {
   }
 
   private applyWelcomeLike(msg: { clientId: string; roomId?: string; room?: string; movementTuning?: unknown }) {
+    this.resetPendingInputState(true);
     this.clientId = msg.clientId;
     this.roomId = msg.roomId ?? msg.room ?? this.roomId ?? 'pond-1';
 
