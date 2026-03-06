@@ -29,6 +29,8 @@ type PlayerState = {
   angle: number;
   moveAngle: number;
   inputAngle: number;
+  lastRawInputAngle: number;
+  antiFlipTimer: number;
   baseBodyAngle: number;
   bodyYawOffset: number;
   bodyTargetAngle: number;
@@ -144,6 +146,8 @@ export class Room {
       angle: 0,
       moveAngle: 0,
       inputAngle: 0,
+      lastRawInputAngle: 0,
+      antiFlipTimer: 0,
       baseBodyAngle: 0,
       bodyYawOffset: 0,
       bodyTargetAngle: 0,
@@ -227,6 +231,8 @@ export class Room {
         stickAngVel: player.stickAngVel,
         moveAngle: player.moveAngle,
         inputAngle: player.inputAngle,
+        lastRawInputAngle: player.lastRawInputAngle,
+        antiFlipTimer: player.antiFlipTimer,
         baseBodyAngle: player.baseBodyAngle,
         bodyYawOffset: player.bodyYawOffset,
         bodyTargetAngle: player.bodyTargetAngle,
@@ -264,6 +270,8 @@ export class Room {
       player.heading = state.heading;
       player.moveAngle = Number.isFinite(state.moveAngle) ? state.moveAngle! : (Number.isFinite(player.heading) ? player.heading! : player.moveAngle);
       player.inputAngle = Number.isFinite(state.inputAngle) ? state.inputAngle! : player.inputAngle;
+      player.lastRawInputAngle = Number.isFinite(state.lastRawInputAngle) ? state.lastRawInputAngle! : player.lastRawInputAngle;
+      player.antiFlipTimer = Number.isFinite(state.antiFlipTimer) ? state.antiFlipTimer! : player.antiFlipTimer;
       player.baseBodyAngle = Number.isFinite(state.baseBodyAngle) ? state.baseBodyAngle! : player.baseBodyAngle;
       player.bodyYawOffset = Number.isFinite(state.bodyYawOffset) ? state.bodyYawOffset! : player.bodyYawOffset;
       player.bodyTargetAngle = Number.isFinite(state.bodyTargetAngle) ? state.bodyTargetAngle! : player.bodyTargetAngle;
@@ -322,6 +330,8 @@ export class Room {
         moveAngle: p.moveAngle,
         heading: p.heading,
         inputAngle: p.inputAngle,
+        lastRawInputAngle: p.lastRawInputAngle,
+        antiFlipTimer: p.antiFlipTimer,
         baseBodyAngle: p.baseBodyAngle,
         bodyTargetAngle: p.bodyTargetAngle,
         bodyYawOffset: p.bodyYawOffset,

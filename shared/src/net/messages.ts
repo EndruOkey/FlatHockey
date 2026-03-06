@@ -23,6 +23,8 @@ export type PlayerStateMsg = {
   moveAngle: number;
   heading?: number;
   inputAngle?: number;
+  lastRawInputAngle?: number;
+  antiFlipTimer?: number;
   baseBodyAngle?: number;
   bodyTargetAngle?: number;
   bodyYawOffset?: number;
