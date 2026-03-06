@@ -53,6 +53,10 @@ export type PredictedPlayerState = PlayerStateMsg & {
   debugTurnResistance?: number;
   debugRedirectAccelScale?: number;
   debugAntiFlipActive?: boolean;
+  debugDesiredInputX?: number;
+  debugDesiredInputY?: number;
+  debugAppliedForwardForce?: number;
+  debugAppliedLateralForce?: number;
   debugBaseBodyAngle?: number;
   debugBodyYawOffset?: number;
   debugBodyTurnInput?: number;
@@ -133,6 +137,10 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     debugTurnResistance: state.debugTurnResistance,
     debugRedirectAccelScale: state.debugRedirectAccelScale,
     debugAntiFlipActive: state.debugAntiFlipActive,
+    debugDesiredInputX: state.debugDesiredInputX,
+    debugDesiredInputY: state.debugDesiredInputY,
+    debugAppliedForwardForce: state.debugAppliedForwardForce,
+    debugAppliedLateralForce: state.debugAppliedLateralForce,
     debugBaseBodyAngle: state.debugBaseBodyAngle,
     debugBodyYawOffset: state.debugBodyYawOffset,
     debugBodyTurnInput: state.debugBodyTurnInput,
@@ -207,6 +215,10 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.debugTurnResistance = simState.debugTurnResistance;
   state.debugRedirectAccelScale = simState.debugRedirectAccelScale;
   state.debugAntiFlipActive = simState.debugAntiFlipActive;
+  state.debugDesiredInputX = simState.debugDesiredInputX;
+  state.debugDesiredInputY = simState.debugDesiredInputY;
+  state.debugAppliedForwardForce = simState.debugAppliedForwardForce;
+  state.debugAppliedLateralForce = simState.debugAppliedLateralForce;
   state.debugBaseBodyAngle = simState.debugBaseBodyAngle;
   state.debugBodyYawOffset = simState.debugBodyYawOffset;
   state.debugBodyTurnInput = simState.debugBodyTurnInput;
@@ -256,6 +268,10 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     turnResistance: simState.debugTurnResistance ?? 0,
     redirectAccelScale: simState.debugRedirectAccelScale ?? 1,
     antiFlipActive: !!simState.debugAntiFlipActive,
+    desiredInputX: simState.debugDesiredInputX ?? 0,
+    desiredInputY: simState.debugDesiredInputY ?? 0,
+    appliedForwardForce: simState.debugAppliedForwardForce ?? 0,
+    appliedLateralForce: simState.debugAppliedLateralForce ?? 0,
     moveAngle: simState.moveAngle ?? 0,
     aimAngle: simState.aimAngle ?? state.aimAngle ?? state.angle,
     aimAngleRaw: simState.aimAngleRaw ?? state.aimAngleRaw ?? state.angle,

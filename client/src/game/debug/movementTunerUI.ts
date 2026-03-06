@@ -1291,7 +1291,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         id: 'movement_turning',
         title: 'Turn / Handling',
         tone: 'control',
-        keys: ['maxTurnRateLowSpeed', 'maxTurnRateHighSpeed', 'inputDirectionTauMs', 'turnIntentTauMs', 'velocityTurnResistance', 'oppositeTurnResistance', 'redirectAccelPenalty', 'antiFlipWindowMs', 'antiFlipPenalty', 'lateralDamping', 'brakeTurnRateBoost', 'brakeLateralDamping']
+        keys: ['inputVectorTauMs', 'forwardAccel', 'lateralSteerForce', 'velocityTurnResistance', 'oppositeSteerScale', 'carveStrength', 'lateralDamping', 'brakeLateralDamping']
       },
       {
         id: 'movement_brake',
@@ -1372,6 +1372,9 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         `bodyTurnInput: ${m.bodyTurnInput.toFixed(2)}`,
         `pointerVector: ${m.pointerVector}`,
         `inputVector: ${m.inputVector}`,
+        `desiredInputVector: ${m.desiredInputVector}`,
+        `appliedForwardForce: ${m.appliedForwardForce.toFixed(1)}`,
+        `appliedLateralForce: ${m.appliedLateralForce.toFixed(1)}`,
         `stickMode: ${String(t.stickMode ?? 'APPROACH')}`,
         `stickDeltaDeg: ${Number(t.stickDeltaDeg ?? 0).toFixed(1)}`,
         `stickAngVelDeg: ${Number(t.stickAngVelDeg ?? 0).toFixed(1)}`,
@@ -1551,6 +1554,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         `velocityY: ${m.velocityY.toFixed(2)}`,
         `turnRate: ${m.turnRate.toFixed(2)}`,
         `inputVector: ${m.inputVector}`,
+        `desiredInputVector: ${m.desiredInputVector}`,
         `pointerVector: ${m.pointerVector}`,
         `aimAngle: ${(m.aimAngle * 180 / Math.PI).toFixed(1)} deg`,
         `bodyWorldAngle: ${(m.bodyWorldAngle * 180 / Math.PI).toFixed(1)} deg`,
@@ -1573,6 +1577,8 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         `turnResistance: ${m.turnResistance.toFixed(2)}`,
         `redirectAccelScale: ${m.redirectAccelScale.toFixed(2)}`,
         `antiFlipActive: ${m.antiFlipActive ? 'true' : 'false'}`,
+        `appliedForwardForce: ${m.appliedForwardForce.toFixed(1)}`,
+        `appliedLateralForce: ${m.appliedLateralForce.toFixed(1)}`,
         `brakeActive: ${m.brakeActive ? 'true' : 'false'}`,
         `activeBodyModel: ${m.activeBodyModel}`,
         `baseBodyAngle: ${(m.baseBodyAngle * 180 / Math.PI).toFixed(1)} deg`,
