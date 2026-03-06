@@ -78,13 +78,14 @@ export class Interpolator<T> {
   }
 }
 
-export type LerpPlayer = { x: number; y: number; rot: number; aimRot?: number; moveRot?: number };
+export type LerpPlayer = { x: number; y: number; rot: number; aimRot?: number; moveRot?: number; baseRot?: number };
 export const lerpPlayer = (a: LerpPlayer, b: LerpPlayer, t: number): LerpPlayer => ({
   x: lerp(a.x, b.x, t),
   y: lerp(a.y, b.y, t),
   rot: lerpAngle(a.rot, b.rot, t),
   aimRot: lerpAngle(a.aimRot ?? a.rot, b.aimRot ?? b.rot, t),
-  moveRot: lerpAngle(a.moveRot ?? a.rot, b.moveRot ?? b.rot, t)
+  moveRot: lerpAngle(a.moveRot ?? a.rot, b.moveRot ?? b.rot, t),
+  baseRot: lerpAngle(a.baseRot ?? a.rot, b.baseRot ?? b.rot, t)
 });
 
 export type LerpPuck = { x: number; y: number };

@@ -17,6 +17,7 @@ export class PlayerView {
   x = 0;
   y = 0;
   rot = 0;
+  baseRot = 0;
   aimRot = 0;
   moveRot = 0;
   private stickVisualRot = 0;
@@ -137,10 +138,11 @@ export class PlayerView {
     g.destroy();
   }
 
-  setState(x: number, y: number, rot: number, aimRot?: number, moveRot?: number) {
+  setState(x: number, y: number, rot: number, aimRot?: number, moveRot?: number, baseRot?: number) {
     this.x = x;
     this.y = y;
     this.rot = rot;
+    this.baseRot = typeof baseRot === 'number' ? baseRot : rot;
     this.aimRot = typeof aimRot === 'number' ? aimRot : rot;
     this.moveRot = typeof moveRot === 'number' ? moveRot : rot;
   }
@@ -279,7 +281,7 @@ export class PlayerView {
     const stickWorldRot = this.stickVisualRot;
     const stickDrawRot = stickWorldRot + PlayerView.STICK_SPRITE_OFFSET_RAD;
     this.stickDrawRot = stickDrawRot;
-    const edgeAngle = PlayerView.wrapToPi(this.rot - this.moveRot);
+    const edgeAngle = PlayerView.wrapToPi(this.baseRot - this.moveRot);
     const leanMaxAngleRad = Math.max(0.001, (this.visualLeanMaxAngleDeg * Math.PI) / 180);
     const edgeNorm = PlayerView.clamp(edgeAngle / leanMaxAngleRad, -1, 1);
     const targetLeanPx = this.visualLeanEnabled ? (edgeNorm * this.visualLeanMaxPx) : 0;

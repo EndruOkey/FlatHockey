@@ -1357,6 +1357,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         `baseBodyAngle: ${(m.baseBodyAngle * 180 / Math.PI).toFixed(1)} deg`,
         `bodyYawOffset: ${(m.bodyYawOffset * 180 / Math.PI).toFixed(1)} deg`,
         `currentBodyAngle: ${(m.currentBodyAngle * 180 / Math.PI).toFixed(1)} deg`,
+        `bodyTurnInput: ${m.bodyTurnInput.toFixed(2)}`,
         `pointerVector: ${m.pointerVector}`,
         `inputVector: ${m.inputVector}`,
         `stickMode: ${String(t.stickMode ?? 'APPROACH')}`,
@@ -1558,6 +1559,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         `baseBodyAngle: ${(m.baseBodyAngle * 180 / Math.PI).toFixed(1)} deg`,
         `bodyYawOffset: ${(m.bodyYawOffset * 180 / Math.PI).toFixed(1)} deg`,
         `currentBodyAngle: ${(m.currentBodyAngle * 180 / Math.PI).toFixed(1)} deg`,
+        `bodyTurnInput: ${m.bodyTurnInput.toFixed(2)}`,
         `recorder: ${m.recorderState} (${m.recordedFrames} frames)`
       ].join('\n');
     });

@@ -41,6 +41,7 @@ export type PredictedPlayerState = PlayerStateMsg & {
   debugVelocityDesiredDeltaDeg?: number;
   debugBaseBodyAngle?: number;
   debugBodyYawOffset?: number;
+  debugBodyTurnInput?: number;
 };
 
 export const CLIENT_FIXED_DT = 1 / 60;
@@ -104,7 +105,8 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     debugMoveTurnRateAppliedDeg: state.debugMoveTurnRateAppliedDeg,
     debugVelocityDesiredDeltaDeg: state.debugVelocityDesiredDeltaDeg,
     debugBaseBodyAngle: state.debugBaseBodyAngle,
-    debugBodyYawOffset: state.debugBodyYawOffset
+    debugBodyYawOffset: state.debugBodyYawOffset,
+    debugBodyTurnInput: state.debugBodyTurnInput
   };
 
   applyMovementStep(
@@ -163,6 +165,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.debugVelocityDesiredDeltaDeg = simState.debugVelocityDesiredDeltaDeg;
   state.debugBaseBodyAngle = simState.debugBaseBodyAngle;
   state.debugBodyYawOffset = simState.debugBodyYawOffset;
+  state.debugBodyTurnInput = simState.debugBodyTurnInput;
 
   const speed = Math.hypot(state.vx, state.vy);
   const maxSpeed = (config.maxSpeed ?? config.maxSpeedNoPuck ?? 1);
@@ -210,6 +213,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     targetAimAngle: simState.debugTargetAimAngle ?? simState.aimAngle ?? state.aimAngle ?? state.angle,
     baseBodyAngle: simState.debugBaseBodyAngle ?? simState.baseBodyAngle ?? state.baseBodyAngle ?? state.angle,
     bodyYawOffset: simState.debugBodyYawOffset ?? simState.bodyYawOffset ?? state.bodyYawOffset ?? 0,
+    bodyTurnInput: simState.debugBodyTurnInput ?? 0,
     aimDiffRaw: simState.debugAimDiffRaw ?? 0,
     aimDiffClamped: simState.debugAimDiffClamped ?? 0,
     stickDeltaDeg: simState.debugStickDeltaDeg ?? 0,

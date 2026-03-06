@@ -42,6 +42,7 @@ export type MovementStepState = {
   debugVelocityDesiredDeltaDeg?: number;
   debugBaseBodyAngle?: number;
   debugBodyYawOffset?: number;
+  debugBodyTurnInput?: number;
 };
 
 export type MovementStepInput = {
@@ -357,6 +358,7 @@ export function applyMovementStep(
   state.debugVelocityDesiredDeltaDeg = 0;
   state.debugBaseBodyAngle = 0;
   state.debugBodyYawOffset = 0;
+  state.debugBodyTurnInput = 0;
 
   const rawX = clamp(input.moveX, -1, 1);
   const rawY = clamp(input.moveY, -1, 1);
@@ -546,6 +548,7 @@ export function applyMovementStep(
   state.bodyAngle = wrapToPi(baseBodyAngle + bodyYawOffset);
   state.bodyManualAngVel = manualTurningActive ? bodyTurnInput * bodyYawSpeed : 0;
 
+  const stickReferenceAngle = state.baseBodyAngle!;
   const aimAngleRaw = wrapToPi(inputAimRaw);
   const stickAngleLimitEnabled = config.stickAngleLimitEnabled ?? DEFAULTS.stickAngleLimitEnabled ?? true;
   const maxStickAngleFromBodyDeg = Math.max(0, config.maxStickAngleFromBodyDeg ?? DEFAULTS.maxStickAngleFromBodyDeg ?? 95);
@@ -575,8 +578,8 @@ export function applyMovementStep(
     -maxStickAngleFromBody,
     maxStickAngleFromBody
   );
-  const bodyTurnDelta = Math.abs(wrapToPi(state.bodyAngle! - baseBodyAngle));
-  const rawDiff = wrapToPi(aimAngleRaw - state.bodyAngle!);
+  const bodyTurnDelta = Math.abs(wrapToPi(stickReferenceAngle - baseBodyAngle));
+  const rawDiff = wrapToPi(aimAngleRaw - stickReferenceAngle);
   const biasedTargetDiff = rawDiff * (1 - stickBodyBias);
   let targetStickDiff = biasedTargetDiff;
   if (stickAngleLimitEnabled) {
@@ -607,8 +610,8 @@ export function applyMovementStep(
   const stickAngularSpeedEffective = stickAngularSpeedDeg * lerp(0.88, 1.32, diffNorm) * edgeSpeedPenalty * lerp(1, 0.9, turnStabilityNorm);
   const stickMaxAngVel = (stickAngularSpeedEffective * Math.PI) / 180;
   const nextStickDiff = approachScalar(prevStickDiff, smoothedTargetDiff, stickMaxAngVel * simDt);
-  const targetAim = wrapToPi(state.bodyAngle! + targetStickDiff);
-  const aimAngle = wrapToPi(state.bodyAngle! + nextStickDiff);
+  const targetAim = wrapToPi(stickReferenceAngle + targetStickDiff);
+  const aimAngle = wrapToPi(stickReferenceAngle + nextStickDiff);
   const stickAngVel = (nextStickDiff - prevStickDiff) / Math.max(0.0001, simDt);
   const stickAngVelClamped = Math.abs(smoothedTargetDiff - nextStickDiff) > 1e-6;
   state.stickAngVel = stickAngVel;
@@ -624,6 +627,7 @@ export function applyMovementStep(
   state.debugTargetAimAngle = targetAim;
   state.debugBaseBodyAngle = state.baseBodyAngle;
   state.debugBodyYawOffset = state.bodyYawOffset;
+  state.debugBodyTurnInput = bodyTurnInput;
 
   const finalSpeedNow = Math.hypot(state.vx, state.vy);
   state.prevHasInput = hasInput;

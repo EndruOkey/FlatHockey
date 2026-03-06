@@ -381,7 +381,7 @@ export class PondScene extends Phaser.Scene {
           this.predicted = { ...p };
           this.pendingInputs = [];
           this.localBuffer.clear();
-          this.localBuffer.push({ x: p.x, y: p.y, rot: p.angle, aimRot: p.aimAngle, moveRot: p.moveAngle }, now);
+          this.localBuffer.push({ x: p.x, y: p.y, rot: p.angle, aimRot: p.aimAngle, moveRot: p.moveAngle, baseRot: p.baseBodyAngle ?? p.angle }, now);
         } else {
           reconcilePrediction(this.predicted, p, this.ackSeq, this.pendingInputs);
           this.localBuffer.push({
@@ -389,7 +389,8 @@ export class PondScene extends Phaser.Scene {
             y: this.predicted.y,
             rot: this.predicted.angle,
             aimRot: this.predicted.aimAngle ?? this.predicted.angle,
-            moveRot: this.predicted.moveAngle ?? this.predicted.angle
+            moveRot: this.predicted.moveAngle ?? this.predicted.angle,
+            baseRot: this.predicted.baseBodyAngle ?? this.predicted.angle
           }, now);
         }
       } else {
@@ -399,7 +400,7 @@ export class PondScene extends Phaser.Scene {
           continue;
         }
         this.remoteLastSnapshotTick.set(p.id, snapshot.serverTick);
-        this.remoteInterpolators.get(p.id)?.push({ x: p.x, y: p.y, rot: p.angle, aimRot: p.aimAngle, moveRot: p.moveAngle }, serverTimeMs);
+        this.remoteInterpolators.get(p.id)?.push({ x: p.x, y: p.y, rot: p.angle, aimRot: p.aimAngle, moveRot: p.moveAngle, baseRot: p.baseBodyAngle ?? p.angle }, serverTimeMs);
       }
     }
 
@@ -569,7 +570,7 @@ export class PondScene extends Phaser.Scene {
     const handPivot = PlayerView.getActiveHandWorldFromPose(
       this.predicted.x,
       this.predicted.y,
-      this.predicted.angle,
+      Number.isFinite(this.predicted.baseBodyAngle) ? this.predicted.baseBodyAngle! : this.predicted.angle,
       handedness
     );
     const rawTarget = Math.atan2(mouseWorld.y - handPivot.y, mouseWorld.x - handPivot.x);
@@ -996,6 +997,7 @@ export class PondScene extends Phaser.Scene {
       baseBodyAngle: Number(this.predicted?.baseBodyAngle ?? telemetry.baseBodyAngle ?? this.predicted?.angle ?? 0),
       bodyYawOffset: Number(this.predicted?.bodyYawOffset ?? telemetry.bodyYawOffset ?? 0),
       currentBodyAngle: Number(this.predicted?.angle ?? 0),
+      bodyTurnInput: Number(telemetry.bodyTurnInput ?? 0),
       recorderState: this.replayEnabled ? 'replaying' : this.inputRecorderEnabled ? 'recording' : 'idle',
       recordedFrames: this.recordedInputs.length
     });
@@ -1141,7 +1143,8 @@ export class PondScene extends Phaser.Scene {
           y: this.predicted.y,
           rot: this.predicted.angle,
           aimRot: this.predicted.aimAngle ?? this.predicted.angle,
-          moveRot: this.predicted.moveAngle ?? this.predicted.angle
+          moveRot: this.predicted.moveAngle ?? this.predicted.angle,
+          baseRot: this.predicted.baseBodyAngle ?? this.predicted.angle
         }, simStepTime);
         this.ws.send(input);
         this.inputsSentTimesMs.push(simStepTime);
@@ -1169,7 +1172,8 @@ export class PondScene extends Phaser.Scene {
             y: this.predicted.y,
             rot: this.predicted.angle,
             aimRot: this.predicted.aimAngle ?? this.predicted.angle,
-            moveRot: this.predicted.moveAngle ?? this.predicted.angle
+            moveRot: this.predicted.moveAngle ?? this.predicted.angle,
+            baseRot: this.predicted.baseBodyAngle ?? this.predicted.angle
           };
         }
       } else {
@@ -1179,7 +1183,7 @@ export class PondScene extends Phaser.Scene {
 
       if (!state) continue;
       const s = this.worldToScreen(state.x, state.y);
-      view.setState(s.x, s.y, state.rot, state.aimRot ?? state.rot, state.moveRot ?? state.rot);
+      view.setState(s.x, s.y, state.rot, state.aimRot ?? state.rot, state.moveRot ?? state.rot, state.baseRot ?? state.rot);
       view.setVisualLeanConfig({
         enabled: Boolean(tuning.visualLeanEnabled ?? true),
         maxPx: Number(tuning.visualLeanMaxPx ?? 6),
