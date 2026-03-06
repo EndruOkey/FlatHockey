@@ -151,7 +151,7 @@ export class PondScene extends Phaser.Scene {
   create() {
     this.drawBackground();
 
-    this.keys = this.input.keyboard!.addKeys('W,A,S,D,C,V,E,SHIFT,SPACE,F3,F8,F9,F10') as Record<string, Phaser.Input.Keyboard.Key>;
+    this.keys = this.input.keyboard!.addKeys('W,A,S,D,E,SPACE,F3,F8,F9,F10') as Record<string, Phaser.Input.Keyboard.Key>;
     this.debugToggleKey = this.keys.F3;
     this.panelToggleKey = this.keys.F8;
     this.recorderToggleKey = this.keys.F9;
@@ -440,7 +440,6 @@ export class PondScene extends Phaser.Scene {
     const moveX = ((this.keys.D.isDown ? 1 : 0) - (this.keys.A.isDown ? 1 : 0)) as -1 | 0 | 1;
     const moveY = ((this.keys.S.isDown ? 1 : 0) - (this.keys.W.isDown ? 1 : 0)) as -1 | 0 | 1;
     this.lastInputVector = { x: moveX, y: moveY };
-    const bodyTurn = ((this.keys.V.isDown ? 1 : 0) - (this.keys.C.isDown ? 1 : 0));
     const moveLen = Math.hypot(moveX, moveY);
     if (moveLen > 0.0001) this.lastMoveAngle = Math.atan2(moveY / moveLen, moveX / moveLen);
     const aimAngle = this.computeMouseAimAngle(CLIENT_FIXED_DT, tuning);
@@ -457,13 +456,13 @@ export class PondScene extends Phaser.Scene {
       seq: ++this.seq,
       moveX,
       moveY,
-      sprint: this.keys.SHIFT.isDown ? 1 : 0,
+      sprint: this.input.activePointer.rightButtonDown() ? 1 : 0,
       brake: this.keys.SPACE.isDown ? 1 : 0,
       shoot: (this.keys.E.isDown || this.input.activePointer.leftButtonDown()) ? 1 : 0,
       aimAngle,
       aimAngleRaw: aimAngle,
       aimDistance01: this.aimDistance01,
-      bodyTurn
+      bodyTurn: 0
     };
   }
 
@@ -915,7 +914,7 @@ export class PondScene extends Phaser.Scene {
     const snapLine = tuning.showSnapFactor ? `snapFactor=${Number(telemetry.snapFactor ?? 0).toFixed(2)}` : null;
     const brakeAssistLine = tuning.showBrakeActive ? `brakeAssist=${telemetry.brakeAssistActive ? 'on' : 'off'}` : null;
     const startModeLine = tuning.showStartMode
-      ? `startMode=${telemetry.startModeActive ? 'on' : 'off'} brake=${telemetry.brakeApplied > 0 ? 'on' : 'off'} turnRateApplied=${Number(telemetry.turnRateAppliedDeg ?? 0).toFixed(1)} fwd=${Number(telemetry.velForward ?? 0).toFixed(1)} side=${Number(telemetry.velSide ?? 0).toFixed(1)}`
+      ? `startMode=${telemetry.startModeActive ? 'on' : 'off'} brake=${telemetry.brakeApplied > 0 ? 'on' : 'off'} charge=${telemetry.chargeActive ? 'on' : 'off'} turnRateApplied=${Number(telemetry.turnRateAppliedDeg ?? 0).toFixed(1)} fwd=${Number(telemetry.velForward ?? 0).toFixed(1)} side=${Number(telemetry.velSide ?? 0).toFixed(1)}`
       : null;
 
     if (this.debugEnabled) {
@@ -978,6 +977,8 @@ export class PondScene extends Phaser.Scene {
       turnRate: this.lastTurnRateDeg,
       turnRateAppliedDeg: Number(telemetry.turnRateAppliedDeg ?? 0),
       inputVector: `(${this.lastInputVector.x}, ${this.lastInputVector.y})`,
+      rawInputVector: `(${Number(telemetry.rawInputX ?? this.lastInputVector.x).toFixed(2)}, ${Number(telemetry.rawInputY ?? this.lastInputVector.y).toFixed(2)})`,
+      filteredInputVector: `(${Number(telemetry.filteredInputX ?? telemetry.desiredInputX ?? 0).toFixed(2)}, ${Number(telemetry.filteredInputY ?? telemetry.desiredInputY ?? 0).toFixed(2)})`,
       desiredInputVector: `(${Number(telemetry.desiredInputX ?? 0).toFixed(2)}, ${Number(telemetry.desiredInputY ?? 0).toFixed(2)})`,
       pointerVector: `(${this.lastPointerVector.x.toFixed(1)}, ${this.lastPointerVector.y.toFixed(1)})`,
       aimAngle: localAimRot,
@@ -1002,7 +1003,9 @@ export class PondScene extends Phaser.Scene {
       antiFlipActive: Boolean(telemetry.antiFlipActive ?? false),
       appliedForwardForce: Number(telemetry.appliedForwardForce ?? 0),
       appliedLateralForce: Number(telemetry.appliedLateralForce ?? 0),
+      edgeFactor: Number(telemetry.edgeFactor ?? 0),
       brakeActive: Number(telemetry.brakeApplied ?? 0) > 0.0001,
+      chargeActive: Boolean(telemetry.chargeActive ?? this.predicted?.chargeActive ?? false),
       baseBodyAngle: Number(this.predicted?.baseBodyAngle ?? telemetry.baseBodyAngle ?? this.predicted?.angle ?? 0),
       bodyYawOffset: Number(this.predicted?.bodyYawOffset ?? telemetry.bodyYawOffset ?? 0),
       currentBodyAngle: Number(this.predicted?.angle ?? 0),
@@ -1026,7 +1029,7 @@ export class PondScene extends Phaser.Scene {
       `Build: ${BUILD_VERSION || 'dev-local'}`,
       `Seq/Ack: ${this.seq}/${this.ackSeq}`,
       `Pending: ${this.pendingInputs.length}`,
-      'WASD move | C/V body turn | SHIFT sprint | SPACE brake | E/LMB shoot'
+      'WASD move | SPACE brake | RMB charge/crosscheck | E/LMB shoot'
     ].join('\n');
 
     if (next !== this.lastHudText) {

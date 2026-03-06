@@ -5,6 +5,8 @@ export type MovementDebugMetrics = {
   turnRate: number;
   turnRateAppliedDeg: number;
   inputVector: string;
+  rawInputVector: string;
+  filteredInputVector: string;
   desiredInputVector: string;
   pointerVector: string;
   aimAngle: number;
@@ -29,7 +31,9 @@ export type MovementDebugMetrics = {
   antiFlipActive: boolean;
   appliedForwardForce: number;
   appliedLateralForce: number;
+  edgeFactor: number;
   brakeActive: boolean;
+  chargeActive: boolean;
   baseBodyAngle: number;
   bodyYawOffset: number;
   currentBodyAngle: number;
@@ -46,6 +50,8 @@ const DEFAULT_MOVEMENT: MovementDebugMetrics = {
   turnRate: 0,
   turnRateAppliedDeg: 0,
   inputVector: '(0,0)',
+  rawInputVector: '(0,0)',
+  filteredInputVector: '(0,0)',
   desiredInputVector: '(0,0)',
   pointerVector: '(0,0)',
   aimAngle: 0,
@@ -70,7 +76,9 @@ const DEFAULT_MOVEMENT: MovementDebugMetrics = {
   antiFlipActive: false,
   appliedForwardForce: 0,
   appliedLateralForce: 0,
+  edgeFactor: 0,
   brakeActive: false,
+  chargeActive: false,
   baseBodyAngle: 0,
   bodyYawOffset: 0,
   currentBodyAngle: 0,

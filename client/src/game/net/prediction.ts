@@ -34,6 +34,8 @@ export type PredictedPlayerState = PlayerStateMsg & {
   brakeAssistLeft?: number;
   startLinearActive?: boolean;
   stickSide?: -1 | 1;
+  chargeActive?: boolean;
+  stunLeft?: number;
   debugSnapFactor?: number;
   debugBrakeAssistActive?: boolean;
   debugStartModeActive?: boolean;
@@ -141,6 +143,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     debugDesiredInputY: state.debugDesiredInputY,
     debugAppliedForwardForce: state.debugAppliedForwardForce,
     debugAppliedLateralForce: state.debugAppliedLateralForce,
+    debugChargeActive: state.chargeActive,
     debugBaseBodyAngle: state.debugBaseBodyAngle,
     debugBodyYawOffset: state.debugBodyYawOffset,
     debugBodyTurnInput: state.debugBodyTurnInput,
@@ -155,7 +158,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
       aimAngleRaw: typeof input.aimAngleRaw === 'number'
         ? input.aimAngleRaw
         : (typeof input.aimAngle === 'number' ? input.aimAngle : (state.aimAngleRaw ?? state.angle)),
-      bodyTurn: typeof input.bodyTurn === 'number' ? input.bodyTurn : 0,
+      bodyTurn: 0,
       buttons: {
         sprint: !!input.sprint,
         brake: !!input.brake
@@ -196,6 +199,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.brakeAssistLeft = simState.brakeAssistLeft;
   state.startLinearActive = simState.startLinearActive;
   state.stickSide = simState.stickSide;
+  state.chargeActive = !!simState.debugChargeActive;
   state.debugSnapFactor = simState.debugSnapFactor;
   state.debugBrakeAssistActive = simState.debugBrakeAssistActive;
   state.debugStartModeActive = simState.debugStartModeActive;
@@ -219,6 +223,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.debugDesiredInputY = simState.debugDesiredInputY;
   state.debugAppliedForwardForce = simState.debugAppliedForwardForce;
   state.debugAppliedLateralForce = simState.debugAppliedLateralForce;
+  state.chargeActive = !!simState.debugChargeActive;
   state.debugBaseBodyAngle = simState.debugBaseBodyAngle;
   state.debugBodyYawOffset = simState.debugBodyYawOffset;
   state.debugBodyTurnInput = simState.debugBodyTurnInput;
@@ -270,8 +275,14 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     antiFlipActive: !!simState.debugAntiFlipActive,
     desiredInputX: simState.debugDesiredInputX ?? 0,
     desiredInputY: simState.debugDesiredInputY ?? 0,
+    rawInputX: simState.debugRawInputX ?? input.moveX ?? 0,
+    rawInputY: simState.debugRawInputY ?? input.moveY ?? 0,
+    filteredInputX: simState.debugFilteredInputX ?? simState.debugDesiredInputX ?? 0,
+    filteredInputY: simState.debugFilteredInputY ?? simState.debugDesiredInputY ?? 0,
     appliedForwardForce: simState.debugAppliedForwardForce ?? 0,
     appliedLateralForce: simState.debugAppliedLateralForce ?? 0,
+    edgeFactor: simState.debugEdgeFactor ?? 0,
+    chargeActive: !!simState.debugChargeActive,
     moveAngle: simState.moveAngle ?? 0,
     aimAngle: simState.aimAngle ?? state.aimAngle ?? state.angle,
     aimAngleRaw: simState.aimAngleRaw ?? state.aimAngleRaw ?? state.angle,
@@ -299,7 +310,21 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     usedTuning.movementCoreModel = config.movementCoreModel as any;
     usedTuning.inputVectorTauMs = config.inputVectorTauMs as any;
     usedTuning.forwardAccel = config.forwardAccel as any;
+    usedTuning.forwardMaxSpeed = config.forwardMaxSpeed as any;
+    usedTuning.sideMaxSpeed = config.sideMaxSpeed as any;
+    usedTuning.reverseMaxSpeed = config.reverseMaxSpeed as any;
+    usedTuning.turnLowSpeed = config.turnLowSpeed as any;
+    usedTuning.turnHighSpeed = config.turnHighSpeed as any;
+    usedTuning.edgeTurnBonusMax = config.edgeTurnBonusMax as any;
+    usedTuning.brakeTurnBonusValue = config.brakeTurnBonusValue as any;
+    usedTuning.brakeOppositeRecovery = config.brakeOppositeRecovery as any;
     usedTuning.lateralSteerForce = config.lateralSteerForce as any;
+    usedTuning.baseLateralDamping = config.baseLateralDamping as any;
+    usedTuning.maxLateralDamping = config.maxLateralDamping as any;
+    usedTuning.brakeLateralDampingBonus = config.brakeLateralDampingBonus as any;
+    usedTuning.carveLossStrength = config.carveLossStrength as any;
+    usedTuning.glideDrag = config.glideDrag as any;
+    usedTuning.moveDrag = config.moveDrag as any;
     usedTuning.oppositeSteerScale = config.oppositeSteerScale as any;
     usedTuning.carveStrength = config.carveStrength as any;
     usedTuning.brakeSteerBoost = config.brakeSteerBoost as any;

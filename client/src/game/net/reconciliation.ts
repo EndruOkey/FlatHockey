@@ -35,6 +35,8 @@ export function reconcilePrediction(
     ?? (authoritative as any).angle;
   (predicted as any).aimAngle = (authoritative as any).aimAngle;
   (predicted as any).aimAngleRaw = (authoritative as any).aimAngleRaw ?? (authoritative as any).aimAngle;
+  (predicted as any).chargeActive = !!(authoritative as any).chargeActive;
+  (predicted as any).stunLeft = Number((authoritative as any).stunLeft ?? 0);
   (predicted as any).stickAngVel = 0;
   (predicted as any).stickLocalAngle = wrapToPi(
     ((authoritative as any).aimAngle ?? (authoritative as any).angle)

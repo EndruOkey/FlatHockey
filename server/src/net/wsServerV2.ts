@@ -186,7 +186,6 @@ function toInputMsg(clientId: string, msg: ClientInputV2, fallbackAim: number): 
   const moveX = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
   const moveY = (keys.s ? 1 : 0) - (keys.w ? 1 : 0);
   const shoot = keys.e ? 1 : 0;
-  const bodyTurn = (keys.v ? 1 : 0) - (keys.c ? 1 : 0);
   return {
     type: 'input',
     clientId,
@@ -199,7 +198,7 @@ function toInputMsg(clientId: string, msg: ClientInputV2, fallbackAim: number): 
     aimAngleRaw: typeof msg.pointer?.aim === 'number' ? msg.pointer.aim : fallbackAim,
     aimAngle: typeof msg.pointer?.aim === 'number' ? msg.pointer.aim : fallbackAim,
     aimDistance01: 1,
-    bodyTurn: clamp(bodyTurn, -1, 1)
+    bodyTurn: 0
   };
 }
 

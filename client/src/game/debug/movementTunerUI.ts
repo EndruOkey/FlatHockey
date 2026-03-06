@@ -1291,13 +1291,19 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         id: 'movement_turning',
         title: 'Turn / Handling',
         tone: 'control',
-        keys: ['inputVectorTauMs', 'forwardAccel', 'lateralSteerForce', 'velocityTurnResistance', 'oppositeSteerScale', 'lateralDamping', 'brakeLateralDamping', 'brakeSteerBoost']
+        keys: ['inputVectorTauMs', 'forwardAccel', 'forwardMaxSpeed', 'sideMaxSpeed', 'reverseMaxSpeed', 'turnLowSpeed', 'turnHighSpeed', 'edgeTurnBonusMax', 'lateralSteerForce', 'velocityTurnResistance', 'oppositeSteerScale', 'brakeOppositeRecovery', 'baseLateralDamping', 'maxLateralDamping', 'brakeLateralDampingBonus', 'carveLossStrength']
       },
       {
         id: 'movement_brake',
         title: 'Brake / Redirect',
         tone: 'control',
-        keys: ['brakeDrag']
+        keys: ['glideDrag', 'moveDrag', 'brakeDrag', 'brakeTurnBonusValue']
+      },
+      {
+        id: 'movement_charge',
+        title: 'Charge / Hit',
+        tone: 'control',
+        keys: ['chargeSpeedMul', 'chargeAccelMul', 'chargeTurnMul', 'chargeLateralGripMul', 'minHitSpeed', 'hitForce', 'hitCooldownTime', 'boardStunMinSpeed', 'boardStunDuration', 'postHitSpeedRetention']
       }
     ];
 
@@ -1369,12 +1375,15 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         `baseBodyAngle: ${(m.baseBodyAngle * 180 / Math.PI).toFixed(1)} deg`,
         `bodyYawOffset: ${(m.bodyYawOffset * 180 / Math.PI).toFixed(1)} deg`,
         `currentBodyAngle: ${(m.currentBodyAngle * 180 / Math.PI).toFixed(1)} deg`,
-        `bodyTurnInput: ${m.bodyTurnInput.toFixed(2)}`,
         `pointerVector: ${m.pointerVector}`,
+        `rawInputVector: ${m.rawInputVector}`,
+        `filteredInputVector: ${m.filteredInputVector}`,
         `inputVector: ${m.inputVector}`,
         `desiredInputVector: ${m.desiredInputVector}`,
         `appliedForwardForce: ${m.appliedForwardForce.toFixed(1)}`,
         `appliedLateralForce: ${m.appliedLateralForce.toFixed(1)}`,
+        `edgeFactor: ${m.edgeFactor.toFixed(2)}`,
+        `chargeActive: ${m.chargeActive ? 'true' : 'false'}`,
         `stickMode: ${String(t.stickMode ?? 'APPROACH')}`,
         `stickDeltaDeg: ${Number(t.stickDeltaDeg ?? 0).toFixed(1)}`,
         `stickAngVelDeg: ${Number(t.stickAngVelDeg ?? 0).toFixed(1)}`,
@@ -1553,6 +1562,8 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         `velocityX: ${m.velocityX.toFixed(2)}`,
         `velocityY: ${m.velocityY.toFixed(2)}`,
         `turnRate: ${m.turnRate.toFixed(2)}`,
+        `rawInputVector: ${m.rawInputVector}`,
+        `filteredInputVector: ${m.filteredInputVector}`,
         `inputVector: ${m.inputVector}`,
         `desiredInputVector: ${m.desiredInputVector}`,
         `pointerVector: ${m.pointerVector}`,
@@ -1579,12 +1590,13 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         `antiFlipActive: ${m.antiFlipActive ? 'true' : 'false'}`,
         `appliedForwardForce: ${m.appliedForwardForce.toFixed(1)}`,
         `appliedLateralForce: ${m.appliedLateralForce.toFixed(1)}`,
+        `edgeFactor: ${m.edgeFactor.toFixed(2)}`,
         `brakeActive: ${m.brakeActive ? 'true' : 'false'}`,
+        `chargeActive: ${m.chargeActive ? 'true' : 'false'}`,
         `activeBodyModel: ${m.activeBodyModel}`,
         `baseBodyAngle: ${(m.baseBodyAngle * 180 / Math.PI).toFixed(1)} deg`,
         `bodyYawOffset: ${(m.bodyYawOffset * 180 / Math.PI).toFixed(1)} deg`,
         `currentBodyAngle: ${(m.currentBodyAngle * 180 / Math.PI).toFixed(1)} deg`,
-        `bodyTurnInput: ${m.bodyTurnInput.toFixed(2)}`,
         `recorder: ${m.recorderState} (${m.recordedFrames} frames)`
       ].join('\n');
     });

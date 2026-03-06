@@ -10,7 +10,7 @@ export type InputMsg = {
   aimAngle?: number;
   aimAngleRaw?: number;
   aimDistance01?: number;
-  bodyTurn?: number; // -1..+1, manual body rotation input
+  bodyTurn?: number; // legacy/inactive
 };
 
 export type PlayerStateMsg = {
@@ -36,6 +36,8 @@ export type PlayerStateMsg = {
   bodyYawOffset?: number;
   aimAngleRaw?: number;
   aimAngle: number;
+  chargeActive?: boolean;
+  stunLeft?: number;
 };
 
 export type SnapshotMsg = {

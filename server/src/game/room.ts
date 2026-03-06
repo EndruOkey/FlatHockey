@@ -1,5 +1,6 @@
 import type { InputMsg, ServerMessage, SnapshotMsg } from '@flathockey/shared';
 import { applyMovementStep, type MovementStepConfig, type MovementStepState } from '@flathockey/shared/sim/movementStep';
+import { MOVEMENT_DEFAULTS } from '@flathockey/shared/tuning/movement.defaults';
 import { resolvePuckStickTuning } from '@flathockey/shared/tuning/puckStickTuning';
 import { WebSocket } from 'ws';
 
@@ -56,6 +57,9 @@ type PlayerState = {
   lastInputState: InputState;
   inputBuffer: BufferedInput[];
   inputGapTicks: number;
+  chargeActive: boolean;
+  hitCooldownLeft: number;
+  stunLeft: number;
 };
 
 type Vec2 = { x: number; y: number };
@@ -178,7 +182,10 @@ export class Room {
       lastProcessedSeq: 0,
       lastInputState: { ...ZERO_INPUT },
       inputBuffer: [],
-      inputGapTicks: 0
+      inputGapTicks: 0,
+      chargeActive: false,
+      hitCooldownLeft: 0,
+      stunLeft: 0
     });
     this.sockets.set(clientId, ws);
   }
@@ -208,9 +215,7 @@ export class Room {
         aimDistance01: typeof input.aimDistance01 === 'number'
           ? clamp(input.aimDistance01, 0, 1)
           : 1,
-        bodyTurn: typeof input.bodyTurn === 'number'
-          ? clamp(input.bodyTurn, -1, 1)
-          : 0
+        bodyTurn: 0
       }
     };
 
@@ -225,6 +230,8 @@ export class Room {
     this.serverTick += 1;
 
     for (const player of this.players.values()) {
+      player.hitCooldownLeft = Math.max(0, player.hitCooldownLeft - dt);
+      player.stunLeft = Math.max(0, player.stunLeft - dt);
       const next = this.consumeNextInput(player);
       if (next) {
         player.lastInputState = next.state;
@@ -263,21 +270,28 @@ export class Room {
         stickLocalAngle: player.stickLocalAngle
       };
 
+      const playerHasPuck = this.puck.state === 'HELD' && this.puck.ownerId === player.id;
+      const chargeInputActive = !!player.lastInputState.sprint && !playerHasPuck && player.stunLeft <= 0;
+      const movementInputX = player.stunLeft > 0 ? 0 : player.lastInputState.moveX;
+      const movementInputY = player.stunLeft > 0 ? 0 : player.lastInputState.moveY;
       applyMovementStep(
         state,
         {
-          moveX: player.lastInputState.moveX,
-          moveY: player.lastInputState.moveY,
+          moveX: movementInputX,
+          moveY: movementInputY,
           aimAngleRaw: player.lastInputState.aimAngleRaw,
           aimDistance01: player.lastInputState.aimDistance01,
-          bodyTurn: player.lastInputState.bodyTurn,
+          bodyTurn: 0,
           buttons: {
-            sprint: !!player.lastInputState.sprint,
+            sprint: chargeInputActive,
             brake: !!player.lastInputState.brake
           }
         },
         dt,
-        this.movementTuning
+        {
+          ...this.movementTuning,
+          hasPuck: playerHasPuck
+        }
       );
 
       player.x = state.x;
@@ -307,6 +321,7 @@ export class Room {
       player.brakeAssistLeft = state.brakeAssistLeft;
       player.startLinearActive = state.startLinearActive;
       player.stickSide = state.stickSide;
+      player.chargeActive = !!state.debugChargeActive && player.stunLeft <= 0;
       if (Number.isFinite(state.bodyAngle)) {
         player.angle = state.bodyAngle!;
       } else {
@@ -324,6 +339,8 @@ export class Room {
       }
     }
 
+    this.resolvePlayerContacts();
+    this.resolveBoardHits();
     this.updatePuck(dt);
   }
 
@@ -366,7 +383,9 @@ export class Room {
         bodyTargetAngle: p.bodyTargetAngle,
         bodyYawOffset: p.bodyYawOffset,
         aimAngleRaw: p.aimAngleRaw,
-        aimAngle: p.aimAngle
+        aimAngle: p.aimAngle,
+        chargeActive: p.chargeActive,
+        stunLeft: p.stunLeft
       }))
     };
 
@@ -530,6 +549,114 @@ export class Room {
             owner.shotCharge = 0;
             owner.prevShoot = !!owner.lastInputState.shoot;
           }
+        }
+      }
+    }
+  }
+
+  private dropPuckFrom(playerId: string | null) {
+    if (!playerId) return;
+    if (this.puck.state !== 'HELD' || this.puck.ownerId !== playerId) return;
+    this.puck.state = 'FREE';
+    this.puck.ownerId = null;
+    this.puck.pickupCooldownMs = Math.max(this.puck.pickupCooldownMs, 180);
+  }
+
+  private resolvePlayerContacts() {
+    const players = [...this.players.values()];
+    if (players.length < 2) return;
+
+    const playerRadius = 18;
+    const minHitSpeed = Number(this.movementTuning.minHitSpeed ?? MOVEMENT_DEFAULTS.minHitSpeed ?? 290);
+    const hitForce = Number(this.movementTuning.hitForce ?? MOVEMENT_DEFAULTS.hitForce ?? 420);
+    const hitCooldownTime = Number(this.movementTuning.hitCooldownTime ?? MOVEMENT_DEFAULTS.hitCooldownTime ?? 0.35);
+    const postHitSpeedRetention = clamp(
+      Number(this.movementTuning.postHitSpeedRetention ?? MOVEMENT_DEFAULTS.postHitSpeedRetention ?? 0.38),
+      0,
+      1
+    );
+
+    for (let i = 0; i < players.length; i += 1) {
+      for (let j = i + 1; j < players.length; j += 1) {
+        const a = players[i];
+        const b = players[j];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const dist = Math.hypot(dx, dy);
+        const minDist = playerRadius * 2;
+        if (dist <= 0 || dist > minDist) continue;
+
+        const nx = dx / dist;
+        const ny = dy / dist;
+        const relVx = a.vx - b.vx;
+        const relVy = a.vy - b.vy;
+        const closingSpeed = Math.abs(relVx * nx + relVy * ny);
+
+        const aCanHit = a.chargeActive && a.hitCooldownLeft <= 0 && a.stunLeft <= 0;
+        const bCanHit = b.chargeActive && b.hitCooldownLeft <= 0 && b.stunLeft <= 0;
+        const shouldHit = closingSpeed >= minHitSpeed && (aCanHit || bCanHit);
+        if (!shouldHit) continue;
+
+        if (aCanHit && bCanHit) {
+          a.vx -= nx * hitForce * 0.8;
+          a.vy -= ny * hitForce * 0.8;
+          b.vx += nx * hitForce * 0.8;
+          b.vy += ny * hitForce * 0.8;
+          a.hitCooldownLeft = hitCooldownTime;
+          b.hitCooldownLeft = hitCooldownTime;
+          this.dropPuckFrom(a.id);
+          this.dropPuckFrom(b.id);
+          continue;
+        }
+
+        const attacker = aCanHit ? a : b;
+        const target = aCanHit ? b : a;
+        const dir = aCanHit ? 1 : -1;
+        target.vx += nx * hitForce * dir;
+        target.vy += ny * hitForce * dir;
+        attacker.vx *= postHitSpeedRetention;
+        attacker.vy *= postHitSpeedRetention;
+        attacker.hitCooldownLeft = hitCooldownTime;
+        this.dropPuckFrom(target.id);
+      }
+    }
+  }
+
+  private resolveBoardHits() {
+    const playerRadius = 18;
+    const boardStunMinSpeed = Number(this.movementTuning.boardStunMinSpeed ?? MOVEMENT_DEFAULTS.boardStunMinSpeed ?? 280);
+    const boardStunDuration = Number(this.movementTuning.boardStunDuration ?? MOVEMENT_DEFAULTS.boardStunDuration ?? 0.55);
+
+    for (const p of this.players.values()) {
+      let hitBoard = false;
+      if (p.x < RINK.left + playerRadius) {
+        p.x = RINK.left + playerRadius;
+        p.vx = Math.abs(p.vx) * 0.18;
+        hitBoard = true;
+      } else if (p.x > RINK.right - playerRadius) {
+        p.x = RINK.right - playerRadius;
+        p.vx = -Math.abs(p.vx) * 0.18;
+        hitBoard = true;
+      }
+      if (p.y < RINK.top + playerRadius) {
+        p.y = RINK.top + playerRadius;
+        p.vy = Math.abs(p.vy) * 0.18;
+        hitBoard = true;
+      } else if (p.y > RINK.bottom - playerRadius) {
+        p.y = RINK.bottom - playerRadius;
+        p.vy = -Math.abs(p.vy) * 0.18;
+        hitBoard = true;
+      }
+      if (!hitBoard) continue;
+
+      const speed = Math.hypot(p.vx, p.vy);
+      if (p.chargeActive && speed >= boardStunMinSpeed) {
+        p.stunLeft = Math.max(p.stunLeft, boardStunDuration);
+        p.chargeActive = false;
+        p.vx *= 0.35;
+        p.vy *= 0.35;
+        if (this.puck.state === 'HELD' && this.puck.ownerId === p.id) {
+          this.dropPuckFrom(p.id);
         }
       }
     }
