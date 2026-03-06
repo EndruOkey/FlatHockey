@@ -21,6 +21,8 @@ export type PlayerStateMsg = {
   vy: number;
   angle: number; // body facing (legacy alias)
   moveAngle: number;
+  heading?: number;
+  inputAngle?: number;
   baseBodyAngle?: number;
   bodyYawOffset?: number;
   aimAngleRaw?: number;

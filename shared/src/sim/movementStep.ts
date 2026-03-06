@@ -690,7 +690,7 @@ export function applyMovementStep(
   state.stickLocalAngle = nextStickDiff;
   state.aimAngleRaw = aimAngleRaw;
   state.aimAngle = aimAngle;
-  state.heading = state.moveAngle;
+  state.heading = turnIntentAngle;
   state.debugStickDeltaDeg = Math.abs(wrapToPi(targetAim - aimAngle)) * (180 / Math.PI);
   state.debugStickAngVelDeg = Math.abs(stickAngVel) * (180 / Math.PI);
   state.debugStickAngVelClamped = stickAngVelClamped;

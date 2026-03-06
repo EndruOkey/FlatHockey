@@ -320,6 +320,8 @@ export class Room {
         vy: p.vy,
         angle: p.angle,
         moveAngle: p.moveAngle,
+        heading: p.heading,
+        inputAngle: p.inputAngle,
         baseBodyAngle: p.baseBodyAngle,
         bodyYawOffset: p.bodyYawOffset,
         aimAngleRaw: p.aimAngleRaw,

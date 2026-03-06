@@ -18,7 +18,8 @@ export function reconcilePrediction(
   predicted.vy = authoritative.vy;
   predicted.angle = authoritative.angle;
   (predicted as any).moveAngle = (authoritative as any).moveAngle;
-  (predicted as any).inputAngle = (authoritative as any).moveAngle;
+  (predicted as any).heading = (authoritative as any).heading ?? (authoritative as any).moveAngle;
+  (predicted as any).inputAngle = (authoritative as any).inputAngle ?? (authoritative as any).moveAngle;
   (predicted as any).baseBodyAngle = (authoritative as any).baseBodyAngle ?? (authoritative as any).angle;
   (predicted as any).bodyYawOffset = (authoritative as any).bodyYawOffset ?? 0;
   (predicted as any).bodyTargetAngle = (authoritative as any).baseBodyAngle ?? (authoritative as any).angle;
