@@ -15,6 +15,8 @@ export type PredictedPlayerState = PlayerStateMsg & {
   heading?: number;
   moveAngle?: number;
   inputAngle?: number;
+  lastRawInputAngle?: number;
+  antiFlipTimer?: number;
   baseBodyAngle?: number;
   bodyYawOffset?: number;
   bodyTargetAngle?: number;
@@ -42,6 +44,9 @@ export type PredictedPlayerState = PlayerStateMsg & {
   debugTurnIntentAngle?: number;
   debugMoveTurnRateAppliedDeg?: number;
   debugVelocityDesiredDeltaDeg?: number;
+  debugTurnResistance?: number;
+  debugRedirectAccelScale?: number;
+  debugAntiFlipActive?: boolean;
   debugBaseBodyAngle?: number;
   debugBodyYawOffset?: number;
   debugBodyTurnInput?: number;
@@ -86,6 +91,8 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     stickLocalAngle: state.stickLocalAngle,
     moveAngle: state.moveAngle,
     inputAngle: state.inputAngle,
+    lastRawInputAngle: state.lastRawInputAngle,
+    antiFlipTimer: state.antiFlipTimer,
     baseBodyAngle: state.baseBodyAngle,
     bodyYawOffset: state.bodyYawOffset,
     bodyTargetAngle: state.bodyTargetAngle,
@@ -111,6 +118,9 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     debugTurnIntentAngle: state.debugTurnIntentAngle,
     debugMoveTurnRateAppliedDeg: state.debugMoveTurnRateAppliedDeg,
     debugVelocityDesiredDeltaDeg: state.debugVelocityDesiredDeltaDeg,
+    debugTurnResistance: state.debugTurnResistance,
+    debugRedirectAccelScale: state.debugRedirectAccelScale,
+    debugAntiFlipActive: state.debugAntiFlipActive,
     debugBaseBodyAngle: state.debugBaseBodyAngle,
     debugBodyYawOffset: state.debugBodyYawOffset,
     debugBodyTurnInput: state.debugBodyTurnInput,
@@ -143,6 +153,8 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.heading = simState.heading;
   state.moveAngle = simState.moveAngle;
   state.inputAngle = simState.inputAngle;
+  state.lastRawInputAngle = simState.lastRawInputAngle;
+  state.antiFlipTimer = simState.antiFlipTimer;
   state.baseBodyAngle = simState.baseBodyAngle;
   state.bodyYawOffset = simState.bodyYawOffset;
   state.bodyTargetAngle = simState.bodyTargetAngle;
@@ -174,6 +186,9 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.debugTurnIntentAngle = simState.debugTurnIntentAngle;
   state.debugMoveTurnRateAppliedDeg = simState.debugMoveTurnRateAppliedDeg;
   state.debugVelocityDesiredDeltaDeg = simState.debugVelocityDesiredDeltaDeg;
+  state.debugTurnResistance = simState.debugTurnResistance;
+  state.debugRedirectAccelScale = simState.debugRedirectAccelScale;
+  state.debugAntiFlipActive = simState.debugAntiFlipActive;
   state.debugBaseBodyAngle = simState.debugBaseBodyAngle;
   state.debugBodyYawOffset = simState.debugBodyYawOffset;
   state.debugBodyTurnInput = simState.debugBodyTurnInput;
@@ -222,6 +237,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     velocityDesiredDeltaDeg: simState.debugVelocityDesiredDeltaDeg ?? 0,
     turnResistance: simState.debugTurnResistance ?? 0,
     redirectAccelScale: simState.debugRedirectAccelScale ?? 1,
+    antiFlipActive: !!simState.debugAntiFlipActive,
     moveAngle: simState.moveAngle ?? 0,
     aimAngle: simState.aimAngle ?? state.aimAngle ?? state.angle,
     aimAngleRaw: simState.aimAngleRaw ?? state.aimAngleRaw ?? state.angle,

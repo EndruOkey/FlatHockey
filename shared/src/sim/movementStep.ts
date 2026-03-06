@@ -18,6 +18,8 @@ export type MovementStepState = {
   bodyManualAngVel?: number;
   stickSide?: -1 | 1;
   stickLocalAngle?: number;
+  lastRawInputAngle?: number;
+  antiFlipTimer?: number;
   // internal heading used by heading-mode movement (radians)
   heading?: number;
   prevHasInput?: boolean;
@@ -45,6 +47,7 @@ export type MovementStepState = {
   debugVelocityDesiredDeltaDeg?: number;
   debugTurnResistance?: number;
   debugRedirectAccelScale?: number;
+  debugAntiFlipActive?: boolean;
   debugBaseBodyAngle?: number;
   debugBodyYawOffset?: number;
   debugBodyTurnInput?: number;
@@ -90,6 +93,8 @@ export type MovementStepConfig = {
   velocityTurnResistance?: number;
   oppositeTurnResistance?: number;
   redirectAccelPenalty?: number;
+  antiFlipWindowMs?: number;
+  antiFlipPenalty?: number;
   lateralDamping?: number;
   brakeTurnRateBoost?: number;
   brakeLateralDamping?: number;
@@ -375,6 +380,7 @@ export function applyMovementStep(
   state.debugVelocityDesiredDeltaDeg = 0;
   state.debugTurnResistance = 0;
   state.debugRedirectAccelScale = 1;
+  state.debugAntiFlipActive = false;
   state.debugBaseBodyAngle = 0;
   state.debugBodyYawOffset = 0;
   state.debugBodyTurnInput = 0;
@@ -394,6 +400,12 @@ export function applyMovementStep(
   }
   if (!Number.isFinite(state.heading)) {
     state.heading = state.moveAngle;
+  }
+  if (!Number.isFinite(state.lastRawInputAngle)) {
+    state.lastRawInputAngle = state.moveAngle;
+  }
+  if (!Number.isFinite(state.antiFlipTimer)) {
+    state.antiFlipTimer = 0;
   }
   if (!Number.isFinite(state.bodyAngle)) {
     state.bodyAngle = Number.isFinite(state.heading) ? state.heading! : state.moveAngle;
@@ -462,6 +474,8 @@ export function applyMovementStep(
   const velocityTurnResistance = Math.max(0, config.velocityTurnResistance ?? DEFAULTS.velocityTurnResistance ?? 1.2);
   const oppositeTurnResistance = Math.max(0, config.oppositeTurnResistance ?? DEFAULTS.oppositeTurnResistance ?? 1.35);
   const redirectAccelPenalty = Math.max(0, config.redirectAccelPenalty ?? DEFAULTS.redirectAccelPenalty ?? 1.15);
+  const antiFlipWindowMs = Math.max(0, config.antiFlipWindowMs ?? DEFAULTS.antiFlipWindowMs ?? 170);
+  const antiFlipPenalty = clamp(config.antiFlipPenalty ?? DEFAULTS.antiFlipPenalty ?? 0.7, 0, 1);
   const brakeTurnRateBoost = Math.max(1, config.brakeTurnRateBoost ?? DEFAULTS.brakeTurnRateBoost ?? 1);
   const bodyTurnInput = clamp(input.bodyTurn ?? 0, -1, 1);
   const bodyYawSpeedDeg = Math.max(
@@ -496,14 +510,29 @@ export function applyMovementStep(
     ? wrapToPi((mouseDrivesMove && Number.isFinite(inputAimRaw)) ? inputAimRaw : Math.atan2(inputNy, inputNx))
     : state.moveAngle!;
   state.debugRawInputAngle = rawDesiredMoveAngle;
+  const rawInputDelta = Math.abs(wrapToPi(rawDesiredMoveAngle - state.lastRawInputAngle!));
+  const antiFlipTrigger = hasInput && rawInputDelta > Math.PI * 0.62 && speedNorm > 0.12;
+  if (antiFlipTrigger && antiFlipWindowMs > 0) {
+    state.antiFlipTimer = antiFlipWindowMs / 1000;
+  } else {
+    state.antiFlipTimer = Math.max(0, (state.antiFlipTimer ?? 0) - simDt);
+  }
+  const antiFlipActive = (state.antiFlipTimer ?? 0) > 0;
+  const antiFlipBlend = antiFlipWindowMs > 0
+    ? clamp((state.antiFlipTimer ?? 0) / (antiFlipWindowMs / 1000), 0, 1)
+    : 0;
+  const antiFlipRatePenalty = lerp(1, antiFlipPenalty, antiFlipBlend);
+  state.debugAntiFlipActive = antiFlipActive;
   if (hasInput) {
     const rawVsFiltered = Math.abs(wrapToPi(rawDesiredMoveAngle - state.inputAngle!));
     const largeInputJump01 = smoothstep01((rawVsFiltered - Math.PI * 0.12) / (Math.PI * 0.88));
-    const inputDirectionRate = (1000 / inputDirectionTauMs) * lerp(1.7, 0.18, largeInputJump01);
+    const inputDirectionRate = (1000 / inputDirectionTauMs) * lerp(1.7, 0.18, largeInputJump01) * antiFlipRatePenalty;
     const inputDirectionAlpha = expBlend(inputDirectionRate, simDt);
     state.inputAngle = lerpAngle(state.inputAngle!, rawDesiredMoveAngle, inputDirectionAlpha);
+    state.lastRawInputAngle = rawDesiredMoveAngle;
   } else {
     state.inputAngle = state.moveAngle!;
+    state.lastRawInputAngle = state.moveAngle!;
   }
   const desiredMoveAngle = state.inputAngle!;
   desiredMoveAngleDebug = desiredMoveAngle;
@@ -525,10 +554,12 @@ export function applyMovementStep(
     const oppositeIntentPenalty = input.buttons.brake
       ? lerp(1, 0.74, oppositeResistance01)
       : lerp(1, 0.32, oppositeResistance01);
+    const antiFlipIntentPenalty = lerp(1, antiFlipPenalty, antiFlipBlend);
     const turnIntentRate = (1000 / turnIntentTauMs)
       * lerp(1.45, input.buttons.brake ? 0.58 : 0.22, largeTurn01)
       * velocityIntentPenalty
       * oppositeIntentPenalty
+      * antiFlipIntentPenalty
       * (input.buttons.brake ? 1.08 : 1);
     const turnIntentAlpha = expBlend(turnIntentRate, simDt);
     state.heading = lerpAngle(state.heading!, desiredMoveAngle, turnIntentAlpha);
@@ -551,7 +582,8 @@ export function applyMovementStep(
   const oppositeTurnPenalty = input.buttons.brake
     ? lerp(1, 0.52, turnResistance)
     : lerp(1, 0.1, turnResistance);
-  const moveTurnRate = moveTurnRateBase * oppositeTurnPenalty * (input.buttons.brake ? brakeTurnRateBoost : 1);
+  const antiFlipTurnPenalty = lerp(1, antiFlipPenalty, antiFlipBlend);
+  const moveTurnRate = moveTurnRateBase * oppositeTurnPenalty * antiFlipTurnPenalty * (input.buttons.brake ? brakeTurnRateBoost : 1);
   if (hasInput) {
     state.moveAngle = approachAngle(state.moveAngle!, turnIntentAngle, moveTurnRate * simDt);
   }
@@ -571,7 +603,8 @@ export function applyMovementStep(
       1
     );
     const redirectAccelFloor = input.buttons.brake ? 0.22 : 0.015;
-    const redirectAccelScale = lerp(1, redirectAccelFloor, redirectPenalty01);
+    const antiFlipAccelPenalty = lerp(1, antiFlipPenalty, antiFlipBlend);
+    const redirectAccelScale = lerp(1, redirectAccelFloor, redirectPenalty01) * antiFlipAccelPenalty;
     state.vx += hx * accel * redirectAccelScale * simDt;
     state.vy += hy * accel * redirectAccelScale * simDt;
     state.debugRedirectAccelScale = redirectAccelScale;

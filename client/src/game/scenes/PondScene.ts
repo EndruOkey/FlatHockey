@@ -998,6 +998,7 @@ export class PondScene extends Phaser.Scene {
       velocityDesiredDeltaDeg: Number(telemetry.velocityDesiredDeltaDeg ?? 0),
       turnResistance: Number(telemetry.turnResistance ?? 0),
       redirectAccelScale: Number(telemetry.redirectAccelScale ?? 1),
+      antiFlipActive: Boolean(telemetry.antiFlipActive ?? false),
       brakeActive: Number(telemetry.brakeApplied ?? 0) > 0.0001,
       baseBodyAngle: Number(this.predicted?.baseBodyAngle ?? telemetry.baseBodyAngle ?? this.predicted?.angle ?? 0),
       bodyYawOffset: Number(this.predicted?.bodyYawOffset ?? telemetry.bodyYawOffset ?? 0),

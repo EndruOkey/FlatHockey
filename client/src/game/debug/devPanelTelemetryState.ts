@@ -25,6 +25,7 @@ export type MovementDebugMetrics = {
   velocityDesiredDeltaDeg: number;
   turnResistance: number;
   redirectAccelScale: number;
+  antiFlipActive: boolean;
   brakeActive: boolean;
   baseBodyAngle: number;
   bodyYawOffset: number;
@@ -62,6 +63,7 @@ const DEFAULT_MOVEMENT: MovementDebugMetrics = {
   velocityDesiredDeltaDeg: 0,
   turnResistance: 0,
   redirectAccelScale: 1,
+  antiFlipActive: false,
   brakeActive: false,
   baseBodyAngle: 0,
   bodyYawOffset: 0,

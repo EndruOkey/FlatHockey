@@ -1291,7 +1291,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         id: 'movement_turning',
         title: 'Turn / Handling',
         tone: 'control',
-        keys: ['maxTurnRateLowSpeed', 'maxTurnRateHighSpeed', 'inputDirectionTauMs', 'turnIntentTauMs', 'velocityTurnResistance', 'oppositeTurnResistance', 'redirectAccelPenalty', 'lateralDamping', 'brakeTurnRateBoost', 'brakeLateralDamping']
+        keys: ['maxTurnRateLowSpeed', 'maxTurnRateHighSpeed', 'inputDirectionTauMs', 'turnIntentTauMs', 'velocityTurnResistance', 'oppositeTurnResistance', 'redirectAccelPenalty', 'antiFlipWindowMs', 'antiFlipPenalty', 'lateralDamping', 'brakeTurnRateBoost', 'brakeLateralDamping']
       },
       {
         id: 'movement_brake',
@@ -1363,6 +1363,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         `velocityVsDesired: ${m.velocityDesiredDeltaDeg.toFixed(1)} deg`,
         `turnResistance: ${m.turnResistance.toFixed(2)}`,
         `redirectAccelScale: ${m.redirectAccelScale.toFixed(2)}`,
+        `antiFlipActive: ${m.antiFlipActive ? 'true' : 'false'}`,
         `brakeActive: ${m.brakeActive ? 'true' : 'false'}`,
         `activeBodyModel: ${m.activeBodyModel}`,
         `baseBodyAngle: ${(m.baseBodyAngle * 180 / Math.PI).toFixed(1)} deg`,
@@ -1571,6 +1572,7 @@ export function createMovementTuner(wsClient?: WsClient): TunerHandle {
         `velocityVsDesired: ${m.velocityDesiredDeltaDeg.toFixed(1)} deg`,
         `turnResistance: ${m.turnResistance.toFixed(2)}`,
         `redirectAccelScale: ${m.redirectAccelScale.toFixed(2)}`,
+        `antiFlipActive: ${m.antiFlipActive ? 'true' : 'false'}`,
         `brakeActive: ${m.brakeActive ? 'true' : 'false'}`,
         `activeBodyModel: ${m.activeBodyModel}`,
         `baseBodyAngle: ${(m.baseBodyAngle * 180 / Math.PI).toFixed(1)} deg`,

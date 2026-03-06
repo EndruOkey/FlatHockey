@@ -33,6 +33,8 @@ export const MOVEMENT_DEFAULTS: MovementTuning = {
   velocityTurnResistance: 1.2,
   oppositeTurnResistance: 1.35,
   redirectAccelPenalty: 1.15,
+  antiFlipWindowMs: 170,
+  antiFlipPenalty: 0.7,
   lateralDamping: 0.18,
   brakeTurnRateBoost: 1.5,
   brakeLateralDamping: 1.35,
