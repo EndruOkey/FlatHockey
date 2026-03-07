@@ -174,6 +174,22 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
       ?? MOVEMENT_DEFAULTS.startupLockSpeedThreshold
       ?? minTravelDirSpeed
   );
+  const startupLatchSpeedThreshold = Math.max(
+    0.001,
+    config.startupLatchSpeedThreshold
+      ?? MOVEMENT_DEFAULTS.startupLatchSpeedThreshold
+      ?? startupLockSpeedThreshold
+  );
+  const startupLatchReleaseSpeed = Math.max(
+    startupLatchSpeedThreshold,
+    config.startupLatchReleaseSpeed
+      ?? MOVEMENT_DEFAULTS.startupLatchReleaseSpeed
+      ?? minTravelDirSpeed
+  );
+  const startupReleaseSec = Math.max(
+    0.02,
+    (config.startupReleaseMs ?? MOVEMENT_DEFAULTS.startupReleaseMs ?? 90) / 1000
+  );
   const startupOppositeLockSec = Math.max(
     0,
     (config.startupOppositeLockMs ?? MOVEMENT_DEFAULTS.startupOppositeLockMs ?? 140) / 1000
@@ -201,6 +217,8 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
   let startCommitLeft = Math.max(0, state.startCommitTimer ?? 0);
   let startNoInputLeft = Math.max(0, state.startNoInputTimer ?? 0);
   let startupOppositeLockLeft = Math.max(0, state.startupOppositeLockTimer ?? 0);
+  let startupLatchActive = !!state.startupLatchActive;
+  let startupReleaseLeft = Math.max(0, state.startupReleaseTimer ?? 0);
   let startDirX = state.startDirX ?? filteredX;
   let startDirY = state.startDirY ?? filteredY;
   const startDirMag = Math.hypot(startDirX, startDirY);
@@ -212,28 +230,37 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
     startDirY = filteredY;
   }
   const lowSpeedStartupActive = speedBefore < noSteerSpeedThreshold;
+  const startupLatchSpeedActive = speedBefore < startupLatchSpeedThreshold;
   const startupOppositeLockActiveRegime = speedBefore < startupLockSpeedThreshold;
   const validStartInput = hasInput && rawLen >= startupInputThreshold;
   const releaseToRearmSec = Math.max(0.06, startupDirHoldSec * 0.45);
-  if (lowSpeedStartupActive) {
-    const hasStoredStartDir = Math.hypot(state.startDirX ?? 0, state.startDirY ?? 0) > 0.0001;
-    if (validStartInput) {
-      const canCaptureFromInput = startCommitLeft <= 0.0001 && (!hasStoredStartDir || startNoInputLeft >= releaseToRearmSec);
-      if (canCaptureFromInput) {
-        startDirX = filteredX;
-        startDirY = filteredY;
-        startCommitLeft = startupDirHoldSec;
-        startupOppositeLockLeft = startupOppositeLockSec;
-      }
+  if (startupLatchSpeedActive) {
+    if (!startupLatchActive && validStartInput) {
+      startDirX = filteredX;
+      startDirY = filteredY;
+      startCommitLeft = startupDirHoldSec;
+      startupOppositeLockLeft = startupOppositeLockSec;
+      startupLatchActive = true;
+      startupReleaseLeft = 0;
       startNoInputLeft = 0;
-    } else {
-      startNoInputLeft += simDt;
-      if (startNoInputLeft >= releaseToRearmSec) {
-        startCommitLeft = 0;
-        startupOppositeLockLeft = 0;
+    } else if (startupLatchActive) {
+      if (validStartInput) {
+        startupReleaseLeft = 0;
+        startNoInputLeft = 0;
+      } else {
+        startupReleaseLeft += simDt;
+        startNoInputLeft += simDt;
+        if (startupReleaseLeft >= startupReleaseSec || startNoInputLeft >= releaseToRearmSec) {
+          startupLatchActive = false;
+          startupReleaseLeft = 0;
+          startCommitLeft = 0;
+          startupOppositeLockLeft = 0;
+        }
       }
     }
   } else {
+    startupLatchActive = false;
+    startupReleaseLeft = 0;
     startCommitLeft = 0;
     startNoInputLeft = 0;
     startupOppositeLockLeft = 0;
@@ -244,6 +271,10 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
   if (startupOppositeLockLeft > 0) {
     startupOppositeLockLeft = Math.max(0, startupOppositeLockLeft - simDt);
   }
+  if (speedBefore >= startupLatchReleaseSpeed) {
+    startupLatchActive = false;
+    startupReleaseLeft = 0;
+  }
   if (speedBefore >= minTravelDirSpeed) {
     startupOppositeLockLeft = 0;
   }
@@ -252,9 +283,13 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
   }
   const startCommitActive = startCommitLeft > 0.0001 && lowSpeedStartupActive;
   const startupOppositeLocked = startupOppositeLockLeft > 0.0001 && startupOppositeLockActiveRegime;
+  const startupLatchNowActive = startupLatchActive && speedBefore < startupLatchReleaseSpeed;
+  const latchedInputIgnored = startupLatchNowActive && validStartInput && (rawNx * startDirX + rawNy * startDirY) < 0.9995;
   state.startCommitTimer = startCommitLeft;
   state.startNoInputTimer = startNoInputLeft;
   state.startupOppositeLockTimer = startupOppositeLockLeft;
+  state.startupLatchActive = startupLatchNowActive;
+  state.startupReleaseTimer = startupReleaseLeft;
   state.startDirX = startDirX;
   state.startDirY = startDirY;
   state.debugStartCommitActive = startCommitActive;
@@ -262,6 +297,9 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
   state.debugStartDirX = startDirX;
   state.debugStartDirY = startDirY;
   state.debugLowSpeedStartupActive = lowSpeedStartupActive;
+  state.debugStartupLatchActive = startupLatchNowActive;
+  state.debugLatchedInputIgnored = latchedInputIgnored;
+  state.debugStartupReleaseTimer = startupReleaseLeft;
 
   const directionCommitWindowSec = Math.max(0, (config.directionCommitWindowMs ?? MOVEMENT_DEFAULTS.directionCommitWindowMs ?? 110) / 1000);
   const commitAngleThresholdRad = ((config.commitAngleThreshold ?? MOVEMENT_DEFAULTS.commitAngleThreshold ?? 70) * Math.PI) / 180;
@@ -274,7 +312,7 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
   const minCarveSpeed = Math.max(0, config.minCarveSpeed ?? MOVEMENT_DEFAULTS.minCarveSpeed ?? 90);
   const carveSideSuppression = clamp(config.carveSideSuppression ?? MOVEMENT_DEFAULTS.carveSideSuppression ?? 0.22, 0, 1);
   const lowSpeedSteeringDisabled = speedBefore < minSteerSpeed;
-  const lowSpeedNoSteer = lowSpeedStartupActive;
+  const lowSpeedNoSteer = startupLatchNowActive || lowSpeedSteeringDisabled;
   state.debugMinSteerSpeed = minSteerSpeed;
   state.debugLowSpeedSteeringDisabled = lowSpeedSteeringDisabled;
 

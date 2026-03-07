@@ -888,7 +888,7 @@ export class PondScene extends Phaser.Scene {
       ? `startMode=${telemetry.startModeActive ? 'on' : 'off'} brake=${telemetry.brakeApplied > 0 ? 'on' : 'off'} charge=${telemetry.chargeActive ? 'on' : 'off'} turnRateApplied=${Number(telemetry.turnRateAppliedDeg ?? 0).toFixed(1)} fwd=${Number(telemetry.velForward ?? 0).toFixed(1)} side=${Number(telemetry.velSide ?? 0).toFixed(1)}`
       : null;
     const v4StabilityLine = tuning.showAngleDiff
-      ? `phase=${String(telemetry.movementPhase ?? 'GLIDE')} lowSteerOff=${telemetry.lowSpeedSteeringDisabled ? 'on' : 'off'} lowStart=${telemetry.lowSpeedStartupActive ? 'on' : 'off'} travelLock=${telemetry.travelDirLocked ? 'on' : 'off'} minSteer=${Number(telemetry.minSteerSpeed ?? 0).toFixed(1)} startCommit=${telemetry.startCommitActive ? 'on' : 'off'} startTimer=${(Number(telemetry.startCommitTimer ?? 0) * 1000).toFixed(0)}ms startDir=(${Number(telemetry.startDirX ?? 0).toFixed(2)}, ${Number(telemetry.startDirY ?? 0).toFixed(2)}) effStart=(${Number(telemetry.effectiveStartDirX ?? 0).toFixed(2)}, ${Number(telemetry.effectiveStartDirY ?? 0).toFixed(2)}) carveLock=${(Number(telemetry.carveLockTimer ?? 0) * 1000).toFixed(0)}ms carveSide=${Number(telemetry.carveSide ?? 0)} signed=${(Number(telemetry.signedInputVsVelocityAngle ?? 0) * 180 / Math.PI).toFixed(1)}deg commit=${(Number(telemetry.commitTimer ?? 0) * 1000).toFixed(0)}ms hold=${(Number(telemetry.oppositeHoldTimer ?? 0) * 1000).toFixed(0)}ms steerDir=(${Number(telemetry.steerDirX ?? 0).toFixed(2)}, ${Number(telemetry.steerDirY ?? 0).toFixed(2)})`
+      ? `phase=${String(telemetry.movementPhase ?? 'GLIDE')} lowSteerOff=${telemetry.lowSpeedSteeringDisabled ? 'on' : 'off'} lowStart=${telemetry.lowSpeedStartupActive ? 'on' : 'off'} latch=${telemetry.startupLatchActive ? 'on' : 'off'} latchIgn=${telemetry.latchedInputIgnored ? 'on' : 'off'} latchRel=${(Number(telemetry.startupReleaseTimer ?? 0) * 1000).toFixed(0)}ms travelLock=${telemetry.travelDirLocked ? 'on' : 'off'} minSteer=${Number(telemetry.minSteerSpeed ?? 0).toFixed(1)} startCommit=${telemetry.startCommitActive ? 'on' : 'off'} startTimer=${(Number(telemetry.startCommitTimer ?? 0) * 1000).toFixed(0)}ms startDir=(${Number(telemetry.startDirX ?? 0).toFixed(2)}, ${Number(telemetry.startDirY ?? 0).toFixed(2)}) effStart=(${Number(telemetry.effectiveStartDirX ?? 0).toFixed(2)}, ${Number(telemetry.effectiveStartDirY ?? 0).toFixed(2)}) carveLock=${(Number(telemetry.carveLockTimer ?? 0) * 1000).toFixed(0)}ms carveSide=${Number(telemetry.carveSide ?? 0)} signed=${(Number(telemetry.signedInputVsVelocityAngle ?? 0) * 180 / Math.PI).toFixed(1)}deg commit=${(Number(telemetry.commitTimer ?? 0) * 1000).toFixed(0)}ms hold=${(Number(telemetry.oppositeHoldTimer ?? 0) * 1000).toFixed(0)}ms steerDir=(${Number(telemetry.steerDirX ?? 0).toFixed(2)}, ${Number(telemetry.steerDirY ?? 0).toFixed(2)})`
       : null;
 
     if (this.debugEnabled) {
@@ -991,6 +991,9 @@ export class PondScene extends Phaser.Scene {
       lowSpeedSteeringDisabled: Boolean(telemetry.lowSpeedSteeringDisabled ?? false),
       lowSpeedStartupActive: Boolean(telemetry.lowSpeedStartupActive ?? false),
       travelDirLocked: Boolean(telemetry.travelDirLocked ?? false),
+      startupLatchActive: Boolean(telemetry.startupLatchActive ?? false),
+      latchedInputIgnored: Boolean(telemetry.latchedInputIgnored ?? false),
+      startupReleaseTimer: Number(telemetry.startupReleaseTimer ?? 0),
       startCommitActive: Boolean(telemetry.startCommitActive ?? false),
       startCommitTimer: Number(telemetry.startCommitTimer ?? 0),
       startDir: `(${Number(telemetry.startDirX ?? 0).toFixed(2)}, ${Number(telemetry.startDirY ?? 0).toFixed(2)})`,

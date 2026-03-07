@@ -44,6 +44,8 @@ type PlayerState = {
   startCommitTimer: number;
   startNoInputTimer: number;
   startupOppositeLockTimer: number;
+  startupLatchActive: boolean;
+  startupReleaseTimer: number;
   startDirX: number;
   startDirY: number;
   lastStableTravelAngle: number;
@@ -180,6 +182,8 @@ export class Room {
       startCommitTimer: 0,
       startNoInputTimer: 0,
       startupOppositeLockTimer: 0,
+      startupLatchActive: false,
+      startupReleaseTimer: 0,
       startDirX: 1,
       startDirY: 0,
       lastStableTravelAngle: 0,
@@ -286,6 +290,8 @@ export class Room {
         startCommitTimer: player.startCommitTimer,
         startNoInputTimer: player.startNoInputTimer,
         startupOppositeLockTimer: player.startupOppositeLockTimer,
+        startupLatchActive: player.startupLatchActive,
+        startupReleaseTimer: player.startupReleaseTimer,
         startDirX: player.startDirX,
         startDirY: player.startDirY,
         lastStableTravelAngle: player.lastStableTravelAngle,
@@ -350,6 +356,8 @@ export class Room {
       player.startCommitTimer = Number.isFinite(state.startCommitTimer) ? state.startCommitTimer! : player.startCommitTimer;
       player.startNoInputTimer = Number.isFinite(state.startNoInputTimer) ? state.startNoInputTimer! : player.startNoInputTimer;
       player.startupOppositeLockTimer = Number.isFinite(state.startupOppositeLockTimer) ? state.startupOppositeLockTimer! : player.startupOppositeLockTimer;
+      player.startupLatchActive = !!state.startupLatchActive;
+      player.startupReleaseTimer = Number.isFinite(state.startupReleaseTimer) ? state.startupReleaseTimer! : player.startupReleaseTimer;
       player.startDirX = Number.isFinite(state.startDirX) ? state.startDirX! : player.startDirX;
       player.startDirY = Number.isFinite(state.startDirY) ? state.startDirY! : player.startDirY;
       player.lastStableTravelAngle = Number.isFinite(state.lastStableTravelAngle) ? state.lastStableTravelAngle! : player.lastStableTravelAngle;
@@ -430,6 +438,8 @@ export class Room {
         movementPhase: p.movementPhase,
         startCommitTimer: p.startCommitTimer,
         startupOppositeLockTimer: p.startupOppositeLockTimer,
+        startupLatchActive: p.startupLatchActive,
+        startupReleaseTimer: p.startupReleaseTimer,
         startDirX: p.startDirX,
         startDirY: p.startDirY,
         lastStableTravelAngle: p.lastStableTravelAngle,

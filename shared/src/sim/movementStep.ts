@@ -84,6 +84,12 @@ export function applyMovementStep(
   if (!Number.isFinite(state.startupOppositeLockTimer)) {
     state.startupOppositeLockTimer = 0;
   }
+  if (typeof state.startupLatchActive !== 'boolean') {
+    state.startupLatchActive = false;
+  }
+  if (!Number.isFinite(state.startupReleaseTimer)) {
+    state.startupReleaseTimer = 0;
+  }
   if (!Number.isFinite(state.startDirX) || !Number.isFinite(state.startDirY)) {
     state.startDirX = state.desiredDirX;
     state.startDirY = state.desiredDirY;
@@ -235,6 +241,8 @@ export function applyMovementStep(
     state.startCommitTimer = 0;
     state.startNoInputTimer = 0;
     state.startupOppositeLockTimer = 0;
+    state.startupLatchActive = false;
+    state.startupReleaseTimer = 0;
     state.startDirX = state.desiredDirX;
     state.startDirY = state.desiredDirY;
     state.lastStableTravelAngle = state.moveAngle;
@@ -284,6 +292,8 @@ export function applyMovementStep(
     state.startCommitTimer = 0;
     state.startNoInputTimer = 0;
     state.startupOppositeLockTimer = 0;
+    state.startupLatchActive = false;
+    state.startupReleaseTimer = 0;
     state.startDirX = state.desiredDirX;
     state.startDirY = state.desiredDirY;
     state.lastStableTravelAngle = state.moveAngle;

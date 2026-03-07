@@ -30,6 +30,8 @@ export type PredictedPlayerState = PlayerStateMsg & {
   startCommitTimer?: number;
   startNoInputTimer?: number;
   startupOppositeLockTimer?: number;
+  startupLatchActive?: boolean;
+  startupReleaseTimer?: number;
   startDirX?: number;
   startDirY?: number;
   lastStableTravelAngle?: number;
@@ -79,6 +81,9 @@ export type PredictedPlayerState = PlayerStateMsg & {
   debugLowSpeedSteeringDisabled?: boolean;
   debugLowSpeedStartupActive?: boolean;
   debugTravelDirLocked?: boolean;
+  debugStartupLatchActive?: boolean;
+  debugLatchedInputIgnored?: boolean;
+  debugStartupReleaseTimer?: number;
   debugStartCommitActive?: boolean;
   debugStartCommitTimer?: number;
   debugStartDirX?: number;
@@ -148,6 +153,8 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     startCommitTimer: state.startCommitTimer,
     startNoInputTimer: state.startNoInputTimer,
     startupOppositeLockTimer: state.startupOppositeLockTimer,
+    startupLatchActive: state.startupLatchActive,
+    startupReleaseTimer: state.startupReleaseTimer,
     startDirX: state.startDirX,
     startDirY: state.startDirY,
     lastStableTravelAngle: state.lastStableTravelAngle,
@@ -247,6 +254,8 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.startCommitTimer = simState.startCommitTimer;
   state.startNoInputTimer = simState.startNoInputTimer;
   state.startupOppositeLockTimer = simState.startupOppositeLockTimer;
+  state.startupLatchActive = simState.startupLatchActive;
+  state.startupReleaseTimer = simState.startupReleaseTimer;
   state.startDirX = simState.startDirX;
   state.startDirY = simState.startDirY;
   state.lastStableTravelAngle = simState.lastStableTravelAngle;
@@ -299,6 +308,9 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.debugLowSpeedSteeringDisabled = simState.debugLowSpeedSteeringDisabled;
   state.debugLowSpeedStartupActive = simState.debugLowSpeedStartupActive;
   state.debugTravelDirLocked = simState.debugTravelDirLocked;
+  state.debugStartupLatchActive = simState.debugStartupLatchActive;
+  state.debugLatchedInputIgnored = simState.debugLatchedInputIgnored;
+  state.debugStartupReleaseTimer = simState.debugStartupReleaseTimer;
   state.debugStartCommitActive = simState.debugStartCommitActive;
   state.debugStartCommitTimer = simState.debugStartCommitTimer;
   state.debugStartDirX = simState.debugStartDirX;
@@ -376,6 +388,9 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     lowSpeedSteeringDisabled: !!simState.debugLowSpeedSteeringDisabled,
     lowSpeedStartupActive: !!simState.debugLowSpeedStartupActive,
     travelDirLocked: !!simState.debugTravelDirLocked,
+    startupLatchActive: !!simState.debugStartupLatchActive,
+    latchedInputIgnored: !!simState.debugLatchedInputIgnored,
+    startupReleaseTimer: simState.debugStartupReleaseTimer ?? simState.startupReleaseTimer ?? 0,
     startCommitActive: !!simState.debugStartCommitActive,
     startCommitTimer: simState.debugStartCommitTimer ?? simState.startCommitTimer ?? 0,
     startDirX: simState.debugStartDirX ?? simState.startDirX ?? 0,
@@ -430,6 +445,9 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     usedTuning.startupOppositeLockMs = config.startupOppositeLockMs as any;
     usedTuning.startupLockSpeedThreshold = config.startupLockSpeedThreshold as any;
     usedTuning.startupOppositeSuppression = config.startupOppositeSuppression as any;
+    usedTuning.startupLatchSpeedThreshold = config.startupLatchSpeedThreshold as any;
+    usedTuning.startupLatchReleaseSpeed = config.startupLatchReleaseSpeed as any;
+    usedTuning.startupReleaseMs = config.startupReleaseMs as any;
     usedTuning.minTravelDirSpeed = config.minTravelDirSpeed as any;
     usedTuning.startCommitSpeed = config.startCommitSpeed as any;
     usedTuning.startCommitMs = config.startCommitMs as any;

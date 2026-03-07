@@ -35,6 +35,8 @@ export function reconcilePrediction(
   (predicted as any).startCommitTimer = (authoritative as any).startCommitTimer ?? 0;
   (predicted as any).startNoInputTimer = (authoritative as any).startNoInputTimer ?? 0;
   (predicted as any).startupOppositeLockTimer = (authoritative as any).startupOppositeLockTimer ?? 0;
+  (predicted as any).startupLatchActive = !!(authoritative as any).startupLatchActive;
+  (predicted as any).startupReleaseTimer = (authoritative as any).startupReleaseTimer ?? 0;
   (predicted as any).startDirX = (authoritative as any).startDirX ?? (predicted as any).desiredDirX ?? 1;
   (predicted as any).startDirY = (authoritative as any).startDirY ?? (predicted as any).desiredDirY ?? 0;
   (predicted as any).lastStableTravelAngle = (authoritative as any).lastStableTravelAngle ?? (authoritative as any).moveAngle ?? 0;
