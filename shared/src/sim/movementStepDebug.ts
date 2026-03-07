@@ -45,6 +45,8 @@ export function resetMovementDebugState(state: MovementStepState) {
   state.debugStartDirY = 0;
   state.debugEffectiveStartDirX = 0;
   state.debugEffectiveStartDirY = 0;
+  state.debugLowSpeedStartupActive = false;
+  state.debugTravelDirLocked = false;
   state.debugMovementPhase = 'GLIDE';
   state.debugCarveLockTimer = 0;
   state.debugCarveSide = 0;

@@ -73,6 +73,10 @@ export type PredictedPlayerState = PlayerStateMsg & {
   debugOppositeHoldTimer?: number;
   debugSteerDirX?: number;
   debugSteerDirY?: number;
+  debugMinSteerSpeed?: number;
+  debugLowSpeedSteeringDisabled?: boolean;
+  debugLowSpeedStartupActive?: boolean;
+  debugTravelDirLocked?: boolean;
   debugStartCommitActive?: boolean;
   debugStartCommitTimer?: number;
   debugStartDirX?: number;
@@ -285,6 +289,10 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.debugOppositeHoldTimer = simState.debugOppositeHoldTimer;
   state.debugSteerDirX = simState.debugSteerDirX;
   state.debugSteerDirY = simState.debugSteerDirY;
+  state.debugMinSteerSpeed = simState.debugMinSteerSpeed;
+  state.debugLowSpeedSteeringDisabled = simState.debugLowSpeedSteeringDisabled;
+  state.debugLowSpeedStartupActive = simState.debugLowSpeedStartupActive;
+  state.debugTravelDirLocked = simState.debugTravelDirLocked;
   state.debugStartCommitActive = simState.debugStartCommitActive;
   state.debugStartCommitTimer = simState.debugStartCommitTimer;
   state.debugStartDirX = simState.debugStartDirX;
@@ -360,6 +368,8 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     steerDirY: simState.debugSteerDirY ?? simState.committedDirY ?? 0,
     minSteerSpeed: simState.debugMinSteerSpeed ?? 0,
     lowSpeedSteeringDisabled: !!simState.debugLowSpeedSteeringDisabled,
+    lowSpeedStartupActive: !!simState.debugLowSpeedStartupActive,
+    travelDirLocked: !!simState.debugTravelDirLocked,
     startCommitActive: !!simState.debugStartCommitActive,
     startCommitTimer: simState.debugStartCommitTimer ?? simState.startCommitTimer ?? 0,
     startDirX: simState.debugStartDirX ?? simState.startDirX ?? 0,
@@ -408,6 +418,9 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     usedTuning.brakeTurnBonusValue = config.brakeTurnBonusValue as any;
     usedTuning.brakeOppositeRecovery = config.brakeOppositeRecovery as any;
     usedTuning.minSteerSpeed = config.minSteerSpeed as any;
+    usedTuning.noSteerSpeedThreshold = config.noSteerSpeedThreshold as any;
+    usedTuning.startupInputThreshold = config.startupInputThreshold as any;
+    usedTuning.startupDirHoldMs = config.startupDirHoldMs as any;
     usedTuning.startCommitSpeed = config.startCommitSpeed as any;
     usedTuning.startCommitMs = config.startCommitMs as any;
     usedTuning.startInputThreshold = config.startInputThreshold as any;

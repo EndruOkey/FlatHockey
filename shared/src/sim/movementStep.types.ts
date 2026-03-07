@@ -82,6 +82,8 @@ export type MovementStepState = {
   debugStartDirY?: number;
   debugEffectiveStartDirX?: number;
   debugEffectiveStartDirY?: number;
+  debugLowSpeedStartupActive?: boolean;
+  debugTravelDirLocked?: boolean;
   debugMovementPhase?: 'GLIDE' | 'CARVE_LEFT' | 'CARVE_RIGHT' | 'BRAKE';
   debugCarveLockTimer?: number;
   debugCarveSide?: -1 | 0 | 1;
@@ -166,6 +168,9 @@ export type MovementStepConfig = {
   startCommitMs?: number;
   startInputThreshold?: number;
   startOppositeSuppression?: number;
+  noSteerSpeedThreshold?: number;
+  startupInputThreshold?: number;
+  startupDirHoldMs?: number;
   chargeSpeedMul?: number;
   chargeAccelMul?: number;
   chargeTurnMul?: number;
