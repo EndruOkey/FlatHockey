@@ -168,6 +168,23 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
       ?? MOVEMENT_DEFAULTS.minTravelDirSpeed
       ?? minSteerSpeed
   );
+  const startupLockSpeedThreshold = Math.max(
+    0.001,
+    config.startupLockSpeedThreshold
+      ?? MOVEMENT_DEFAULTS.startupLockSpeedThreshold
+      ?? minTravelDirSpeed
+  );
+  const startupOppositeLockSec = Math.max(
+    0,
+    (config.startupOppositeLockMs ?? MOVEMENT_DEFAULTS.startupOppositeLockMs ?? 140) / 1000
+  );
+  const startupOppositeSuppression = clamp(
+    config.startupOppositeSuppression
+      ?? MOVEMENT_DEFAULTS.startupOppositeSuppression
+      ?? 1.0,
+    0,
+    1
+  );
   const startOppositeSuppression = clamp(config.startOppositeSuppression ?? MOVEMENT_DEFAULTS.startOppositeSuppression ?? 0.2, 0, 1);
 
   let committedX = state.committedDirX ?? filteredX;
@@ -183,6 +200,7 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
 
   let startCommitLeft = Math.max(0, state.startCommitTimer ?? 0);
   let startNoInputLeft = Math.max(0, state.startNoInputTimer ?? 0);
+  let startupOppositeLockLeft = Math.max(0, state.startupOppositeLockTimer ?? 0);
   let startDirX = state.startDirX ?? filteredX;
   let startDirY = state.startDirY ?? filteredY;
   const startDirMag = Math.hypot(startDirX, startDirY);
@@ -194,6 +212,7 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
     startDirY = filteredY;
   }
   const lowSpeedStartupActive = speedBefore < noSteerSpeedThreshold;
+  const startupOppositeLockActiveRegime = speedBefore < startupLockSpeedThreshold;
   const validStartInput = hasInput && rawLen >= startupInputThreshold;
   const releaseToRearmSec = Math.max(0.06, startupDirHoldSec * 0.45);
   if (lowSpeedStartupActive) {
@@ -204,24 +223,38 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
         startDirX = filteredX;
         startDirY = filteredY;
         startCommitLeft = startupDirHoldSec;
+        startupOppositeLockLeft = startupOppositeLockSec;
       }
       startNoInputLeft = 0;
     } else {
       startNoInputLeft += simDt;
       if (startNoInputLeft >= releaseToRearmSec) {
         startCommitLeft = 0;
+        startupOppositeLockLeft = 0;
       }
     }
   } else {
     startCommitLeft = 0;
     startNoInputLeft = 0;
+    startupOppositeLockLeft = 0;
   }
   if (startCommitLeft > 0) {
     startCommitLeft = Math.max(0, startCommitLeft - simDt);
   }
+  if (startupOppositeLockLeft > 0) {
+    startupOppositeLockLeft = Math.max(0, startupOppositeLockLeft - simDt);
+  }
+  if (speedBefore >= minTravelDirSpeed) {
+    startupOppositeLockLeft = 0;
+  }
+  if (!startupOppositeLockActiveRegime) {
+    startupOppositeLockLeft = 0;
+  }
   const startCommitActive = startCommitLeft > 0.0001 && lowSpeedStartupActive;
+  const startupOppositeLocked = startupOppositeLockLeft > 0.0001 && startupOppositeLockActiveRegime;
   state.startCommitTimer = startCommitLeft;
   state.startNoInputTimer = startNoInputLeft;
+  state.startupOppositeLockTimer = startupOppositeLockLeft;
   state.startDirX = startDirX;
   state.startDirY = startDirY;
   state.debugStartCommitActive = startCommitActive;
@@ -433,8 +466,11 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
   const reverseEntryPenalty = intentForward < 0 && !input.buttons.brake
     ? lerp(0.42, 0.08, smoothstep01(speedNorm))
     : 1;
-  const startOpposesCommitted = startCommitActive && validStartInput && (rawNx * startDirX + rawNy * startDirY) < 0;
-  const startCommitForwardScale = startOpposesCommitted ? startOppositeSuppression : 1;
+  const startOpposesCommitted = validStartInput && (rawNx * startDirX + rawNy * startDirY) < 0;
+  const startupOppositeScale = startupOppositeLocked && startOpposesCommitted ? startupOppositeSuppression : 1;
+  const startCommitForwardScale = startOpposesCommitted
+    ? (startCommitActive ? startOppositeSuppression : startupOppositeScale)
+    : 1;
   const forwardInput = (lowSpeedNoSteer || startCommitActive)
     ? ((validStartInput ? 1 : 0) * startCommitForwardScale)
     : (lowSpeedSteeringDisabled

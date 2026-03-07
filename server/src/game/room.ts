@@ -43,6 +43,7 @@ type PlayerState = {
   movementPhase: 'GLIDE' | 'CARVE_LEFT' | 'CARVE_RIGHT' | 'BRAKE';
   startCommitTimer: number;
   startNoInputTimer: number;
+  startupOppositeLockTimer: number;
   startDirX: number;
   startDirY: number;
   lastStableTravelAngle: number;
@@ -178,6 +179,7 @@ export class Room {
       movementPhase: 'GLIDE',
       startCommitTimer: 0,
       startNoInputTimer: 0,
+      startupOppositeLockTimer: 0,
       startDirX: 1,
       startDirY: 0,
       lastStableTravelAngle: 0,
@@ -283,6 +285,7 @@ export class Room {
         movementPhase: player.movementPhase,
         startCommitTimer: player.startCommitTimer,
         startNoInputTimer: player.startNoInputTimer,
+        startupOppositeLockTimer: player.startupOppositeLockTimer,
         startDirX: player.startDirX,
         startDirY: player.startDirY,
         lastStableTravelAngle: player.lastStableTravelAngle,
@@ -346,6 +349,7 @@ export class Room {
       player.movementPhase = state.movementPhase ?? player.movementPhase;
       player.startCommitTimer = Number.isFinite(state.startCommitTimer) ? state.startCommitTimer! : player.startCommitTimer;
       player.startNoInputTimer = Number.isFinite(state.startNoInputTimer) ? state.startNoInputTimer! : player.startNoInputTimer;
+      player.startupOppositeLockTimer = Number.isFinite(state.startupOppositeLockTimer) ? state.startupOppositeLockTimer! : player.startupOppositeLockTimer;
       player.startDirX = Number.isFinite(state.startDirX) ? state.startDirX! : player.startDirX;
       player.startDirY = Number.isFinite(state.startDirY) ? state.startDirY! : player.startDirY;
       player.lastStableTravelAngle = Number.isFinite(state.lastStableTravelAngle) ? state.lastStableTravelAngle! : player.lastStableTravelAngle;
@@ -425,6 +429,7 @@ export class Room {
         carveSide: p.carveSide,
         movementPhase: p.movementPhase,
         startCommitTimer: p.startCommitTimer,
+        startupOppositeLockTimer: p.startupOppositeLockTimer,
         startDirX: p.startDirX,
         startDirY: p.startDirY,
         lastStableTravelAngle: p.lastStableTravelAngle,

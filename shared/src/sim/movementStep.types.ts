@@ -30,6 +30,7 @@ export type MovementStepState = {
   movementPhase?: 'GLIDE' | 'CARVE_LEFT' | 'CARVE_RIGHT' | 'BRAKE';
   startCommitTimer?: number;
   startNoInputTimer?: number;
+  startupOppositeLockTimer?: number;
   startDirX?: number;
   startDirY?: number;
   lastStableTravelAngle?: number;
@@ -172,6 +173,9 @@ export type MovementStepConfig = {
   noSteerSpeedThreshold?: number;
   startupInputThreshold?: number;
   startupDirHoldMs?: number;
+  startupOppositeLockMs?: number;
+  startupLockSpeedThreshold?: number;
+  startupOppositeSuppression?: number;
   minTravelDirSpeed?: number;
   chargeSpeedMul?: number;
   chargeAccelMul?: number;

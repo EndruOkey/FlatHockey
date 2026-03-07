@@ -81,6 +81,9 @@ export function applyMovementStep(
   if (!Number.isFinite(state.startNoInputTimer)) {
     state.startNoInputTimer = 0;
   }
+  if (!Number.isFinite(state.startupOppositeLockTimer)) {
+    state.startupOppositeLockTimer = 0;
+  }
   if (!Number.isFinite(state.startDirX) || !Number.isFinite(state.startDirY)) {
     state.startDirX = state.desiredDirX;
     state.startDirY = state.desiredDirY;
@@ -231,6 +234,7 @@ export function applyMovementStep(
     state.movementPhase = 'GLIDE';
     state.startCommitTimer = 0;
     state.startNoInputTimer = 0;
+    state.startupOppositeLockTimer = 0;
     state.startDirX = state.desiredDirX;
     state.startDirY = state.desiredDirY;
     state.lastStableTravelAngle = state.moveAngle;
@@ -279,6 +283,7 @@ export function applyMovementStep(
     state.movementPhase = 'GLIDE';
     state.startCommitTimer = 0;
     state.startNoInputTimer = 0;
+    state.startupOppositeLockTimer = 0;
     state.startDirX = state.desiredDirX;
     state.startDirY = state.desiredDirY;
     state.lastStableTravelAngle = state.moveAngle;

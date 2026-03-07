@@ -29,6 +29,7 @@ export type PredictedPlayerState = PlayerStateMsg & {
   movementPhase?: 'GLIDE' | 'CARVE_LEFT' | 'CARVE_RIGHT' | 'BRAKE';
   startCommitTimer?: number;
   startNoInputTimer?: number;
+  startupOppositeLockTimer?: number;
   startDirX?: number;
   startDirY?: number;
   lastStableTravelAngle?: number;
@@ -146,6 +147,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     movementPhase: state.movementPhase,
     startCommitTimer: state.startCommitTimer,
     startNoInputTimer: state.startNoInputTimer,
+    startupOppositeLockTimer: state.startupOppositeLockTimer,
     startDirX: state.startDirX,
     startDirY: state.startDirY,
     lastStableTravelAngle: state.lastStableTravelAngle,
@@ -244,6 +246,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.movementPhase = simState.movementPhase;
   state.startCommitTimer = simState.startCommitTimer;
   state.startNoInputTimer = simState.startNoInputTimer;
+  state.startupOppositeLockTimer = simState.startupOppositeLockTimer;
   state.startDirX = simState.startDirX;
   state.startDirY = simState.startDirY;
   state.lastStableTravelAngle = simState.lastStableTravelAngle;
@@ -424,6 +427,9 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     usedTuning.noSteerSpeedThreshold = config.noSteerSpeedThreshold as any;
     usedTuning.startupInputThreshold = config.startupInputThreshold as any;
     usedTuning.startupDirHoldMs = config.startupDirHoldMs as any;
+    usedTuning.startupOppositeLockMs = config.startupOppositeLockMs as any;
+    usedTuning.startupLockSpeedThreshold = config.startupLockSpeedThreshold as any;
+    usedTuning.startupOppositeSuppression = config.startupOppositeSuppression as any;
     usedTuning.minTravelDirSpeed = config.minTravelDirSpeed as any;
     usedTuning.startCommitSpeed = config.startCommitSpeed as any;
     usedTuning.startCommitMs = config.startCommitMs as any;
