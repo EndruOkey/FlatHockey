@@ -40,6 +40,12 @@ export type MovementV4Result = {
   chargeActive: boolean;
 };
 
+function phaseFromSide(side: -1 | 0 | 1): 'GLIDE' | 'CARVE_LEFT' | 'CARVE_RIGHT' {
+  if (side < 0) return 'CARVE_LEFT';
+  if (side > 0) return 'CARVE_RIGHT';
+  return 'GLIDE';
+}
+
 type MovementV4Args = {
   state: MovementStepState;
   input: MovementStepInput;
@@ -144,6 +150,12 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
   const commitAngleThresholdRad = ((config.commitAngleThreshold ?? MOVEMENT_DEFAULTS.commitAngleThreshold ?? 70) * Math.PI) / 180;
   const oppositeThresholdRad = ((config.oppositeThreshold ?? MOVEMENT_DEFAULTS.oppositeThreshold ?? 120) * Math.PI) / 180;
   const oppositeHoldWindowSec = Math.max(0, (config.oppositeHoldMs ?? MOVEMENT_DEFAULTS.oppositeHoldMs ?? 90) / 1000);
+  const carveEnterAngleRad = ((config.carveEnterAngle ?? MOVEMENT_DEFAULTS.carveEnterAngle ?? 30) * Math.PI) / 180;
+  const carveExitAngleRad = ((config.carveExitAngle ?? MOVEMENT_DEFAULTS.carveExitAngle ?? 16) * Math.PI) / 180;
+  const carveLockWindowSec = Math.max(0, (config.carveLockMs ?? MOVEMENT_DEFAULTS.carveLockMs ?? 140) / 1000);
+  const carveSwitchCooldownSec = Math.max(0, (config.carveSwitchCooldownMs ?? MOVEMENT_DEFAULTS.carveSwitchCooldownMs ?? 70) / 1000);
+  const minCarveSpeed = Math.max(0, config.minCarveSpeed ?? MOVEMENT_DEFAULTS.minCarveSpeed ?? 90);
+  const carveSideSuppression = clamp(config.carveSideSuppression ?? MOVEMENT_DEFAULTS.carveSideSuppression ?? 0.22, 0, 1);
 
   let commitLeft = Math.max(0, state.directionCommitTimer ?? 0);
   let oppositeHoldLeft = Math.max(0, state.oppositeHoldTimer ?? 0);
@@ -223,10 +235,69 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
   const sx = -fy;
   const sy = fx;
   const intentForward = fx * steerX + fy * steerY;
-  const intentSide = sx * steerX + sy * steerY;
+  const intentSideRaw = sx * steerX + sy * steerY;
+  const signedInputVsVelocity = Math.atan2(intentSideRaw, intentForward);
+  state.debugSignedInputVsVelocityAngle = signedInputVsVelocity;
   const desiredVsVelocity = Math.abs(wrapToPi(desiredMoveAngle - velDirAngle));
   const angleNorm = clamp(desiredVsVelocity / Math.PI, 0, 1);
-  const edgeFactor = clamp(0.08 + angleNorm * lerp(0.22, 0.76, speedNorm) + (input.buttons.brake ? 0.26 : 0), 0, 1);
+
+  let movementPhase: 'GLIDE' | 'CARVE_LEFT' | 'CARVE_RIGHT' | 'BRAKE' = state.movementPhase ?? 'GLIDE';
+  let carveSide: -1 | 0 | 1 = state.carveSide ?? 0;
+  let carveLockLeft = Math.max(0, state.carveLockTimer ?? 0);
+  let carveSwitchCooldownLeft = Math.max(0, state.carveSwitchCooldownTimer ?? 0);
+  const speedCanCarve = speedBefore >= minCarveSpeed;
+  const desiredCarveSide: -1 | 0 | 1 = Math.abs(signedInputVsVelocity) >= carveEnterAngleRad
+    ? (signedInputVsVelocity > 0 ? 1 : -1)
+    : 0;
+
+  if (input.buttons.brake) {
+    movementPhase = 'BRAKE';
+    carveSide = 0;
+    carveLockLeft = 0;
+  } else {
+    carveLockLeft = Math.max(0, carveLockLeft - simDt);
+    carveSwitchCooldownLeft = Math.max(0, carveSwitchCooldownLeft - simDt);
+    if (!speedCanCarve || !hasInput) {
+      if (Math.abs(signedInputVsVelocity) <= carveExitAngleRad && carveLockLeft <= 0.0001) {
+        carveSide = 0;
+        movementPhase = 'GLIDE';
+      } else if (carveSide !== 0) {
+        movementPhase = phaseFromSide(carveSide);
+      }
+    } else if (desiredCarveSide === 0) {
+      if (Math.abs(signedInputVsVelocity) <= carveExitAngleRad && carveLockLeft <= 0.0001) {
+        carveSide = 0;
+        movementPhase = 'GLIDE';
+      }
+    } else if (carveSide === 0) {
+      carveSide = desiredCarveSide;
+      carveLockLeft = carveLockWindowSec;
+      movementPhase = phaseFromSide(carveSide);
+    } else if (desiredCarveSide === carveSide) {
+      movementPhase = phaseFromSide(carveSide);
+    } else {
+      // Opposite carve switches are blocked while carve lock or switch cooldown is active.
+      if (carveLockLeft <= 0.0001 && carveSwitchCooldownLeft <= 0.0001) {
+        carveSide = desiredCarveSide;
+        carveLockLeft = carveLockWindowSec;
+        carveSwitchCooldownLeft = carveSwitchCooldownSec;
+      }
+      movementPhase = phaseFromSide(carveSide);
+    }
+  }
+  state.movementPhase = movementPhase;
+  state.carveSide = carveSide;
+  state.carveLockTimer = carveLockLeft;
+  state.carveSwitchCooldownTimer = carveSwitchCooldownLeft;
+  state.debugMovementPhase = movementPhase;
+  state.debugCarveLockTimer = carveLockLeft;
+  state.debugCarveSide = carveSide;
+
+  const carveLockNorm = carveLockWindowSec > 0 ? clamp(carveLockLeft / carveLockWindowSec, 0, 1) : 0;
+  const carveBias = movementPhase === 'CARVE_LEFT' || movementPhase === 'CARVE_RIGHT'
+    ? lerp(0.12, 0.32, carveLockNorm)
+    : 0;
+  const edgeFactor = clamp(0.08 + angleNorm * lerp(0.22, 0.76, speedNorm) + carveBias + (input.buttons.brake ? 0.26 : 0), 0, 1);
   state.debugEdgeFactor = edgeFactor;
 
   const turnResistance = clamp(
@@ -258,6 +329,10 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
   const oppositeSteerClamp = clamp(config.oppositeSteerClamp ?? MOVEMENT_DEFAULTS.oppositeSteerClamp ?? 0.35, 0.05, 1);
   const inputOpposesVelocity = hasInput && intentForward < 0;
   const commitClamp = (commitLeft > 0.0001 && inputOpposesVelocity) ? oppositeSteerClamp : 1;
+  const oppositeCarveSuppression = (carveLockLeft > 0.0001 && carveSide !== 0 && Math.sign(intentSideRaw || 0) !== carveSide)
+    ? carveSideSuppression
+    : 1;
+  const intentSide = intentSideRaw * oppositeCarveSuppression;
   const appliedLateralForce = lateralSteerForce * intentSide * lateralAuthority * commitClamp;
   state.debugAppliedForwardForce = hasInput ? appliedForwardForce : 0;
   state.debugAppliedLateralForce = hasInput ? appliedLateralForce : 0;

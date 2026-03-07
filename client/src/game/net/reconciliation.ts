@@ -28,6 +28,10 @@ export function reconcilePrediction(
   (predicted as any).pendingDirY = (authoritative as any).pendingDirY ?? (predicted as any).committedDirY;
   (predicted as any).directionCommitTimer = (authoritative as any).directionCommitTimer ?? 0;
   (predicted as any).oppositeHoldTimer = (authoritative as any).oppositeHoldTimer ?? 0;
+  (predicted as any).carveLockTimer = (authoritative as any).carveLockTimer ?? 0;
+  (predicted as any).carveSwitchCooldownTimer = (authoritative as any).carveSwitchCooldownTimer ?? 0;
+  (predicted as any).carveSide = (authoritative as any).carveSide ?? 0;
+  (predicted as any).movementPhase = (authoritative as any).movementPhase ?? 'GLIDE';
   (predicted as any).lastRawInputAngle = (authoritative as any).lastRawInputAngle ?? (authoritative as any).inputAngle ?? (authoritative as any).moveAngle;
   (predicted as any).antiFlipTimer = (authoritative as any).antiFlipTimer ?? 0;
   (predicted as any).baseBodyAngle = (authoritative as any).baseBodyAngle ?? (authoritative as any).angle;

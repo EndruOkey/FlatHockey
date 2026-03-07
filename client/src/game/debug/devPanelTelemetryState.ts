@@ -36,6 +36,10 @@ export type MovementDebugMetrics = {
   commitTimer: number;
   oppositeHoldTimer: number;
   steerDir: string;
+  movementPhase: string;
+  carveLockTimer: number;
+  carveSide: number;
+  signedInputVsVelocityAngle: number;
   brakeActive: boolean;
   chargeActive: boolean;
   baseBodyAngle: number;
@@ -85,6 +89,10 @@ const DEFAULT_MOVEMENT: MovementDebugMetrics = {
   commitTimer: 0,
   oppositeHoldTimer: 0,
   steerDir: '(0,0)',
+  movementPhase: 'GLIDE',
+  carveLockTimer: 0,
+  carveSide: 0,
+  signedInputVsVelocityAngle: 0,
   brakeActive: false,
   chargeActive: false,
   baseBodyAngle: 0,

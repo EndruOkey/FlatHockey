@@ -303,13 +303,21 @@ export class PlayerView {
     const bodyLeanY = rightY * this.leanPx;
     this.bodyRig.setPosition(bodyLeanX, bodyLeanY);
     this.bodyRig.rotation = this.getBodyRenderRotation();
+    const stickBaseLocalOffset = PlayerView.rotateLocal(stickOffsetX, stickOffsetY, stickWorldRot);
     const handSocket = this.getActiveHandSocketLocal();
-    this.leadHandSprite.setPosition(handSocket.x, handSocket.y);
+    const bodyRenderRot = this.getBodyRenderRotation();
+    const cosInv = Math.cos(-bodyRenderRot);
+    const sinInv = Math.sin(-bodyRenderRot);
+    const handDeltaLocalX = stickBaseLocalOffset.x * cosInv - stickBaseLocalOffset.y * sinInv;
+    const handDeltaLocalY = stickBaseLocalOffset.x * sinInv + stickBaseLocalOffset.y * cosInv;
+    this.leadHandSprite.setPosition(
+      handSocket.x + handDeltaLocalX,
+      handSocket.y + handDeltaLocalY
+    );
     const gripLocal = {
       x: gripLocalBase.x + bodyLeanX,
       y: gripLocalBase.y + bodyLeanY
     };
-    const stickBaseLocalOffset = PlayerView.rotateLocal(stickOffsetX, stickOffsetY, stickWorldRot);
     this.stickRoot.setPosition(gripLocal.x + stickBaseLocalOffset.x, gripLocal.y + stickBaseLocalOffset.y);
     this.stickRoot.rotation = stickDrawRot;
     this.supportHandSprite.setPosition(supportDist - stickOffsetX, PlayerView.SUPPORT_HAND_Y_OFFSET - stickOffsetY);

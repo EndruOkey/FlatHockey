@@ -23,6 +23,10 @@ export type PredictedPlayerState = PlayerStateMsg & {
   pendingDirY?: number;
   directionCommitTimer?: number;
   oppositeHoldTimer?: number;
+  carveLockTimer?: number;
+  carveSwitchCooldownTimer?: number;
+  carveSide?: -1 | 0 | 1;
+  movementPhase?: 'GLIDE' | 'CARVE_LEFT' | 'CARVE_RIGHT' | 'BRAKE';
   lastRawInputAngle?: number;
   antiFlipTimer?: number;
   baseBodyAngle?: number;
@@ -65,6 +69,10 @@ export type PredictedPlayerState = PlayerStateMsg & {
   debugOppositeHoldTimer?: number;
   debugSteerDirX?: number;
   debugSteerDirY?: number;
+  debugMovementPhase?: 'GLIDE' | 'CARVE_LEFT' | 'CARVE_RIGHT' | 'BRAKE';
+  debugCarveLockTimer?: number;
+  debugCarveSide?: -1 | 0 | 1;
+  debugSignedInputVsVelocityAngle?: number;
   debugBaseBodyAngle?: number;
   debugBodyYawOffset?: number;
   debugBodyTurnInput?: number;
@@ -117,6 +125,10 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     pendingDirY: state.pendingDirY,
     directionCommitTimer: state.directionCommitTimer,
     oppositeHoldTimer: state.oppositeHoldTimer,
+    carveLockTimer: state.carveLockTimer,
+    carveSwitchCooldownTimer: state.carveSwitchCooldownTimer,
+    carveSide: state.carveSide,
+    movementPhase: state.movementPhase,
     lastRawInputAngle: state.lastRawInputAngle,
     antiFlipTimer: state.antiFlipTimer,
     baseBodyAngle: state.baseBodyAngle,
@@ -155,6 +167,10 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     debugOppositeHoldTimer: state.debugOppositeHoldTimer,
     debugSteerDirX: state.debugSteerDirX,
     debugSteerDirY: state.debugSteerDirY,
+    debugMovementPhase: state.debugMovementPhase,
+    debugCarveLockTimer: state.debugCarveLockTimer,
+    debugCarveSide: state.debugCarveSide,
+    debugSignedInputVsVelocityAngle: state.debugSignedInputVsVelocityAngle,
     debugChargeActive: state.chargeActive,
     debugBaseBodyAngle: state.debugBaseBodyAngle,
     debugBodyYawOffset: state.debugBodyYawOffset,
@@ -196,6 +212,10 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.pendingDirY = simState.pendingDirY;
   state.directionCommitTimer = simState.directionCommitTimer;
   state.oppositeHoldTimer = simState.oppositeHoldTimer;
+  state.carveLockTimer = simState.carveLockTimer;
+  state.carveSwitchCooldownTimer = simState.carveSwitchCooldownTimer;
+  state.carveSide = simState.carveSide;
+  state.movementPhase = simState.movementPhase;
   state.lastRawInputAngle = simState.lastRawInputAngle;
   state.antiFlipTimer = simState.antiFlipTimer;
   state.baseBodyAngle = simState.baseBodyAngle;
@@ -241,6 +261,10 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.debugOppositeHoldTimer = simState.debugOppositeHoldTimer;
   state.debugSteerDirX = simState.debugSteerDirX;
   state.debugSteerDirY = simState.debugSteerDirY;
+  state.debugMovementPhase = simState.debugMovementPhase;
+  state.debugCarveLockTimer = simState.debugCarveLockTimer;
+  state.debugCarveSide = simState.debugCarveSide;
+  state.debugSignedInputVsVelocityAngle = simState.debugSignedInputVsVelocityAngle;
   state.chargeActive = !!simState.debugChargeActive;
   state.debugBaseBodyAngle = simState.debugBaseBodyAngle;
   state.debugBodyYawOffset = simState.debugBodyYawOffset;
@@ -304,6 +328,10 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     oppositeHoldTimer: simState.debugOppositeHoldTimer ?? simState.oppositeHoldTimer ?? 0,
     steerDirX: simState.debugSteerDirX ?? simState.committedDirX ?? 0,
     steerDirY: simState.debugSteerDirY ?? simState.committedDirY ?? 0,
+    movementPhase: simState.debugMovementPhase ?? simState.movementPhase ?? 'GLIDE',
+    carveLockTimer: simState.debugCarveLockTimer ?? simState.carveLockTimer ?? 0,
+    carveSide: simState.debugCarveSide ?? simState.carveSide ?? 0,
+    signedInputVsVelocityAngle: simState.debugSignedInputVsVelocityAngle ?? 0,
     chargeActive: !!simState.debugChargeActive,
     moveAngle: simState.moveAngle ?? 0,
     aimAngle: simState.aimAngle ?? state.aimAngle ?? state.angle,
