@@ -128,6 +128,7 @@ export class PondScene extends Phaser.Scene {
   private replayIndex = 0;
   private recordedInputs: Array<{ tMs: number; input: InputMsg }> = [];
   private readonly inputRecordWindowMs = 20_000;
+  private localRenderState: LerpPlayer | null = null;
 
   constructor() {
     super('PondScene');
@@ -135,6 +136,7 @@ export class PondScene extends Phaser.Scene {
 
   private resetPendingInputState(resetSeq = false) {
     this.pendingInputs = [];
+    this.localRenderState = null;
     if (resetSeq) {
       this.seq = 0;
       this.ackSeq = 0;
@@ -1142,6 +1144,22 @@ export class PondScene extends Phaser.Scene {
             moveRot: this.predicted.moveAngle ?? this.predicted.angle,
             baseRot: this.predicted.baseBodyAngle ?? this.predicted.angle
           };
+        }
+        if (state) {
+          if (!this.localRenderState) {
+            this.localRenderState = { ...state };
+          } else {
+            // Smooth only render-space pose to avoid visible 60 Hz stepping on high refresh displays.
+            const tauMs = 24;
+            const alpha = 1 - Math.exp(-Math.max(0, clampedDtMs) / Math.max(1, tauMs));
+            this.localRenderState.x += (state.x - this.localRenderState.x) * alpha;
+            this.localRenderState.y += (state.y - this.localRenderState.y) * alpha;
+            this.localRenderState.rot = this.lerpAngle(this.localRenderState.rot, state.rot, alpha);
+            this.localRenderState.aimRot = this.lerpAngle(this.localRenderState.aimRot ?? state.aimRot ?? state.rot, state.aimRot ?? state.rot, alpha);
+            this.localRenderState.moveRot = this.lerpAngle(this.localRenderState.moveRot ?? state.moveRot ?? state.rot, state.moveRot ?? state.rot, alpha);
+            this.localRenderState.baseRot = this.lerpAngle(this.localRenderState.baseRot ?? state.baseRot ?? state.rot, state.baseRot ?? state.rot, alpha);
+          }
+          state = this.localRenderState;
         }
       } else {
         const interp = this.remoteInterpolators.get(id);
