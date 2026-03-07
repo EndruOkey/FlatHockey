@@ -22,6 +22,8 @@ export type MovementStepState = {
   committedDirY?: number;
   pendingDirX?: number;
   pendingDirY?: number;
+  directionCommitTimer?: number;
+  oppositeHoldTimer?: number;
   lastRawInputAngle?: number;
   antiFlipTimer?: number;
   heading?: number;
@@ -60,6 +62,10 @@ export type MovementStepState = {
   debugAppliedForwardForce?: number;
   debugAppliedLateralForce?: number;
   debugEdgeFactor?: number;
+  debugCommitTimer?: number;
+  debugOppositeHoldTimer?: number;
+  debugSteerDirX?: number;
+  debugSteerDirY?: number;
   debugChargeActive?: boolean;
   debugBaseBodyAngle?: number;
   debugBodyYawOffset?: number;
@@ -124,6 +130,11 @@ export type MovementStepConfig = {
   brakeSteerBoost?: number;
   velocityTurnResistance?: number;
   oppositeSteerScale?: number;
+  directionCommitWindowMs?: number;
+  commitAngleThreshold?: number;
+  oppositeThreshold?: number;
+  oppositeHoldMs?: number;
+  oppositeSteerClamp?: number;
   chargeSpeedMul?: number;
   chargeAccelMul?: number;
   chargeTurnMul?: number;
@@ -319,4 +330,3 @@ export type MovementStepConfig = {
   debugDrawVectors?: boolean;
   debugDrawArcPreview?: boolean;
 };
-

@@ -33,6 +33,9 @@ export type MovementDebugMetrics = {
   appliedForwardForce: number;
   appliedLateralForce: number;
   edgeFactor: number;
+  commitTimer: number;
+  oppositeHoldTimer: number;
+  steerDir: string;
   brakeActive: boolean;
   chargeActive: boolean;
   baseBodyAngle: number;
@@ -79,6 +82,9 @@ const DEFAULT_MOVEMENT: MovementDebugMetrics = {
   appliedForwardForce: 0,
   appliedLateralForce: 0,
   edgeFactor: 0,
+  commitTimer: 0,
+  oppositeHoldTimer: 0,
+  steerDir: '(0,0)',
   brakeActive: false,
   chargeActive: false,
   baseBodyAngle: 0,

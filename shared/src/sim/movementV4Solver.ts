@@ -92,8 +92,6 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
   const moveDrag = Math.max(0, config.moveDrag ?? MOVEMENT_DEFAULTS.moveDrag ?? 2.6);
   const brakeDrag = Math.max(0, config.brakeDrag ?? MOVEMENT_DEFAULTS.brakeDrag ?? 4.8);
   const velocityTurnResistance = Math.max(0, config.velocityTurnResistance ?? MOVEMENT_DEFAULTS.velocityTurnResistance ?? 1.2);
-  const antiFlipWindowSec = Math.max(0, (config.antiFlipWindowMs ?? MOVEMENT_DEFAULTS.antiFlipWindowMs ?? 220) / 1000);
-  const antiFlipPenalty = clamp(config.antiFlipPenalty ?? MOVEMENT_DEFAULTS.antiFlipPenalty ?? 0.72, 0, 0.95);
   const chargeSpeedMul = Math.max(1, config.chargeSpeedMul ?? MOVEMENT_DEFAULTS.chargeSpeedMul ?? 1.2);
   const chargeAccelMul = Math.max(1, config.chargeAccelMul ?? MOVEMENT_DEFAULTS.chargeAccelMul ?? 1.25);
   const chargeTurnMul = clamp(config.chargeTurnMul ?? MOVEMENT_DEFAULTS.chargeTurnMul ?? 0.55, 0.1, 1);
@@ -142,40 +140,81 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
     committedY = filteredY;
   }
 
-  const dotPendingCommitted = clamp(committedX * filteredX + committedY * filteredY, -1, 1);
-  const sharpFlipIntent = hasInput && dotPendingCommitted < -0.42;
-  let antiFlipLeft = Math.max(0, state.antiFlipTimer ?? 0);
-  const shouldGateFlip = !input.buttons.brake && speedNorm > 0.15 && sharpFlipIntent;
-  if (shouldGateFlip && antiFlipLeft <= 0) {
-    antiFlipLeft = antiFlipWindowSec * lerp(0.75, 1.35, speedNorm);
-  }
-  antiFlipLeft = Math.max(0, antiFlipLeft - simDt);
-  state.antiFlipTimer = antiFlipLeft;
-  state.debugAntiFlipActive = antiFlipLeft > 0.0001;
+  const directionCommitWindowSec = Math.max(0, (config.directionCommitWindowMs ?? MOVEMENT_DEFAULTS.directionCommitWindowMs ?? 110) / 1000);
+  const commitAngleThresholdRad = ((config.commitAngleThreshold ?? MOVEMENT_DEFAULTS.commitAngleThreshold ?? 70) * Math.PI) / 180;
+  const oppositeThresholdRad = ((config.oppositeThreshold ?? MOVEMENT_DEFAULTS.oppositeThreshold ?? 120) * Math.PI) / 180;
+  const oppositeHoldWindowSec = Math.max(0, (config.oppositeHoldMs ?? MOVEMENT_DEFAULTS.oppositeHoldMs ?? 90) / 1000);
 
-  const commitPenalty = antiFlipLeft > 0.0001
-    ? lerp(1 - antiFlipPenalty, 0.75, input.buttons.brake ? 1 : 0)
-    : 1;
-  const commitAlpha = clamp(desiredAlpha * commitPenalty, 0.01, 1);
-  committedX += (filteredX - committedX) * commitAlpha;
-  committedY += (filteredY - committedY) * commitAlpha;
-  const committedNextMag = Math.hypot(committedX, committedY);
-  if (committedNextMag > 0.0001) {
-    committedX /= committedNextMag;
-    committedY /= committedNextMag;
-  } else {
+  let commitLeft = Math.max(0, state.directionCommitTimer ?? 0);
+  let oppositeHoldLeft = Math.max(0, state.oppositeHoldTimer ?? 0);
+
+  const filteredAngle = Math.atan2(filteredY, filteredX);
+  const velocityAngle = speedBefore > 0.001 ? Math.atan2(prevVy, prevVx) : filteredAngle;
+  const inputVsVelocity = hasInput ? Math.abs(wrapToPi(filteredAngle - velocityAngle)) : 0;
+  if (hasInput && inputVsVelocity > commitAngleThresholdRad && commitLeft <= 0.0001) {
     committedX = filteredX;
     committedY = filteredY;
+    commitLeft = directionCommitWindowSec;
   }
+
+  const dotInputCommitted = clamp(committedX * filteredX + committedY * filteredY, -1, 1);
+  const oppositeDetected = hasInput && Math.acos(dotInputCommitted) > oppositeThresholdRad;
+  const pendingX = state.pendingDirX ?? filteredX;
+  const pendingY = state.pendingDirY ?? filteredY;
+  const candidateStable = clamp(pendingX * filteredX + pendingY * filteredY, -1, 1) > Math.cos((22 * Math.PI) / 180);
+
+  if (oppositeDetected) {
+    if (oppositeHoldLeft <= 0.0001 || !candidateStable) {
+      oppositeHoldLeft = oppositeHoldWindowSec;
+      state.pendingDirX = filteredX;
+      state.pendingDirY = filteredY;
+    } else {
+      oppositeHoldLeft = Math.max(0, oppositeHoldLeft - simDt);
+      if (oppositeHoldLeft <= 0.0001) {
+        committedX = filteredX;
+        committedY = filteredY;
+        commitLeft = Math.max(commitLeft, directionCommitWindowSec);
+      }
+    }
+  } else {
+    oppositeHoldLeft = 0;
+    state.pendingDirX = filteredX;
+    state.pendingDirY = filteredY;
+  }
+
+  const commitLocked = commitLeft > 0.0001;
+  const holdLocked = oppositeHoldLeft > 0.0001;
+  if (!commitLocked && !holdLocked && hasInput) {
+    const commitAlpha = clamp(desiredAlpha, 0.04, 1);
+    committedX += (filteredX - committedX) * commitAlpha;
+    committedY += (filteredY - committedY) * commitAlpha;
+    const committedNextMag = Math.hypot(committedX, committedY);
+    if (committedNextMag > 0.0001) {
+      committedX /= committedNextMag;
+      committedY /= committedNextMag;
+    }
+  }
+
+  commitLeft = Math.max(0, commitLeft - simDt);
+  state.directionCommitTimer = commitLeft;
+  state.oppositeHoldTimer = oppositeHoldLeft;
+  state.antiFlipTimer = commitLeft;
+  state.debugAntiFlipActive = commitLeft > 0.0001 || oppositeHoldLeft > 0.0001;
+  state.debugCommitTimer = commitLeft;
+  state.debugOppositeHoldTimer = oppositeHoldLeft;
   state.committedDirX = committedX;
   state.committedDirY = committedY;
+  const steerX = (commitLeft > 0.0001 || oppositeHoldLeft > 0.0001) ? committedX : filteredX;
+  const steerY = (commitLeft > 0.0001 || oppositeHoldLeft > 0.0001) ? committedY : filteredY;
+  state.debugSteerDirX = steerX;
+  state.debugSteerDirY = steerY;
 
-  const desiredMoveAngle = Math.atan2(committedY, committedX);
+  const desiredMoveAngle = Math.atan2(steerY, steerX);
   state.inputAngle = desiredMoveAngle;
   state.lastRawInputAngle = rawTargetAngle;
   state.debugRawInputAngle = rawTargetAngle;
-  state.debugDesiredInputX = committedX;
-  state.debugDesiredInputY = committedY;
+  state.debugDesiredInputX = steerX;
+  state.debugDesiredInputY = steerY;
   state.debugFilteredInputX = filteredX;
   state.debugFilteredInputY = filteredY;
   const velDirAngle = speedBefore > 0.001 ? Math.atan2(state.vy, state.vx) : desiredMoveAngle;
@@ -183,8 +222,8 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
   const fy = Math.sin(velDirAngle);
   const sx = -fy;
   const sy = fx;
-  const intentForward = fx * committedX + fy * committedY;
-  const intentSide = sx * committedX + sy * committedY;
+  const intentForward = fx * steerX + fy * steerY;
+  const intentSide = sx * steerX + sy * steerY;
   const desiredVsVelocity = Math.abs(wrapToPi(desiredMoveAngle - velDirAngle));
   const angleNorm = clamp(desiredVsVelocity / Math.PI, 0, 1);
   const edgeFactor = clamp(0.08 + angleNorm * lerp(0.22, 0.76, speedNorm) + (input.buttons.brake ? 0.26 : 0), 0, 1);
@@ -212,10 +251,14 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
     0.02,
     1.25
   );
-  const alternatingPenalty = lerp(1, 0.55, clamp((1 - dotPendingCommitted) * 0.5 * speedNorm, 0, 1));
+  const dotSteerFiltered = clamp(steerX * filteredX + steerY * filteredY, -1, 1);
+  const alternatingPenalty = lerp(1, 0.55, clamp((1 - dotSteerFiltered) * 0.5 * speedNorm, 0, 1));
   const lateralAuthority = clamp(turnAuthority * alternatingPenalty * (chargeActive ? chargeTurnMul : 1), 0.02, 1);
   const appliedForwardForce = forwardAccel * (chargeActive ? chargeAccelMul : 1) * forwardInput * reverseEntryPenalty;
-  const appliedLateralForce = lateralSteerForce * intentSide * lateralAuthority;
+  const oppositeSteerClamp = clamp(config.oppositeSteerClamp ?? MOVEMENT_DEFAULTS.oppositeSteerClamp ?? 0.35, 0.05, 1);
+  const inputOpposesVelocity = hasInput && intentForward < 0;
+  const commitClamp = (commitLeft > 0.0001 && inputOpposesVelocity) ? oppositeSteerClamp : 1;
+  const appliedLateralForce = lateralSteerForce * intentSide * lateralAuthority * commitClamp;
   state.debugAppliedForwardForce = hasInput ? appliedForwardForce : 0;
   state.debugAppliedLateralForce = hasInput ? appliedLateralForce : 0;
   state.debugRedirectAccelScale = lateralAuthority;

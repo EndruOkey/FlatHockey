@@ -886,6 +886,9 @@ export class PondScene extends Phaser.Scene {
     const startModeLine = tuning.showStartMode
       ? `startMode=${telemetry.startModeActive ? 'on' : 'off'} brake=${telemetry.brakeApplied > 0 ? 'on' : 'off'} charge=${telemetry.chargeActive ? 'on' : 'off'} turnRateApplied=${Number(telemetry.turnRateAppliedDeg ?? 0).toFixed(1)} fwd=${Number(telemetry.velForward ?? 0).toFixed(1)} side=${Number(telemetry.velSide ?? 0).toFixed(1)}`
       : null;
+    const v4StabilityLine = tuning.showAngleDiff
+      ? `commit=${(Number(telemetry.commitTimer ?? 0) * 1000).toFixed(0)}ms oppositeHold=${(Number(telemetry.oppositeHoldTimer ?? 0) * 1000).toFixed(0)}ms steerDir=(${Number(telemetry.steerDirX ?? 0).toFixed(2)}, ${Number(telemetry.steerDirY ?? 0).toFixed(2)})`
+      : null;
 
     if (this.debugEnabled) {
       this.debugOverlay.setText([
@@ -910,6 +913,7 @@ export class PondScene extends Phaser.Scene {
         ...(stickRuntimeLine ? [stickRuntimeLine] : []),
         ...(bodyYawLine ? [bodyYawLine] : []),
         ...(stickLimitLine ? [stickLimitLine] : []),
+        ...(v4StabilityLine ? [v4StabilityLine] : []),
         ...(snapLine ? [snapLine] : []),
         ...(brakeAssistLine ? [brakeAssistLine] : []),
         ...(startModeLine ? [startModeLine] : []),
@@ -975,6 +979,9 @@ export class PondScene extends Phaser.Scene {
       appliedForwardForce: Number(telemetry.appliedForwardForce ?? 0),
       appliedLateralForce: Number(telemetry.appliedLateralForce ?? 0),
       edgeFactor: Number(telemetry.edgeFactor ?? 0),
+      commitTimer: Number(telemetry.commitTimer ?? 0),
+      oppositeHoldTimer: Number(telemetry.oppositeHoldTimer ?? 0),
+      steerDir: `(${Number(telemetry.steerDirX ?? 0).toFixed(2)}, ${Number(telemetry.steerDirY ?? 0).toFixed(2)})`,
       brakeActive: Number(telemetry.brakeApplied ?? 0) > 0.0001,
       chargeActive: Boolean(telemetry.chargeActive ?? this.predicted?.chargeActive ?? false),
       baseBodyAngle: Number(this.predicted?.baseBodyAngle ?? telemetry.baseBodyAngle ?? this.predicted?.angle ?? 0),

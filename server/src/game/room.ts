@@ -35,6 +35,8 @@ type PlayerState = {
   committedDirY: number;
   pendingDirX: number;
   pendingDirY: number;
+  directionCommitTimer: number;
+  oppositeHoldTimer: number;
   lastRawInputAngle: number;
   antiFlipTimer: number;
   baseBodyAngle: number;
@@ -159,6 +161,8 @@ export class Room {
       committedDirY: 0,
       pendingDirX: 1,
       pendingDirY: 0,
+      directionCommitTimer: 0,
+      oppositeHoldTimer: 0,
       lastRawInputAngle: 0,
       antiFlipTimer: 0,
       baseBodyAngle: 0,
@@ -253,6 +257,8 @@ export class Room {
         committedDirY: player.committedDirY,
         pendingDirX: player.pendingDirX,
         pendingDirY: player.pendingDirY,
+        directionCommitTimer: player.directionCommitTimer,
+        oppositeHoldTimer: player.oppositeHoldTimer,
         lastRawInputAngle: player.lastRawInputAngle,
         antiFlipTimer: player.antiFlipTimer,
         baseBodyAngle: player.baseBodyAngle,
@@ -305,6 +311,8 @@ export class Room {
       player.committedDirY = Number.isFinite(state.committedDirY) ? state.committedDirY! : player.committedDirY;
       player.pendingDirX = Number.isFinite(state.pendingDirX) ? state.pendingDirX! : player.pendingDirX;
       player.pendingDirY = Number.isFinite(state.pendingDirY) ? state.pendingDirY! : player.pendingDirY;
+      player.directionCommitTimer = Number.isFinite(state.directionCommitTimer) ? state.directionCommitTimer! : player.directionCommitTimer;
+      player.oppositeHoldTimer = Number.isFinite(state.oppositeHoldTimer) ? state.oppositeHoldTimer! : player.oppositeHoldTimer;
       player.lastRawInputAngle = Number.isFinite(state.lastRawInputAngle) ? state.lastRawInputAngle! : player.lastRawInputAngle;
       player.antiFlipTimer = Number.isFinite(state.antiFlipTimer) ? state.antiFlipTimer! : player.antiFlipTimer;
       player.baseBodyAngle = Number.isFinite(state.baseBodyAngle) ? state.baseBodyAngle! : player.baseBodyAngle;
@@ -374,6 +382,8 @@ export class Room {
         committedDirY: p.committedDirY,
         pendingDirX: p.pendingDirX,
         pendingDirY: p.pendingDirY,
+        directionCommitTimer: p.directionCommitTimer,
+        oppositeHoldTimer: p.oppositeHoldTimer,
         lastRawInputAngle: p.lastRawInputAngle,
         antiFlipTimer: p.antiFlipTimer,
         baseBodyAngle: p.baseBodyAngle,

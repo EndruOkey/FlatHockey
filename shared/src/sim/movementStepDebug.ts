@@ -33,6 +33,10 @@ export function resetMovementDebugState(state: MovementStepState) {
   state.debugAppliedForwardForce = 0;
   state.debugAppliedLateralForce = 0;
   state.debugEdgeFactor = 0;
+  state.debugCommitTimer = 0;
+  state.debugOppositeHoldTimer = 0;
+  state.debugSteerDirX = 0;
+  state.debugSteerDirY = 0;
   state.debugChargeActive = false;
   state.debugBaseBodyAngle = 0;
   state.debugBodyYawOffset = 0;

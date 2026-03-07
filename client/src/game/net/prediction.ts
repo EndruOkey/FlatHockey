@@ -21,6 +21,8 @@ export type PredictedPlayerState = PlayerStateMsg & {
   committedDirY?: number;
   pendingDirX?: number;
   pendingDirY?: number;
+  directionCommitTimer?: number;
+  oppositeHoldTimer?: number;
   lastRawInputAngle?: number;
   antiFlipTimer?: number;
   baseBodyAngle?: number;
@@ -59,6 +61,10 @@ export type PredictedPlayerState = PlayerStateMsg & {
   debugDesiredInputY?: number;
   debugAppliedForwardForce?: number;
   debugAppliedLateralForce?: number;
+  debugCommitTimer?: number;
+  debugOppositeHoldTimer?: number;
+  debugSteerDirX?: number;
+  debugSteerDirY?: number;
   debugBaseBodyAngle?: number;
   debugBodyYawOffset?: number;
   debugBodyTurnInput?: number;
@@ -109,6 +115,8 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     committedDirY: state.committedDirY,
     pendingDirX: state.pendingDirX,
     pendingDirY: state.pendingDirY,
+    directionCommitTimer: state.directionCommitTimer,
+    oppositeHoldTimer: state.oppositeHoldTimer,
     lastRawInputAngle: state.lastRawInputAngle,
     antiFlipTimer: state.antiFlipTimer,
     baseBodyAngle: state.baseBodyAngle,
@@ -143,6 +151,10 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     debugDesiredInputY: state.debugDesiredInputY,
     debugAppliedForwardForce: state.debugAppliedForwardForce,
     debugAppliedLateralForce: state.debugAppliedLateralForce,
+    debugCommitTimer: state.debugCommitTimer,
+    debugOppositeHoldTimer: state.debugOppositeHoldTimer,
+    debugSteerDirX: state.debugSteerDirX,
+    debugSteerDirY: state.debugSteerDirY,
     debugChargeActive: state.chargeActive,
     debugBaseBodyAngle: state.debugBaseBodyAngle,
     debugBodyYawOffset: state.debugBodyYawOffset,
@@ -182,6 +194,8 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.committedDirY = simState.committedDirY;
   state.pendingDirX = simState.pendingDirX;
   state.pendingDirY = simState.pendingDirY;
+  state.directionCommitTimer = simState.directionCommitTimer;
+  state.oppositeHoldTimer = simState.oppositeHoldTimer;
   state.lastRawInputAngle = simState.lastRawInputAngle;
   state.antiFlipTimer = simState.antiFlipTimer;
   state.baseBodyAngle = simState.baseBodyAngle;
@@ -223,6 +237,10 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.debugDesiredInputY = simState.debugDesiredInputY;
   state.debugAppliedForwardForce = simState.debugAppliedForwardForce;
   state.debugAppliedLateralForce = simState.debugAppliedLateralForce;
+  state.debugCommitTimer = simState.debugCommitTimer;
+  state.debugOppositeHoldTimer = simState.debugOppositeHoldTimer;
+  state.debugSteerDirX = simState.debugSteerDirX;
+  state.debugSteerDirY = simState.debugSteerDirY;
   state.chargeActive = !!simState.debugChargeActive;
   state.debugBaseBodyAngle = simState.debugBaseBodyAngle;
   state.debugBodyYawOffset = simState.debugBodyYawOffset;
@@ -282,6 +300,10 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     appliedForwardForce: simState.debugAppliedForwardForce ?? 0,
     appliedLateralForce: simState.debugAppliedLateralForce ?? 0,
     edgeFactor: simState.debugEdgeFactor ?? 0,
+    commitTimer: simState.debugCommitTimer ?? simState.directionCommitTimer ?? 0,
+    oppositeHoldTimer: simState.debugOppositeHoldTimer ?? simState.oppositeHoldTimer ?? 0,
+    steerDirX: simState.debugSteerDirX ?? simState.committedDirX ?? 0,
+    steerDirY: simState.debugSteerDirY ?? simState.committedDirY ?? 0,
     chargeActive: !!simState.debugChargeActive,
     moveAngle: simState.moveAngle ?? 0,
     aimAngle: simState.aimAngle ?? state.aimAngle ?? state.angle,

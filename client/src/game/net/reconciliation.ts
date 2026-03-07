@@ -26,6 +26,8 @@ export function reconcilePrediction(
   (predicted as any).committedDirY = (authoritative as any).committedDirY ?? Math.sin((authoritative as any).heading ?? (authoritative as any).moveAngle ?? 0);
   (predicted as any).pendingDirX = (authoritative as any).pendingDirX ?? (predicted as any).committedDirX;
   (predicted as any).pendingDirY = (authoritative as any).pendingDirY ?? (predicted as any).committedDirY;
+  (predicted as any).directionCommitTimer = (authoritative as any).directionCommitTimer ?? 0;
+  (predicted as any).oppositeHoldTimer = (authoritative as any).oppositeHoldTimer ?? 0;
   (predicted as any).lastRawInputAngle = (authoritative as any).lastRawInputAngle ?? (authoritative as any).inputAngle ?? (authoritative as any).moveAngle;
   (predicted as any).antiFlipTimer = (authoritative as any).antiFlipTimer ?? 0;
   (predicted as any).baseBodyAngle = (authoritative as any).baseBodyAngle ?? (authoritative as any).angle;
