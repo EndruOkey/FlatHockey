@@ -45,6 +45,7 @@ type PlayerState = {
   startNoInputTimer: number;
   startDirX: number;
   startDirY: number;
+  lastStableTravelAngle: number;
   lastRawInputAngle: number;
   antiFlipTimer: number;
   baseBodyAngle: number;
@@ -179,6 +180,7 @@ export class Room {
       startNoInputTimer: 0,
       startDirX: 1,
       startDirY: 0,
+      lastStableTravelAngle: 0,
       lastRawInputAngle: 0,
       antiFlipTimer: 0,
       baseBodyAngle: 0,
@@ -283,6 +285,7 @@ export class Room {
         startNoInputTimer: player.startNoInputTimer,
         startDirX: player.startDirX,
         startDirY: player.startDirY,
+        lastStableTravelAngle: player.lastStableTravelAngle,
         lastRawInputAngle: player.lastRawInputAngle,
         antiFlipTimer: player.antiFlipTimer,
         baseBodyAngle: player.baseBodyAngle,
@@ -345,6 +348,7 @@ export class Room {
       player.startNoInputTimer = Number.isFinite(state.startNoInputTimer) ? state.startNoInputTimer! : player.startNoInputTimer;
       player.startDirX = Number.isFinite(state.startDirX) ? state.startDirX! : player.startDirX;
       player.startDirY = Number.isFinite(state.startDirY) ? state.startDirY! : player.startDirY;
+      player.lastStableTravelAngle = Number.isFinite(state.lastStableTravelAngle) ? state.lastStableTravelAngle! : player.lastStableTravelAngle;
       player.lastRawInputAngle = Number.isFinite(state.lastRawInputAngle) ? state.lastRawInputAngle! : player.lastRawInputAngle;
       player.antiFlipTimer = Number.isFinite(state.antiFlipTimer) ? state.antiFlipTimer! : player.antiFlipTimer;
       player.baseBodyAngle = Number.isFinite(state.baseBodyAngle) ? state.baseBodyAngle! : player.baseBodyAngle;
@@ -423,6 +427,7 @@ export class Room {
         startCommitTimer: p.startCommitTimer,
         startDirX: p.startDirX,
         startDirY: p.startDirY,
+        lastStableTravelAngle: p.lastStableTravelAngle,
         lastRawInputAngle: p.lastRawInputAngle,
         antiFlipTimer: p.antiFlipTimer,
         baseBodyAngle: p.baseBodyAngle,

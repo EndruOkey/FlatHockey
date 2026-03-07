@@ -72,6 +72,7 @@ export const MOVEMENT_DEFAULTS: MovementTuning = {
   noSteerSpeedThreshold: 75,
   startupInputThreshold: 0.35,
   startupDirHoldMs: 120,
+  minTravelDirSpeed: 55,
   chargeSpeedMul: 1.2,
   chargeAccelMul: 1.25,
   chargeTurnMul: 0.55,

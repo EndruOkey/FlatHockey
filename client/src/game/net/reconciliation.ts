@@ -36,6 +36,7 @@ export function reconcilePrediction(
   (predicted as any).startNoInputTimer = (authoritative as any).startNoInputTimer ?? 0;
   (predicted as any).startDirX = (authoritative as any).startDirX ?? (predicted as any).desiredDirX ?? 1;
   (predicted as any).startDirY = (authoritative as any).startDirY ?? (predicted as any).desiredDirY ?? 0;
+  (predicted as any).lastStableTravelAngle = (authoritative as any).lastStableTravelAngle ?? (authoritative as any).moveAngle ?? 0;
   (predicted as any).lastRawInputAngle = (authoritative as any).lastRawInputAngle ?? (authoritative as any).inputAngle ?? (authoritative as any).moveAngle;
   (predicted as any).antiFlipTimer = (authoritative as any).antiFlipTimer ?? 0;
   (predicted as any).baseBodyAngle = (authoritative as any).baseBodyAngle ?? (authoritative as any).angle;

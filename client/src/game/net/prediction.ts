@@ -31,6 +31,7 @@ export type PredictedPlayerState = PlayerStateMsg & {
   startNoInputTimer?: number;
   startDirX?: number;
   startDirY?: number;
+  lastStableTravelAngle?: number;
   lastRawInputAngle?: number;
   antiFlipTimer?: number;
   baseBodyAngle?: number;
@@ -147,6 +148,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     startNoInputTimer: state.startNoInputTimer,
     startDirX: state.startDirX,
     startDirY: state.startDirY,
+    lastStableTravelAngle: state.lastStableTravelAngle,
     lastRawInputAngle: state.lastRawInputAngle,
     antiFlipTimer: state.antiFlipTimer,
     baseBodyAngle: state.baseBodyAngle,
@@ -244,6 +246,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.startNoInputTimer = simState.startNoInputTimer;
   state.startDirX = simState.startDirX;
   state.startDirY = simState.startDirY;
+  state.lastStableTravelAngle = simState.lastStableTravelAngle;
   state.lastRawInputAngle = simState.lastRawInputAngle;
   state.antiFlipTimer = simState.antiFlipTimer;
   state.baseBodyAngle = simState.baseBodyAngle;
@@ -421,6 +424,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     usedTuning.noSteerSpeedThreshold = config.noSteerSpeedThreshold as any;
     usedTuning.startupInputThreshold = config.startupInputThreshold as any;
     usedTuning.startupDirHoldMs = config.startupDirHoldMs as any;
+    usedTuning.minTravelDirSpeed = config.minTravelDirSpeed as any;
     usedTuning.startCommitSpeed = config.startCommitSpeed as any;
     usedTuning.startCommitMs = config.startCommitMs as any;
     usedTuning.startInputThreshold = config.startInputThreshold as any;

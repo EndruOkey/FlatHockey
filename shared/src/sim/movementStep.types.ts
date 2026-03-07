@@ -32,6 +32,7 @@ export type MovementStepState = {
   startNoInputTimer?: number;
   startDirX?: number;
   startDirY?: number;
+  lastStableTravelAngle?: number;
   lastRawInputAngle?: number;
   antiFlipTimer?: number;
   heading?: number;
@@ -171,6 +172,7 @@ export type MovementStepConfig = {
   noSteerSpeedThreshold?: number;
   startupInputThreshold?: number;
   startupDirHoldMs?: number;
+  minTravelDirSpeed?: number;
   chargeSpeedMul?: number;
   chargeAccelMul?: number;
   chargeTurnMul?: number;

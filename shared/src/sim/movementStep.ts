@@ -85,6 +85,9 @@ export function applyMovementStep(
     state.startDirX = state.desiredDirX;
     state.startDirY = state.desiredDirY;
   }
+  if (!Number.isFinite(state.lastStableTravelAngle)) {
+    state.lastStableTravelAngle = state.moveAngle;
+  }
   if (!Number.isFinite(state.bodyAngle)) {
     state.bodyAngle = Number.isFinite(state.heading) ? state.heading! : state.moveAngle;
   }
@@ -230,6 +233,7 @@ export function applyMovementStep(
     state.startNoInputTimer = 0;
     state.startDirX = state.desiredDirX;
     state.startDirY = state.desiredDirY;
+    state.lastStableTravelAngle = state.moveAngle;
     state.debugAntiFlipActive = false;
     state.debugDesiredInputX = state.desiredDirX;
     state.debugDesiredInputY = state.desiredDirY;
@@ -277,6 +281,7 @@ export function applyMovementStep(
     state.startNoInputTimer = 0;
     state.startDirX = state.desiredDirX;
     state.startDirY = state.desiredDirY;
+    state.lastStableTravelAngle = state.moveAngle;
     state.debugAntiFlipActive = false;
 
     const desiredMoveAngle = Math.atan2(state.desiredDirY!, state.desiredDirX!);

@@ -162,6 +162,12 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
     0.05,
     1.2
   );
+  const minTravelDirSpeed = Math.max(
+    0.001,
+    config.minTravelDirSpeed
+      ?? MOVEMENT_DEFAULTS.minTravelDirSpeed
+      ?? minSteerSpeed
+  );
   const startOppositeSuppression = clamp(config.startOppositeSuppression ?? MOVEMENT_DEFAULTS.startOppositeSuppression ?? 0.2, 0, 1);
 
   let committedX = state.committedDirX ?? filteredX;
@@ -326,7 +332,10 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
   state.debugDesiredInputY = steerY;
   state.debugFilteredInputX = filteredX;
   state.debugFilteredInputY = filteredY;
-  const lockedTravelAngle = state.moveAngle ?? Math.atan2(startDirY, startDirX);
+  const stableTravelAngle = Number.isFinite(state.lastStableTravelAngle)
+    ? state.lastStableTravelAngle!
+    : (state.moveAngle ?? Math.atan2(startDirY, startDirX));
+  const lockedTravelAngle = stableTravelAngle;
   const velDirAngle = speedBefore > 0.001
     ? Math.atan2(state.vy, state.vx)
     : (lowSpeedNoSteer ? lockedTravelAngle : desiredMoveAngle);
@@ -478,7 +487,7 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
   state.vy *= dragFactor;
 
   const speedAfterDrag = Math.hypot(state.vx, state.vy);
-  const slipRef = speedAfterDrag > 0.001 ? Math.atan2(state.vy, state.vx) : desiredMoveAngle;
+  const slipRef = speedAfterDrag >= minTravelDirSpeed ? Math.atan2(state.vy, state.vx) : lockedTravelAngle;
   const dfx = Math.cos(slipRef);
   const dfy = Math.sin(slipRef);
   const dsx = -dfy;
@@ -536,10 +545,15 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
   state.y += state.vy * simDt;
 
   const speedAfterSolve = Math.hypot(state.vx, state.vy);
-  const useLockedTravelAngle = lowSpeedStartupActive && speedAfterSolve < Math.max(4, noSteerSpeedThreshold * 0.5);
+  let nextStableTravelAngle = stableTravelAngle;
+  if (speedAfterSolve >= minTravelDirSpeed) {
+    nextStableTravelAngle = Math.atan2(state.vy, state.vx);
+  }
+  state.lastStableTravelAngle = nextStableTravelAngle;
+  const useLockedTravelAngle = lowSpeedStartupActive || speedAfterSolve < minTravelDirSpeed;
   const moveAngle = useLockedTravelAngle
-    ? lockedTravelAngle
-    : (speedAfterSolve > 0.001 ? Math.atan2(state.vy, state.vx) : desiredMoveAngle);
+    ? nextStableTravelAngle
+    : Math.atan2(state.vy, state.vx);
   state.debugTravelDirLocked = useLockedTravelAngle;
   state.moveAngle = moveAngle;
   state.heading = moveAngle;

@@ -38,6 +38,7 @@ export type PlayerStateMsg = {
   startCommitTimer?: number;
   startDirX?: number;
   startDirY?: number;
+  lastStableTravelAngle?: number;
   lastRawInputAngle?: number;
   antiFlipTimer?: number;
   baseBodyAngle?: number;
