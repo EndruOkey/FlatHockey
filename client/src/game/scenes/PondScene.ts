@@ -888,7 +888,7 @@ export class PondScene extends Phaser.Scene {
       ? `startMode=${telemetry.startModeActive ? 'on' : 'off'} brake=${telemetry.brakeApplied > 0 ? 'on' : 'off'} charge=${telemetry.chargeActive ? 'on' : 'off'} turnRateApplied=${Number(telemetry.turnRateAppliedDeg ?? 0).toFixed(1)} fwd=${Number(telemetry.velForward ?? 0).toFixed(1)} side=${Number(telemetry.velSide ?? 0).toFixed(1)}`
       : null;
     const v4StabilityLine = tuning.showAngleDiff
-      ? `phase=${String(telemetry.movementPhase ?? 'GLIDE')} carveLock=${(Number(telemetry.carveLockTimer ?? 0) * 1000).toFixed(0)}ms carveSide=${Number(telemetry.carveSide ?? 0)} signed=${(Number(telemetry.signedInputVsVelocityAngle ?? 0) * 180 / Math.PI).toFixed(1)}deg commit=${(Number(telemetry.commitTimer ?? 0) * 1000).toFixed(0)}ms hold=${(Number(telemetry.oppositeHoldTimer ?? 0) * 1000).toFixed(0)}ms steerDir=(${Number(telemetry.steerDirX ?? 0).toFixed(2)}, ${Number(telemetry.steerDirY ?? 0).toFixed(2)})`
+      ? `phase=${String(telemetry.movementPhase ?? 'GLIDE')} lowSteerOff=${telemetry.lowSpeedSteeringDisabled ? 'on' : 'off'} minSteer=${Number(telemetry.minSteerSpeed ?? 0).toFixed(1)} carveLock=${(Number(telemetry.carveLockTimer ?? 0) * 1000).toFixed(0)}ms carveSide=${Number(telemetry.carveSide ?? 0)} signed=${(Number(telemetry.signedInputVsVelocityAngle ?? 0) * 180 / Math.PI).toFixed(1)}deg commit=${(Number(telemetry.commitTimer ?? 0) * 1000).toFixed(0)}ms hold=${(Number(telemetry.oppositeHoldTimer ?? 0) * 1000).toFixed(0)}ms steerDir=(${Number(telemetry.steerDirX ?? 0).toFixed(2)}, ${Number(telemetry.steerDirY ?? 0).toFixed(2)})`
       : null;
 
     if (this.debugEnabled) {
@@ -987,6 +987,8 @@ export class PondScene extends Phaser.Scene {
       carveLockTimer: Number(telemetry.carveLockTimer ?? 0),
       carveSide: Number(telemetry.carveSide ?? 0),
       signedInputVsVelocityAngle: Number(telemetry.signedInputVsVelocityAngle ?? 0),
+      minSteerSpeed: Number(telemetry.minSteerSpeed ?? 0),
+      lowSpeedSteeringDisabled: Boolean(telemetry.lowSpeedSteeringDisabled ?? false),
       brakeActive: Number(telemetry.brakeApplied ?? 0) > 0.0001,
       chargeActive: Boolean(telemetry.chargeActive ?? this.predicted?.chargeActive ?? false),
       baseBodyAngle: Number(this.predicted?.baseBodyAngle ?? telemetry.baseBodyAngle ?? this.predicted?.angle ?? 0),

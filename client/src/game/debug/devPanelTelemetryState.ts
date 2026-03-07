@@ -40,6 +40,8 @@ export type MovementDebugMetrics = {
   carveLockTimer: number;
   carveSide: number;
   signedInputVsVelocityAngle: number;
+  minSteerSpeed: number;
+  lowSpeedSteeringDisabled: boolean;
   brakeActive: boolean;
   chargeActive: boolean;
   baseBodyAngle: number;
@@ -93,6 +95,8 @@ const DEFAULT_MOVEMENT: MovementDebugMetrics = {
   carveLockTimer: 0,
   carveSide: 0,
   signedInputVsVelocityAngle: 0,
+  minSteerSpeed: 0,
+  lowSpeedSteeringDisabled: false,
   brakeActive: false,
   chargeActive: false,
   baseBodyAngle: 0,

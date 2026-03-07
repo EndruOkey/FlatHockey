@@ -37,6 +37,8 @@ export function resetMovementDebugState(state: MovementStepState) {
   state.debugOppositeHoldTimer = 0;
   state.debugSteerDirX = 0;
   state.debugSteerDirY = 0;
+  state.debugMinSteerSpeed = 0;
+  state.debugLowSpeedSteeringDisabled = false;
   state.debugMovementPhase = 'GLIDE';
   state.debugCarveLockTimer = 0;
   state.debugCarveSide = 0;

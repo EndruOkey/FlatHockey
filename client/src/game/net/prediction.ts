@@ -328,6 +328,8 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     oppositeHoldTimer: simState.debugOppositeHoldTimer ?? simState.oppositeHoldTimer ?? 0,
     steerDirX: simState.debugSteerDirX ?? simState.committedDirX ?? 0,
     steerDirY: simState.debugSteerDirY ?? simState.committedDirY ?? 0,
+    minSteerSpeed: simState.debugMinSteerSpeed ?? 0,
+    lowSpeedSteeringDisabled: !!simState.debugLowSpeedSteeringDisabled,
     movementPhase: simState.debugMovementPhase ?? simState.movementPhase ?? 'GLIDE',
     carveLockTimer: simState.debugCarveLockTimer ?? simState.carveLockTimer ?? 0,
     carveSide: simState.debugCarveSide ?? simState.carveSide ?? 0,
@@ -369,6 +371,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     usedTuning.edgeTurnBonusMax = config.edgeTurnBonusMax as any;
     usedTuning.brakeTurnBonusValue = config.brakeTurnBonusValue as any;
     usedTuning.brakeOppositeRecovery = config.brakeOppositeRecovery as any;
+    usedTuning.minSteerSpeed = config.minSteerSpeed as any;
     usedTuning.lateralSteerForce = config.lateralSteerForce as any;
     usedTuning.baseLateralDamping = config.baseLateralDamping as any;
     usedTuning.maxLateralDamping = config.maxLateralDamping as any;

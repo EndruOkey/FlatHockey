@@ -155,7 +155,11 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
   const carveLockWindowSec = Math.max(0, (config.carveLockMs ?? MOVEMENT_DEFAULTS.carveLockMs ?? 140) / 1000);
   const carveSwitchCooldownSec = Math.max(0, (config.carveSwitchCooldownMs ?? MOVEMENT_DEFAULTS.carveSwitchCooldownMs ?? 70) / 1000);
   const minCarveSpeed = Math.max(0, config.minCarveSpeed ?? MOVEMENT_DEFAULTS.minCarveSpeed ?? 90);
+  const minSteerSpeed = Math.max(0, config.minSteerSpeed ?? MOVEMENT_DEFAULTS.minSteerSpeed ?? 55);
   const carveSideSuppression = clamp(config.carveSideSuppression ?? MOVEMENT_DEFAULTS.carveSideSuppression ?? 0.22, 0, 1);
+  const lowSpeedSteeringDisabled = speedBefore < minSteerSpeed;
+  state.debugMinSteerSpeed = minSteerSpeed;
+  state.debugLowSpeedSteeringDisabled = lowSpeedSteeringDisabled;
 
   let commitLeft = Math.max(0, state.directionCommitTimer ?? 0);
   let oppositeHoldLeft = Math.max(0, state.oppositeHoldTimer ?? 0);
@@ -163,7 +167,7 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
   const filteredAngle = Math.atan2(filteredY, filteredX);
   const velocityAngle = speedBefore > 0.001 ? Math.atan2(prevVy, prevVx) : filteredAngle;
   const inputVsVelocity = hasInput ? Math.abs(wrapToPi(filteredAngle - velocityAngle)) : 0;
-  if (hasInput && inputVsVelocity > commitAngleThresholdRad && commitLeft <= 0.0001) {
+  if (!lowSpeedSteeringDisabled && hasInput && inputVsVelocity > commitAngleThresholdRad && commitLeft <= 0.0001) {
     committedX = filteredX;
     committedY = filteredY;
     commitLeft = directionCommitWindowSec;
@@ -175,7 +179,7 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
   const pendingY = state.pendingDirY ?? filteredY;
   const candidateStable = clamp(pendingX * filteredX + pendingY * filteredY, -1, 1) > Math.cos((22 * Math.PI) / 180);
 
-  if (oppositeDetected) {
+  if (!lowSpeedSteeringDisabled && oppositeDetected) {
     if (oppositeHoldLeft <= 0.0001 || !candidateStable) {
       oppositeHoldLeft = oppositeHoldWindowSec;
       state.pendingDirX = filteredX;
@@ -196,7 +200,7 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
 
   const commitLocked = commitLeft > 0.0001;
   const holdLocked = oppositeHoldLeft > 0.0001;
-  if (!commitLocked && !holdLocked && hasInput) {
+  if ((lowSpeedSteeringDisabled || (!commitLocked && !holdLocked)) && hasInput) {
     const commitAlpha = clamp(desiredAlpha, 0.04, 1);
     committedX += (filteredX - committedX) * commitAlpha;
     committedY += (filteredY - committedY) * commitAlpha;
@@ -207,7 +211,12 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
     }
   }
 
-  commitLeft = Math.max(0, commitLeft - simDt);
+  if (lowSpeedSteeringDisabled) {
+    commitLeft = 0;
+    oppositeHoldLeft = 0;
+  } else {
+    commitLeft = Math.max(0, commitLeft - simDt);
+  }
   state.directionCommitTimer = commitLeft;
   state.oppositeHoldTimer = oppositeHoldLeft;
   state.antiFlipTimer = commitLeft;
@@ -216,8 +225,12 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
   state.debugOppositeHoldTimer = oppositeHoldLeft;
   state.committedDirX = committedX;
   state.committedDirY = committedY;
-  const steerX = (commitLeft > 0.0001 || oppositeHoldLeft > 0.0001) ? committedX : filteredX;
-  const steerY = (commitLeft > 0.0001 || oppositeHoldLeft > 0.0001) ? committedY : filteredY;
+  const steerX = (lowSpeedSteeringDisabled || !(commitLeft > 0.0001 || oppositeHoldLeft > 0.0001))
+    ? filteredX
+    : committedX;
+  const steerY = (lowSpeedSteeringDisabled || !(commitLeft > 0.0001 || oppositeHoldLeft > 0.0001))
+    ? filteredY
+    : committedY;
   state.debugSteerDirX = steerX;
   state.debugSteerDirY = steerY;
 
@@ -235,7 +248,7 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
   const sx = -fy;
   const sy = fx;
   const intentForward = fx * steerX + fy * steerY;
-  const intentSideRaw = sx * steerX + sy * steerY;
+  const intentSideRaw = lowSpeedSteeringDisabled ? 0 : (sx * steerX + sy * steerY);
   const signedInputVsVelocity = Math.atan2(intentSideRaw, intentForward);
   state.debugSignedInputVsVelocityAngle = signedInputVsVelocity;
   const desiredVsVelocity = Math.abs(wrapToPi(desiredMoveAngle - velDirAngle));
@@ -250,7 +263,12 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
     ? (signedInputVsVelocity > 0 ? 1 : -1)
     : 0;
 
-  if (input.buttons.brake) {
+  if (lowSpeedSteeringDisabled) {
+    movementPhase = 'GLIDE';
+    carveSide = 0;
+    carveLockLeft = 0;
+    carveSwitchCooldownLeft = 0;
+  } else if (input.buttons.brake) {
     movementPhase = 'BRAKE';
     carveSide = 0;
     carveLockLeft = 0;
@@ -297,14 +315,18 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
   const carveBias = movementPhase === 'CARVE_LEFT' || movementPhase === 'CARVE_RIGHT'
     ? lerp(0.12, 0.32, carveLockNorm)
     : 0;
-  const edgeFactor = clamp(0.08 + angleNorm * lerp(0.22, 0.76, speedNorm) + carveBias + (input.buttons.brake ? 0.26 : 0), 0, 1);
+  const edgeFactor = lowSpeedSteeringDisabled
+    ? 0
+    : clamp(0.08 + angleNorm * lerp(0.22, 0.76, speedNorm) + carveBias + (input.buttons.brake ? 0.26 : 0), 0, 1);
   state.debugEdgeFactor = edgeFactor;
 
-  const turnResistance = clamp(
-    smoothstep01((desiredVsVelocity - Math.PI * 0.06) / (Math.PI * 0.94)) * speedNorm * velocityTurnResistance,
-    0,
-    1
-  );
+  const turnResistance = lowSpeedSteeringDisabled
+    ? 0
+    : clamp(
+      smoothstep01((desiredVsVelocity - Math.PI * 0.06) / (Math.PI * 0.94)) * speedNorm * velocityTurnResistance,
+      0,
+      1
+    );
   const oppositeScale = input.buttons.brake
     ? clamp(oppositeSteerScale + brakeOppositeRecovery, 0, 1)
     : oppositeSteerScale;
@@ -315,7 +337,9 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
   const reverseEntryPenalty = intentForward < 0 && !input.buttons.brake
     ? lerp(0.42, 0.08, smoothstep01(speedNorm))
     : 1;
-  const forwardInput = intentForward >= 0 ? intentForward : intentForward * reverseScale;
+  const forwardInput = lowSpeedSteeringDisabled
+    ? (hasInput ? 1 : 0)
+    : (intentForward >= 0 ? intentForward : intentForward * reverseScale);
   const baseTurnAuthority = lerp(turnLowSpeed, turnHighSpeed, speedNorm);
   const turnAuthority = clamp(
     (baseTurnAuthority + edgeTurnBonusMax * edgeFactor + (input.buttons.brake ? brakeTurnBonusValue : 0)) * (1 - turnResistance),
@@ -323,12 +347,14 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
     1.25
   );
   const dotSteerFiltered = clamp(steerX * filteredX + steerY * filteredY, -1, 1);
-  const alternatingPenalty = lerp(1, 0.55, clamp((1 - dotSteerFiltered) * 0.5 * speedNorm, 0, 1));
-  const lateralAuthority = clamp(turnAuthority * alternatingPenalty * (chargeActive ? chargeTurnMul : 1), 0.02, 1);
+  const alternatingPenalty = lowSpeedSteeringDisabled ? 1 : lerp(1, 0.55, clamp((1 - dotSteerFiltered) * 0.5 * speedNorm, 0, 1));
+  const lateralAuthority = lowSpeedSteeringDisabled
+    ? 0
+    : clamp(turnAuthority * alternatingPenalty * (chargeActive ? chargeTurnMul : 1), 0.02, 1);
   const appliedForwardForce = forwardAccel * (chargeActive ? chargeAccelMul : 1) * forwardInput * reverseEntryPenalty;
   const oppositeSteerClamp = clamp(config.oppositeSteerClamp ?? MOVEMENT_DEFAULTS.oppositeSteerClamp ?? 0.35, 0.05, 1);
   const inputOpposesVelocity = hasInput && intentForward < 0;
-  const commitClamp = (commitLeft > 0.0001 && inputOpposesVelocity) ? oppositeSteerClamp : 1;
+  const commitClamp = (!lowSpeedSteeringDisabled && commitLeft > 0.0001 && inputOpposesVelocity) ? oppositeSteerClamp : 1;
   const oppositeCarveSuppression = (carveLockLeft > 0.0001 && carveSide !== 0 && Math.sign(intentSideRaw || 0) !== carveSide)
     ? carveSideSuppression
     : 1;

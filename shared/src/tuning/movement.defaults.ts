@@ -63,6 +63,7 @@ export const MOVEMENT_DEFAULTS: MovementTuning = {
   carveLockMs: 140,
   carveSwitchCooldownMs: 70,
   minCarveSpeed: 90,
+  minSteerSpeed: 55,
   carveSideSuppression: 0.22,
   chargeSpeedMul: 1.2,
   chargeAccelMul: 1.25,
