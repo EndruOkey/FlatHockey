@@ -583,6 +583,7 @@ export class PondScene extends Phaser.Scene {
   private drawMovementDebugVectors() {
     const tuning = getTuning();
     this.motionDebugGraphics.clear();
+    if (!this.debugEnabled) return;
     if (!this.predicted || !(tuning.drawVectors || tuning.debugDrawVectors || tuning.drawVelComponents || tuning.drawMoveVector || tuning.drawBodyVector || tuning.drawAimVector || tuning.drawAimVectorRaw || tuning.drawAimVectorClamped)) return;
     const p = this.worldToScreen(this.predicted.x, this.predicted.y);
     const speed = Math.hypot(this.predicted.vx, this.predicted.vy);
@@ -769,7 +770,7 @@ export class PondScene extends Phaser.Scene {
       );
     }
 
-    if (tuning.drawStickTarget || tuning.drawStickHitbox || tuning.drawPickupRadius || tuning.drawMagnetRadius) {
+    if (this.debugEnabled && (tuning.drawStickTarget || tuning.drawStickHitbox || tuning.drawPickupRadius || tuning.drawMagnetRadius)) {
       for (const view of this.players.values()) {
         const t = this.stickTargetScreen(view);
         if (tuning.drawStickTarget) {
@@ -783,7 +784,7 @@ export class PondScene extends Phaser.Scene {
       }
     }
 
-    if (tuning.drawPickupRadius && this.clientId) {
+    if (this.debugEnabled && tuning.drawPickupRadius && this.clientId) {
       const local = this.players.get(this.clientId);
       if (local) {
         const t = this.stickTargetScreen(local);
@@ -791,7 +792,7 @@ export class PondScene extends Phaser.Scene {
         this.puckGraphics.strokeCircle(t.x, t.y, tuning.pickupRadius);
       }
     }
-    if (tuning.drawMagnetRadius && this.clientId) {
+    if (this.debugEnabled && tuning.drawMagnetRadius && this.clientId) {
       const local = this.players.get(this.clientId);
       if (local) {
         const t = this.stickTargetScreen(local);
