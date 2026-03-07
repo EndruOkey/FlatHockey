@@ -28,6 +28,10 @@ export type MovementStepState = {
   carveSwitchCooldownTimer?: number;
   carveSide?: -1 | 0 | 1;
   movementPhase?: 'GLIDE' | 'CARVE_LEFT' | 'CARVE_RIGHT' | 'BRAKE';
+  startCommitTimer?: number;
+  startNoInputTimer?: number;
+  startDirX?: number;
+  startDirY?: number;
   lastRawInputAngle?: number;
   antiFlipTimer?: number;
   heading?: number;
@@ -72,6 +76,12 @@ export type MovementStepState = {
   debugSteerDirY?: number;
   debugMinSteerSpeed?: number;
   debugLowSpeedSteeringDisabled?: boolean;
+  debugStartCommitActive?: boolean;
+  debugStartCommitTimer?: number;
+  debugStartDirX?: number;
+  debugStartDirY?: number;
+  debugEffectiveStartDirX?: number;
+  debugEffectiveStartDirY?: number;
   debugMovementPhase?: 'GLIDE' | 'CARVE_LEFT' | 'CARVE_RIGHT' | 'BRAKE';
   debugCarveLockTimer?: number;
   debugCarveSide?: -1 | 0 | 1;
@@ -152,6 +162,10 @@ export type MovementStepConfig = {
   minCarveSpeed?: number;
   minSteerSpeed?: number;
   carveSideSuppression?: number;
+  startCommitSpeed?: number;
+  startCommitMs?: number;
+  startInputThreshold?: number;
+  startOppositeSuppression?: number;
   chargeSpeedMul?: number;
   chargeAccelMul?: number;
   chargeTurnMul?: number;

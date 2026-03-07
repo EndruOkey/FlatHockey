@@ -35,6 +35,9 @@ export type PlayerStateMsg = {
   carveSwitchCooldownTimer?: number;
   carveSide?: -1 | 0 | 1;
   movementPhase?: 'GLIDE' | 'CARVE_LEFT' | 'CARVE_RIGHT' | 'BRAKE';
+  startCommitTimer?: number;
+  startDirX?: number;
+  startDirY?: number;
   lastRawInputAngle?: number;
   antiFlipTimer?: number;
   baseBodyAngle?: number;

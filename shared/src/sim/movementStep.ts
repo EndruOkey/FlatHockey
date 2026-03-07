@@ -75,6 +75,16 @@ export function applyMovementStep(
   if (state.movementPhase !== 'GLIDE' && state.movementPhase !== 'CARVE_LEFT' && state.movementPhase !== 'CARVE_RIGHT' && state.movementPhase !== 'BRAKE') {
     state.movementPhase = 'GLIDE';
   }
+  if (!Number.isFinite(state.startCommitTimer)) {
+    state.startCommitTimer = 0;
+  }
+  if (!Number.isFinite(state.startNoInputTimer)) {
+    state.startNoInputTimer = 0;
+  }
+  if (!Number.isFinite(state.startDirX) || !Number.isFinite(state.startDirY)) {
+    state.startDirX = state.desiredDirX;
+    state.startDirY = state.desiredDirY;
+  }
   if (!Number.isFinite(state.bodyAngle)) {
     state.bodyAngle = Number.isFinite(state.heading) ? state.heading! : state.moveAngle;
   }
@@ -216,6 +226,10 @@ export function applyMovementStep(
     state.carveSwitchCooldownTimer = 0;
     state.carveSide = 0;
     state.movementPhase = 'GLIDE';
+    state.startCommitTimer = 0;
+    state.startNoInputTimer = 0;
+    state.startDirX = state.desiredDirX;
+    state.startDirY = state.desiredDirY;
     state.debugAntiFlipActive = false;
     state.debugDesiredInputX = state.desiredDirX;
     state.debugDesiredInputY = state.desiredDirY;
@@ -259,6 +273,10 @@ export function applyMovementStep(
     state.carveSwitchCooldownTimer = 0;
     state.carveSide = 0;
     state.movementPhase = 'GLIDE';
+    state.startCommitTimer = 0;
+    state.startNoInputTimer = 0;
+    state.startDirX = state.desiredDirX;
+    state.startDirY = state.desiredDirY;
     state.debugAntiFlipActive = false;
 
     const desiredMoveAngle = Math.atan2(state.desiredDirY!, state.desiredDirX!);

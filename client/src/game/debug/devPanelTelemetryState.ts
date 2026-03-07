@@ -42,6 +42,10 @@ export type MovementDebugMetrics = {
   signedInputVsVelocityAngle: number;
   minSteerSpeed: number;
   lowSpeedSteeringDisabled: boolean;
+  startCommitActive: boolean;
+  startCommitTimer: number;
+  startDir: string;
+  effectiveStartDir: string;
   brakeActive: boolean;
   chargeActive: boolean;
   baseBodyAngle: number;
@@ -97,6 +101,10 @@ const DEFAULT_MOVEMENT: MovementDebugMetrics = {
   signedInputVsVelocityAngle: 0,
   minSteerSpeed: 0,
   lowSpeedSteeringDisabled: false,
+  startCommitActive: false,
+  startCommitTimer: 0,
+  startDir: '(0,0)',
+  effectiveStartDir: '(0,0)',
   brakeActive: false,
   chargeActive: false,
   baseBodyAngle: 0,

@@ -27,6 +27,10 @@ export type PredictedPlayerState = PlayerStateMsg & {
   carveSwitchCooldownTimer?: number;
   carveSide?: -1 | 0 | 1;
   movementPhase?: 'GLIDE' | 'CARVE_LEFT' | 'CARVE_RIGHT' | 'BRAKE';
+  startCommitTimer?: number;
+  startNoInputTimer?: number;
+  startDirX?: number;
+  startDirY?: number;
   lastRawInputAngle?: number;
   antiFlipTimer?: number;
   baseBodyAngle?: number;
@@ -69,6 +73,12 @@ export type PredictedPlayerState = PlayerStateMsg & {
   debugOppositeHoldTimer?: number;
   debugSteerDirX?: number;
   debugSteerDirY?: number;
+  debugStartCommitActive?: boolean;
+  debugStartCommitTimer?: number;
+  debugStartDirX?: number;
+  debugStartDirY?: number;
+  debugEffectiveStartDirX?: number;
+  debugEffectiveStartDirY?: number;
   debugMovementPhase?: 'GLIDE' | 'CARVE_LEFT' | 'CARVE_RIGHT' | 'BRAKE';
   debugCarveLockTimer?: number;
   debugCarveSide?: -1 | 0 | 1;
@@ -129,6 +139,10 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     carveSwitchCooldownTimer: state.carveSwitchCooldownTimer,
     carveSide: state.carveSide,
     movementPhase: state.movementPhase,
+    startCommitTimer: state.startCommitTimer,
+    startNoInputTimer: state.startNoInputTimer,
+    startDirX: state.startDirX,
+    startDirY: state.startDirY,
     lastRawInputAngle: state.lastRawInputAngle,
     antiFlipTimer: state.antiFlipTimer,
     baseBodyAngle: state.baseBodyAngle,
@@ -167,6 +181,12 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     debugOppositeHoldTimer: state.debugOppositeHoldTimer,
     debugSteerDirX: state.debugSteerDirX,
     debugSteerDirY: state.debugSteerDirY,
+    debugStartCommitActive: state.debugStartCommitActive,
+    debugStartCommitTimer: state.debugStartCommitTimer,
+    debugStartDirX: state.debugStartDirX,
+    debugStartDirY: state.debugStartDirY,
+    debugEffectiveStartDirX: state.debugEffectiveStartDirX,
+    debugEffectiveStartDirY: state.debugEffectiveStartDirY,
     debugMovementPhase: state.debugMovementPhase,
     debugCarveLockTimer: state.debugCarveLockTimer,
     debugCarveSide: state.debugCarveSide,
@@ -216,6 +236,10 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.carveSwitchCooldownTimer = simState.carveSwitchCooldownTimer;
   state.carveSide = simState.carveSide;
   state.movementPhase = simState.movementPhase;
+  state.startCommitTimer = simState.startCommitTimer;
+  state.startNoInputTimer = simState.startNoInputTimer;
+  state.startDirX = simState.startDirX;
+  state.startDirY = simState.startDirY;
   state.lastRawInputAngle = simState.lastRawInputAngle;
   state.antiFlipTimer = simState.antiFlipTimer;
   state.baseBodyAngle = simState.baseBodyAngle;
@@ -261,6 +285,12 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.debugOppositeHoldTimer = simState.debugOppositeHoldTimer;
   state.debugSteerDirX = simState.debugSteerDirX;
   state.debugSteerDirY = simState.debugSteerDirY;
+  state.debugStartCommitActive = simState.debugStartCommitActive;
+  state.debugStartCommitTimer = simState.debugStartCommitTimer;
+  state.debugStartDirX = simState.debugStartDirX;
+  state.debugStartDirY = simState.debugStartDirY;
+  state.debugEffectiveStartDirX = simState.debugEffectiveStartDirX;
+  state.debugEffectiveStartDirY = simState.debugEffectiveStartDirY;
   state.debugMovementPhase = simState.debugMovementPhase;
   state.debugCarveLockTimer = simState.debugCarveLockTimer;
   state.debugCarveSide = simState.debugCarveSide;
@@ -330,6 +360,12 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     steerDirY: simState.debugSteerDirY ?? simState.committedDirY ?? 0,
     minSteerSpeed: simState.debugMinSteerSpeed ?? 0,
     lowSpeedSteeringDisabled: !!simState.debugLowSpeedSteeringDisabled,
+    startCommitActive: !!simState.debugStartCommitActive,
+    startCommitTimer: simState.debugStartCommitTimer ?? simState.startCommitTimer ?? 0,
+    startDirX: simState.debugStartDirX ?? simState.startDirX ?? 0,
+    startDirY: simState.debugStartDirY ?? simState.startDirY ?? 0,
+    effectiveStartDirX: simState.debugEffectiveStartDirX ?? simState.debugSteerDirX ?? 0,
+    effectiveStartDirY: simState.debugEffectiveStartDirY ?? simState.debugSteerDirY ?? 0,
     movementPhase: simState.debugMovementPhase ?? simState.movementPhase ?? 'GLIDE',
     carveLockTimer: simState.debugCarveLockTimer ?? simState.carveLockTimer ?? 0,
     carveSide: simState.debugCarveSide ?? simState.carveSide ?? 0,
@@ -372,6 +408,10 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     usedTuning.brakeTurnBonusValue = config.brakeTurnBonusValue as any;
     usedTuning.brakeOppositeRecovery = config.brakeOppositeRecovery as any;
     usedTuning.minSteerSpeed = config.minSteerSpeed as any;
+    usedTuning.startCommitSpeed = config.startCommitSpeed as any;
+    usedTuning.startCommitMs = config.startCommitMs as any;
+    usedTuning.startInputThreshold = config.startInputThreshold as any;
+    usedTuning.startOppositeSuppression = config.startOppositeSuppression as any;
     usedTuning.lateralSteerForce = config.lateralSteerForce as any;
     usedTuning.baseLateralDamping = config.baseLateralDamping as any;
     usedTuning.maxLateralDamping = config.maxLateralDamping as any;

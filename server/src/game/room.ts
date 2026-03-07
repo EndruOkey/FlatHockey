@@ -41,6 +41,10 @@ type PlayerState = {
   carveSwitchCooldownTimer: number;
   carveSide: -1 | 0 | 1;
   movementPhase: 'GLIDE' | 'CARVE_LEFT' | 'CARVE_RIGHT' | 'BRAKE';
+  startCommitTimer: number;
+  startNoInputTimer: number;
+  startDirX: number;
+  startDirY: number;
   lastRawInputAngle: number;
   antiFlipTimer: number;
   baseBodyAngle: number;
@@ -171,6 +175,10 @@ export class Room {
       carveSwitchCooldownTimer: 0,
       carveSide: 0,
       movementPhase: 'GLIDE',
+      startCommitTimer: 0,
+      startNoInputTimer: 0,
+      startDirX: 1,
+      startDirY: 0,
       lastRawInputAngle: 0,
       antiFlipTimer: 0,
       baseBodyAngle: 0,
@@ -271,6 +279,10 @@ export class Room {
         carveSwitchCooldownTimer: player.carveSwitchCooldownTimer,
         carveSide: player.carveSide,
         movementPhase: player.movementPhase,
+        startCommitTimer: player.startCommitTimer,
+        startNoInputTimer: player.startNoInputTimer,
+        startDirX: player.startDirX,
+        startDirY: player.startDirY,
         lastRawInputAngle: player.lastRawInputAngle,
         antiFlipTimer: player.antiFlipTimer,
         baseBodyAngle: player.baseBodyAngle,
@@ -329,6 +341,10 @@ export class Room {
       player.carveSwitchCooldownTimer = Number.isFinite(state.carveSwitchCooldownTimer) ? state.carveSwitchCooldownTimer! : player.carveSwitchCooldownTimer;
       player.carveSide = state.carveSide === -1 || state.carveSide === 1 ? state.carveSide : 0;
       player.movementPhase = state.movementPhase ?? player.movementPhase;
+      player.startCommitTimer = Number.isFinite(state.startCommitTimer) ? state.startCommitTimer! : player.startCommitTimer;
+      player.startNoInputTimer = Number.isFinite(state.startNoInputTimer) ? state.startNoInputTimer! : player.startNoInputTimer;
+      player.startDirX = Number.isFinite(state.startDirX) ? state.startDirX! : player.startDirX;
+      player.startDirY = Number.isFinite(state.startDirY) ? state.startDirY! : player.startDirY;
       player.lastRawInputAngle = Number.isFinite(state.lastRawInputAngle) ? state.lastRawInputAngle! : player.lastRawInputAngle;
       player.antiFlipTimer = Number.isFinite(state.antiFlipTimer) ? state.antiFlipTimer! : player.antiFlipTimer;
       player.baseBodyAngle = Number.isFinite(state.baseBodyAngle) ? state.baseBodyAngle! : player.baseBodyAngle;
@@ -404,6 +420,9 @@ export class Room {
         carveSwitchCooldownTimer: p.carveSwitchCooldownTimer,
         carveSide: p.carveSide,
         movementPhase: p.movementPhase,
+        startCommitTimer: p.startCommitTimer,
+        startDirX: p.startDirX,
+        startDirY: p.startDirY,
         lastRawInputAngle: p.lastRawInputAngle,
         antiFlipTimer: p.antiFlipTimer,
         baseBodyAngle: p.baseBodyAngle,
