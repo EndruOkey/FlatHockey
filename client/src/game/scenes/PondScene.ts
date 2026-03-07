@@ -231,7 +231,7 @@ export class PondScene extends Phaser.Scene {
   }
 
   private connect(wsUrl: string) {
-    this.ws.onStatus((state) => {
+    this.ws.onStatus((state: 'connecting' | 'connected' | 'disconnected') => {
       if (state === 'connecting') this.hud.setText('Connecting...');
       if (state === 'connected') this.wsConnected = true;
       if (state === 'disconnected') {
@@ -252,7 +252,7 @@ export class PondScene extends Phaser.Scene {
       this.hud.setText('Offline (retrying...)');
     });
 
-    this.ws.onMessage((msg) => this.onServerMessage(msg));
+    this.ws.onMessage((msg: ServerMessage | { type?: string; [key: string]: unknown }) => this.onServerMessage(msg));
     this.ws.connect(wsUrl);
   }
 
@@ -283,14 +283,24 @@ export class PondScene extends Phaser.Scene {
   }
 
   private onServerMessage(msg: ServerMessage | { type?: string; [key: string]: unknown }) {
-    const m = msg as (ServerMessage & { type?: string }) & {
-      user?: { id?: string; name?: string; flag?: string };
+    const m = msg as {
+      type?: string;
       room?: string;
       reason?: string;
+      code?: string;
+      message?: string;
+      clientId?: string;
+      roomId?: string;
+      movementTuning?: unknown;
     };
 
     if (m.type === 'welcome') {
-      this.applyWelcomeLike(m as any);
+      this.applyWelcomeLike({
+        clientId: String(m.clientId ?? ''),
+        roomId: typeof m.roomId === 'string' ? m.roomId : undefined,
+        room: typeof m.room === 'string' ? m.room : undefined,
+        movementTuning: m.movementTuning
+      });
       return;
     }
 
@@ -308,8 +318,8 @@ export class PondScene extends Phaser.Scene {
     }
 
     if (m.type === 'error') {
-      const reason = typeof (m as any).code === 'string'
-        ? `${(m as any).code}: ${(m as any).message ?? 'unknown'}`
+      const reason = typeof m.code === 'string'
+        ? `${m.code}: ${m.message ?? 'unknown'}`
         : String(m.reason ?? 'unknown');
       this.hud.setText(`Offline (ws error)\n${reason}`);
       this.wsConnected = false;

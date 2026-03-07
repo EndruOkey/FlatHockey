@@ -1,0 +1,41 @@
+import type { MovementStepState } from './movementStep.types';
+
+export function resetMovementDebugState(state: MovementStepState) {
+  state.debugSnapFactor = 0;
+  state.debugBrakeAssistActive = false;
+  state.debugStartModeActive = false;
+  state.debugVelForward = 0;
+  state.debugVelSide = 0;
+  state.debugAimAngleRaw = 0;
+  state.debugAimAngleClamped = 0;
+  state.debugAimDiffRaw = 0;
+  state.debugAimDiffClamped = 0;
+  state.debugStickDeltaDeg = 0;
+  state.debugStickAngVelDeg = 0;
+  state.debugStickAngVelClamped = false;
+  state.debugStickTargetSlewActive = false;
+  state.debugStickMode = 'APPROACH';
+  state.debugTargetAimAngle = 0;
+  state.debugRawInputAngle = 0;
+  state.debugDesiredMoveAngle = 0;
+  state.debugTurnIntentAngle = 0;
+  state.debugMoveTurnRateAppliedDeg = 0;
+  state.debugVelocityDesiredDeltaDeg = 0;
+  state.debugTurnResistance = 0;
+  state.debugRedirectAccelScale = 1;
+  state.debugAntiFlipActive = false;
+  state.debugDesiredInputX = 0;
+  state.debugDesiredInputY = 0;
+  state.debugRawInputX = 0;
+  state.debugRawInputY = 0;
+  state.debugFilteredInputX = 0;
+  state.debugFilteredInputY = 0;
+  state.debugAppliedForwardForce = 0;
+  state.debugAppliedLateralForce = 0;
+  state.debugEdgeFactor = 0;
+  state.debugChargeActive = false;
+  state.debugBaseBodyAngle = 0;
+  state.debugBodyYawOffset = 0;
+  state.debugBodyTurnInput = 0;
+  state.debugActiveBodyModel = 'B';
+}

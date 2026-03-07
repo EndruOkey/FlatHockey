@@ -174,7 +174,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.vy = simState.vy;
   state.stamina = simState.stamina;
   state.heading = simState.heading;
-  state.moveAngle = simState.moveAngle;
+  state.moveAngle = simState.moveAngle ?? state.moveAngle ?? state.angle;
   state.inputAngle = simState.inputAngle;
   state.desiredDirX = simState.desiredDirX;
   state.desiredDirY = simState.desiredDirY;

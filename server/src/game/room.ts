@@ -1,8 +1,7 @@
 import type { InputMsg, ServerMessage, SnapshotMsg } from '@flathockey/shared';
 import { applyMovementStep, type MovementStepConfig, type MovementStepState } from '@flathockey/shared/sim/movementStep';
-import { MOVEMENT_DEFAULTS } from '@flathockey/shared/tuning/movement.defaults';
-import { resolvePuckStickTuning } from '@flathockey/shared/tuning/puckStickTuning';
 import { WebSocket } from 'ws';
+import { dropPuckFrom, resolveBoardHits, resolvePlayerContacts, stickTarget, updatePuck } from './roomSystems';
 
 type InputState = {
   moveX: -1 | 0 | 1;
@@ -61,8 +60,6 @@ type PlayerState = {
   hitCooldownLeft: number;
   stunLeft: number;
 };
-
-type Vec2 = { x: number; y: number };
 
 type PuckState = {
   state: 'FREE' | 'HELD';
@@ -392,292 +389,24 @@ export class Room {
     this.broadcast(msg);
   }
 
-  private stickTarget(player: PlayerState): Vec2 {
-    const puckStick = resolvePuckStickTuning(this.movementTuning);
-    const ang = player.aimAngle;
-    const offsetX = puckStick.stickOffsetX;
-    const offsetY = puckStick.stickOffsetY;
-    const cos = Math.cos(ang);
-    const sin = Math.sin(ang);
-    return {
-      x: player.x + offsetX * cos - offsetY * sin,
-      y: player.y + offsetX * sin + offsetY * cos
-    };
+  private stickTarget(player: PlayerState) {
+    return stickTarget(this, player);
   }
 
   private updatePuck(dt: number) {
-    const puckStick = resolvePuckStickTuning(this.movementTuning);
-    const pickupRadius = puckStick.pickupRadius;
-    const pickupMaxSpeed = puckStick.pickupMaxPuckSpeed;
-    const pickupMaxRelativeSpeed = puckStick.pickupMaxRelativeSpeed;
-    const magnetRadius = puckStick.magnetRadius;
-    const magnetStrength = puckStick.magnetStrength;
-    const magnetMaxForce = puckStick.magnetMaxForce;
-    const holdSpringK = puckStick.holdSpringK;
-    const holdDampingC = puckStick.holdDampingC;
-    const holdMaxError = puckStick.holdMaxError;
-    const pickupCooldownMs = puckStick.pickupCooldownMs;
-    const shotBaseImpulse = puckStick.shotBaseImpulse;
-    const shotChargeRate = puckStick.shotChargeRate;
-    const shotChargeMult = puckStick.shotChargeMult;
-    const shotMaxImpulse = puckStick.shotMaxImpulse;
-    const shotMinHoldMs = puckStick.shotMinHoldMs;
-    const maxSpeed = puckStick.maxSpeed;
-    const linearDamping = puckStick.linearDamping;
-    const restitution = puckStick.restitution;
-    const surfaceDrag = puckStick.surfaceDrag;
-
-    this.puck.pickupCooldownMs = Math.max(0, this.puck.pickupCooldownMs - dt * 1000);
-
-    if (this.puck.state === 'HELD' && this.puck.ownerId) {
-      const owner = this.players.get(this.puck.ownerId);
-      if (!owner) {
-        this.puck.state = 'FREE';
-        this.puck.ownerId = null;
-      } else {
-        const shooting = !!owner.lastInputState.shoot;
-        const justPressedShoot = shooting && !owner.prevShoot;
-        const justReleasedShoot = !shooting && owner.prevShoot;
-
-        if (justPressedShoot) owner.shotCharge = 0;
-        if (shooting) owner.shotCharge = clamp(owner.shotCharge + shotChargeRate * dt, 0, 1);
-
-        const target = this.stickTarget(owner);
-        const dx = target.x - this.puck.x;
-        const dy = target.y - this.puck.y;
-        const fx = dx * holdSpringK - this.puck.vx * holdDampingC;
-        const fy = dy * holdSpringK - this.puck.vy * holdDampingC;
-        this.puck.vx += fx * dt;
-        this.puck.vy += fy * dt;
-        this.puck.x += this.puck.vx * dt;
-        this.puck.y += this.puck.vy * dt;
-
-        const err = Math.hypot(dx, dy);
-        if (err > holdMaxError) {
-          this.puck.state = 'FREE';
-          this.puck.ownerId = null;
-          this.puck.pickupCooldownMs = Math.max(this.puck.pickupCooldownMs, 80);
-        }
-
-        if (justReleasedShoot && owner.shotCharge * 1000 >= shotMinHoldMs) {
-          const ang = owner.aimAngle;
-          const impulse = clamp(shotBaseImpulse + owner.shotCharge * shotChargeMult, 0, shotMaxImpulse);
-          this.puck.vx += Math.cos(ang) * impulse;
-          this.puck.vy += Math.sin(ang) * impulse;
-          this.puck.state = 'FREE';
-          this.puck.ownerId = null;
-          this.puck.pickupCooldownMs = pickupCooldownMs;
-          owner.shotCharge = 0;
-        }
-
-        owner.prevShoot = shooting;
-      }
-    }
-
-    if (this.puck.state === 'FREE') {
-      if (this.puck.pickupCooldownMs <= 0 && magnetRadius > 0 && magnetStrength > 0) {
-        let bestTarget: Vec2 | null = null;
-        let bestDist = Infinity;
-        for (const player of this.players.values()) {
-          const t = this.stickTarget(player);
-          const d = Math.hypot(this.puck.x - t.x, this.puck.y - t.y);
-          if (d < magnetRadius && d < bestDist) {
-            bestDist = d;
-            bestTarget = t;
-          }
-        }
-        if (bestTarget) {
-          const dx = bestTarget.x - this.puck.x;
-          const dy = bestTarget.y - this.puck.y;
-          const dist = Math.max(0.0001, Math.hypot(dx, dy));
-          const falloff = 1 - clamp(dist / magnetRadius, 0, 1);
-          const force = Math.min(magnetMaxForce, magnetStrength * falloff);
-          this.puck.vx += (dx / dist) * force * dt;
-          this.puck.vy += (dy / dist) * force * dt;
-        }
-      }
-
-      const damp = Math.exp(-linearDamping * dt);
-      this.puck.vx *= damp;
-      this.puck.vy *= damp;
-      this.puck.vx *= 1 - clamp(surfaceDrag, 0, 0.95) * dt * 60;
-      this.puck.vy *= 1 - clamp(surfaceDrag, 0, 0.95) * dt * 60;
-
-      const speed = Math.hypot(this.puck.vx, this.puck.vy);
-      if (speed > maxSpeed) {
-        const k = maxSpeed / Math.max(1, speed);
-        this.puck.vx *= k;
-        this.puck.vy *= k;
-      }
-
-      this.puck.x += this.puck.vx * dt;
-      this.puck.y += this.puck.vy * dt;
-
-      if (this.puck.x < RINK.left) {
-        this.puck.x = RINK.left;
-        this.puck.vx = Math.abs(this.puck.vx) * restitution;
-      } else if (this.puck.x > RINK.right) {
-        this.puck.x = RINK.right;
-        this.puck.vx = -Math.abs(this.puck.vx) * restitution;
-      }
-      if (this.puck.y < RINK.top) {
-        this.puck.y = RINK.top;
-        this.puck.vy = Math.abs(this.puck.vy) * restitution;
-      } else if (this.puck.y > RINK.bottom) {
-        this.puck.y = RINK.bottom;
-        this.puck.vy = -Math.abs(this.puck.vy) * restitution;
-      }
-
-      if (this.puck.pickupCooldownMs <= 0) {
-        let bestId: string | null = null;
-        let bestDist = Infinity;
-        for (const player of this.players.values()) {
-          const t = this.stickTarget(player);
-          const d = Math.hypot(this.puck.x - t.x, this.puck.y - t.y);
-          const relSpeed = Math.hypot(this.puck.vx - player.vx, this.puck.vy - player.vy);
-          const canCapture = relSpeed <= pickupMaxRelativeSpeed || speed <= pickupMaxSpeed;
-          if (d < pickupRadius && canCapture && d < bestDist) {
-            bestDist = d;
-            bestId = player.id;
-          }
-        }
-        if (bestId) {
-          this.puck.state = 'HELD';
-          this.puck.ownerId = bestId;
-          const owner = this.players.get(bestId);
-          if (owner) {
-            owner.shotCharge = 0;
-            owner.prevShoot = !!owner.lastInputState.shoot;
-          }
-        }
-      }
-    }
+    updatePuck(this, dt);
   }
 
   private dropPuckFrom(playerId: string | null) {
-    if (!playerId) return;
-    if (this.puck.state !== 'HELD' || this.puck.ownerId !== playerId) return;
-    this.puck.state = 'FREE';
-    this.puck.ownerId = null;
-    this.puck.pickupCooldownMs = Math.max(this.puck.pickupCooldownMs, 180);
+    dropPuckFrom(this, playerId);
   }
 
   private resolvePlayerContacts() {
-    const players = [...this.players.values()];
-    if (players.length < 2) return;
-
-    const playerRadius = 18;
-    const bumpForce = 110;
-    const minHitSpeed = Number(this.movementTuning.minHitSpeed ?? MOVEMENT_DEFAULTS.minHitSpeed ?? 290);
-    const hitForce = Number(this.movementTuning.hitForce ?? MOVEMENT_DEFAULTS.hitForce ?? 420);
-    const hitCooldownTime = Number(this.movementTuning.hitCooldownTime ?? MOVEMENT_DEFAULTS.hitCooldownTime ?? 0.35);
-    const postHitSpeedRetention = clamp(
-      Number(this.movementTuning.postHitSpeedRetention ?? MOVEMENT_DEFAULTS.postHitSpeedRetention ?? 0.38),
-      0,
-      1
-    );
-
-    for (let i = 0; i < players.length; i += 1) {
-      for (let j = i + 1; j < players.length; j += 1) {
-        const a = players[i];
-        const b = players[j];
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const dist = Math.hypot(dx, dy);
-        const minDist = playerRadius * 2;
-        if (dist > minDist) continue;
-        const safeDist = Math.max(dist, 0.0001);
-        const nx = dx / safeDist;
-        const ny = dy / safeDist;
-        const overlap = minDist - safeDist;
-        if (overlap > 0) {
-          // Always resolve penetration to keep non-charge contacts readable as bumps.
-          const push = overlap * 0.5;
-          a.x -= nx * push;
-          a.y -= ny * push;
-          b.x += nx * push;
-          b.y += ny * push;
-        }
-
-        const relVx = a.vx - b.vx;
-        const relVy = a.vy - b.vy;
-        const closingSpeed = Math.abs(relVx * nx + relVy * ny);
-
-        const aCanHit = a.chargeActive && a.hitCooldownLeft <= 0 && a.stunLeft <= 0;
-        const bCanHit = b.chargeActive && b.hitCooldownLeft <= 0 && b.stunLeft <= 0;
-        const shouldHit = closingSpeed >= minHitSpeed && (aCanHit || bCanHit);
-        if (!shouldHit) {
-          // Normal movement collision = soft bump.
-          a.vx -= nx * bumpForce;
-          a.vy -= ny * bumpForce;
-          b.vx += nx * bumpForce;
-          b.vy += ny * bumpForce;
-          continue;
-        }
-
-        if (aCanHit && bCanHit) {
-          a.vx -= nx * hitForce * 0.8;
-          a.vy -= ny * hitForce * 0.8;
-          b.vx += nx * hitForce * 0.8;
-          b.vy += ny * hitForce * 0.8;
-          a.hitCooldownLeft = hitCooldownTime;
-          b.hitCooldownLeft = hitCooldownTime;
-          this.dropPuckFrom(a.id);
-          this.dropPuckFrom(b.id);
-          continue;
-        }
-
-        const attacker = aCanHit ? a : b;
-        const target = aCanHit ? b : a;
-        const dir = aCanHit ? 1 : -1;
-        target.vx += nx * hitForce * dir;
-        target.vy += ny * hitForce * dir;
-        attacker.vx *= postHitSpeedRetention;
-        attacker.vy *= postHitSpeedRetention;
-        attacker.hitCooldownLeft = hitCooldownTime;
-        this.dropPuckFrom(target.id);
-      }
-    }
+    resolvePlayerContacts(this);
   }
 
   private resolveBoardHits() {
-    const playerRadius = 18;
-    const boardStunMinSpeed = Number(this.movementTuning.boardStunMinSpeed ?? MOVEMENT_DEFAULTS.boardStunMinSpeed ?? 280);
-    const boardStunDuration = Number(this.movementTuning.boardStunDuration ?? MOVEMENT_DEFAULTS.boardStunDuration ?? 0.55);
-
-    for (const p of this.players.values()) {
-      const preImpactSpeed = Math.hypot(p.vx, p.vy);
-      let hitBoard = false;
-      if (p.x < RINK.left + playerRadius) {
-        p.x = RINK.left + playerRadius;
-        p.vx = Math.abs(p.vx) * 0.18;
-        hitBoard = true;
-      } else if (p.x > RINK.right - playerRadius) {
-        p.x = RINK.right - playerRadius;
-        p.vx = -Math.abs(p.vx) * 0.18;
-        hitBoard = true;
-      }
-      if (p.y < RINK.top + playerRadius) {
-        p.y = RINK.top + playerRadius;
-        p.vy = Math.abs(p.vy) * 0.18;
-        hitBoard = true;
-      } else if (p.y > RINK.bottom - playerRadius) {
-        p.y = RINK.bottom - playerRadius;
-        p.vy = -Math.abs(p.vy) * 0.18;
-        hitBoard = true;
-      }
-      if (!hitBoard) continue;
-
-      if (p.chargeActive && preImpactSpeed >= boardStunMinSpeed) {
-        p.stunLeft = Math.max(p.stunLeft, boardStunDuration);
-        p.chargeActive = false;
-        p.vx *= 0.35;
-        p.vy *= 0.35;
-        if (this.puck.state === 'HELD' && this.puck.ownerId === p.id) {
-          this.dropPuckFrom(p.id);
-        }
-      }
-    }
+    resolveBoardHits(this);
   }
 
   private consumeNextInput(player: PlayerState): BufferedInput | null {
