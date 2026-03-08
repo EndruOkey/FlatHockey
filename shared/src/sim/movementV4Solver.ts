@@ -244,7 +244,7 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
   state.debugSignedInputVsVelocityAngle = Math.atan2(driveSide, driveDotTravelIntent);
   state.debugEdgeFactor = clamp(Math.abs(driveSide), 0, 1);
   state.debugTravelDirLocked = speedAfterSolve < minTravelDirSpeed;
-  state.debugMajorDirectionChangeBlocked = false;
+  state.debugMajorDirectionChangeBlocked = sharpRedirectGated;
   state.debugBrakeActive = !!input.buttons.brake;
   state.debugReverseTransitionActive = reverseTransitionActive;
   state.debugSharpRedirectGated = sharpRedirectGated;
