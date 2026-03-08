@@ -107,6 +107,9 @@ export type PredictedPlayerState = PlayerStateMsg & {
   debugCommitUnlockReason?: 'NONE' | 'LOW_SPEED' | 'DISTANCE_RELAXED' | 'BRAKE_REVERSE_READY';
   debugMinHeadingAuthorityActive?: boolean;
   debugMovementModel?: 'skateSteering' | 'desiredHeadingTraction';
+  debugMovementModelRequested?: 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION';
+  debugMovementModelAuthoritative?: 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION';
+  debugMovementModelSource?: 'serverPlayerState' | 'roomTuning' | 'localPrediction';
   debugMovementModelStepUsed?: 'skateSteering' | 'desiredHeadingTraction';
   debugHeadingAngle?: number;
   debugHeadingOmega?: number;

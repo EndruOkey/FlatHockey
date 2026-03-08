@@ -26,13 +26,12 @@ type ReverseDriveState = 'NORMAL' | 'TRANSITION_TO_REVERSE' | 'REVERSE_READY';
 function resetStateForModelSwitch(state: MovementStepState, model: ExperimentalMovementModel) {
   const prev = state.movementModelActive;
   if (prev === model) return;
+  const speed = Math.hypot(state.vx, state.vy);
   const heading = Number.isFinite(state.heading)
     ? state.heading!
-    : (Number.isFinite(state.moveAngle) ? state.moveAngle! : (Math.hypot(state.vx, state.vy) > 0.001 ? Math.atan2(state.vy, state.vx) : 0));
-  state.vx = 0;
-  state.vy = 0;
+    : (Number.isFinite(state.moveAngle) ? state.moveAngle! : (speed > 0.001 ? Math.atan2(state.vy, state.vx) : 0));
   state.heading = heading;
-  state.moveAngle = heading;
+  state.moveAngle = speed > 0.001 ? Math.atan2(state.vy, state.vx) : heading;
   state.inputAngle = heading;
   state.headingOmega = 0;
   state.desiredHeadingAngle = heading;
@@ -203,6 +202,13 @@ export function applyExperimentalMovementStep(model: ExperimentalMovementModel, 
   const headingError = wrapToPi(desiredHeading - headingAngle);
   state.debugMovementModel = model === 'SKATE_STEERING' ? 'skateSteering' : 'desiredHeadingTraction';
   state.debugMovementModelStepUsed = state.debugMovementModel;
+  state.debugMovementModelAuthoritative = model;
+  if (state.debugMovementModelRequested !== 'SKATE_STEERING' && state.debugMovementModelRequested !== 'DESIRED_HEADING_TRACTION') {
+    state.debugMovementModelRequested = model;
+  }
+  if (state.debugMovementModelSource !== 'serverPlayerState' && state.debugMovementModelSource !== 'roomTuning') {
+    state.debugMovementModelSource = 'localPrediction';
+  }
   state.debugHeadingAngle = headingAngle;
   state.debugHeadingOmega = headingOmega;
   state.debugForwardSpeed = forwardSpeed;

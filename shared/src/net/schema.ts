@@ -16,10 +16,6 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       const sprint = data.sprint ? 1 : 0;
       const brake = data.brake ? 1 : 0;
       const shoot = (data as any).shoot ? 1 : 0;
-      const movementModelRaw = typeof (data as any).movementModel === 'string' ? (data as any).movementModel : undefined;
-      const movementModel = movementModelRaw === 'skateSteering' || movementModelRaw === 'desiredHeadingTraction'
-        ? movementModelRaw
-        : undefined;
       const aimAngle = typeof data.aimAngle === 'number' ? data.aimAngle : undefined;
       const aimAngleRaw = typeof (data as any).aimAngleRaw === 'number' ? (data as any).aimAngleRaw : undefined;
       const aimDistance01Raw = typeof (data as any).aimDistance01 === 'number' ? (data as any).aimDistance01 : undefined;
@@ -37,7 +33,6 @@ export function parseClientMessage(raw: string): ClientMessage | null {
         seq: Math.max(0, Math.floor(data.seq)),
         moveX,
         moveY,
-        movementModel,
         sprint,
         brake,
         shoot,
@@ -53,6 +48,15 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       return {
         type: 'debug:setMovementTuning',
         config: (data as any).config || {}
+      } as ClientMessage;
+    }
+
+    if (data.type === 'debug:setMovementModel') {
+      const movementModelRaw = typeof (data as any).movementModel === 'string' ? (data as any).movementModel : '';
+      if (movementModelRaw !== 'skateSteering' && movementModelRaw !== 'desiredHeadingTraction') return null;
+      return {
+        type: 'debug:setMovementModel',
+        movementModel: movementModelRaw
       } as ClientMessage;
     }
 

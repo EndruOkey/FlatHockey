@@ -6,6 +6,7 @@ import { parseWsPayload } from './protocol';
 import { MOVEMENT_DEFAULTS } from '@flathockey/shared/tuning/movement.defaults';
 
 const ALLOW_TUNING_SYNC = true;
+const ALLOW_MOVEMENT_MODEL_SYNC = true;
 
 let nextClientId = 1;
 
@@ -37,7 +38,8 @@ export function createWsServer(server: Server, roomManager: RoomManager) {
       roomId: room.id,
       serverTick: room.serverTick,
       movementTuning: effectiveTuning,
-      allowTuningSync: ALLOW_TUNING_SYNC
+      allowTuningSync: ALLOW_TUNING_SYNC,
+      allowMovementModelSync: ALLOW_MOVEMENT_MODEL_SYNC
     };
 
     ws.send(JSON.stringify(welcome));
@@ -104,13 +106,18 @@ export function createWsServer(server: Server, roomManager: RoomManager) {
             ...MOVEMENT_DEFAULTS,
             ...(room as any).movementTuning || {}
           },
-          allowTuningSync: ALLOW_TUNING_SYNC
+          allowTuningSync: ALLOW_TUNING_SYNC,
+          allowMovementModelSync: ALLOW_MOVEMENT_MODEL_SYNC
         };
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(rewelcome));
         console.log(`[WS] JOIN accepted clientId=${clientId} room=${room.id}`);
       } else if (msg.type === 'debug:setMovementTuning') {
         if (!ALLOW_TUNING_SYNC) return;
         room.setMovementTuning(msg.config ?? {});
+        return;
+      } else if (msg.type === 'debug:setMovementModel') {
+        if (!ALLOW_MOVEMENT_MODEL_SYNC) return;
+        room.setPlayerMovementModel(clientId, msg.movementModel);
         return;
       }
     });

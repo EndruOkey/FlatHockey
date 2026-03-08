@@ -70,6 +70,9 @@ export function resetMovementDebugState(state: MovementStepState) {
   state.debugMinHeadingAuthorityActive = false;
   state.debugMovementModel = 'desiredHeadingTraction';
   state.debugMovementModelStepUsed = 'desiredHeadingTraction';
+  state.debugMovementModelRequested = 'DESIRED_HEADING_TRACTION';
+  state.debugMovementModelAuthoritative = 'DESIRED_HEADING_TRACTION';
+  state.debugMovementModelSource = 'localPrediction';
   state.debugHeadingAngle = 0;
   state.debugHeadingOmega = 0;
   state.debugForwardSpeed = 0;

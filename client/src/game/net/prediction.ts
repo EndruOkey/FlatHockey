@@ -34,13 +34,9 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     config.maxSpeedNoPuck = tuning.maxSpeed;
     config.maxSpeedWithPuck = tuning.maxSpeed;
   }
-  if (input.movementModel === 'skateSteering') {
-    config.movementModel = 'skateSteering';
-    config.movementCoreModel = 'SKATE_STEERING';
-  } else if (input.movementModel === 'desiredHeadingTraction') {
-    config.movementModel = 'desiredHeadingTraction';
-    config.movementCoreModel = 'DESIRED_HEADING_TRACTION';
-  }
+  const authoritativeModel = state.movementModelActive === 'SKATE_STEERING' ? 'skateSteering' : 'desiredHeadingTraction';
+  config.movementModel = authoritativeModel;
+  config.movementCoreModel = state.movementModelActive === 'SKATE_STEERING' ? 'SKATE_STEERING' : 'DESIRED_HEADING_TRACTION';
 
   const prevVx = state.vx;
   const prevVy = state.vy;
@@ -92,6 +88,9 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     heading: state.heading,
     headingOmega: state.headingOmega,
     desiredHeadingAngle: state.desiredHeadingAngle,
+    debugMovementModelRequested: state.debugMovementModelRequested,
+    debugMovementModelAuthoritative: state.debugMovementModelAuthoritative,
+    debugMovementModelSource: state.debugMovementModelSource,
     movementModelActive: state.movementModelActive,
     prevHasInput: state.prevHasInput,
     brakeAssistLeft: state.brakeAssistLeft,
@@ -192,6 +191,9 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.headingOmega = simState.headingOmega;
   state.desiredHeadingAngle = simState.desiredHeadingAngle;
   state.movementModelActive = simState.movementModelActive;
+  state.debugMovementModelRequested = simState.debugMovementModelRequested;
+  state.debugMovementModelAuthoritative = simState.debugMovementModelAuthoritative;
+  state.debugMovementModelSource = simState.debugMovementModelSource;
   state.moveAngle = simState.moveAngle ?? state.moveAngle ?? state.angle;
   state.inputAngle = simState.inputAngle;
   state.desiredDirX = simState.desiredDirX;
@@ -376,6 +378,9 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     commitUnlockReason: simState.debugCommitUnlockReason ?? 'NONE',
     minHeadingAuthorityActive: !!simState.debugMinHeadingAuthorityActive,
     movementModel: simState.debugMovementModel ?? 'desiredHeadingTraction',
+    movementModelRequested: simState.debugMovementModelRequested === 'SKATE_STEERING' ? 'skateSteering' : 'desiredHeadingTraction',
+    movementModelAuthoritative: simState.debugMovementModelAuthoritative === 'SKATE_STEERING' ? 'skateSteering' : 'desiredHeadingTraction',
+    movementModelSource: simState.debugMovementModelSource ?? 'localPrediction',
     movementModelStepUsed: simState.debugMovementModelStepUsed ?? simState.debugMovementModel ?? 'desiredHeadingTraction',
     headingAngle: simState.debugHeadingAngle ?? simState.heading ?? 0,
     headingOmega: simState.debugHeadingOmega ?? simState.headingOmega ?? 0,

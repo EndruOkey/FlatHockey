@@ -119,6 +119,9 @@ export type MovementStepState = {
   debugMinHeadingAuthorityActive?: boolean;
   debugMovementModel?: 'skateSteering' | 'desiredHeadingTraction';
   debugMovementModelStepUsed?: 'skateSteering' | 'desiredHeadingTraction';
+  debugMovementModelRequested?: 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION';
+  debugMovementModelAuthoritative?: 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION';
+  debugMovementModelSource?: 'serverPlayerState' | 'roomTuning' | 'localPrediction';
   debugHeadingAngle?: number;
   debugHeadingOmega?: number;
   debugForwardSpeed?: number;

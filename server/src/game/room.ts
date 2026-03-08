@@ -28,9 +28,14 @@ export class Room {
   setMovementTuning(patch: Partial<MovementStepConfig>) {
     if (!patch || typeof patch !== 'object') return;
     const normalizedPatch: Partial<MovementStepConfig> = { ...patch };
-    const rawModel = (normalizedPatch as any).movementCoreModel ?? (normalizedPatch as any).movementModel;
-    if (rawModel === 'skateSteering') (normalizedPatch as any).movementCoreModel = 'SKATE_STEERING';
-    else if (rawModel === 'desiredHeadingTraction') (normalizedPatch as any).movementCoreModel = 'DESIRED_HEADING_TRACTION';
+    const rawModel = (normalizedPatch as any).movementModel ?? (normalizedPatch as any).movementCoreModel;
+    if (rawModel === 'skateSteering' || rawModel === 'SKATE_STEERING') {
+      (normalizedPatch as any).movementModel = 'skateSteering';
+      (normalizedPatch as any).movementCoreModel = 'SKATE_STEERING';
+    } else if (rawModel === 'desiredHeadingTraction' || rawModel === 'DESIRED_HEADING_TRACTION') {
+      (normalizedPatch as any).movementModel = 'desiredHeadingTraction';
+      (normalizedPatch as any).movementCoreModel = 'DESIRED_HEADING_TRACTION';
+    }
     for (const [k, v] of Object.entries(normalizedPatch)) {
       if (v === undefined || v === null) continue;
       (this.movementTuning as any)[k] = v;
@@ -59,6 +64,7 @@ export class Room {
       moveAngle: 0,
       headingOmega: 0,
       desiredHeadingAngle: 0,
+      movementModel: 'DESIRED_HEADING_TRACTION',
       movementModelActive: 'DESIRED_HEADING_TRACTION',
       inputAngle: 0,
       desiredDirX: 1,
@@ -130,7 +136,6 @@ export class Room {
       state: {
         moveX: input.moveX < 0 ? -1 : input.moveX > 0 ? 1 : 0,
         moveY: input.moveY < 0 ? -1 : input.moveY > 0 ? 1 : 0,
-        movementModel: input.movementModel === 'skateSteering' ? 'skateSteering' : 'desiredHeadingTraction',
         sprint: input.sprint ? 1 : 0,
         brake: input.brake ? 1 : 0,
         shoot: input.shoot ? 1 : 0,
@@ -176,6 +181,9 @@ export class Room {
         moveAngle: player.moveAngle,
         headingOmega: player.headingOmega,
         desiredHeadingAngle: player.desiredHeadingAngle,
+        debugMovementModelRequested: player.movementModel,
+        debugMovementModelAuthoritative: player.movementModel,
+        debugMovementModelSource: 'serverPlayerState',
         movementModelActive: player.movementModelActive,
         inputAngle: player.inputAngle,
         desiredDirX: player.desiredDirX,
@@ -237,7 +245,7 @@ export class Room {
         dt,
         {
           ...this.movementTuning,
-          movementCoreModel: player.lastInputState.movementModel === 'skateSteering' ? 'SKATE_STEERING' : 'DESIRED_HEADING_TRACTION',
+          movementModel: player.movementModel === 'SKATE_STEERING' ? 'skateSteering' : 'desiredHeadingTraction',
           hasPuck: playerHasPuck
         }
       );
@@ -251,6 +259,8 @@ export class Room {
       player.headingOmega = Number.isFinite(state.headingOmega) ? state.headingOmega! : player.headingOmega;
       player.desiredHeadingAngle = Number.isFinite(state.desiredHeadingAngle) ? state.desiredHeadingAngle! : player.desiredHeadingAngle;
       player.movementModelActive = state.movementModelActive === 'SKATE_STEERING' ? 'SKATE_STEERING' : 'DESIRED_HEADING_TRACTION';
+      player.debugMovementModelRequested = state.debugMovementModelRequested;
+      player.debugMovementModelSource = state.debugMovementModelSource === 'roomTuning' ? 'roomTuning' : 'serverPlayerState';
       player.moveAngle = Number.isFinite(state.moveAngle) ? state.moveAngle! : (Number.isFinite(player.heading) ? player.heading! : player.moveAngle);
       player.inputAngle = Number.isFinite(state.inputAngle) ? state.inputAngle! : player.inputAngle;
       player.desiredDirX = Number.isFinite(state.desiredDirX) ? state.desiredDirX! : player.desiredDirX;
@@ -314,6 +324,12 @@ export class Room {
     this.updatePuck(dt);
   }
 
+  setPlayerMovementModel(clientId: string, movementModel: 'skateSteering' | 'desiredHeadingTraction') {
+    const player = this.players.get(clientId);
+    if (!player) return;
+    player.movementModel = movementModel === 'skateSteering' ? 'SKATE_STEERING' : 'DESIRED_HEADING_TRACTION';
+  }
+
   broadcastSnapshot() {
     const ack: Record<string, number> = {};
     for (const p of this.players.values()) ack[p.id] = p.lastProcessedSeq;
@@ -343,6 +359,9 @@ export class Room {
         headingOmega: p.headingOmega,
         desiredHeadingAngle: p.desiredHeadingAngle,
         movementModelActive: p.movementModelActive,
+        movementModelRequested: p.debugMovementModelRequested ?? p.movementModel,
+        movementModelAuthoritative: p.movementModel,
+        movementModelSource: p.debugMovementModelSource ?? 'serverPlayerState',
         inputAngle: p.inputAngle,
         desiredDirX: p.desiredDirX,
         desiredDirY: p.desiredDirY,

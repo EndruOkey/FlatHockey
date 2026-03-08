@@ -16,6 +16,7 @@ export function handleServerMessage(scene: any, msg: ServerMessage | { type?: st
     roomId?: string;
     movementTuning?: unknown;
     allowTuningSync?: unknown;
+    allowMovementModelSync?: unknown;
   };
 
   if (m.type === 'welcome' || m.type === 'net:welcome') {
@@ -24,7 +25,8 @@ export function handleServerMessage(scene: any, msg: ServerMessage | { type?: st
       roomId: typeof m.roomId === 'string' ? m.roomId : undefined,
       room: typeof m.room === 'string' ? m.room : undefined,
       movementTuning: m.movementTuning,
-      allowTuningSync: !!m.allowTuningSync
+      allowTuningSync: !!m.allowTuningSync,
+      allowMovementModelSync: !!m.allowMovementModelSync
     });
     return;
   }
@@ -138,10 +140,8 @@ export function buildClientInput(scene: any): InputMsg {
   const aimAngle = scene.computeMouseAimAngle(CLIENT_FIXED_DT, tuning);
   if (typeof aimAngle === 'number' && Number.isFinite(aimAngle)) {
     scene.lastAimAngle = aimAngle;
-    scene.lastDesiredHeading = aimAngle;
-  } else {
-    scene.lastDesiredHeading = scene.lastMoveAngle;
   }
+  scene.lastDesiredHeading = scene.lastMoveAngle;
 
   return {
     type: 'input',
@@ -149,9 +149,6 @@ export function buildClientInput(scene: any): InputMsg {
     seq: ++scene.seq,
     moveX,
     moveY,
-    movementModel: tuning.movementCoreModel === 'SKATE_STEERING' || tuning.movementModel === 'skateSteering'
-      ? 'skateSteering'
-      : 'desiredHeadingTraction',
     sprint: scene.input.activePointer.rightButtonDown() ? 1 : 0,
     brake: scene.keys.SPACE.isDown ? 1 : 0,
     shoot: (scene.keys.E.isDown || scene.input.activePointer.leftButtonDown()) ? 1 : 0,

@@ -1,7 +1,6 @@
 export type InputState = {
   moveX: -1 | 0 | 1;
   moveY: -1 | 0 | 1;
-  movementModel?: 'skateSteering' | 'desiredHeadingTraction';
   sprint: 0 | 1;
   brake: 0 | 1;
   shoot: 0 | 1;
@@ -26,6 +25,7 @@ export type PlayerState = {
   moveAngle: number;
   headingOmega: number;
   desiredHeadingAngle: number;
+  movementModel: 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION';
   movementModelActive: 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION';
   inputAngle: number;
   desiredDirX: number;
@@ -77,6 +77,8 @@ export type PlayerState = {
   chargeActive: boolean;
   hitCooldownLeft: number;
   stunLeft: number;
+  debugMovementModelRequested?: 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION';
+  debugMovementModelSource?: 'serverPlayerState' | 'roomTuning';
 };
 
 export type PuckState = {
@@ -92,7 +94,6 @@ export type PuckState = {
 export const ZERO_INPUT: InputState = {
   moveX: 0,
   moveY: 0,
-  movementModel: 'desiredHeadingTraction',
   sprint: 0,
   brake: 0,
   shoot: 0,
