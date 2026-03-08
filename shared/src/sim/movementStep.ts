@@ -14,9 +14,10 @@ export const DEFAULTS: MovementStepConfig = { ...BASE_DEFAULTS };
 
 function normalizeMovementCoreModel(config: MovementStepConfig): 'LEGACY' | 'V3' | 'V4' | 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION' {
   const raw = (config.movementCoreModel ?? config.movementModel ?? DEFAULTS.movementCoreModel ?? DEFAULTS.movementModel ?? 'DESIRED_HEADING_TRACTION') as string;
-  if (raw === 'LEGACY' || raw === 'V3' || raw === 'V4' || raw === 'SKATE_STEERING' || raw === 'DESIRED_HEADING_TRACTION') return raw;
-  if (raw === 'skateSteering') return 'SKATE_STEERING';
-  if (raw === 'desiredHeadingTraction') return 'DESIRED_HEADING_TRACTION';
+  if (raw === 'SKATE_STEERING' || raw === 'skateSteering') return 'SKATE_STEERING';
+  if (raw === 'DESIRED_HEADING_TRACTION' || raw === 'desiredHeadingTraction') return 'DESIRED_HEADING_TRACTION';
+  // Legacy core model names are deliberately collapsed to the new traction model.
+  if (raw === 'LEGACY' || raw === 'V3' || raw === 'V4') return 'DESIRED_HEADING_TRACTION';
   return 'DESIRED_HEADING_TRACTION';
 }
 

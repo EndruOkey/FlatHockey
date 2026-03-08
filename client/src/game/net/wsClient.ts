@@ -128,7 +128,8 @@ export class WsClient {
     } catch {}
   }
 
-  // Translate legacy/shared input payload to WS2 wire schema.
+  // Keep legacy input fields intact for the current authoritative server,
+  // while also attaching WS2-style fields for compatibility.
   private toV2WireMessage(msg: any): any {
     if (!msg || msg.type !== 'input') return msg;
 
@@ -150,7 +151,7 @@ export class WsClient {
       : (typeof msg.aimAngle === 'number' ? msg.aimAngle : undefined);
 
     return {
-      type: 'input',
+      ...msg,
       seq: Number.isFinite(msg.seq) ? Math.max(0, Math.floor(msg.seq)) : 0,
       dt: typeof msg.dt === 'number' && Number.isFinite(msg.dt) ? msg.dt : undefined,
       pointer: typeof aim === 'number' ? { aim } : undefined,
