@@ -58,6 +58,9 @@ export function resetMovementDebugState(state: MovementStepState) {
   state.debugSignedInputVsVelocityAngle = 0;
   state.debugMajorDirectionChangeBlocked = false;
   state.debugBrakeActive = false;
+  state.debugReverseTransitionActive = false;
+  state.debugSharpRedirectGated = false;
+  state.debugAngularCapDegPerSec = 0;
   state.debugChargeActive = false;
   state.debugBaseBodyAngle = 0;
   state.debugBodyYawOffset = 0;

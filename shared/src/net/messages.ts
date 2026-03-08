@@ -28,6 +28,8 @@ export type PlayerStateMsg = {
   committedDirX?: number;
   committedDirY?: number;
   distanceSinceCommit?: number;
+  reverseTransitionActive?: boolean;
+  reverseTransitionTimer?: number;
   pendingDirX?: number;
   pendingDirY?: number;
   directionCommitTimer?: number;

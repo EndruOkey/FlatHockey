@@ -36,6 +36,8 @@ type PlayerState = {
   committedDirY: number;
   distanceSinceCommit: number;
   commitNoInputTimer: number;
+  reverseTransitionActive: boolean;
+  reverseTransitionTimer: number;
   pendingDirX: number;
   pendingDirY: number;
   directionCommitTimer: number;
@@ -154,6 +156,8 @@ export class Room {
       committedDirY: 0,
       distanceSinceCommit: 0,
       commitNoInputTimer: 0,
+      reverseTransitionActive: false,
+      reverseTransitionTimer: 0,
       pendingDirX: 1,
       pendingDirY: 0,
       directionCommitTimer: 0,
@@ -264,6 +268,8 @@ export class Room {
         committedDirY: player.committedDirY,
         distanceSinceCommit: player.distanceSinceCommit,
         commitNoInputTimer: player.commitNoInputTimer,
+        reverseTransitionActive: player.reverseTransitionActive,
+        reverseTransitionTimer: player.reverseTransitionTimer,
         pendingDirX: player.pendingDirX,
         pendingDirY: player.pendingDirY,
         directionCommitTimer: player.directionCommitTimer,
@@ -332,6 +338,8 @@ export class Room {
       player.committedDirY = Number.isFinite(state.committedDirY) ? state.committedDirY! : player.committedDirY;
       player.distanceSinceCommit = Number.isFinite(state.distanceSinceCommit) ? state.distanceSinceCommit! : player.distanceSinceCommit;
       player.commitNoInputTimer = Number.isFinite(state.commitNoInputTimer) ? state.commitNoInputTimer! : player.commitNoInputTimer;
+      player.reverseTransitionActive = !!state.reverseTransitionActive;
+      player.reverseTransitionTimer = Number.isFinite(state.reverseTransitionTimer) ? state.reverseTransitionTimer! : player.reverseTransitionTimer;
       player.pendingDirX = Number.isFinite(state.pendingDirX) ? state.pendingDirX! : player.pendingDirX;
       player.pendingDirY = Number.isFinite(state.pendingDirY) ? state.pendingDirY! : player.pendingDirY;
       player.directionCommitTimer = Number.isFinite(state.directionCommitTimer) ? state.directionCommitTimer! : player.directionCommitTimer;
@@ -416,6 +424,8 @@ export class Room {
         committedDirX: p.committedDirX,
         committedDirY: p.committedDirY,
         distanceSinceCommit: p.distanceSinceCommit,
+        reverseTransitionActive: p.reverseTransitionActive,
+        reverseTransitionTimer: p.reverseTransitionTimer,
         pendingDirX: p.pendingDirX,
         pendingDirY: p.pendingDirY,
         directionCommitTimer: p.directionCommitTimer,

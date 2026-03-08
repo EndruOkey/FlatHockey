@@ -22,6 +22,12 @@ export function ensureMovementStateBase(state: MovementStepState) {
   if (!Number.isFinite(state.commitNoInputTimer)) {
     state.commitNoInputTimer = 0;
   }
+  if (typeof state.reverseTransitionActive !== 'boolean') {
+    state.reverseTransitionActive = false;
+  }
+  if (!Number.isFinite(state.reverseTransitionTimer)) {
+    state.reverseTransitionTimer = 0;
+  }
   if (!Number.isFinite(state.pendingDirX) || !Number.isFinite(state.pendingDirY)) {
     state.pendingDirX = state.desiredDirX;
     state.pendingDirY = state.desiredDirY;

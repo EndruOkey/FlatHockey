@@ -22,6 +22,8 @@ export type MovementStepState = {
   committedDirY?: number;
   distanceSinceCommit?: number;
   commitNoInputTimer?: number;
+  reverseTransitionActive?: boolean;
+  reverseTransitionTimer?: number;
   pendingDirX?: number;
   pendingDirY?: number;
   directionCommitTimer?: number;
@@ -101,6 +103,9 @@ export type MovementStepState = {
   debugSignedInputVsVelocityAngle?: number;
   debugMajorDirectionChangeBlocked?: boolean;
   debugBrakeActive?: boolean;
+  debugReverseTransitionActive?: boolean;
+  debugSharpRedirectGated?: boolean;
+  debugAngularCapDegPerSec?: number;
   debugChargeActive?: boolean;
   debugBaseBodyAngle?: number;
   debugBodyYawOffset?: number;
@@ -158,8 +163,13 @@ export type MovementStepConfig = {
   brakeTurnMult?: number;
   brakeOppositeRecovery?: number;
   reverseThreshold?: number;
+  reverseExitDotThreshold?: number;
+  reverseTransitionMinSpeed?: number;
+  reverseTransitionHoldMs?: number;
   reverseAccelMult?: number;
   reverseBrakeBonus?: number;
+  sharpRedirectAngleDeg?: number;
+  sharpRedirectNoBrakeTurnMul?: number;
   lateralSteerForce?: number;
   baseLateralDamping?: number;
   maxLateralDamping?: number;

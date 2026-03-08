@@ -1,7 +1,8 @@
 import type { InputMsg, PlayerStateMsg } from '@flathockey/shared';
 import { applyMovementStep, type MovementStepConfig, type MovementStepState } from '@flathockey/shared/sim/movementStep';
 import { MOVEMENT_DEFAULTS } from '@flathockey/shared/tuning/movement.defaults';
-import { getTuning, usedTuning } from '../debug/movementTuning';
+import { getTuning } from '../debug/movementTuning';
+import { syncUsedTuning } from './predictionUsedTuning';
 
 export let lastTelemetry: Record<string, any> = {};
 export let lastAimInputRateLimited = false;
@@ -21,6 +22,8 @@ export type PredictedPlayerState = PlayerStateMsg & {
   committedDirY?: number;
   distanceSinceCommit?: number;
   commitNoInputTimer?: number;
+  reverseTransitionActive?: boolean;
+  reverseTransitionTimer?: number;
   pendingDirX?: number;
   pendingDirY?: number;
   directionCommitTimer?: number;
@@ -100,6 +103,9 @@ export type PredictedPlayerState = PlayerStateMsg & {
   debugSignedInputVsVelocityAngle?: number;
   debugMajorDirectionChangeBlocked?: boolean;
   debugBrakeActive?: boolean;
+  debugReverseTransitionActive?: boolean;
+  debugSharpRedirectGated?: boolean;
+  debugAngularCapDegPerSec?: number;
   debugBaseBodyAngle?: number;
   debugBodyYawOffset?: number;
   debugBodyTurnInput?: number;
@@ -150,6 +156,8 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     committedDirY: state.committedDirY,
     distanceSinceCommit: state.distanceSinceCommit,
     commitNoInputTimer: state.commitNoInputTimer,
+    reverseTransitionActive: state.reverseTransitionActive,
+    reverseTransitionTimer: state.reverseTransitionTimer,
     pendingDirX: state.pendingDirX,
     pendingDirY: state.pendingDirY,
     directionCommitTimer: state.directionCommitTimer,
@@ -218,6 +226,9 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     debugSignedInputVsVelocityAngle: state.debugSignedInputVsVelocityAngle,
     debugMajorDirectionChangeBlocked: state.debugMajorDirectionChangeBlocked,
     debugBrakeActive: state.debugBrakeActive,
+    debugReverseTransitionActive: state.debugReverseTransitionActive,
+    debugSharpRedirectGated: state.debugSharpRedirectGated,
+    debugAngularCapDegPerSec: state.debugAngularCapDegPerSec,
     debugChargeActive: state.chargeActive,
     debugBaseBodyAngle: state.debugBaseBodyAngle,
     debugBodyYawOffset: state.debugBodyYawOffset,
@@ -257,6 +268,8 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.committedDirY = simState.committedDirY;
   state.distanceSinceCommit = simState.distanceSinceCommit;
   state.commitNoInputTimer = simState.commitNoInputTimer;
+  state.reverseTransitionActive = simState.reverseTransitionActive;
+  state.reverseTransitionTimer = simState.reverseTransitionTimer;
   state.pendingDirX = simState.pendingDirX;
   state.pendingDirY = simState.pendingDirY;
   state.directionCommitTimer = simState.directionCommitTimer;
@@ -339,6 +352,9 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.debugSignedInputVsVelocityAngle = simState.debugSignedInputVsVelocityAngle;
   state.debugMajorDirectionChangeBlocked = simState.debugMajorDirectionChangeBlocked;
   state.debugBrakeActive = simState.debugBrakeActive;
+  state.debugReverseTransitionActive = simState.debugReverseTransitionActive;
+  state.debugSharpRedirectGated = simState.debugSharpRedirectGated;
+  state.debugAngularCapDegPerSec = simState.debugAngularCapDegPerSec;
   state.chargeActive = !!simState.debugChargeActive;
   state.debugBaseBodyAngle = simState.debugBaseBodyAngle;
   state.debugBodyYawOffset = simState.debugBodyYawOffset;
@@ -396,7 +412,11 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     committedDirX: simState.committedDirX ?? 0,
     committedDirY: simState.committedDirY ?? 0,
     distanceSinceCommit: simState.distanceSinceCommit ?? 0,
+    reverseTransitionActive: !!simState.reverseTransitionActive,
+    reverseTransitionTimer: simState.reverseTransitionTimer ?? 0,
     majorDirectionChangeBlocked: !!simState.debugMajorDirectionChangeBlocked,
+    sharpRedirectGated: !!simState.debugSharpRedirectGated,
+    angularCapDegPerSec: simState.debugAngularCapDegPerSec ?? 0,
     brakeActive: !!simState.debugBrakeActive,
     rawInputX: simState.debugRawInputX ?? input.moveX ?? 0,
     rawInputY: simState.debugRawInputY ?? input.moveY ?? 0,
@@ -445,70 +465,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     aimInputRateLimited: lastAimInputRateLimited
   };
 
-  try {
-    usedTuning.accel = config.accel;
-    usedTuning.dragMove = config.dragMove;
-    usedTuning.dragIdle = config.dragIdle;
-    usedTuning.brakeDrag = config.brakeDrag;
-    usedTuning.maxSpeed = config.maxSpeed;
-    usedTuning.movementCoreModel = config.movementCoreModel as any;
-    usedTuning.inputVectorResponsiveness = config.inputVectorResponsiveness as any;
-    usedTuning.inputVectorTauMs = config.inputVectorTauMs as any;
-    usedTuning.forwardAccel = config.forwardAccel as any;
-    usedTuning.forwardMaxSpeed = config.forwardMaxSpeed as any;
-    usedTuning.sideMaxSpeed = config.sideMaxSpeed as any;
-    usedTuning.reverseMaxSpeed = config.reverseMaxSpeed as any;
-    usedTuning.turnLowSpeed = config.turnLowSpeed as any;
-    usedTuning.turnHighSpeed = config.turnHighSpeed as any;
-    usedTuning.turnRateBase = config.turnRateBase as any;
-    usedTuning.turnRateSpeedScale = config.turnRateSpeedScale as any;
-    usedTuning.edgeTurnBonusMax = config.edgeTurnBonusMax as any;
-    usedTuning.brakeTurnBonusValue = config.brakeTurnBonusValue as any;
-    usedTuning.brakeTurnMult = config.brakeTurnMult as any;
-    usedTuning.brakeOppositeRecovery = config.brakeOppositeRecovery as any;
-    usedTuning.reverseThreshold = config.reverseThreshold as any;
-    usedTuning.reverseAccelMult = config.reverseAccelMult as any;
-    usedTuning.reverseBrakeBonus = config.reverseBrakeBonus as any;
-    usedTuning.minSteerSpeed = config.minSteerSpeed as any;
-    usedTuning.noSteerSpeedThreshold = config.noSteerSpeedThreshold as any;
-    usedTuning.startupInputThreshold = config.startupInputThreshold as any;
-    usedTuning.startupDirHoldMs = config.startupDirHoldMs as any;
-    usedTuning.startupOppositeLockMs = config.startupOppositeLockMs as any;
-    usedTuning.startupLockSpeedThreshold = config.startupLockSpeedThreshold as any;
-    usedTuning.startupOppositeSuppression = config.startupOppositeSuppression as any;
-    usedTuning.startupLatchSpeedThreshold = config.startupLatchSpeedThreshold as any;
-    usedTuning.startupLatchReleaseSpeed = config.startupLatchReleaseSpeed as any;
-    usedTuning.startupReleaseMs = config.startupReleaseMs as any;
-    usedTuning.minTravelDirSpeed = config.minTravelDirSpeed as any;
-    usedTuning.bodyAimWeightLowSpeed = config.bodyAimWeightLowSpeed as any;
-    usedTuning.bodyAimWeightHighSpeed = config.bodyAimWeightHighSpeed as any;
-    usedTuning.bodySpeedMin = config.bodySpeedMin as any;
-    usedTuning.bodySpeedMax = config.bodySpeedMax as any;
-    usedTuning.minCommitDistance = config.minCommitDistance as any;
-    usedTuning.directionChangeThresholdDeg = config.directionChangeThresholdDeg as any;
-    usedTuning.brakeCommitDistanceMul = config.brakeCommitDistanceMul as any;
-    usedTuning.startCommitSpeed = config.startCommitSpeed as any;
-    usedTuning.startCommitMs = config.startCommitMs as any;
-    usedTuning.startInputThreshold = config.startInputThreshold as any;
-    usedTuning.startOppositeSuppression = config.startOppositeSuppression as any;
-    usedTuning.lateralSteerForce = config.lateralSteerForce as any;
-    usedTuning.baseLateralDamping = config.baseLateralDamping as any;
-    usedTuning.maxLateralDamping = config.maxLateralDamping as any;
-    usedTuning.brakeLateralDampingBonus = config.brakeLateralDampingBonus as any;
-    usedTuning.carveLossStrength = config.carveLossStrength as any;
-    usedTuning.glideDrag = config.glideDrag as any;
-    usedTuning.moveDrag = config.moveDrag as any;
-    usedTuning.oppositeSteerScale = config.oppositeSteerScale as any;
-    usedTuning.carveStrength = config.carveStrength as any;
-    usedTuning.brakeSteerBoost = config.brakeSteerBoost as any;
-    usedTuning.headingModeEnabled = config.headingModeEnabled;
-    usedTuning.maxTurnRateLowSpeed = config.maxTurnRateLowSpeed;
-    usedTuning.maxTurnRateHighSpeed = config.maxTurnRateHighSpeed;
-    usedTuning.lateralDamping = config.lateralDamping;
-    usedTuning.regimesEnabled = config.regimesEnabled;
-    usedTuning.speedSplit = config.speedSplit;
-    usedTuning.splitBlendWidth = config.splitBlendWidth;
-  } catch {}
+  syncUsedTuning(config);
 
   try {
     lastTelemetry = telemetry;
