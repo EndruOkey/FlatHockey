@@ -475,10 +475,18 @@ export function updateHud(scene: any, dtSec: number) {
   scene.hudAcc += dtSec;
   if (scene.hudAcc < 0.25) return;
   scene.hudAcc = 0;
+  const tuning = getTuning();
+  const requestedModel = tuning.movementCoreModel === 'SKATE_STEERING' || tuning.movementModel === 'skateSteering'
+    ? 'skateSteering'
+    : 'desiredHeadingTraction';
+  const activeModel = scene.predicted?.movementModelActive === 'SKATE_STEERING'
+    ? 'skateSteering'
+    : 'desiredHeadingTraction';
   const next = [
     `Room: ${scene.roomId ?? '-'}`,
     `Client: ${scene.clientId ?? '-'}`,
     `Build: ${BUILD_VERSION || 'dev-local'}`,
+    `Model (req/active): ${requestedModel} / ${activeModel}`,
     `Seq/Ack: ${scene.seq}/${scene.ackSeq}`,
     `Pending: ${scene.pendingInputs.length}`,
     'WASD move | SPACE brake | RMB charge/crosscheck | E/LMB shoot | F8 model switch'
