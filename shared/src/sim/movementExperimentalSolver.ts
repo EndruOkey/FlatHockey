@@ -119,6 +119,7 @@ export function applyExperimentalMovementStep(model: ExperimentalMovementModel, 
     headingAngle = wrapToPi(headingAngle + headingOmega * dt);
     desiredHeading = headingAngle;
   } else {
+    const inputMag = clamp(Math.hypot(rawInputX, rawInputY), 0, 1);
     if (hasInput) desiredHeading = Math.atan2(rawInputY, rawInputX);
     const desiredHeadingTurnRate = Math.max(0, config.desiredHeadingTurnRate ?? MOVEMENT_DEFAULTS.desiredHeadingTurnRate ?? 7.2);
     const desiredHeadingTurnAccel = Math.max(0, config.desiredHeadingTurnAccel ?? MOVEMENT_DEFAULTS.desiredHeadingTurnAccel ?? 32);
@@ -132,7 +133,14 @@ export function applyExperimentalMovementStep(model: ExperimentalMovementModel, 
     steerInput = clamp(headingError / (Math.PI * 0.5), -1, 1);
     const dirX = Math.cos(desiredHeading);
     const dirY = Math.sin(desiredHeading);
-    throttleInput = clamp(dirX * Math.cos(headingAngle) + dirY * Math.sin(headingAngle), -1, 1) * (hasInput ? 1 : 0);
+    const desiredDotForward = clamp(dirX * Math.cos(headingAngle) + dirY * Math.sin(headingAngle), -1, 1);
+    if (!hasInput) {
+      throttleInput = 0;
+    } else if (desiredDotForward < -0.35) {
+      throttleInput = -inputMag;
+    } else {
+      throttleInput = inputMag;
+    }
   }
 
   const fx = Math.cos(headingAngle);

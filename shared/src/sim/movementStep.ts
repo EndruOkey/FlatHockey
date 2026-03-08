@@ -54,7 +54,6 @@ export function applyMovementStep(
   }
 
   const movementCoreModel = normalizeMovementCoreModel(config);
-  state.movementModelActive = movementCoreModel;
   const usesLegacySprintStamina = movementCoreModel === 'LEGACY' || movementCoreModel === 'V3';
   if (input.buttons.sprint && usesLegacySprintStamina) {
     const drainMul = hasPuck ? (config.staminaDrainMulWithPuck ?? DEFAULTS.staminaDrainMulWithPuck!) : 1;
@@ -504,6 +503,7 @@ export function applyMovementStep(
   state.debugTurnIntentAngle = turnIntentAngle;
   state.debugVelocityDesiredDeltaDeg = wrapToPi(desiredMoveAngleDebug - debugVelocityAngle) * (180 / Math.PI);
   state.debugTurnResistance = turnResistance;
+  state.movementModelActive = movementCoreModel;
 }
 
 
