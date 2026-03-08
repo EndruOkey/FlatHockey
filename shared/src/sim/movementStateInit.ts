@@ -22,6 +22,9 @@ export function ensureMovementStateBase(state: MovementStepState) {
   if (!Number.isFinite(state.commitNoInputTimer)) {
     state.commitNoInputTimer = 0;
   }
+  if (state.reverseDriveState !== 'NORMAL' && state.reverseDriveState !== 'TRANSITION_TO_REVERSE' && state.reverseDriveState !== 'REVERSE_READY') {
+    state.reverseDriveState = 'NORMAL';
+  }
   if (typeof state.reverseTransitionActive !== 'boolean') {
     state.reverseTransitionActive = false;
   }

@@ -61,6 +61,13 @@ export function resetMovementDebugState(state: MovementStepState) {
   state.debugReverseTransitionActive = false;
   state.debugSharpRedirectGated = false;
   state.debugAngularCapDegPerSec = 0;
+  state.debugCommittedDriveAngle = 0;
+  state.debugDesiredDriveAngle = 0;
+  state.debugDriveCommitLocked = false;
+  state.debugReverseState = 'NORMAL';
+  state.debugOppositeIntentBlocked = false;
+  state.debugCommitUnlockReason = 'NONE';
+  state.debugMinHeadingAuthorityActive = false;
   state.debugChargeActive = false;
   state.debugBaseBodyAngle = 0;
   state.debugBodyYawOffset = 0;

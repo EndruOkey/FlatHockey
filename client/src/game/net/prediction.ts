@@ -21,6 +21,7 @@ export type PredictedPlayerState = PlayerStateMsg & {
   committedDirX?: number;
   committedDirY?: number;
   distanceSinceCommit?: number;
+  reverseDriveState?: 'NORMAL' | 'TRANSITION_TO_REVERSE' | 'REVERSE_READY';
   commitNoInputTimer?: number;
   reverseTransitionActive?: boolean;
   reverseTransitionTimer?: number;
@@ -106,6 +107,13 @@ export type PredictedPlayerState = PlayerStateMsg & {
   debugReverseTransitionActive?: boolean;
   debugSharpRedirectGated?: boolean;
   debugAngularCapDegPerSec?: number;
+  debugCommittedDriveAngle?: number;
+  debugDesiredDriveAngle?: number;
+  debugDriveCommitLocked?: boolean;
+  debugReverseState?: 'NORMAL' | 'TRANSITION_TO_REVERSE' | 'REVERSE_READY';
+  debugOppositeIntentBlocked?: boolean;
+  debugCommitUnlockReason?: 'NONE' | 'LOW_SPEED' | 'DISTANCE_RELAXED' | 'BRAKE_REVERSE_READY';
+  debugMinHeadingAuthorityActive?: boolean;
   debugBaseBodyAngle?: number;
   debugBodyYawOffset?: number;
   debugBodyTurnInput?: number;
@@ -155,6 +163,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     committedDirX: state.committedDirX,
     committedDirY: state.committedDirY,
     distanceSinceCommit: state.distanceSinceCommit,
+    reverseDriveState: state.reverseDriveState,
     commitNoInputTimer: state.commitNoInputTimer,
     reverseTransitionActive: state.reverseTransitionActive,
     reverseTransitionTimer: state.reverseTransitionTimer,
@@ -229,6 +238,13 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     debugReverseTransitionActive: state.debugReverseTransitionActive,
     debugSharpRedirectGated: state.debugSharpRedirectGated,
     debugAngularCapDegPerSec: state.debugAngularCapDegPerSec,
+    debugCommittedDriveAngle: state.debugCommittedDriveAngle,
+    debugDesiredDriveAngle: state.debugDesiredDriveAngle,
+    debugDriveCommitLocked: state.debugDriveCommitLocked,
+    debugReverseState: state.debugReverseState,
+    debugOppositeIntentBlocked: state.debugOppositeIntentBlocked,
+    debugCommitUnlockReason: state.debugCommitUnlockReason,
+    debugMinHeadingAuthorityActive: state.debugMinHeadingAuthorityActive,
     debugChargeActive: state.chargeActive,
     debugBaseBodyAngle: state.debugBaseBodyAngle,
     debugBodyYawOffset: state.debugBodyYawOffset,
@@ -267,6 +283,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.committedDirX = simState.committedDirX;
   state.committedDirY = simState.committedDirY;
   state.distanceSinceCommit = simState.distanceSinceCommit;
+  state.reverseDriveState = simState.reverseDriveState;
   state.commitNoInputTimer = simState.commitNoInputTimer;
   state.reverseTransitionActive = simState.reverseTransitionActive;
   state.reverseTransitionTimer = simState.reverseTransitionTimer;
@@ -355,6 +372,13 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.debugReverseTransitionActive = simState.debugReverseTransitionActive;
   state.debugSharpRedirectGated = simState.debugSharpRedirectGated;
   state.debugAngularCapDegPerSec = simState.debugAngularCapDegPerSec;
+  state.debugCommittedDriveAngle = simState.debugCommittedDriveAngle;
+  state.debugDesiredDriveAngle = simState.debugDesiredDriveAngle;
+  state.debugDriveCommitLocked = simState.debugDriveCommitLocked;
+  state.debugReverseState = simState.debugReverseState;
+  state.debugOppositeIntentBlocked = simState.debugOppositeIntentBlocked;
+  state.debugCommitUnlockReason = simState.debugCommitUnlockReason;
+  state.debugMinHeadingAuthorityActive = simState.debugMinHeadingAuthorityActive;
   state.chargeActive = !!simState.debugChargeActive;
   state.debugBaseBodyAngle = simState.debugBaseBodyAngle;
   state.debugBodyYawOffset = simState.debugBodyYawOffset;
@@ -412,11 +436,19 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     committedDirX: simState.committedDirX ?? 0,
     committedDirY: simState.committedDirY ?? 0,
     distanceSinceCommit: simState.distanceSinceCommit ?? 0,
+    reverseDriveState: simState.reverseDriveState ?? 'NORMAL',
     reverseTransitionActive: !!simState.reverseTransitionActive,
     reverseTransitionTimer: simState.reverseTransitionTimer ?? 0,
     majorDirectionChangeBlocked: !!simState.debugMajorDirectionChangeBlocked,
     sharpRedirectGated: !!simState.debugSharpRedirectGated,
     angularCapDegPerSec: simState.debugAngularCapDegPerSec ?? 0,
+    committedDriveAngle: simState.debugCommittedDriveAngle ?? 0,
+    desiredDriveAngle: simState.debugDesiredDriveAngle ?? 0,
+    driveCommitLocked: !!simState.debugDriveCommitLocked,
+    reverseState: simState.debugReverseState ?? 'NORMAL',
+    oppositeIntentBlocked: !!simState.debugOppositeIntentBlocked,
+    commitUnlockReason: simState.debugCommitUnlockReason ?? 'NONE',
+    minHeadingAuthorityActive: !!simState.debugMinHeadingAuthorityActive,
     brakeActive: !!simState.debugBrakeActive,
     rawInputX: simState.debugRawInputX ?? input.moveX ?? 0,
     rawInputY: simState.debugRawInputY ?? input.moveY ?? 0,

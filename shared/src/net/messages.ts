@@ -28,6 +28,7 @@ export type PlayerStateMsg = {
   committedDirX?: number;
   committedDirY?: number;
   distanceSinceCommit?: number;
+  reverseDriveState?: 'NORMAL' | 'TRANSITION_TO_REVERSE' | 'REVERSE_READY';
   reverseTransitionActive?: boolean;
   reverseTransitionTimer?: number;
   pendingDirX?: number;

@@ -35,6 +35,7 @@ type PlayerState = {
   committedDirX: number;
   committedDirY: number;
   distanceSinceCommit: number;
+  reverseDriveState: 'NORMAL' | 'TRANSITION_TO_REVERSE' | 'REVERSE_READY';
   commitNoInputTimer: number;
   reverseTransitionActive: boolean;
   reverseTransitionTimer: number;
@@ -155,6 +156,7 @@ export class Room {
       committedDirX: 1,
       committedDirY: 0,
       distanceSinceCommit: 0,
+      reverseDriveState: 'NORMAL',
       commitNoInputTimer: 0,
       reverseTransitionActive: false,
       reverseTransitionTimer: 0,
@@ -267,6 +269,7 @@ export class Room {
         committedDirX: player.committedDirX,
         committedDirY: player.committedDirY,
         distanceSinceCommit: player.distanceSinceCommit,
+        reverseDriveState: player.reverseDriveState,
         commitNoInputTimer: player.commitNoInputTimer,
         reverseTransitionActive: player.reverseTransitionActive,
         reverseTransitionTimer: player.reverseTransitionTimer,
@@ -337,6 +340,9 @@ export class Room {
       player.committedDirX = Number.isFinite(state.committedDirX) ? state.committedDirX! : player.committedDirX;
       player.committedDirY = Number.isFinite(state.committedDirY) ? state.committedDirY! : player.committedDirY;
       player.distanceSinceCommit = Number.isFinite(state.distanceSinceCommit) ? state.distanceSinceCommit! : player.distanceSinceCommit;
+      player.reverseDriveState = state.reverseDriveState === 'TRANSITION_TO_REVERSE' || state.reverseDriveState === 'REVERSE_READY'
+        ? state.reverseDriveState
+        : 'NORMAL';
       player.commitNoInputTimer = Number.isFinite(state.commitNoInputTimer) ? state.commitNoInputTimer! : player.commitNoInputTimer;
       player.reverseTransitionActive = !!state.reverseTransitionActive;
       player.reverseTransitionTimer = Number.isFinite(state.reverseTransitionTimer) ? state.reverseTransitionTimer! : player.reverseTransitionTimer;
@@ -424,6 +430,7 @@ export class Room {
         committedDirX: p.committedDirX,
         committedDirY: p.committedDirY,
         distanceSinceCommit: p.distanceSinceCommit,
+        reverseDriveState: p.reverseDriveState,
         reverseTransitionActive: p.reverseTransitionActive,
         reverseTransitionTimer: p.reverseTransitionTimer,
         pendingDirX: p.pendingDirX,

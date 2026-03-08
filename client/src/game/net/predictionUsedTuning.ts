@@ -24,6 +24,15 @@ export function syncUsedTuning(config: MovementStepConfig) {
     usedTuning.brakeTurnMult = config.brakeTurnMult as any;
     usedTuning.brakeOppositeRecovery = config.brakeOppositeRecovery as any;
     usedTuning.reverseThreshold = config.reverseThreshold as any;
+    usedTuning.commitSpeedThreshold = config.commitSpeedThreshold as any;
+    usedTuning.commitSpeedRelaxedThreshold = config.commitSpeedRelaxedThreshold as any;
+    usedTuning.oppositeIntentThreshold = config.oppositeIntentThreshold as any;
+    usedTuning.minHeadingAuthoritySpeed = config.minHeadingAuthoritySpeed as any;
+    usedTuning.reverseEnterSpeed = config.reverseEnterSpeed as any;
+    usedTuning.reverseMinDurationMs = config.reverseMinDurationMs as any;
+    usedTuning.reverseBrakeForceMul = config.reverseBrakeForceMul as any;
+    usedTuning.reverseSteerMul = config.reverseSteerMul as any;
+    usedTuning.reverseAccelMul = config.reverseAccelMul as any;
     usedTuning.reverseExitDotThreshold = config.reverseExitDotThreshold as any;
     usedTuning.reverseTransitionMinSpeed = config.reverseTransitionMinSpeed as any;
     usedTuning.reverseTransitionHoldMs = config.reverseTransitionHoldMs as any;
