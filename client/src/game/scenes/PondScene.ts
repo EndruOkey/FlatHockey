@@ -287,6 +287,14 @@ export class PondScene extends Phaser.Scene {
     this.clientId = msg.clientId;
     this.roomId = msg.roomId ?? msg.room ?? this.roomId ?? 'pond-1';
     this.allowTuningSync = !!msg.allowTuningSync;
+    const serverTuning = msg.movementTuning as Record<string, unknown> | undefined;
+    const core = typeof serverTuning?.movementCoreModel === 'string' ? serverTuning.movementCoreModel : undefined;
+    const model = typeof serverTuning?.movementModel === 'string' ? serverTuning.movementModel : undefined;
+    const normalized = core === 'SKATE_STEERING' || model === 'skateSteering'
+      ? { movementCoreModel: 'SKATE_STEERING' as const, movementModel: 'skateSteering' as const }
+      : { movementCoreModel: 'DESIRED_HEADING_TRACTION' as const, movementModel: 'desiredHeadingTraction' as const };
+    setTuningKey('movementCoreModel', normalized.movementCoreModel);
+    setTuningKey('movementModel', normalized.movementModel);
   }
 
   private onServerMessage(msg: ServerMessage | { type?: string; [key: string]: unknown }) {

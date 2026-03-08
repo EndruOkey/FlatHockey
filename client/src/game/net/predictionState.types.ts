@@ -5,7 +5,7 @@ export type PredictedPlayerState = PlayerStateMsg & {
   heading?: number;
   headingOmega?: number;
   desiredHeadingAngle?: number;
-  movementModelActive?: 'LEGACY' | 'V3' | 'V4' | 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION';
+  movementModelActive?: 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION';
   moveAngle?: number;
   inputAngle?: number;
   desiredDirX?: number;
@@ -107,6 +107,7 @@ export type PredictedPlayerState = PlayerStateMsg & {
   debugCommitUnlockReason?: 'NONE' | 'LOW_SPEED' | 'DISTANCE_RELAXED' | 'BRAKE_REVERSE_READY';
   debugMinHeadingAuthorityActive?: boolean;
   debugMovementModel?: 'skateSteering' | 'desiredHeadingTraction';
+  debugMovementModelStepUsed?: 'skateSteering' | 'desiredHeadingTraction';
   debugHeadingAngle?: number;
   debugHeadingOmega?: number;
   debugForwardSpeed?: number;

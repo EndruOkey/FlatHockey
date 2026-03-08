@@ -31,6 +31,7 @@ export type MovementDebugMetrics = {
   redirectAccelScale: number;
   antiFlipActive: boolean;
   movementModel: string;
+  movementModelStepUsed: string;
   headingAngle: number;
   headingOmega: number;
   forwardSpeedLocal: number;
@@ -104,6 +105,7 @@ const DEFAULT_MOVEMENT: MovementDebugMetrics = {
   redirectAccelScale: 1,
   antiFlipActive: false,
   movementModel: 'desiredHeadingTraction',
+  movementModelStepUsed: 'desiredHeadingTraction',
   headingAngle: 0,
   headingOmega: 0,
   forwardSpeedLocal: 0,

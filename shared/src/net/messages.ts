@@ -25,7 +25,7 @@ export type PlayerStateMsg = {
   heading?: number;
   headingOmega?: number;
   desiredHeadingAngle?: number;
-  movementModelActive?: 'LEGACY' | 'V3' | 'V4' | 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION';
+  movementModelActive?: 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION';
   inputAngle?: number;
   desiredDirX?: number;
   desiredDirY?: number;

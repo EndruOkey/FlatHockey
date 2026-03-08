@@ -250,7 +250,7 @@ export class Room {
       player.heading = state.heading;
       player.headingOmega = Number.isFinite(state.headingOmega) ? state.headingOmega! : player.headingOmega;
       player.desiredHeadingAngle = Number.isFinite(state.desiredHeadingAngle) ? state.desiredHeadingAngle! : player.desiredHeadingAngle;
-      player.movementModelActive = state.movementModelActive === 'LEGACY' || state.movementModelActive === 'V3' || state.movementModelActive === 'V4' || state.movementModelActive === 'SKATE_STEERING' ? state.movementModelActive : 'DESIRED_HEADING_TRACTION';
+      player.movementModelActive = state.movementModelActive === 'SKATE_STEERING' ? 'SKATE_STEERING' : 'DESIRED_HEADING_TRACTION';
       player.moveAngle = Number.isFinite(state.moveAngle) ? state.moveAngle! : (Number.isFinite(player.heading) ? player.heading! : player.moveAngle);
       player.inputAngle = Number.isFinite(state.inputAngle) ? state.inputAngle! : player.inputAngle;
       player.desiredDirX = Number.isFinite(state.desiredDirX) ? state.desiredDirX! : player.desiredDirX;

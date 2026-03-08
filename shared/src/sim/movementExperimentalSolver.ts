@@ -202,6 +202,7 @@ export function applyExperimentalMovementStep(model: ExperimentalMovementModel, 
 
   const headingError = wrapToPi(desiredHeading - headingAngle);
   state.debugMovementModel = model === 'SKATE_STEERING' ? 'skateSteering' : 'desiredHeadingTraction';
+  state.debugMovementModelStepUsed = state.debugMovementModel;
   state.debugHeadingAngle = headingAngle;
   state.debugHeadingOmega = headingOmega;
   state.debugForwardSpeed = forwardSpeed;

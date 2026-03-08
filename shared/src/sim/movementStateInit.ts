@@ -22,7 +22,7 @@ export function ensureMovementStateBase(state: MovementStepState) {
   if (!Number.isFinite(state.headingOmega)) {
     state.headingOmega = 0;
   }
-  if (state.movementModelActive !== 'LEGACY' && state.movementModelActive !== 'V3' && state.movementModelActive !== 'V4' && state.movementModelActive !== 'SKATE_STEERING' && state.movementModelActive !== 'DESIRED_HEADING_TRACTION') {
+  if (state.movementModelActive !== 'SKATE_STEERING' && state.movementModelActive !== 'DESIRED_HEADING_TRACTION') {
     state.movementModelActive = 'DESIRED_HEADING_TRACTION';
   }
   if (!Number.isFinite(state.distanceSinceCommit)) {

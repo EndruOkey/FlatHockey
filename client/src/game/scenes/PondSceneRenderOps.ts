@@ -338,7 +338,7 @@ export function updateOverlay(scene: any) {
     ? `phase=${String(telemetry.movementPhase ?? 'GLIDE')} lowSteerOff=${telemetry.lowSpeedSteeringDisabled ? 'on' : 'off'} lowStart=${telemetry.lowSpeedStartupActive ? 'on' : 'off'} latch=${telemetry.startupLatchActive ? 'on' : 'off'} latchIgn=${telemetry.latchedInputIgnored ? 'on' : 'off'} latchRel=${(Number(telemetry.startupReleaseTimer ?? 0) * 1000).toFixed(0)}ms travelLock=${telemetry.travelDirLocked ? 'on' : 'off'} minSteer=${Number(telemetry.minSteerSpeed ?? 0).toFixed(1)} startCommit=${telemetry.startCommitActive ? 'on' : 'off'} startTimer=${(Number(telemetry.startCommitTimer ?? 0) * 1000).toFixed(0)}ms startDir=(${Number(telemetry.startDirX ?? 0).toFixed(2)}, ${Number(telemetry.startDirY ?? 0).toFixed(2)}) effStart=(${Number(telemetry.effectiveStartDirX ?? 0).toFixed(2)}, ${Number(telemetry.effectiveStartDirY ?? 0).toFixed(2)}) carveLock=${(Number(telemetry.carveLockTimer ?? 0) * 1000).toFixed(0)}ms carveSide=${Number(telemetry.carveSide ?? 0)} signed=${(Number(telemetry.signedInputVsVelocityAngle ?? 0) * 180 / Math.PI).toFixed(1)}deg commit=${(Number(telemetry.commitTimer ?? 0) * 1000).toFixed(0)}ms hold=${(Number(telemetry.oppositeHoldTimer ?? 0) * 1000).toFixed(0)}ms steerDir=(${Number(telemetry.steerDirX ?? 0).toFixed(2)}, ${Number(telemetry.steerDirY ?? 0).toFixed(2)})`
     : null;
   const modelLine = tuning.showAngleDiff
-    ? `model=${String(telemetry.movementModel ?? 'desiredHeadingTraction')} heading=${(Number(telemetry.headingAngle ?? 0) * 180 / Math.PI).toFixed(1)}deg omega=${(Number(telemetry.headingOmega ?? 0) * 180 / Math.PI).toFixed(1)}deg/s fwd=${Number(telemetry.forwardSpeedLocal ?? 0).toFixed(1)} lat=${Number(telemetry.lateralSpeedLocal ?? 0).toFixed(1)} desired=${(Number(telemetry.desiredHeadingAngle ?? 0) * 180 / Math.PI).toFixed(1)} err=${Number(telemetry.headingErrorDeg ?? 0).toFixed(1)} steer=${Number(telemetry.steerInput ?? 0).toFixed(2)} throttle=${Number(telemetry.throttleInput ?? 0).toFixed(2)}`
+    ? `model=${String(telemetry.movementModel ?? 'desiredHeadingTraction')} stepUsed=${String(telemetry.movementModelStepUsed ?? telemetry.movementModel ?? 'desiredHeadingTraction')} heading=${(Number(telemetry.headingAngle ?? 0) * 180 / Math.PI).toFixed(1)}deg omega=${(Number(telemetry.headingOmega ?? 0) * 180 / Math.PI).toFixed(1)}deg/s fwd=${Number(telemetry.forwardSpeedLocal ?? 0).toFixed(1)} lat=${Number(telemetry.lateralSpeedLocal ?? 0).toFixed(1)} desired=${(Number(telemetry.desiredHeadingAngle ?? 0) * 180 / Math.PI).toFixed(1)} err=${Number(telemetry.headingErrorDeg ?? 0).toFixed(1)} steer=${Number(telemetry.steerInput ?? 0).toFixed(2)} throttle=${Number(telemetry.throttleInput ?? 0).toFixed(2)}`
     : null;
 
   if (scene.debugEnabled) {
@@ -429,6 +429,7 @@ export function updateOverlay(scene: any) {
     redirectAccelScale: Number(telemetry.redirectAccelScale ?? 1),
     antiFlipActive: Boolean(telemetry.antiFlipActive ?? false),
     movementModel: String(telemetry.movementModel ?? 'desiredHeadingTraction'),
+    movementModelStepUsed: String(telemetry.movementModelStepUsed ?? telemetry.movementModel ?? 'desiredHeadingTraction'),
     headingAngle: Number(telemetry.headingAngle ?? 0),
     headingOmega: Number(telemetry.headingOmega ?? 0),
     forwardSpeedLocal: Number(telemetry.forwardSpeedLocal ?? 0),

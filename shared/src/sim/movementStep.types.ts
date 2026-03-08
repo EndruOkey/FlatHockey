@@ -22,7 +22,7 @@ export type MovementStepState = {
   committedDirX?: number;
   committedDirY?: number;
   headingOmega?: number;
-  movementModelActive?: 'LEGACY' | 'V3' | 'V4' | 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION';
+  movementModelActive?: 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION';
   distanceSinceCommit?: number;
   commitNoInputTimer?: number;
   reverseDriveState?: 'NORMAL' | 'TRANSITION_TO_REVERSE' | 'REVERSE_READY';
@@ -118,6 +118,7 @@ export type MovementStepState = {
   debugCommitUnlockReason?: 'NONE' | 'LOW_SPEED' | 'DISTANCE_RELAXED' | 'BRAKE_REVERSE_READY';
   debugMinHeadingAuthorityActive?: boolean;
   debugMovementModel?: 'skateSteering' | 'desiredHeadingTraction';
+  debugMovementModelStepUsed?: 'skateSteering' | 'desiredHeadingTraction';
   debugHeadingAngle?: number;
   debugHeadingOmega?: number;
   debugForwardSpeed?: number;
@@ -164,7 +165,7 @@ export type MovementStepConfig = {
   staminaDrainMulWithPuck?: number;
   headingModeEnabled?: boolean;
   movementModel?: 'skateSteering' | 'desiredHeadingTraction';
-  movementCoreModel?: 'LEGACY' | 'V3' | 'V4' | 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION';
+  movementCoreModel?: 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION';
   maxTurnRateLowSpeed?: number;
   maxTurnRateHighSpeed?: number;
   inputDirectionTauMs?: number;

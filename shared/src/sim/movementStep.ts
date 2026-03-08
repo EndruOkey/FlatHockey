@@ -503,7 +503,7 @@ export function applyMovementStep(
   state.debugTurnIntentAngle = turnIntentAngle;
   state.debugVelocityDesiredDeltaDeg = wrapToPi(desiredMoveAngleDebug - debugVelocityAngle) * (180 / Math.PI);
   state.debugTurnResistance = turnResistance;
-  state.movementModelActive = movementCoreModel;
+  state.movementModelActive = movementCoreModel === 'SKATE_STEERING' ? 'SKATE_STEERING' : 'DESIRED_HEADING_TRACTION';
 }
 
 

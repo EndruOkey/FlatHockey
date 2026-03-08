@@ -34,6 +34,13 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     config.maxSpeedNoPuck = tuning.maxSpeed;
     config.maxSpeedWithPuck = tuning.maxSpeed;
   }
+  if (input.movementModel === 'skateSteering') {
+    config.movementModel = 'skateSteering';
+    config.movementCoreModel = 'SKATE_STEERING';
+  } else if (input.movementModel === 'desiredHeadingTraction') {
+    config.movementModel = 'desiredHeadingTraction';
+    config.movementCoreModel = 'DESIRED_HEADING_TRACTION';
+  }
 
   const prevVx = state.vx;
   const prevVy = state.vy;
@@ -142,6 +149,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     debugCommitUnlockReason: state.debugCommitUnlockReason,
     debugMinHeadingAuthorityActive: state.debugMinHeadingAuthorityActive,
     debugMovementModel: state.debugMovementModel,
+    debugMovementModelStepUsed: state.debugMovementModelStepUsed,
     debugHeadingAngle: state.debugHeadingAngle,
     debugHeadingOmega: state.debugHeadingOmega,
     debugForwardSpeed: state.debugForwardSpeed,
@@ -288,6 +296,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.debugCommitUnlockReason = simState.debugCommitUnlockReason;
   state.debugMinHeadingAuthorityActive = simState.debugMinHeadingAuthorityActive;
   state.debugMovementModel = simState.debugMovementModel;
+  state.debugMovementModelStepUsed = simState.debugMovementModelStepUsed;
   state.debugHeadingAngle = simState.debugHeadingAngle;
   state.debugHeadingOmega = simState.debugHeadingOmega;
   state.debugForwardSpeed = simState.debugForwardSpeed;
@@ -367,6 +376,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     commitUnlockReason: simState.debugCommitUnlockReason ?? 'NONE',
     minHeadingAuthorityActive: !!simState.debugMinHeadingAuthorityActive,
     movementModel: simState.debugMovementModel ?? 'desiredHeadingTraction',
+    movementModelStepUsed: simState.debugMovementModelStepUsed ?? simState.debugMovementModel ?? 'desiredHeadingTraction',
     headingAngle: simState.debugHeadingAngle ?? simState.heading ?? 0,
     headingOmega: simState.debugHeadingOmega ?? simState.headingOmega ?? 0,
     forwardSpeedLocal: simState.debugForwardSpeed ?? 0,
