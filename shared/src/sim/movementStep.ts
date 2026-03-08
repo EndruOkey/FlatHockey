@@ -12,6 +12,14 @@ export { approachAngle, wrapToPi } from './movementMath';
 const BASE_DEFAULTS: MovementStepConfig = { ...MOVEMENT_DEFAULTS };
 export const DEFAULTS: MovementStepConfig = { ...BASE_DEFAULTS };
 
+function normalizeMovementCoreModel(config: MovementStepConfig): 'LEGACY' | 'V3' | 'V4' | 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION' {
+  const raw = (config.movementCoreModel ?? config.movementModel ?? DEFAULTS.movementCoreModel ?? DEFAULTS.movementModel ?? 'DESIRED_HEADING_TRACTION') as string;
+  if (raw === 'LEGACY' || raw === 'V3' || raw === 'V4' || raw === 'SKATE_STEERING' || raw === 'DESIRED_HEADING_TRACTION') return raw;
+  if (raw === 'skateSteering') return 'SKATE_STEERING';
+  if (raw === 'desiredHeadingTraction') return 'DESIRED_HEADING_TRACTION';
+  return 'DESIRED_HEADING_TRACTION';
+}
+
 export function applyMovementStep(
   state: MovementStepState,
   input: MovementStepInput,
@@ -44,11 +52,7 @@ export function applyMovementStep(
     state.stickLocalAngle = wrapToPi(fallbackAim - state.bodyAngle!);
   }
 
-  const movementCoreModelRaw = config.movementCoreModel ?? DEFAULTS.movementCoreModel ?? 'DESIRED_HEADING_TRACTION';
-  const movementCoreModel: 'LEGACY' | 'V3' | 'V4' | 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION' =
-    movementCoreModelRaw === 'LEGACY' || movementCoreModelRaw === 'V3' || movementCoreModelRaw === 'V4' || movementCoreModelRaw === 'SKATE_STEERING'
-      ? movementCoreModelRaw
-      : 'DESIRED_HEADING_TRACTION';
+  const movementCoreModel = normalizeMovementCoreModel(config);
   state.movementModelActive = movementCoreModel;
   const usesLegacySprintStamina = movementCoreModel === 'LEGACY' || movementCoreModel === 'V3';
   if (input.buttons.sprint && usesLegacySprintStamina) {

@@ -127,7 +127,11 @@ export class Room {
 
   setMovementTuning(patch: Partial<MovementStepConfig>) {
     if (!patch || typeof patch !== 'object') return;
-    for (const [k, v] of Object.entries(patch)) {
+    const normalizedPatch: Partial<MovementStepConfig> = { ...patch };
+    const rawModel = (normalizedPatch as any).movementCoreModel ?? (normalizedPatch as any).movementModel;
+    if (rawModel === 'skateSteering') (normalizedPatch as any).movementCoreModel = 'SKATE_STEERING';
+    else if (rawModel === 'desiredHeadingTraction') (normalizedPatch as any).movementCoreModel = 'DESIRED_HEADING_TRACTION';
+    for (const [k, v] of Object.entries(normalizedPatch)) {
       if (v === undefined || v === null) continue;
       (this.movementTuning as any)[k] = v;
     }
@@ -344,9 +348,7 @@ export class Room {
       player.heading = state.heading;
       player.headingOmega = Number.isFinite(state.headingOmega) ? state.headingOmega! : player.headingOmega;
       player.desiredHeadingAngle = Number.isFinite(state.desiredHeadingAngle) ? state.desiredHeadingAngle! : player.desiredHeadingAngle;
-      player.movementModelActive = state.movementModelActive === 'LEGACY' || state.movementModelActive === 'V3' || state.movementModelActive === 'V4' || state.movementModelActive === 'SKATE_STEERING'
-        ? state.movementModelActive
-        : 'DESIRED_HEADING_TRACTION';
+      player.movementModelActive = state.movementModelActive === 'LEGACY' || state.movementModelActive === 'V3' || state.movementModelActive === 'V4' || state.movementModelActive === 'SKATE_STEERING' ? state.movementModelActive : 'DESIRED_HEADING_TRACTION';
       player.moveAngle = Number.isFinite(state.moveAngle) ? state.moveAngle! : (Number.isFinite(player.heading) ? player.heading! : player.moveAngle);
       player.inputAngle = Number.isFinite(state.inputAngle) ? state.inputAngle! : player.inputAngle;
       player.desiredDirX = Number.isFinite(state.desiredDirX) ? state.desiredDirX! : player.desiredDirX;
@@ -354,9 +356,7 @@ export class Room {
       player.committedDirX = Number.isFinite(state.committedDirX) ? state.committedDirX! : player.committedDirX;
       player.committedDirY = Number.isFinite(state.committedDirY) ? state.committedDirY! : player.committedDirY;
       player.distanceSinceCommit = Number.isFinite(state.distanceSinceCommit) ? state.distanceSinceCommit! : player.distanceSinceCommit;
-      player.reverseDriveState = state.reverseDriveState === 'TRANSITION_TO_REVERSE' || state.reverseDriveState === 'REVERSE_READY'
-        ? state.reverseDriveState
-        : 'NORMAL';
+      player.reverseDriveState = state.reverseDriveState === 'TRANSITION_TO_REVERSE' || state.reverseDriveState === 'REVERSE_READY' ? state.reverseDriveState : 'NORMAL';
       player.commitNoInputTimer = Number.isFinite(state.commitNoInputTimer) ? state.commitNoInputTimer! : player.commitNoInputTimer;
       player.reverseTransitionActive = !!state.reverseTransitionActive;
       player.reverseTransitionTimer = Number.isFinite(state.reverseTransitionTimer) ? state.reverseTransitionTimer! : player.reverseTransitionTimer;
@@ -507,12 +507,9 @@ export class Room {
       player.inputBuffer.shift();
     }
     if (player.inputBuffer.length === 0) return null;
-
     if (player.inputBuffer[0].seq === player.lastProcessedSeq + 1) {
       return player.inputBuffer.shift() ?? null;
     }
-
-    // Recover from reconnect/session resets or any stale gap instead of deadlocking ack forever.
     if (player.lastProcessedSeq === 0) {
       return player.inputBuffer.shift() ?? null;
     }
@@ -520,7 +517,6 @@ export class Room {
     if (player.inputGapTicks >= 10) {
       return player.inputBuffer.shift() ?? null;
     }
-
     return null;
   }
 
@@ -531,5 +527,4 @@ export class Room {
     }
   }
 }
-
 

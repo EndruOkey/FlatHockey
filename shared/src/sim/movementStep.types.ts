@@ -163,6 +163,7 @@ export type MovementStepConfig = {
   staminaRegen?: number;
   staminaDrainMulWithPuck?: number;
   headingModeEnabled?: boolean;
+  movementModel?: 'skateSteering' | 'desiredHeadingTraction';
   movementCoreModel?: 'LEGACY' | 'V3' | 'V4' | 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION';
   maxTurnRateLowSpeed?: number;
   maxTurnRateHighSpeed?: number;

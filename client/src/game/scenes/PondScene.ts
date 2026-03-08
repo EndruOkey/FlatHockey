@@ -451,9 +451,13 @@ export class PondScene extends Phaser.Scene {
     const current = getTuning().movementCoreModel === 'SKATE_STEERING' ? 'SKATE_STEERING' : 'DESIRED_HEADING_TRACTION';
     const next = current === 'SKATE_STEERING' ? 'DESIRED_HEADING_TRACTION' : 'SKATE_STEERING';
     setTuningKey('movementCoreModel', next);
+    setTuningKey('movementModel', next === 'SKATE_STEERING' ? 'skateSteering' : 'desiredHeadingTraction');
     this.ws.send({
       type: 'debug:setMovementTuning',
-      config: { movementCoreModel: next }
+      config: {
+        movementCoreModel: next,
+        movementModel: next === 'SKATE_STEERING' ? 'skateSteering' : 'desiredHeadingTraction'
+      }
     });
     console.log(`[MOVEMENT_MODEL] switched to ${next}`);
   }

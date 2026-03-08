@@ -43,7 +43,11 @@ export function runPondSceneUpdate(scene: any) {
     else scene.startReplay();
   }
   if (Phaser.Input.Keyboard.JustDown(scene.modelToggleKey)) {
-    scene.cycleMovementModel();
+    try {
+      scene.cycleMovementModel();
+    } catch (err) {
+      console.error('[MOVEMENT_MODEL] switch failed', err);
+    }
   }
 
   if (scene.needsResync) {

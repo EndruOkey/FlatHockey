@@ -8,6 +8,7 @@ export function syncUsedTuning(config: MovementStepConfig) {
     usedTuning.dragIdle = config.dragIdle;
     usedTuning.brakeDrag = config.brakeDrag;
     usedTuning.maxSpeed = config.maxSpeed;
+    usedTuning.movementModel = config.movementModel as any;
     usedTuning.movementCoreModel = config.movementCoreModel as any;
     usedTuning.inputVectorResponsiveness = config.inputVectorResponsiveness as any;
     usedTuning.inputVectorTauMs = config.inputVectorTauMs as any;
