@@ -15,14 +15,16 @@ export function handleServerMessage(scene: any, msg: ServerMessage | { type?: st
     clientId?: string;
     roomId?: string;
     movementTuning?: unknown;
+    allowTuningSync?: unknown;
   };
 
-  if (m.type === 'welcome') {
+  if (m.type === 'welcome' || m.type === 'net:welcome') {
     scene.applyWelcomeLike({
       clientId: String(m.clientId ?? ''),
       roomId: typeof m.roomId === 'string' ? m.roomId : undefined,
       room: typeof m.room === 'string' ? m.room : undefined,
-      movementTuning: m.movementTuning
+      movementTuning: m.movementTuning,
+      allowTuningSync: !!m.allowTuningSync
     });
     return;
   }

@@ -50,6 +50,7 @@ export class PondScene extends Phaser.Scene {
   private clientId: string | null = null;
   private roomId: string | null = null;
   private wsConnected = false;
+  private allowTuningSync = false;
 
   private players = new Map<string, PlayerView>();
   private remoteInterpolators = new Map<string, Interpolator<LerpPlayer>>();
@@ -281,10 +282,11 @@ export class PondScene extends Phaser.Scene {
     return view;
   }
 
-  private applyWelcomeLike(msg: { clientId: string; roomId?: string; room?: string; movementTuning?: unknown }) {
+  private applyWelcomeLike(msg: { clientId: string; roomId?: string; room?: string; movementTuning?: unknown; allowTuningSync?: boolean }) {
     this.resetPendingInputState(true);
     this.clientId = msg.clientId;
     this.roomId = msg.roomId ?? msg.room ?? this.roomId ?? 'pond-1';
+    this.allowTuningSync = !!msg.allowTuningSync;
   }
 
   private onServerMessage(msg: ServerMessage | { type?: string; [key: string]: unknown }) {
@@ -452,13 +454,17 @@ export class PondScene extends Phaser.Scene {
     const next = current === 'SKATE_STEERING' ? 'DESIRED_HEADING_TRACTION' : 'SKATE_STEERING';
     setTuningKey('movementCoreModel', next);
     setTuningKey('movementModel', next === 'SKATE_STEERING' ? 'skateSteering' : 'desiredHeadingTraction');
-    this.ws.send({
-      type: 'debug:setMovementTuning',
-      config: {
-        movementCoreModel: next,
-        movementModel: next === 'SKATE_STEERING' ? 'skateSteering' : 'desiredHeadingTraction'
-      }
-    });
+    if (this.allowTuningSync) {
+      this.ws.send({
+        type: 'debug:setMovementTuning',
+        config: {
+          movementCoreModel: next,
+          movementModel: next === 'SKATE_STEERING' ? 'skateSteering' : 'desiredHeadingTraction'
+        }
+      });
+    } else {
+      console.warn('[MOVEMENT_MODEL] server does not allow tuning sync; switched locally only');
+    }
     console.log(`[MOVEMENT_MODEL] switched to ${next}`);
   }
   
