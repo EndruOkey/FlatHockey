@@ -2,6 +2,7 @@ import type { InputMsg, ServerMessage, SnapshotMsg } from '@flathockey/shared';
 import { applyMovementStep, type MovementStepConfig, type MovementStepState } from '@flathockey/shared/sim/movementStep';
 import { WebSocket } from 'ws';
 import { dropPuckFrom, resolveBoardHits, resolvePlayerContacts, stickTarget, updatePuck } from './roomSystems';
+import { clamp, lerpAngle } from './roomMath';
 
 type InputState = {
   moveX: -1 | 0 | 1;
@@ -97,28 +98,6 @@ const ZERO_INPUT: InputState = {
   aimDistance01: 1,
   bodyTurn: 0
 };
-
-const RINK = {
-  left: -560,
-  right: 560,
-  top: -320,
-  bottom: 320
-};
-
-function clamp(v: number, lo: number, hi: number): number {
-  return Math.max(lo, Math.min(hi, v));
-}
-
-function normalizeAngle(rad: number): number {
-  let a = rad;
-  while (a > Math.PI) a -= Math.PI * 2;
-  while (a < -Math.PI) a += Math.PI * 2;
-  return a;
-}
-
-function lerpAngle(a: number, b: number, t: number): number {
-  return normalizeAngle(a + normalizeAngle(b - a) * t);
-}
 
 export class Room {
   readonly id: string;
