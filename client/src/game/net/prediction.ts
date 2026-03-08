@@ -460,9 +460,15 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     usedTuning.reverseMaxSpeed = config.reverseMaxSpeed as any;
     usedTuning.turnLowSpeed = config.turnLowSpeed as any;
     usedTuning.turnHighSpeed = config.turnHighSpeed as any;
+    usedTuning.turnRateBase = config.turnRateBase as any;
+    usedTuning.turnRateSpeedScale = config.turnRateSpeedScale as any;
     usedTuning.edgeTurnBonusMax = config.edgeTurnBonusMax as any;
     usedTuning.brakeTurnBonusValue = config.brakeTurnBonusValue as any;
+    usedTuning.brakeTurnMult = config.brakeTurnMult as any;
     usedTuning.brakeOppositeRecovery = config.brakeOppositeRecovery as any;
+    usedTuning.reverseThreshold = config.reverseThreshold as any;
+    usedTuning.reverseAccelMult = config.reverseAccelMult as any;
+    usedTuning.reverseBrakeBonus = config.reverseBrakeBonus as any;
     usedTuning.minSteerSpeed = config.minSteerSpeed as any;
     usedTuning.noSteerSpeedThreshold = config.noSteerSpeedThreshold as any;
     usedTuning.startupInputThreshold = config.startupInputThreshold as any;
@@ -474,6 +480,10 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     usedTuning.startupLatchReleaseSpeed = config.startupLatchReleaseSpeed as any;
     usedTuning.startupReleaseMs = config.startupReleaseMs as any;
     usedTuning.minTravelDirSpeed = config.minTravelDirSpeed as any;
+    usedTuning.bodyAimWeightLowSpeed = config.bodyAimWeightLowSpeed as any;
+    usedTuning.bodyAimWeightHighSpeed = config.bodyAimWeightHighSpeed as any;
+    usedTuning.bodySpeedMin = config.bodySpeedMin as any;
+    usedTuning.bodySpeedMax = config.bodySpeedMax as any;
     usedTuning.minCommitDistance = config.minCommitDistance as any;
     usedTuning.directionChangeThresholdDeg = config.directionChangeThresholdDeg as any;
     usedTuning.brakeCommitDistanceMul = config.brakeCommitDistanceMul as any;

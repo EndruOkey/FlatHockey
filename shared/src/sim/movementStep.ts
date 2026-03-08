@@ -335,26 +335,28 @@ export function applyMovementStep(
 
   let baseBodyAngle = Number.isFinite(state.baseBodyAngle) ? state.baseBodyAngle! : state.bodyAngle!;
   const speedNow = Math.hypot(state.vx, state.vy);
-  const bodyBaseSpeedThreshold = Math.max(0, config.bodyBaseSpeedThreshold ?? DEFAULTS.bodyBaseSpeedThreshold ?? 51.375);
+  const bodySpeedMin = Math.max(0, config.bodySpeedMin ?? DEFAULTS.bodySpeedMin ?? config.bodyBaseSpeedThreshold ?? DEFAULTS.bodyBaseSpeedThreshold ?? 35);
+  const bodySpeedMax = Math.max(bodySpeedMin + 1, config.bodySpeedMax ?? DEFAULTS.bodySpeedMax ?? 280);
+  const bodyAimWeightLowSpeed = clamp(config.bodyAimWeightLowSpeed ?? DEFAULTS.bodyAimWeightLowSpeed ?? 0.9, 0, 1);
+  const bodyAimWeightHighSpeed = clamp(config.bodyAimWeightHighSpeed ?? DEFAULTS.bodyAimWeightHighSpeed ?? 0.25, 0, 1);
   const velocityAngleNow = speedNow > 0.001 ? Math.atan2(state.vy, state.vx) : baseBodyAngle;
   const moveTargetAngle = hasInput ? state.moveAngle! : baseBodyAngle;
-  const velocityInfluence = smoothstep01((speedNow - bodyBaseSpeedThreshold) / Math.max(bodyBaseSpeedThreshold * 2.2, 1));
+  const velocityInfluence = smoothstep01((speedNow - bodySpeedMin) / Math.max(bodySpeedMax - bodySpeedMin, 1));
   const movementBodyTargetAngle = lerpAngle(moveTargetAngle, velocityAngleNow, velocityInfluence);
   let rawBodyTargetAngle = movementBodyTargetAngle;
   let effectiveAimBias = 0;
   if (bodyOrientationModel === 'C') {
     const hybridAimAngle = wrapToPi(inputAimRaw);
-    const aimDiff = Math.abs(wrapToPi(hybridAimAngle - movementBodyTargetAngle));
+    const aimBlendBySpeed = lerp(bodyAimWeightLowSpeed, bodyAimWeightHighSpeed, velocityInfluence);
     const aimFocus = clamp(input.aimDistance01 ?? 1, 0, 1);
-    const aimEngage = smoothstep01((aimDiff - bodyHybridDeadzone) / Math.max(Math.PI - bodyHybridDeadzone, 0.0001));
-    effectiveAimBias = bodyAimBias * lerp(0.35, 1, aimFocus) * aimEngage;
+    effectiveAimBias = clamp(aimBlendBySpeed * lerp(0.5, 1, aimFocus), 0, 1);
     rawBodyTargetAngle = lerpAngle(movementBodyTargetAngle, hybridAimAngle, effectiveAimBias);
   }
   if (!Number.isFinite(state.bodyTargetAngle)) {
     state.bodyTargetAngle = rawBodyTargetAngle;
   }
   const bodyTargetRate = bodyOrientationModel === 'C'
-    ? lerp(bodyTurnRate * 0.65, 1000 / bodyAimResponseTauMs, effectiveAimBias / Math.max(bodyAimBias, 0.0001))
+    ? lerp(bodyTurnRate * 0.65, 1000 / bodyAimResponseTauMs, effectiveAimBias)
     : bodyTurnRate * 0.65;
   const bodyTargetAlpha = expBlend(bodyTargetRate, simDt);
   state.bodyTargetAngle = lerpAngle(state.bodyTargetAngle!, rawBodyTargetAngle, bodyTargetAlpha);

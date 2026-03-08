@@ -151,9 +151,15 @@ export type MovementStepConfig = {
   reverseMaxSpeed?: number;
   turnLowSpeed?: number;
   turnHighSpeed?: number;
+  turnRateBase?: number;
+  turnRateSpeedScale?: number;
   edgeTurnBonusMax?: number;
   brakeTurnBonusValue?: number;
+  brakeTurnMult?: number;
   brakeOppositeRecovery?: number;
+  reverseThreshold?: number;
+  reverseAccelMult?: number;
+  reverseBrakeBonus?: number;
   lateralSteerForce?: number;
   baseLateralDamping?: number;
   maxLateralDamping?: number;
@@ -275,6 +281,10 @@ export type MovementStepConfig = {
   bodyFacingMode?: 'MOVE_LAST' | 'AIM_WHEN_IDLE' | 'BLEND' | 'AIM_ALWAYS';
   bodyOrientationModel?: 'B' | 'C';
   bodyTurnRate?: number;
+  bodyAimWeightLowSpeed?: number;
+  bodyAimWeightHighSpeed?: number;
+  bodySpeedMin?: number;
+  bodySpeedMax?: number;
   bodyTurnRateLowSpeedMult?: number;
   bodyAimBias?: number;
   bodyAimResponseTauMs?: number;

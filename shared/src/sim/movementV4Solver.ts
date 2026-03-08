@@ -1,458 +1,209 @@
 import { MOVEMENT_DEFAULTS } from '../tuning/movement.defaults';
 import { approachAngle, clamp, expBlend, lerp, smoothstep01, wrapToPi } from './movementMath';
-import type { MovementStepConfig, MovementStepInput, MovementStepState } from './movementStep';
-import { phaseFromSide, type MovementV4Args, type MovementV4Result } from './movementV4.types';
-import { applyDirectionalSpeedLimit, applyV4VelocityStep, computeTravelAngle } from './movementV4VelocityStep';
+import type { MovementV4Args, MovementV4Result } from './movementV4.types';
+
 export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
   const { state, input, dt, config, hasPuck, mouseDrivesMove, inputAimRaw, rawInputX, rawInputY, prevMoveAngle } = args;
+
   const simDt = clamp(dt, 0.001, 0.05);
   const rawLen = Math.hypot(rawInputX, rawInputY);
   const hasInput = rawLen > 0.0001;
   const rawNx = hasInput ? rawInputX / rawLen : 0;
   const rawNy = hasInput ? rawInputY / rawLen : 0;
+
   const chargeActive = !!input.buttons.sprint && !hasPuck;
   state.debugChargeActive = chargeActive;
+
   const inputVectorResponsiveness = Math.max(1, config.inputVectorResponsiveness ?? config.inputVectorTauMs ?? MOVEMENT_DEFAULTS.inputVectorResponsiveness ?? MOVEMENT_DEFAULTS.inputVectorTauMs ?? 95);
+  const desiredRate = 1000 / inputVectorResponsiveness;
+  const desiredAlpha = expBlend(desiredRate, simDt);
+
+  const rawDriveAngle = hasInput
+    ? wrapToPi(mouseDrivesMove ? inputAimRaw : Math.atan2(rawNy, rawNx))
+    : (state.moveAngle ?? 0);
+  const rawDriveX = Math.cos(rawDriveAngle);
+  const rawDriveY = Math.sin(rawDriveAngle);
+
+  const filteredXRaw = (state.desiredDirX ?? rawDriveX) + (rawDriveX - (state.desiredDirX ?? rawDriveX)) * desiredAlpha;
+  const filteredYRaw = (state.desiredDirY ?? rawDriveY) + (rawDriveY - (state.desiredDirY ?? rawDriveY)) * desiredAlpha;
+  const filteredMag = Math.hypot(filteredXRaw, filteredYRaw);
+  const driveX = filteredMag > 0.0001 ? filteredXRaw / filteredMag : rawDriveX;
+  const driveY = filteredMag > 0.0001 ? filteredYRaw / filteredMag : rawDriveY;
+  state.desiredDirX = driveX;
+  state.desiredDirY = driveY;
+  state.pendingDirX = driveX;
+  state.pendingDirY = driveY;
+
+  const prevVx = state.vx;
+  const prevVy = state.vy;
+  const speedBefore = Math.hypot(prevVx, prevVy);
+  const prevTravelAngle = speedBefore > 0.001
+    ? Math.atan2(prevVy, prevVx)
+    : (Number.isFinite(state.lastStableTravelAngle) ? state.lastStableTravelAngle! : rawDriveAngle);
+
+  const turnRateBase = Math.max(0.05, config.turnRateBase ?? MOVEMENT_DEFAULTS.turnRateBase ?? 1.8);
+  const turnRateSpeedScale = Math.max(0, config.turnRateSpeedScale ?? MOVEMENT_DEFAULTS.turnRateSpeedScale ?? 0.0065);
+  const brakeTurnMult = Math.max(1, config.brakeTurnMult ?? MOVEMENT_DEFAULTS.brakeTurnMult ?? 1.8);
+  let maxTurnRate = turnRateBase + speedBefore * turnRateSpeedScale;
+  if (input.buttons.brake) maxTurnRate *= brakeTurnMult;
+
+  const driveAngle = Math.atan2(driveY, driveX);
+  const curvedTravelAngle = hasInput
+    ? approachAngle(prevTravelAngle, driveAngle, maxTurnRate * simDt)
+    : prevTravelAngle;
+  const travelX = Math.cos(curvedTravelAngle);
+  const travelY = Math.sin(curvedTravelAngle);
+
   const forwardAccel = Math.max(0, config.forwardAccel ?? MOVEMENT_DEFAULTS.forwardAccel ?? 1500);
+  const lateralSteerForce = Math.max(0, config.lateralSteerForce ?? MOVEMENT_DEFAULTS.lateralSteerForce ?? 620);
+  const reverseThreshold = clamp(config.reverseThreshold ?? MOVEMENT_DEFAULTS.reverseThreshold ?? -0.4, -0.98, -0.05);
+  const reverseAccelMult = clamp(config.reverseAccelMult ?? MOVEMENT_DEFAULTS.reverseAccelMult ?? 0.28, 0, 1);
+  const reverseBrakeBonus = Math.max(0, config.reverseBrakeBonus ?? MOVEMENT_DEFAULTS.reverseBrakeBonus ?? 3.5);
+
+  const driveDotTravel = hasInput ? clamp(driveX * travelX + driveY * travelY, -1, 1) : 0;
+  const driveSide = hasInput ? (travelX * driveY - travelY * driveX) : 0;
+  const reverseT = driveDotTravel < reverseThreshold
+    ? smoothstep01((reverseThreshold - driveDotTravel) / Math.max(1 + reverseThreshold, 0.0001))
+    : 0;
+
+  const accelScale = lerp(1, reverseAccelMult, reverseT);
+  const forwardIntent = hasInput ? driveDotTravel : 0;
+  const forwardForce = forwardAccel * accelScale * (forwardIntent >= 0 ? forwardIntent : forwardIntent * 0.15);
+  const lateralForce = lateralSteerForce * driveSide * (input.buttons.brake ? 1.25 : 1);
+
+  if (hasInput) {
+    state.vx += (travelX * forwardForce + (-travelY) * lateralForce) * simDt;
+    state.vy += (travelY * forwardForce + travelX * lateralForce) * simDt;
+  }
+
   const forwardMaxSpeed = Math.max(1, config.forwardMaxSpeed ?? MOVEMENT_DEFAULTS.forwardMaxSpeed ?? 342.5);
   const sideMaxSpeed = clamp(config.sideMaxSpeed ?? MOVEMENT_DEFAULTS.sideMaxSpeed ?? forwardMaxSpeed * 0.85, 1, forwardMaxSpeed);
   const reverseMaxSpeed = clamp(config.reverseMaxSpeed ?? MOVEMENT_DEFAULTS.reverseMaxSpeed ?? forwardMaxSpeed * 0.7, 1, forwardMaxSpeed);
-  const turnLowSpeed = Math.max(0, config.turnLowSpeed ?? MOVEMENT_DEFAULTS.turnLowSpeed ?? 1);
-  const turnHighSpeed = Math.max(0, config.turnHighSpeed ?? MOVEMENT_DEFAULTS.turnHighSpeed ?? 0.28);
-  const edgeTurnBonusMax = Math.max(0, config.edgeTurnBonusMax ?? MOVEMENT_DEFAULTS.edgeTurnBonusMax ?? 0.35);
-  const brakeTurnBonusValue = Math.max(0, config.brakeTurnBonusValue ?? MOVEMENT_DEFAULTS.brakeTurnBonusValue ?? 0.28);
-  const oppositeSteerScale = clamp(config.oppositeSteerScale ?? MOVEMENT_DEFAULTS.oppositeSteerScale ?? 0.08, 0, 1);
-  const brakeOppositeRecovery = Math.max(0, config.brakeOppositeRecovery ?? MOVEMENT_DEFAULTS.brakeOppositeRecovery ?? 0.4);
-  const lateralSteerForce = Math.max(0, config.lateralSteerForce ?? MOVEMENT_DEFAULTS.lateralSteerForce ?? 620);
+  const chargeSpeedMul = Math.max(1, config.chargeSpeedMul ?? MOVEMENT_DEFAULTS.chargeSpeedMul ?? 1.2);
+
+  const directionalSpeedScale = (() => {
+    if (!hasInput) return 1;
+    if (driveDotTravel >= 0) return lerp(sideMaxSpeed / forwardMaxSpeed, 1, driveDotTravel);
+    return lerp(sideMaxSpeed / forwardMaxSpeed, reverseMaxSpeed / forwardMaxSpeed, -driveDotTravel);
+  })();
+  const localMaxSpeed = Math.max(1, forwardMaxSpeed * directionalSpeedScale * (chargeActive ? chargeSpeedMul : 1));
+  const speedAfterForces = Math.hypot(state.vx, state.vy);
+  if (speedAfterForces > localMaxSpeed) {
+    const k = localMaxSpeed / Math.max(1, speedAfterForces);
+    state.vx *= k;
+    state.vy *= k;
+  }
+
+  const moveDrag = Math.max(0, config.moveDrag ?? MOVEMENT_DEFAULTS.moveDrag ?? 2.6);
+  const glideDrag = Math.max(0, config.glideDrag ?? MOVEMENT_DEFAULTS.glideDrag ?? 0.96909);
+  const brakeDrag = Math.max(0, config.brakeDrag ?? MOVEMENT_DEFAULTS.brakeDrag ?? 4.8);
   const baseLateralDamping = Math.max(0, config.baseLateralDamping ?? MOVEMENT_DEFAULTS.baseLateralDamping ?? 0.18);
   const maxLateralDamping = Math.max(baseLateralDamping, config.maxLateralDamping ?? MOVEMENT_DEFAULTS.maxLateralDamping ?? 1.35);
   const brakeLateralDampingBonus = Math.max(0, config.brakeLateralDampingBonus ?? MOVEMENT_DEFAULTS.brakeLateralDampingBonus ?? 0.65);
   const carveLossStrength = Math.max(0, config.carveLossStrength ?? MOVEMENT_DEFAULTS.carveLossStrength ?? 0.42);
-  const glideDrag = Math.max(0, config.glideDrag ?? MOVEMENT_DEFAULTS.glideDrag ?? 0.96909);
-  const moveDrag = Math.max(0, config.moveDrag ?? MOVEMENT_DEFAULTS.moveDrag ?? 2.6);
-  const brakeDrag = Math.max(0, config.brakeDrag ?? MOVEMENT_DEFAULTS.brakeDrag ?? 4.8);
-  const velocityTurnResistance = Math.max(0, config.velocityTurnResistance ?? MOVEMENT_DEFAULTS.velocityTurnResistance ?? 1.2);
-  const chargeSpeedMul = Math.max(1, config.chargeSpeedMul ?? MOVEMENT_DEFAULTS.chargeSpeedMul ?? 1.2);
-  const chargeAccelMul = Math.max(1, config.chargeAccelMul ?? MOVEMENT_DEFAULTS.chargeAccelMul ?? 1.25);
-  const chargeTurnMul = clamp(config.chargeTurnMul ?? MOVEMENT_DEFAULTS.chargeTurnMul ?? 0.55, 0.1, 1);
-  const chargeLateralGripMul = clamp(config.chargeLateralGripMul ?? MOVEMENT_DEFAULTS.chargeLateralGripMul ?? 0.7, 0.1, 1);
-  const rawTargetAngle = hasInput
-    ? wrapToPi(mouseDrivesMove ? inputAimRaw : Math.atan2(rawNy, rawNx))
-    : (state.moveAngle ?? 0);
-  const rawTargetX = Math.cos(rawTargetAngle);
-  const rawTargetY = Math.sin(rawTargetAngle);
-  const desiredRate = 1000 / inputVectorResponsiveness;
-  const desiredAlpha = expBlend(desiredRate, simDt);
-  const filteredXRaw = (state.desiredDirX ?? rawTargetX) + (rawTargetX - (state.desiredDirX ?? rawTargetX)) * desiredAlpha;
-  const filteredYRaw = (state.desiredDirY ?? rawTargetY) + (rawTargetY - (state.desiredDirY ?? rawTargetY)) * desiredAlpha;
-  const filteredMag = Math.hypot(filteredXRaw, filteredYRaw);
-  let filteredX = rawTargetX;
-  let filteredY = rawTargetY;
-  if (filteredMag > 0.0001) {
-    filteredX = filteredXRaw / filteredMag;
-    filteredY = filteredYRaw / filteredMag;
-    state.desiredDirX = filteredX;
-    state.desiredDirY = filteredY;
-  } else {
-    state.desiredDirX = rawTargetX;
-    state.desiredDirY = rawTargetY;
-    filteredX = rawTargetX;
-    filteredY = rawTargetY;
+
+  const baseDrag = hasInput ? moveDrag : glideDrag;
+  state.vx *= Math.exp(-baseDrag * simDt);
+  state.vy *= Math.exp(-baseDrag * simDt);
+
+  const speedAfterDrag = Math.hypot(state.vx, state.vy);
+  const minTravelDirSpeed = Math.max(0.001, config.minTravelDirSpeed ?? MOVEMENT_DEFAULTS.minTravelDirSpeed ?? 55);
+  const slipRef = speedAfterDrag >= minTravelDirSpeed ? Math.atan2(state.vy, state.vx) : curvedTravelAngle;
+  const sfx = Math.cos(slipRef);
+  const sfy = Math.sin(slipRef);
+  const stx = -sfy;
+  const sty = sfx;
+
+  let forwardVel = state.vx * sfx + state.vy * sfy;
+  let sideVel = state.vx * stx + state.vy * sty;
+  let lateralDamping = lerp(baseLateralDamping, maxLateralDamping, clamp(speedAfterDrag / Math.max(forwardMaxSpeed, 1), 0, 1));
+  if (input.buttons.brake) lateralDamping += brakeLateralDampingBonus;
+  lateralDamping += reverseT * reverseBrakeBonus;
+  sideVel *= Math.exp(-lateralDamping * simDt);
+
+  if (input.buttons.brake || reverseT > 0) {
+    const dynBrake = brakeDrag + reverseT * reverseBrakeBonus;
+    const brakeFactor = Math.exp(-dynBrake * simDt);
+    forwardVel *= brakeFactor;
+    sideVel *= brakeFactor;
   }
-  const prevVx = state.vx;
-  const prevVy = state.vy;
-  const speedBefore = Math.hypot(prevVx, prevVy);
-  const speedNorm = clamp(speedBefore / Math.max(forwardMaxSpeed, 1), 0, 1);
-  state.pendingDirX = filteredX;
-  state.pendingDirY = filteredY;
-  const minSteerSpeed = Math.max(0, config.minSteerSpeed ?? MOVEMENT_DEFAULTS.minSteerSpeed ?? 55);
-  const noSteerSpeedThreshold = Math.max(minSteerSpeed, config.noSteerSpeedThreshold ?? MOVEMENT_DEFAULTS.noSteerSpeedThreshold ?? config.startCommitSpeed ?? MOVEMENT_DEFAULTS.startCommitSpeed ?? 75);
-  const startupDirHoldSec = Math.max(0, (config.startupDirHoldMs ?? MOVEMENT_DEFAULTS.startupDirHoldMs ?? config.startCommitMs ?? MOVEMENT_DEFAULTS.startCommitMs ?? 120) / 1000);
-  const startupInputThreshold = clamp(config.startupInputThreshold ?? MOVEMENT_DEFAULTS.startupInputThreshold ?? config.startInputThreshold ?? MOVEMENT_DEFAULTS.startInputThreshold ?? 0.35, 0.05, 1.2);
-  const minTravelDirSpeed = Math.max(0.001, config.minTravelDirSpeed ?? MOVEMENT_DEFAULTS.minTravelDirSpeed ?? minSteerSpeed);
-  const startupLockSpeedThreshold = Math.max(0.001, config.startupLockSpeedThreshold ?? MOVEMENT_DEFAULTS.startupLockSpeedThreshold ?? minTravelDirSpeed);
-  const startupLatchSpeedThreshold = Math.max(0.001, config.startupLatchSpeedThreshold ?? MOVEMENT_DEFAULTS.startupLatchSpeedThreshold ?? startupLockSpeedThreshold);
-  const startupLatchReleaseSpeed = Math.max(startupLatchSpeedThreshold, config.startupLatchReleaseSpeed ?? MOVEMENT_DEFAULTS.startupLatchReleaseSpeed ?? minTravelDirSpeed);
-  const startupReleaseSec = Math.max(0.02, (config.startupReleaseMs ?? MOVEMENT_DEFAULTS.startupReleaseMs ?? 90) / 1000);
-  const startupOppositeLockSec = Math.max(0, (config.startupOppositeLockMs ?? MOVEMENT_DEFAULTS.startupOppositeLockMs ?? 140) / 1000);
-  const startupOppositeSuppression = clamp(config.startupOppositeSuppression ?? MOVEMENT_DEFAULTS.startupOppositeSuppression ?? 1.0, 0, 1);
-  const startOppositeSuppression = clamp(config.startOppositeSuppression ?? MOVEMENT_DEFAULTS.startOppositeSuppression ?? 0.2, 0, 1);
-  let committedX = state.committedDirX ?? filteredX;
-  let committedY = state.committedDirY ?? filteredY;
-  const committedMag = Math.hypot(committedX, committedY);
-  if (committedMag > 0.0001) {
-    committedX /= committedMag;
-    committedY /= committedMag;
-  } else {
-    committedX = filteredX;
-    committedY = filteredY;
-  }
-  let startCommitLeft = Math.max(0, state.startCommitTimer ?? 0);
-  let startNoInputLeft = Math.max(0, state.startNoInputTimer ?? 0);
-  let startupOppositeLockLeft = Math.max(0, state.startupOppositeLockTimer ?? 0);
-  let startupLatchActive = !!state.startupLatchActive;
-  let startupReleaseLeft = Math.max(0, state.startupReleaseTimer ?? 0);
-  let startDirX = state.startDirX ?? filteredX;
-  let startDirY = state.startDirY ?? filteredY;
-  const startDirMag = Math.hypot(startDirX, startDirY);
-  if (startDirMag > 0.0001) {
-    startDirX /= startDirMag;
-    startDirY /= startDirMag;
-  } else {
-    startDirX = filteredX;
-    startDirY = filteredY;
-  }
-  const lowSpeedStartupActive = speedBefore < noSteerSpeedThreshold;
-  const startupLatchSpeedActive = speedBefore < startupLatchSpeedThreshold;
-  const startupOppositeLockActiveRegime = speedBefore < startupLockSpeedThreshold;
-  const validStartInput = hasInput && rawLen >= startupInputThreshold;
-  const releaseToRearmSec = Math.max(0.06, startupDirHoldSec * 0.45);
-  if (startupLatchSpeedActive) {
-    if (!startupLatchActive && validStartInput) {
-      startDirX = filteredX;
-      startDirY = filteredY;
-      startCommitLeft = startupDirHoldSec;
-      startupOppositeLockLeft = startupOppositeLockSec;
-      startupLatchActive = true;
-      startupReleaseLeft = 0;
-      startNoInputLeft = 0;
-    } else if (startupLatchActive) {
-      if (validStartInput) {
-        startupReleaseLeft = 0;
-        startNoInputLeft = 0;
-      } else {
-        startupReleaseLeft += simDt;
-        startNoInputLeft += simDt;
-        if (startupReleaseLeft >= startupReleaseSec || startNoInputLeft >= releaseToRearmSec) {
-          startupLatchActive = false;
-          startupReleaseLeft = 0;
-          startCommitLeft = 0;
-          startupOppositeLockLeft = 0;
-        }
-      }
-    }
-  } else {
-    startupLatchActive = false;
-    startupReleaseLeft = 0;
-    startCommitLeft = 0;
-    startNoInputLeft = 0;
-    startupOppositeLockLeft = 0;
-  }
-  if (startCommitLeft > 0) {
-    startCommitLeft = Math.max(0, startCommitLeft - simDt);
-  }
-  if (startupOppositeLockLeft > 0) {
-    startupOppositeLockLeft = Math.max(0, startupOppositeLockLeft - simDt);
-  }
-  if (speedBefore >= startupLatchReleaseSpeed) {
-    startupLatchActive = false;
-    startupReleaseLeft = 0;
-  }
-  if (speedBefore >= minTravelDirSpeed) {
-    startupOppositeLockLeft = 0;
-  }
-  if (!startupOppositeLockActiveRegime) {
-    startupOppositeLockLeft = 0;
-  }
-  const startCommitActive = startCommitLeft > 0.0001 && lowSpeedStartupActive;
-  const startupOppositeLocked = startupOppositeLockLeft > 0.0001 && startupOppositeLockActiveRegime;
-  const startupLatchNowActive = startupLatchActive && speedBefore < startupLatchReleaseSpeed;
-  const latchedInputIgnored = startupLatchNowActive && validStartInput && (rawNx * startDirX + rawNy * startDirY) < 0.9995;
-  state.startCommitTimer = startCommitLeft;
-  state.startNoInputTimer = startNoInputLeft;
-  state.startupOppositeLockTimer = startupOppositeLockLeft;
-  state.startupLatchActive = startupLatchNowActive;
-  state.startupReleaseTimer = startupReleaseLeft;
-  state.startDirX = startDirX;
-  state.startDirY = startDirY;
-  state.debugStartCommitActive = startCommitActive;
-  state.debugStartCommitTimer = startCommitLeft;
-  state.debugStartDirX = startDirX;
-  state.debugStartDirY = startDirY;
-  state.debugLowSpeedStartupActive = lowSpeedStartupActive;
-  state.debugStartupLatchActive = startupLatchNowActive;
-  state.debugLatchedInputIgnored = latchedInputIgnored;
-  state.debugStartupReleaseTimer = startupReleaseLeft;
-  const carveEnterAngleRad = ((config.carveEnterAngle ?? MOVEMENT_DEFAULTS.carveEnterAngle ?? 30) * Math.PI) / 180;
-  const carveExitAngleRad = ((config.carveExitAngle ?? MOVEMENT_DEFAULTS.carveExitAngle ?? 16) * Math.PI) / 180;
-  const carveLockWindowSec = Math.max(0, (config.carveLockMs ?? MOVEMENT_DEFAULTS.carveLockMs ?? 140) / 1000);
-  const carveSwitchCooldownSec = Math.max(0, (config.carveSwitchCooldownMs ?? MOVEMENT_DEFAULTS.carveSwitchCooldownMs ?? 70) / 1000);
-  const minCarveSpeed = Math.max(0, config.minCarveSpeed ?? MOVEMENT_DEFAULTS.minCarveSpeed ?? 90);
-  const carveSideSuppression = clamp(config.carveSideSuppression ?? MOVEMENT_DEFAULTS.carveSideSuppression ?? 0.22, 0, 1);
-  const lowSpeedSteeringDisabled = speedBefore < minSteerSpeed;
-  const lowSpeedNoSteer = startupLatchNowActive || lowSpeedSteeringDisabled;
-  state.debugMinSteerSpeed = minSteerSpeed;
-  state.debugLowSpeedSteeringDisabled = lowSpeedSteeringDisabled;
-  const directionChangeThresholdRad = ((config.directionChangeThresholdDeg ?? MOVEMENT_DEFAULTS.directionChangeThresholdDeg ?? 105) * Math.PI) / 180;
-  const minCommitDistance = Math.max(0, config.minCommitDistance ?? MOVEMENT_DEFAULTS.minCommitDistance ?? 44);
-  const brakeCommitDistanceMul = clamp(
-    config.brakeCommitDistanceMul ?? MOVEMENT_DEFAULTS.brakeCommitDistanceMul ?? 0.35,
-    0,
-    1
-  );
-  const commitReleaseNoInputSec = 0.12;
-  const speedNearZeroThreshold = Math.max(6, minTravelDirSpeed * 0.15);
-  let distanceSinceCommit = Math.max(0, state.distanceSinceCommit ?? 0);
-  let commitNoInputTimer = Math.max(0, state.commitNoInputTimer ?? 0);
-  if (hasInput) {
-    commitNoInputTimer = 0;
-  } else {
-    commitNoInputTimer += simDt;
-  }
-  const startupReinitialized = commitNoInputTimer >= commitReleaseNoInputSec || speedBefore <= speedNearZeroThreshold;
-  const dotRequestedCommitted = clamp(committedX * filteredX + committedY * filteredY, -1, 1);
-  const requestedAngleDiff = hasInput ? Math.acos(dotRequestedCommitted) : 0;
-  const majorDirectionChange = hasInput && requestedAngleDiff > directionChangeThresholdRad;
-  const requiredCommitDistance = minCommitDistance * (input.buttons.brake ? brakeCommitDistanceMul : 1);
-  const majorDirectionChangeBlocked = !lowSpeedNoSteer
-    && !startCommitActive
-    && majorDirectionChange
-    && !startupReinitialized
-    && distanceSinceCommit < requiredCommitDistance;
-  if (hasInput && majorDirectionChange && !majorDirectionChangeBlocked) {
-    committedX = filteredX;
-    committedY = filteredY;
-    distanceSinceCommit = 0;
-  }
-  state.pendingDirX = filteredX;
-  state.pendingDirY = filteredY;
-  state.directionCommitTimer = 0;
-  state.oppositeHoldTimer = 0;
-  state.antiFlipTimer = 0;
-  state.debugAntiFlipActive = majorDirectionChangeBlocked;
-  state.debugCommitTimer = Math.max(0, requiredCommitDistance - distanceSinceCommit);
-  state.debugOppositeHoldTimer = 0;
-  state.committedDirX = committedX;
-  state.committedDirY = committedY;
-  state.distanceSinceCommit = distanceSinceCommit;
-  state.commitNoInputTimer = commitNoInputTimer;
-  const steerX = lowSpeedNoSteer
-    ? startDirX
-    : (startCommitActive
-      ? startDirX
-      : (majorDirectionChangeBlocked ? committedX : filteredX));
-  const steerY = lowSpeedNoSteer
-    ? startDirY
-    : (startCommitActive
-      ? startDirY
-      : (majorDirectionChangeBlocked ? committedY : filteredY));
-  state.debugSteerDirX = steerX;
-  state.debugSteerDirY = steerY;
-  state.debugEffectiveStartDirX = steerX;
-  state.debugEffectiveStartDirY = steerY;
-  state.debugMajorDirectionChangeBlocked = majorDirectionChangeBlocked;
-  state.debugBrakeActive = !!input.buttons.brake;
-  const desiredMoveAngle = Math.atan2(steerY, steerX);
-  state.inputAngle = desiredMoveAngle;
-  state.lastRawInputAngle = rawTargetAngle;
-  state.debugRawInputAngle = rawTargetAngle;
-  state.debugDesiredInputX = steerX;
-  state.debugDesiredInputY = steerY;
-  state.debugRequestedInputDirX = filteredX;
-  state.debugRequestedInputDirY = filteredY;
-  state.debugFilteredInputX = filteredX;
-  state.debugFilteredInputY = filteredY;
-  const stableTravelAngle = Number.isFinite(state.lastStableTravelAngle)
-    ? state.lastStableTravelAngle!
-    : (state.moveAngle ?? Math.atan2(startDirY, startDirX));
-  const lockedTravelAngle = stableTravelAngle;
-  const velDirAngle = speedBefore > 0.001
-    ? Math.atan2(state.vy, state.vx)
-    : (lowSpeedNoSteer ? lockedTravelAngle : desiredMoveAngle);
-  const fx = Math.cos(velDirAngle);
-  const fy = Math.sin(velDirAngle);
-  const sx = -fy;
-  const sy = fx;
-  const intentForward = fx * steerX + fy * steerY;
-  const intentSideRaw = (lowSpeedNoSteer || lowSpeedSteeringDisabled) ? 0 : (sx * steerX + sy * steerY);
-  const signedInputVsVelocity = Math.atan2(intentSideRaw, intentForward);
-  state.debugSignedInputVsVelocityAngle = signedInputVsVelocity;
-  const desiredVsVelocity = Math.abs(wrapToPi(desiredMoveAngle - velDirAngle));
-  const angleNorm = clamp(desiredVsVelocity / Math.PI, 0, 1);
-  let movementPhase: 'GLIDE' | 'CARVE_LEFT' | 'CARVE_RIGHT' | 'BRAKE' = state.movementPhase ?? 'GLIDE';
-  let carveSide: -1 | 0 | 1 = state.carveSide ?? 0;
-  let carveLockLeft = Math.max(0, state.carveLockTimer ?? 0);
-  let carveSwitchCooldownLeft = Math.max(0, state.carveSwitchCooldownTimer ?? 0);
-  const speedCanCarve = speedBefore >= minCarveSpeed;
-  const desiredCarveSide: -1 | 0 | 1 = Math.abs(signedInputVsVelocity) >= carveEnterAngleRad
-    ? (signedInputVsVelocity > 0 ? 1 : -1)
-    : 0;
-  if (lowSpeedNoSteer || lowSpeedSteeringDisabled || startCommitActive) {
-    movementPhase = 'GLIDE';
-    carveSide = 0;
-    carveLockLeft = 0;
-    carveSwitchCooldownLeft = 0;
-  } else if (input.buttons.brake) {
-    movementPhase = 'BRAKE';
-    carveSide = 0;
-    carveLockLeft = 0;
-  } else {
-    carveLockLeft = Math.max(0, carveLockLeft - simDt);
-    carveSwitchCooldownLeft = Math.max(0, carveSwitchCooldownLeft - simDt);
-    if (!speedCanCarve || !hasInput) {
-      if (Math.abs(signedInputVsVelocity) <= carveExitAngleRad && carveLockLeft <= 0.0001) {
-        carveSide = 0;
-        movementPhase = 'GLIDE';
-      } else if (carveSide !== 0) {
-        movementPhase = phaseFromSide(carveSide);
-      }
-    } else if (desiredCarveSide === 0) {
-      if (Math.abs(signedInputVsVelocity) <= carveExitAngleRad && carveLockLeft <= 0.0001) {
-        carveSide = 0;
-        movementPhase = 'GLIDE';
-      }
-    } else if (carveSide === 0) {
-      carveSide = desiredCarveSide;
-      carveLockLeft = carveLockWindowSec;
-      movementPhase = phaseFromSide(carveSide);
-    } else if (desiredCarveSide === carveSide) {
-      movementPhase = phaseFromSide(carveSide);
-    } else {
-      // Opposite carve switches are blocked while carve lock or switch cooldown is active.
-      if (carveLockLeft <= 0.0001 && carveSwitchCooldownLeft <= 0.0001) {
-        carveSide = desiredCarveSide;
-        carveLockLeft = carveLockWindowSec;
-        carveSwitchCooldownLeft = carveSwitchCooldownSec;
-      }
-      movementPhase = phaseFromSide(carveSide);
-    }
-  }
-  state.movementPhase = movementPhase;
-  state.carveSide = carveSide;
-  state.carveLockTimer = carveLockLeft;
-  state.carveSwitchCooldownTimer = carveSwitchCooldownLeft;
-  state.debugMovementPhase = movementPhase;
-  state.debugCarveLockTimer = carveLockLeft;
-  state.debugCarveSide = carveSide;
-  const carveLockNorm = carveLockWindowSec > 0 ? clamp(carveLockLeft / carveLockWindowSec, 0, 1) : 0;
-  const carveBias = movementPhase === 'CARVE_LEFT' || movementPhase === 'CARVE_RIGHT'
-    ? lerp(0.12, 0.32, carveLockNorm)
-    : 0;
-  const edgeFactor = (lowSpeedNoSteer || lowSpeedSteeringDisabled)
-    ? 0
-    : clamp(0.08 + angleNorm * lerp(0.22, 0.76, speedNorm) + carveBias + (input.buttons.brake ? 0.26 : 0), 0, 1);
-  state.debugEdgeFactor = edgeFactor;
-  const turnResistance = (lowSpeedNoSteer || lowSpeedSteeringDisabled)
-    ? 0
-    : clamp(
-      smoothstep01((desiredVsVelocity - Math.PI * 0.06) / (Math.PI * 0.94)) * speedNorm * velocityTurnResistance,
-      0,
-      1
-    );
-  const oppositeScale = input.buttons.brake
-    ? clamp(oppositeSteerScale + brakeOppositeRecovery, 0, 1)
-    : oppositeSteerScale;
-  const reverseNoBrakeScale = input.buttons.brake
-    ? 1
-    : lerp(0.42, 0.02, smoothstep01(speedNorm));
-  const reverseScale = oppositeScale * reverseNoBrakeScale;
-  const reverseEntryPenalty = intentForward < 0 && !input.buttons.brake
-    ? lerp(0.42, 0.08, smoothstep01(speedNorm))
-    : 1;
-  const startOpposesCommitted = validStartInput && (rawNx * startDirX + rawNy * startDirY) < 0;
-  const startupOppositeScale = startupOppositeLocked && startOpposesCommitted ? startupOppositeSuppression : 1;
-  const startCommitForwardScale = startOpposesCommitted
-    ? (startCommitActive ? startOppositeSuppression : startupOppositeScale)
-    : 1;
-  const forwardInput = (lowSpeedNoSteer || startCommitActive)
-    ? ((validStartInput ? 1 : 0) * startCommitForwardScale)
-    : (lowSpeedSteeringDisabled
-      ? (hasInput ? 1 : 0)
-      : (intentForward >= 0 ? intentForward : intentForward * reverseScale));
-  const baseTurnAuthority = lerp(turnLowSpeed, turnHighSpeed, speedNorm);
-  const turnAuthority = clamp(
-    (baseTurnAuthority + edgeTurnBonusMax * edgeFactor + (input.buttons.brake ? brakeTurnBonusValue : 0)) * (1 - turnResistance),
-    0.02,
-    1.25
-  );
-  const dotSteerFiltered = clamp(steerX * filteredX + steerY * filteredY, -1, 1);
-  const alternatingPenalty = (lowSpeedNoSteer || lowSpeedSteeringDisabled) ? 1 : lerp(1, 0.55, clamp((1 - dotSteerFiltered) * 0.5 * speedNorm, 0, 1));
-  const lateralAuthority = (lowSpeedNoSteer || lowSpeedSteeringDisabled)
-    ? 0
-    : clamp(turnAuthority * alternatingPenalty * (chargeActive ? chargeTurnMul : 1), 0.02, 1);
-  const appliedForwardForce = forwardAccel * (chargeActive ? chargeAccelMul : 1) * forwardInput * reverseEntryPenalty;
-  const oppositeSteerClamp = clamp(config.oppositeSteerClamp ?? MOVEMENT_DEFAULTS.oppositeSteerClamp ?? 0.35, 0.05, 1);
-  const inputOpposesVelocity = hasInput && intentForward < 0;
-  const commitClamp = (!(lowSpeedNoSteer || lowSpeedSteeringDisabled) && majorDirectionChangeBlocked && inputOpposesVelocity) ? oppositeSteerClamp : 1;
-  const oppositeCarveSuppression = (carveLockLeft > 0.0001 && carveSide !== 0 && Math.sign(intentSideRaw || 0) !== carveSide)
-    ? carveSideSuppression
-    : 1;
-  const intentSide = intentSideRaw * oppositeCarveSuppression;
-  const appliedLateralForce = lateralSteerForce * intentSide * lateralAuthority * commitClamp;
-  state.debugAppliedForwardForce = hasInput ? appliedForwardForce : 0;
-  state.debugAppliedLateralForce = hasInput ? appliedLateralForce : 0;
-  state.debugRedirectAccelScale = lateralAuthority;
-  if (hasInput) {
-    state.vx += (fx * appliedForwardForce + sx * appliedLateralForce) * simDt;
-    state.vy += (fy * appliedForwardForce + sy * appliedLateralForce) * simDt;
-  }
-  const directionalLimited = applyDirectionalSpeedLimit({
-    vx: state.vx,
-    vy: state.vy,
-    hasInput,
-    intentForward,
-    sideMaxSpeed,
-    forwardMaxSpeed,
-    reverseMaxSpeed,
-    chargeActive,
-    chargeSpeedMul
-  });
-  state.vx = directionalLimited.vx;
-  state.vy = directionalLimited.vy;
+
+  forwardVel *= Math.exp(-carveLossStrength * clamp(Math.abs(driveSide), 0, 1) * simDt);
+  state.vx = sfx * forwardVel + stx * sideVel;
+  state.vy = sfy * forwardVel + sty * sideVel;
+
+  const finalSpeed = Math.hypot(state.vx, state.vy);
   const finalMaxSpeed = Math.max(1, forwardMaxSpeed * (chargeActive ? chargeSpeedMul : 1));
-  const velocityStep = applyV4VelocityStep({
-    vx: state.vx,
-    vy: state.vy,
-    hasInput,
-    moveDrag,
-    glideDrag,
-    simDt,
-    minTravelDirSpeed,
-    lockedTravelAngle,
-    baseLateralDamping,
-    maxLateralDamping,
-    edgeFactor,
-    speedNorm,
-    chargeActive,
-    chargeLateralGripMul,
-    brakeActive: !!input.buttons.brake,
-    brakeLateralDampingBonus,
-    brakeDrag,
-    carveLossStrength,
-    speedBefore,
-    prevVx,
-    prevVy,
-    turnLowSpeed,
-    turnHighSpeed,
-    brakeTurnBonusValue,
-    edgeTurnBonusMax,
-    finalMaxSpeed
-  });
-  state.vx = velocityStep.vx;
-  state.vy = velocityStep.vy;
+  if (finalSpeed > finalMaxSpeed) {
+    const k = finalMaxSpeed / finalSpeed;
+    state.vx *= k;
+    state.vy *= k;
+  }
+
   const prevX = state.x;
   const prevY = state.y;
   state.x += state.vx * simDt;
   state.y += state.vy * simDt;
-  distanceSinceCommit += Math.hypot(state.x - prevX, state.y - prevY);
-  state.distanceSinceCommit = distanceSinceCommit;
-  const travel = computeTravelAngle({
-    vx: state.vx,
-    vy: state.vy,
-    minTravelDirSpeed,
-    lastStableTravelAngle: stableTravelAngle,
-    lowSpeedStartupActive
-  });
-  state.lastStableTravelAngle = travel.nextStableTravelAngle;
-  const moveAngle = travel.moveAngle;
-  state.debugTravelDirLocked = travel.useLockedTravelAngle;
-  state.moveAngle = moveAngle;
-  state.heading = moveAngle;
-  state.debugMoveTurnRateAppliedDeg = Math.abs(wrapToPi(moveAngle - prevMoveAngle)) * (180 / Math.PI) / Math.max(simDt, 0.0001);
+
+  const moved = Math.hypot(state.x - prevX, state.y - prevY);
+  state.distanceSinceCommit = Math.max(0, (state.distanceSinceCommit ?? 0) + moved);
+  state.commitNoInputTimer = hasInput ? 0 : Math.max(0, (state.commitNoInputTimer ?? 0) + simDt);
+  state.committedDirX = travelX;
+  state.committedDirY = travelY;
+
+  const speedAfterSolve = Math.hypot(state.vx, state.vy);
+  const stableTravelAngle = speedAfterSolve >= minTravelDirSpeed
+    ? Math.atan2(state.vy, state.vx)
+    : (Number.isFinite(state.lastStableTravelAngle) ? state.lastStableTravelAngle! : curvedTravelAngle);
+  state.lastStableTravelAngle = stableTravelAngle;
+  state.moveAngle = stableTravelAngle;
+  state.heading = stableTravelAngle;
+  state.inputAngle = driveAngle;
+
+  const velocityDesiredDelta = wrapToPi(driveAngle - stableTravelAngle);
+  state.debugRawInputAngle = rawDriveAngle;
+  state.debugDesiredMoveAngle = driveAngle;
+  state.debugTurnIntentAngle = curvedTravelAngle;
+  state.debugVelocityDesiredDeltaDeg = velocityDesiredDelta * (180 / Math.PI);
+  state.debugMoveTurnRateAppliedDeg = Math.abs(wrapToPi(stableTravelAngle - prevMoveAngle)) * (180 / Math.PI) / Math.max(simDt, 0.0001);
+  state.debugTurnResistance = clamp(reverseT, 0, 1);
+  state.debugRedirectAccelScale = accelScale;
+  state.debugDesiredInputX = driveX;
+  state.debugDesiredInputY = driveY;
+  state.debugRequestedInputDirX = driveX;
+  state.debugRequestedInputDirY = driveY;
+  state.debugFilteredInputX = driveX;
+  state.debugFilteredInputY = driveY;
+  state.debugAppliedForwardForce = hasInput ? forwardForce : 0;
+  state.debugAppliedLateralForce = hasInput ? lateralForce : 0;
+  state.debugSteerDirX = travelX;
+  state.debugSteerDirY = travelY;
+  state.debugEffectiveStartDirX = travelX;
+  state.debugEffectiveStartDirY = travelY;
+  state.debugSignedInputVsVelocityAngle = Math.atan2(driveSide, driveDotTravel);
+  state.debugEdgeFactor = clamp(Math.abs(driveSide), 0, 1);
+  state.debugTravelDirLocked = speedAfterSolve < minTravelDirSpeed;
+  state.debugMajorDirectionChangeBlocked = false;
+  state.debugBrakeActive = !!input.buttons.brake;
+  state.debugCommitTimer = 0;
+  state.debugOppositeHoldTimer = 0;
+  state.debugAntiFlipActive = false;
+
+  state.directionCommitTimer = 0;
+  state.oppositeHoldTimer = 0;
+  state.antiFlipTimer = 0;
+  state.carveLockTimer = 0;
+  state.carveSwitchCooldownTimer = 0;
+  state.carveSide = 0;
+  state.movementPhase = input.buttons.brake ? 'BRAKE' : 'GLIDE';
+  state.debugMovementPhase = state.movementPhase;
+  state.debugCarveLockTimer = 0;
+  state.debugCarveSide = 0;
+
   return {
-    desiredMoveAngle,
-    turnIntentAngle: moveAngle,
-    turnResistance,
+    desiredMoveAngle: driveAngle,
+    turnIntentAngle: curvedTravelAngle,
+    turnResistance: reverseT,
     chargeActive
   };
 }
