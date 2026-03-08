@@ -149,6 +149,9 @@ export function buildClientInput(scene: any): InputMsg {
     seq: ++scene.seq,
     moveX,
     moveY,
+    movementModel: tuning.movementCoreModel === 'SKATE_STEERING' || tuning.movementModel === 'skateSteering'
+      ? 'skateSteering'
+      : 'desiredHeadingTraction',
     sprint: scene.input.activePointer.rightButtonDown() ? 1 : 0,
     brake: scene.keys.SPACE.isDown ? 1 : 0,
     shoot: (scene.keys.E.isDown || scene.input.activePointer.leftButtonDown()) ? 1 : 0,

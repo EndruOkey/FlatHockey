@@ -4,6 +4,7 @@ export type InputMsg = {
   seq: number;
   moveX: -1 | 0 | 1;
   moveY: -1 | 0 | 1;
+  movementModel?: 'skateSteering' | 'desiredHeadingTraction';
   sprint: 0 | 1;
   brake: 0 | 1;
   shoot?: 0 | 1;

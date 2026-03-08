@@ -3,107 +3,7 @@ import { applyMovementStep, type MovementStepConfig, type MovementStepState } fr
 import { WebSocket } from 'ws';
 import { dropPuckFrom, resolveBoardHits, resolvePlayerContacts, stickTarget, updatePuck } from './roomSystems';
 import { clamp, lerpAngle } from './roomMath';
-
-type InputState = {
-  moveX: -1 | 0 | 1;
-  moveY: -1 | 0 | 1;
-  sprint: 0 | 1;
-  brake: 0 | 1;
-  shoot: 0 | 1;
-  aimAngleRaw: number;
-  aimDistance01: number;
-  bodyTurn: number;
-};
-
-type BufferedInput = {
-  seq: number;
-  state: InputState;
-};
-
-type PlayerState = {
-  id: string;
-  name: string;
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  angle: number;
-  moveAngle: number;
-  headingOmega: number;
-  desiredHeadingAngle: number;
-  movementModelActive: 'LEGACY' | 'V3' | 'V4' | 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION';
-  inputAngle: number;
-  desiredDirX: number;
-  desiredDirY: number;
-  committedDirX: number;
-  committedDirY: number;
-  distanceSinceCommit: number;
-  reverseDriveState: 'NORMAL' | 'TRANSITION_TO_REVERSE' | 'REVERSE_READY';
-  commitNoInputTimer: number;
-  reverseTransitionActive: boolean;
-  reverseTransitionTimer: number;
-  pendingDirX: number;
-  pendingDirY: number;
-  directionCommitTimer: number;
-  oppositeHoldTimer: number;
-  carveLockTimer: number;
-  carveSwitchCooldownTimer: number;
-  carveSide: -1 | 0 | 1;
-  movementPhase: 'GLIDE' | 'CARVE_LEFT' | 'CARVE_RIGHT' | 'BRAKE';
-  startCommitTimer: number;
-  startNoInputTimer: number;
-  startupOppositeLockTimer: number;
-  startupLatchActive: boolean;
-  startupReleaseTimer: number;
-  startDirX: number;
-  startDirY: number;
-  lastStableTravelAngle: number;
-  lastRawInputAngle: number;
-  antiFlipTimer: number;
-  baseBodyAngle: number;
-  bodyYawOffset: number;
-  bodyTargetAngle: number;
-  aimAngleRaw: number;
-  aimAngle: number;
-  stickAngVel?: number;
-  stickLocalAngle?: number;
-  stamina: number;
-  heading?: number;
-  prevHasInput?: boolean;
-  brakeAssistLeft?: number;
-  startLinearActive?: boolean;
-  stickSide?: -1 | 1;
-  prevShoot: boolean;
-  shotCharge: number;
-  lastProcessedSeq: number;
-  lastInputState: InputState;
-  inputBuffer: BufferedInput[];
-  inputGapTicks: number;
-  chargeActive: boolean;
-  hitCooldownLeft: number;
-  stunLeft: number;
-};
-
-type PuckState = {
-  state: 'FREE' | 'HELD';
-  ownerId: string | null;
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  pickupCooldownMs: number;
-};
-
-const ZERO_INPUT: InputState = {
-  moveX: 0,
-  moveY: 0,
-  sprint: 0,
-  brake: 0,
-  shoot: 0,
-  aimAngleRaw: 0,
-  aimDistance01: 1,
-  bodyTurn: 0
-};
+import { type BufferedInput, type PlayerState, type PuckState, ZERO_INPUT } from './room.types';
 
 export class Room {
   readonly id: string;
@@ -230,6 +130,7 @@ export class Room {
       state: {
         moveX: input.moveX < 0 ? -1 : input.moveX > 0 ? 1 : 0,
         moveY: input.moveY < 0 ? -1 : input.moveY > 0 ? 1 : 0,
+        movementModel: input.movementModel === 'skateSteering' ? 'skateSteering' : 'desiredHeadingTraction',
         sprint: input.sprint ? 1 : 0,
         brake: input.brake ? 1 : 0,
         shoot: input.shoot ? 1 : 0,
@@ -336,6 +237,7 @@ export class Room {
         dt,
         {
           ...this.movementTuning,
+          movementCoreModel: player.lastInputState.movementModel === 'skateSteering' ? 'SKATE_STEERING' : 'DESIRED_HEADING_TRACTION',
           hasPuck: playerHasPuck
         }
       );
@@ -476,30 +378,23 @@ export class Room {
         stunLeft: p.stunLeft
       }))
     };
-
     this.broadcast(msg);
   }
-
   private stickTarget(player: PlayerState) {
     return stickTarget(this, player);
   }
-
   private updatePuck(dt: number) {
     updatePuck(this, dt);
   }
-
   private dropPuckFrom(playerId: string | null) {
     dropPuckFrom(this, playerId);
   }
-
   private resolvePlayerContacts() {
     resolvePlayerContacts(this);
   }
-
   private resolveBoardHits() {
     resolveBoardHits(this);
   }
-
   private consumeNextInput(player: PlayerState): BufferedInput | null {
     if (player.inputBuffer.length === 0) return null;
 
