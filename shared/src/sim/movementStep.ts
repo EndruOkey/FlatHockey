@@ -1,5 +1,6 @@
 import { MOVEMENT_DEFAULTS } from '../tuning/movement.defaults';
 import { resetMovementDebugState } from './movementStepDebug';
+import { applyExperimentalMovementStep } from './movementExperimentalSolver';
 import { applyMovementV4Solver } from './movementV4Solver';
 import { approachAngle, approachScalar, clamp, expBlend, lerp, lerpAngle, smoothstep01, wrapToPi } from './movementMath';
 import { ensureMovementStateBase } from './movementStateInit';
@@ -43,17 +44,21 @@ export function applyMovementStep(
     state.stickLocalAngle = wrapToPi(fallbackAim - state.bodyAngle!);
   }
 
-  const movementCoreModelRaw = config.movementCoreModel ?? DEFAULTS.movementCoreModel ?? 'V4';
-  const movementCoreModel: 'LEGACY' | 'V3' | 'V4' =
-    movementCoreModelRaw === 'LEGACY' ? 'LEGACY' : (movementCoreModelRaw === 'V3' ? 'V3' : 'V4');
-  if (input.buttons.sprint && movementCoreModel !== 'V4') {
+  const movementCoreModelRaw = config.movementCoreModel ?? DEFAULTS.movementCoreModel ?? 'DESIRED_HEADING_TRACTION';
+  const movementCoreModel: 'LEGACY' | 'V3' | 'V4' | 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION' =
+    movementCoreModelRaw === 'LEGACY' || movementCoreModelRaw === 'V3' || movementCoreModelRaw === 'V4' || movementCoreModelRaw === 'SKATE_STEERING'
+      ? movementCoreModelRaw
+      : 'DESIRED_HEADING_TRACTION';
+  state.movementModelActive = movementCoreModel;
+  const usesLegacySprintStamina = movementCoreModel === 'LEGACY' || movementCoreModel === 'V3';
+  if (input.buttons.sprint && usesLegacySprintStamina) {
     const drainMul = hasPuck ? (config.staminaDrainMulWithPuck ?? DEFAULTS.staminaDrainMulWithPuck!) : 1;
     state.stamina = clamp(state.stamina - (config.staminaDrain ?? DEFAULTS.staminaDrain!) * drainMul * simDt, 0, 1);
   } else {
     state.stamina = clamp(state.stamina + (config.staminaRegen ?? DEFAULTS.staminaRegen!) * simDt, 0, 1);
   }
 
-  const sprinting = movementCoreModel !== 'V4'
+  const sprinting = usesLegacySprintStamina
     && input.buttons.sprint
     && state.stamina > (config.sprintMinStamina ?? DEFAULTS.sprintMinStamina!);
   const maxSpeedAlias = config.maxSpeed;
@@ -268,7 +273,7 @@ export function applyMovementStep(
     state.debugAppliedForwardForce = hasInput ? appliedForwardForce : 0;
     state.debugAppliedLateralForce = hasInput ? appliedLateralForce : 0;
     state.debugRedirectAccelScale = lateralControl;
-  } else {
+  } else if (movementCoreModel === 'V4') {
     const v4 = applyMovementV4Solver({
       state,
       input,
@@ -284,9 +289,24 @@ export function applyMovementStep(
     desiredMoveAngleDebug = v4.desiredMoveAngle;
     turnIntentAngle = v4.turnIntentAngle;
     turnResistance = v4.turnResistance;
+  } else {
+    const nextModel = movementCoreModel === 'SKATE_STEERING' ? 'SKATE_STEERING' : 'DESIRED_HEADING_TRACTION';
+    const result = applyExperimentalMovementStep(nextModel, {
+      state,
+      input,
+      dt: simDt,
+      config,
+      rawInputX: rawX,
+      rawInputY: rawY,
+      hasInput,
+      prevMoveAngle
+    });
+    desiredMoveAngleDebug = result.desiredMoveAngle;
+    turnIntentAngle = result.turnIntentAngle;
+    turnResistance = result.turnResistance;
   }
 
-  if (movementCoreModel !== 'V4') {
+  if (movementCoreModel === 'LEGACY' || movementCoreModel === 'V3') {
     const baseDrag = hasInput ? dragMove : dragIdle;
     const dragFactor = Math.exp(-baseDrag * simDt);
     state.vx *= dragFactor;
@@ -446,7 +466,7 @@ export function applyMovementStep(
   state.stickLocalAngle = nextStickDiff;
   state.aimAngleRaw = aimAngleRaw;
   state.aimAngle = aimAngle;
-  state.heading = turnIntentAngle;
+  state.heading = Number.isFinite(state.heading) ? state.heading : turnIntentAngle;
   state.debugStickDeltaDeg = Math.abs(wrapToPi(targetAim - aimAngle)) * (180 / Math.PI);
   state.debugStickAngVelDeg = Math.abs(stickAngVel) * (180 / Math.PI);
   state.debugStickAngVelClamped = stickAngVelClamped;

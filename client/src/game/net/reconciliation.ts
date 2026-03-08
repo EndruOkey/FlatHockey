@@ -19,6 +19,9 @@ export function reconcilePrediction(
   predicted.angle = authoritative.angle;
   (predicted as any).moveAngle = (authoritative as any).moveAngle;
   (predicted as any).heading = (authoritative as any).heading ?? (authoritative as any).moveAngle;
+  (predicted as any).headingOmega = (authoritative as any).headingOmega ?? 0;
+  (predicted as any).desiredHeadingAngle = (authoritative as any).desiredHeadingAngle ?? (authoritative as any).heading ?? (authoritative as any).moveAngle;
+  (predicted as any).movementModelActive = (authoritative as any).movementModelActive ?? 'DESIRED_HEADING_TRACTION';
   (predicted as any).inputAngle = (authoritative as any).inputAngle ?? (authoritative as any).moveAngle;
   (predicted as any).desiredDirX = (authoritative as any).desiredDirX ?? Math.cos((authoritative as any).inputAngle ?? (authoritative as any).moveAngle ?? 0);
   (predicted as any).desiredDirY = (authoritative as any).desiredDirY ?? Math.sin((authoritative as any).inputAngle ?? (authoritative as any).moveAngle ?? 0);

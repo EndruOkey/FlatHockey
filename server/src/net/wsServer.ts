@@ -5,7 +5,7 @@ import type { ServerMessage } from '@flathockey/shared';
 import { parseWsPayload } from './protocol';
 import { MOVEMENT_DEFAULTS } from '@flathockey/shared/tuning/movement.defaults';
 
-const ALLOW_TUNING_SYNC = false;
+const ALLOW_TUNING_SYNC = true;
 
 let nextClientId = 1;
 
@@ -109,7 +109,8 @@ export function createWsServer(server: Server, roomManager: RoomManager) {
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(rewelcome));
         console.log(`[WS] JOIN accepted clientId=${clientId} room=${room.id}`);
       } else if (msg.type === 'debug:setMovementTuning') {
-        // Runtime gameplay tuning is intentionally disabled.
+        if (!ALLOW_TUNING_SYNC) return;
+        room.setMovementTuning(msg.config ?? {});
         return;
       }
     });

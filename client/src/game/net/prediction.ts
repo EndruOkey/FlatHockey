@@ -1,8 +1,10 @@
-import type { InputMsg, PlayerStateMsg } from '@flathockey/shared';
+import type { InputMsg } from '@flathockey/shared';
 import { applyMovementStep, type MovementStepConfig, type MovementStepState } from '@flathockey/shared/sim/movementStep';
 import { MOVEMENT_DEFAULTS } from '@flathockey/shared/tuning/movement.defaults';
 import { getTuning } from '../debug/movementTuning';
 import { syncUsedTuning } from './predictionUsedTuning';
+import type { PredictedPlayerState } from './predictionState.types';
+export type { PredictedPlayerState } from './predictionState.types';
 
 export let lastTelemetry: Record<string, any> = {};
 export let lastAimInputRateLimited = false;
@@ -10,115 +12,6 @@ export let lastAimInputRateLimited = false;
 export function setAimInputRateLimited(flag: boolean) {
   lastAimInputRateLimited = !!flag;
 }
-
-export type PredictedPlayerState = PlayerStateMsg & {
-  stamina?: number;
-  heading?: number;
-  moveAngle?: number;
-  inputAngle?: number;
-  desiredDirX?: number;
-  desiredDirY?: number;
-  committedDirX?: number;
-  committedDirY?: number;
-  distanceSinceCommit?: number;
-  reverseDriveState?: 'NORMAL' | 'TRANSITION_TO_REVERSE' | 'REVERSE_READY';
-  commitNoInputTimer?: number;
-  reverseTransitionActive?: boolean;
-  reverseTransitionTimer?: number;
-  pendingDirX?: number;
-  pendingDirY?: number;
-  directionCommitTimer?: number;
-  oppositeHoldTimer?: number;
-  carveLockTimer?: number;
-  carveSwitchCooldownTimer?: number;
-  carveSide?: -1 | 0 | 1;
-  movementPhase?: 'GLIDE' | 'CARVE_LEFT' | 'CARVE_RIGHT' | 'BRAKE';
-  startCommitTimer?: number;
-  startNoInputTimer?: number;
-  startupOppositeLockTimer?: number;
-  startupLatchActive?: boolean;
-  startupReleaseTimer?: number;
-  startDirX?: number;
-  startDirY?: number;
-  lastStableTravelAngle?: number;
-  lastRawInputAngle?: number;
-  antiFlipTimer?: number;
-  baseBodyAngle?: number;
-  bodyYawOffset?: number;
-  bodyTargetAngle?: number;
-  aimAngle?: number;
-  aimAngleRaw?: number;
-  stickAngVel?: number;
-  stickLocalAngle?: number;
-  prevHasInput?: boolean;
-  brakeAssistLeft?: number;
-  startLinearActive?: boolean;
-  stickSide?: -1 | 1;
-  chargeActive?: boolean;
-  stunLeft?: number;
-  debugSnapFactor?: number;
-  debugBrakeAssistActive?: boolean;
-  debugStartModeActive?: boolean;
-  debugVelForward?: number;
-  debugVelSide?: number;
-  debugStickDeltaDeg?: number;
-  debugStickAngVelDeg?: number;
-  debugStickAngVelClamped?: boolean;
-  debugStickTargetSlewActive?: boolean;
-  debugStickMode?: 'TAU' | 'SPRING' | 'APPROACH';
-  debugTargetAimAngle?: number;
-  debugRawInputAngle?: number;
-  debugDesiredMoveAngle?: number;
-  debugTurnIntentAngle?: number;
-  debugMoveTurnRateAppliedDeg?: number;
-  debugVelocityDesiredDeltaDeg?: number;
-  debugTurnResistance?: number;
-  debugRedirectAccelScale?: number;
-  debugAntiFlipActive?: boolean;
-  debugDesiredInputX?: number;
-  debugDesiredInputY?: number;
-  debugRequestedInputDirX?: number;
-  debugRequestedInputDirY?: number;
-  debugAppliedForwardForce?: number;
-  debugAppliedLateralForce?: number;
-  debugCommitTimer?: number;
-  debugOppositeHoldTimer?: number;
-  debugSteerDirX?: number;
-  debugSteerDirY?: number;
-  debugMinSteerSpeed?: number;
-  debugLowSpeedSteeringDisabled?: boolean;
-  debugLowSpeedStartupActive?: boolean;
-  debugTravelDirLocked?: boolean;
-  debugStartupLatchActive?: boolean;
-  debugLatchedInputIgnored?: boolean;
-  debugStartupReleaseTimer?: number;
-  debugStartCommitActive?: boolean;
-  debugStartCommitTimer?: number;
-  debugStartDirX?: number;
-  debugStartDirY?: number;
-  debugEffectiveStartDirX?: number;
-  debugEffectiveStartDirY?: number;
-  debugMovementPhase?: 'GLIDE' | 'CARVE_LEFT' | 'CARVE_RIGHT' | 'BRAKE';
-  debugCarveLockTimer?: number;
-  debugCarveSide?: -1 | 0 | 1;
-  debugSignedInputVsVelocityAngle?: number;
-  debugMajorDirectionChangeBlocked?: boolean;
-  debugBrakeActive?: boolean;
-  debugReverseTransitionActive?: boolean;
-  debugSharpRedirectGated?: boolean;
-  debugAngularCapDegPerSec?: number;
-  debugCommittedDriveAngle?: number;
-  debugDesiredDriveAngle?: number;
-  debugDriveCommitLocked?: boolean;
-  debugReverseState?: 'NORMAL' | 'TRANSITION_TO_REVERSE' | 'REVERSE_READY';
-  debugOppositeIntentBlocked?: boolean;
-  debugCommitUnlockReason?: 'NONE' | 'LOW_SPEED' | 'DISTANCE_RELAXED' | 'BRAKE_REVERSE_READY';
-  debugMinHeadingAuthorityActive?: boolean;
-  debugBaseBodyAngle?: number;
-  debugBodyYawOffset?: number;
-  debugBodyTurnInput?: number;
-  debugActiveBodyModel?: 'B' | 'C';
-};
 
 export const CLIENT_FIXED_DT = 1 / 60;
 
@@ -190,6 +83,9 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     bodyTargetAngle: state.bodyTargetAngle,
     bodyAngle: state.angle,
     heading: state.heading,
+    headingOmega: state.headingOmega,
+    desiredHeadingAngle: state.desiredHeadingAngle,
+    movementModelActive: state.movementModelActive,
     prevHasInput: state.prevHasInput,
     brakeAssistLeft: state.brakeAssistLeft,
     startLinearActive: state.startLinearActive,
@@ -245,6 +141,15 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     debugOppositeIntentBlocked: state.debugOppositeIntentBlocked,
     debugCommitUnlockReason: state.debugCommitUnlockReason,
     debugMinHeadingAuthorityActive: state.debugMinHeadingAuthorityActive,
+    debugMovementModel: state.debugMovementModel,
+    debugHeadingAngle: state.debugHeadingAngle,
+    debugHeadingOmega: state.debugHeadingOmega,
+    debugForwardSpeed: state.debugForwardSpeed,
+    debugLateralSpeed: state.debugLateralSpeed,
+    debugDesiredHeadingAngle: state.debugDesiredHeadingAngle,
+    debugHeadingErrorDeg: state.debugHeadingErrorDeg,
+    debugSteerInput: state.debugSteerInput,
+    debugThrottleInput: state.debugThrottleInput,
     debugChargeActive: state.chargeActive,
     debugBaseBodyAngle: state.debugBaseBodyAngle,
     debugBodyYawOffset: state.debugBodyYawOffset,
@@ -276,6 +181,9 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.vy = simState.vy;
   state.stamina = simState.stamina;
   state.heading = simState.heading;
+  state.headingOmega = simState.headingOmega;
+  state.desiredHeadingAngle = simState.desiredHeadingAngle;
+  state.movementModelActive = simState.movementModelActive;
   state.moveAngle = simState.moveAngle ?? state.moveAngle ?? state.angle;
   state.inputAngle = simState.inputAngle;
   state.desiredDirX = simState.desiredDirX;
@@ -379,6 +287,15 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.debugOppositeIntentBlocked = simState.debugOppositeIntentBlocked;
   state.debugCommitUnlockReason = simState.debugCommitUnlockReason;
   state.debugMinHeadingAuthorityActive = simState.debugMinHeadingAuthorityActive;
+  state.debugMovementModel = simState.debugMovementModel;
+  state.debugHeadingAngle = simState.debugHeadingAngle;
+  state.debugHeadingOmega = simState.debugHeadingOmega;
+  state.debugForwardSpeed = simState.debugForwardSpeed;
+  state.debugLateralSpeed = simState.debugLateralSpeed;
+  state.debugDesiredHeadingAngle = simState.debugDesiredHeadingAngle;
+  state.debugHeadingErrorDeg = simState.debugHeadingErrorDeg;
+  state.debugSteerInput = simState.debugSteerInput;
+  state.debugThrottleInput = simState.debugThrottleInput;
   state.chargeActive = !!simState.debugChargeActive;
   state.debugBaseBodyAngle = simState.debugBaseBodyAngle;
   state.debugBodyYawOffset = simState.debugBodyYawOffset;
@@ -449,6 +366,15 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     oppositeIntentBlocked: !!simState.debugOppositeIntentBlocked,
     commitUnlockReason: simState.debugCommitUnlockReason ?? 'NONE',
     minHeadingAuthorityActive: !!simState.debugMinHeadingAuthorityActive,
+    movementModel: simState.debugMovementModel ?? 'desiredHeadingTraction',
+    headingAngle: simState.debugHeadingAngle ?? simState.heading ?? 0,
+    headingOmega: simState.debugHeadingOmega ?? simState.headingOmega ?? 0,
+    forwardSpeedLocal: simState.debugForwardSpeed ?? 0,
+    lateralSpeedLocal: simState.debugLateralSpeed ?? 0,
+    desiredHeadingAngle: simState.debugDesiredHeadingAngle ?? simState.desiredHeadingAngle ?? simState.inputAngle ?? 0,
+    headingErrorDeg: simState.debugHeadingErrorDeg ?? 0,
+    steerInput: simState.debugSteerInput ?? 0,
+    throttleInput: simState.debugThrottleInput ?? 0,
     brakeActive: !!simState.debugBrakeActive,
     rawInputX: simState.debugRawInputX ?? input.moveX ?? 0,
     rawInputY: simState.debugRawInputY ?? input.moveY ?? 0,

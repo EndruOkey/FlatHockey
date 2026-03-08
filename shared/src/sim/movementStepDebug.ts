@@ -68,6 +68,15 @@ export function resetMovementDebugState(state: MovementStepState) {
   state.debugOppositeIntentBlocked = false;
   state.debugCommitUnlockReason = 'NONE';
   state.debugMinHeadingAuthorityActive = false;
+  state.debugMovementModel = 'desiredHeadingTraction';
+  state.debugHeadingAngle = 0;
+  state.debugHeadingOmega = 0;
+  state.debugForwardSpeed = 0;
+  state.debugLateralSpeed = 0;
+  state.debugDesiredHeadingAngle = 0;
+  state.debugHeadingErrorDeg = 0;
+  state.debugSteerInput = 0;
+  state.debugThrottleInput = 0;
   state.debugChargeActive = false;
   state.debugBaseBodyAngle = 0;
   state.debugBodyYawOffset = 0;

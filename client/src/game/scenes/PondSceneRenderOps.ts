@@ -337,6 +337,9 @@ export function updateOverlay(scene: any) {
   const v4StabilityLine = tuning.showAngleDiff
     ? `phase=${String(telemetry.movementPhase ?? 'GLIDE')} lowSteerOff=${telemetry.lowSpeedSteeringDisabled ? 'on' : 'off'} lowStart=${telemetry.lowSpeedStartupActive ? 'on' : 'off'} latch=${telemetry.startupLatchActive ? 'on' : 'off'} latchIgn=${telemetry.latchedInputIgnored ? 'on' : 'off'} latchRel=${(Number(telemetry.startupReleaseTimer ?? 0) * 1000).toFixed(0)}ms travelLock=${telemetry.travelDirLocked ? 'on' : 'off'} minSteer=${Number(telemetry.minSteerSpeed ?? 0).toFixed(1)} startCommit=${telemetry.startCommitActive ? 'on' : 'off'} startTimer=${(Number(telemetry.startCommitTimer ?? 0) * 1000).toFixed(0)}ms startDir=(${Number(telemetry.startDirX ?? 0).toFixed(2)}, ${Number(telemetry.startDirY ?? 0).toFixed(2)}) effStart=(${Number(telemetry.effectiveStartDirX ?? 0).toFixed(2)}, ${Number(telemetry.effectiveStartDirY ?? 0).toFixed(2)}) carveLock=${(Number(telemetry.carveLockTimer ?? 0) * 1000).toFixed(0)}ms carveSide=${Number(telemetry.carveSide ?? 0)} signed=${(Number(telemetry.signedInputVsVelocityAngle ?? 0) * 180 / Math.PI).toFixed(1)}deg commit=${(Number(telemetry.commitTimer ?? 0) * 1000).toFixed(0)}ms hold=${(Number(telemetry.oppositeHoldTimer ?? 0) * 1000).toFixed(0)}ms steerDir=(${Number(telemetry.steerDirX ?? 0).toFixed(2)}, ${Number(telemetry.steerDirY ?? 0).toFixed(2)})`
     : null;
+  const modelLine = tuning.showAngleDiff
+    ? `model=${String(telemetry.movementModel ?? 'desiredHeadingTraction')} heading=${(Number(telemetry.headingAngle ?? 0) * 180 / Math.PI).toFixed(1)}deg omega=${(Number(telemetry.headingOmega ?? 0) * 180 / Math.PI).toFixed(1)}deg/s fwd=${Number(telemetry.forwardSpeedLocal ?? 0).toFixed(1)} lat=${Number(telemetry.lateralSpeedLocal ?? 0).toFixed(1)} desired=${(Number(telemetry.desiredHeadingAngle ?? 0) * 180 / Math.PI).toFixed(1)} err=${Number(telemetry.headingErrorDeg ?? 0).toFixed(1)} steer=${Number(telemetry.steerInput ?? 0).toFixed(2)} throttle=${Number(telemetry.throttleInput ?? 0).toFixed(2)}`
+    : null;
 
   if (scene.debugEnabled) {
     scene.debugOverlay.setText([
@@ -362,6 +365,7 @@ export function updateOverlay(scene: any) {
       ...(bodyYawLine ? [bodyYawLine] : []),
       ...(stickLimitLine ? [stickLimitLine] : []),
       ...(v4StabilityLine ? [v4StabilityLine] : []),
+      ...(modelLine ? [modelLine] : []),
       ...(snapLine ? [snapLine] : []),
       ...(brakeAssistLine ? [brakeAssistLine] : []),
       ...(startModeLine ? [startModeLine] : []),
@@ -424,6 +428,15 @@ export function updateOverlay(scene: any) {
     turnResistance: Number(telemetry.turnResistance ?? 0),
     redirectAccelScale: Number(telemetry.redirectAccelScale ?? 1),
     antiFlipActive: Boolean(telemetry.antiFlipActive ?? false),
+    movementModel: String(telemetry.movementModel ?? 'desiredHeadingTraction'),
+    headingAngle: Number(telemetry.headingAngle ?? 0),
+    headingOmega: Number(telemetry.headingOmega ?? 0),
+    forwardSpeedLocal: Number(telemetry.forwardSpeedLocal ?? 0),
+    lateralSpeedLocal: Number(telemetry.lateralSpeedLocal ?? 0),
+    desiredHeadingAngle: Number(telemetry.desiredHeadingAngle ?? 0),
+    headingErrorDeg: Number(telemetry.headingErrorDeg ?? 0),
+    steerInput: Number(telemetry.steerInput ?? 0),
+    throttleInput: Number(telemetry.throttleInput ?? 0),
     appliedForwardForce: Number(telemetry.appliedForwardForce ?? 0),
     appliedLateralForce: Number(telemetry.appliedLateralForce ?? 0),
     edgeFactor: Number(telemetry.edgeFactor ?? 0),
@@ -468,7 +481,7 @@ export function updateHud(scene: any, dtSec: number) {
     `Build: ${BUILD_VERSION || 'dev-local'}`,
     `Seq/Ack: ${scene.seq}/${scene.ackSeq}`,
     `Pending: ${scene.pendingInputs.length}`,
-    'WASD move | SPACE brake | RMB charge/crosscheck | E/LMB shoot'
+    'WASD move | SPACE brake | RMB charge/crosscheck | E/LMB shoot | F8 model switch'
   ].join('\n');
   if (next !== scene.lastHudText) {
     scene.lastHudText = next;

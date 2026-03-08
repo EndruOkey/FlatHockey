@@ -42,6 +42,9 @@ export function runPondSceneUpdate(scene: any) {
     if (scene.replayEnabled) scene.stopReplay();
     else scene.startReplay();
   }
+  if (Phaser.Input.Keyboard.JustDown(scene.modelToggleKey)) {
+    scene.cycleMovementModel();
+  }
 
   if (scene.needsResync) {
     scene.needsResync = false;

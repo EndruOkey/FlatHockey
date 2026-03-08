@@ -29,6 +29,9 @@ type PlayerState = {
   vy: number;
   angle: number;
   moveAngle: number;
+  headingOmega: number;
+  desiredHeadingAngle: number;
+  movementModelActive: 'LEGACY' | 'V3' | 'V4' | 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION';
   inputAngle: number;
   desiredDirX: number;
   desiredDirY: number;
@@ -150,6 +153,9 @@ export class Room {
       vy: 0,
       angle: 0,
       moveAngle: 0,
+      headingOmega: 0,
+      desiredHeadingAngle: 0,
+      movementModelActive: 'DESIRED_HEADING_TRACTION',
       inputAngle: 0,
       desiredDirX: 1,
       desiredDirY: 0,
@@ -263,6 +269,9 @@ export class Room {
         aimAngleRaw: player.aimAngleRaw,
         stickAngVel: player.stickAngVel,
         moveAngle: player.moveAngle,
+        headingOmega: player.headingOmega,
+        desiredHeadingAngle: player.desiredHeadingAngle,
+        movementModelActive: player.movementModelActive,
         inputAngle: player.inputAngle,
         desiredDirX: player.desiredDirX,
         desiredDirY: player.desiredDirY,
@@ -333,6 +342,11 @@ export class Room {
       player.vy = state.vy;
       player.stamina = state.stamina;
       player.heading = state.heading;
+      player.headingOmega = Number.isFinite(state.headingOmega) ? state.headingOmega! : player.headingOmega;
+      player.desiredHeadingAngle = Number.isFinite(state.desiredHeadingAngle) ? state.desiredHeadingAngle! : player.desiredHeadingAngle;
+      player.movementModelActive = state.movementModelActive === 'LEGACY' || state.movementModelActive === 'V3' || state.movementModelActive === 'V4' || state.movementModelActive === 'SKATE_STEERING'
+        ? state.movementModelActive
+        : 'DESIRED_HEADING_TRACTION';
       player.moveAngle = Number.isFinite(state.moveAngle) ? state.moveAngle! : (Number.isFinite(player.heading) ? player.heading! : player.moveAngle);
       player.inputAngle = Number.isFinite(state.inputAngle) ? state.inputAngle! : player.inputAngle;
       player.desiredDirX = Number.isFinite(state.desiredDirX) ? state.desiredDirX! : player.desiredDirX;
@@ -424,6 +438,9 @@ export class Room {
         angle: p.angle,
         moveAngle: p.moveAngle,
         heading: p.heading,
+        headingOmega: p.headingOmega,
+        desiredHeadingAngle: p.desiredHeadingAngle,
+        movementModelActive: p.movementModelActive,
         inputAngle: p.inputAngle,
         desiredDirX: p.desiredDirX,
         desiredDirY: p.desiredDirY,

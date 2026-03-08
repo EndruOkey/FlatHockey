@@ -3,7 +3,7 @@ import { SIM_HZ, type InputMsg, PlayerStateMsg, ServerMessage, SnapshotMsg, wrap
 import { WsClient } from '../net/wsClient';
 import { Interpolator, lerpPlayer, type LerpPlayer } from '../net/interpolation';
 import { applyPredictedInput, CLIENT_FIXED_DT, type PredictedPlayerState, lastTelemetry, setAimInputRateLimited } from '../net/prediction';
-import { getTuning, getTuningApplyCount, usedTuning } from '../debug/movementTuning';
+import { getTuning, getTuningApplyCount, setTuningKey, usedTuning } from '../debug/movementTuning';
 import { NetDebugOverlay } from '../debug/netDebugOverlay';
 import { setNetDebugMetrics } from '../debug/netDebugState';
 import { setMovementDebugMetrics } from '../debug/devPanelTelemetryState';
@@ -95,6 +95,7 @@ export class PondScene extends Phaser.Scene {
   private debugToggleKey!: Phaser.Input.Keyboard.Key;
   private recorderToggleKey!: Phaser.Input.Keyboard.Key;
   private replayToggleKey!: Phaser.Input.Keyboard.Key;
+  private modelToggleKey!: Phaser.Input.Keyboard.Key;
   private debugEnabled = true;
   private debugOverlay!: Phaser.GameObjects.Text;
   private hud!: Phaser.GameObjects.Text;
@@ -151,8 +152,9 @@ export class PondScene extends Phaser.Scene {
   create() {
     this.drawBackground();
 
-    this.keys = this.input.keyboard!.addKeys('W,A,S,D,E,SPACE,F3,F9,F10') as Record<string, Phaser.Input.Keyboard.Key>;
+    this.keys = this.input.keyboard!.addKeys('W,A,S,D,E,SPACE,F3,F8,F9,F10') as Record<string, Phaser.Input.Keyboard.Key>;
     this.debugToggleKey = this.keys.F3;
+    this.modelToggleKey = this.keys.F8;
     this.recorderToggleKey = this.keys.F9;
     this.replayToggleKey = this.keys.F10;
 
@@ -443,6 +445,17 @@ export class PondScene extends Phaser.Scene {
 
   private updateHud(dtSec: number) {
     updateHudOp(this, dtSec);
+  }
+
+  cycleMovementModel() {
+    const current = getTuning().movementCoreModel === 'SKATE_STEERING' ? 'SKATE_STEERING' : 'DESIRED_HEADING_TRACTION';
+    const next = current === 'SKATE_STEERING' ? 'DESIRED_HEADING_TRACTION' : 'SKATE_STEERING';
+    setTuningKey('movementCoreModel', next);
+    this.ws.send({
+      type: 'debug:setMovementTuning',
+      config: { movementCoreModel: next }
+    });
+    console.log(`[MOVEMENT_MODEL] switched to ${next}`);
   }
   
   update(_time: number, _deltaMs: number) {

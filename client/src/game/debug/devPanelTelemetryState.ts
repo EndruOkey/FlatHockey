@@ -30,6 +30,15 @@ export type MovementDebugMetrics = {
   turnResistance: number;
   redirectAccelScale: number;
   antiFlipActive: boolean;
+  movementModel: string;
+  headingAngle: number;
+  headingOmega: number;
+  forwardSpeedLocal: number;
+  lateralSpeedLocal: number;
+  desiredHeadingAngle: number;
+  headingErrorDeg: number;
+  steerInput: number;
+  throttleInput: number;
   appliedForwardForce: number;
   appliedLateralForce: number;
   edgeFactor: number;
@@ -94,6 +103,15 @@ const DEFAULT_MOVEMENT: MovementDebugMetrics = {
   turnResistance: 0,
   redirectAccelScale: 1,
   antiFlipActive: false,
+  movementModel: 'desiredHeadingTraction',
+  headingAngle: 0,
+  headingOmega: 0,
+  forwardSpeedLocal: 0,
+  lateralSpeedLocal: 0,
+  desiredHeadingAngle: 0,
+  headingErrorDeg: 0,
+  steerInput: 0,
+  throttleInput: 0,
   appliedForwardForce: 0,
   appliedLateralForce: 0,
   edgeFactor: 0,

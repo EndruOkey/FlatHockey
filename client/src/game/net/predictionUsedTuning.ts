@@ -19,6 +19,13 @@ export function syncUsedTuning(config: MovementStepConfig) {
     usedTuning.turnHighSpeed = config.turnHighSpeed as any;
     usedTuning.turnRateBase = config.turnRateBase as any;
     usedTuning.turnRateSpeedScale = config.turnRateSpeedScale as any;
+    usedTuning.headingTurnRate = config.headingTurnRate as any;
+    usedTuning.headingTurnAccel = config.headingTurnAccel as any;
+    usedTuning.desiredHeadingTurnRate = config.desiredHeadingTurnRate as any;
+    usedTuning.desiredHeadingTurnAccel = config.desiredHeadingTurnAccel as any;
+    usedTuning.brakeForce = config.brakeForce as any;
+    usedTuning.forwardDamping = config.forwardDamping as any;
+    usedTuning.headingResponseCurve = config.headingResponseCurve as any;
     usedTuning.edgeTurnBonusMax = config.edgeTurnBonusMax as any;
     usedTuning.brakeTurnBonusValue = config.brakeTurnBonusValue as any;
     usedTuning.brakeTurnMult = config.brakeTurnMult as any;

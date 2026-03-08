@@ -12,9 +12,18 @@ export function ensureMovementStateBase(state: MovementStepState) {
     state.desiredDirX = Math.cos(state.moveAngle!);
     state.desiredDirY = Math.sin(state.moveAngle!);
   }
+  if (!Number.isFinite(state.desiredHeadingAngle)) {
+    state.desiredHeadingAngle = state.moveAngle;
+  }
   if (!Number.isFinite(state.committedDirX) || !Number.isFinite(state.committedDirY)) {
     state.committedDirX = state.desiredDirX;
     state.committedDirY = state.desiredDirY;
+  }
+  if (!Number.isFinite(state.headingOmega)) {
+    state.headingOmega = 0;
+  }
+  if (state.movementModelActive !== 'LEGACY' && state.movementModelActive !== 'V3' && state.movementModelActive !== 'V4' && state.movementModelActive !== 'SKATE_STEERING' && state.movementModelActive !== 'DESIRED_HEADING_TRACTION') {
+    state.movementModelActive = 'DESIRED_HEADING_TRACTION';
   }
   if (!Number.isFinite(state.distanceSinceCommit)) {
     state.distanceSinceCommit = 0;
