@@ -26,6 +26,8 @@ export function resetMovementDebugState(state: MovementStepState) {
   state.debugAntiFlipActive = false;
   state.debugDesiredInputX = 0;
   state.debugDesiredInputY = 0;
+  state.debugRequestedInputDirX = 0;
+  state.debugRequestedInputDirY = 0;
   state.debugRawInputX = 0;
   state.debugRawInputY = 0;
   state.debugFilteredInputX = 0;
@@ -54,6 +56,8 @@ export function resetMovementDebugState(state: MovementStepState) {
   state.debugCarveLockTimer = 0;
   state.debugCarveSide = 0;
   state.debugSignedInputVsVelocityAngle = 0;
+  state.debugMajorDirectionChangeBlocked = false;
+  state.debugBrakeActive = false;
   state.debugChargeActive = false;
   state.debugBaseBodyAngle = 0;
   state.debugBodyYawOffset = 0;

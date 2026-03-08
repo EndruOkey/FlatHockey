@@ -27,6 +27,7 @@ export type PlayerStateMsg = {
   desiredDirY?: number;
   committedDirX?: number;
   committedDirY?: number;
+  distanceSinceCommit?: number;
   pendingDirX?: number;
   pendingDirY?: number;
   directionCommitTimer?: number;

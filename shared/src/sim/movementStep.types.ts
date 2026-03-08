@@ -20,6 +20,8 @@ export type MovementStepState = {
   desiredDirY?: number;
   committedDirX?: number;
   committedDirY?: number;
+  distanceSinceCommit?: number;
+  commitNoInputTimer?: number;
   pendingDirX?: number;
   pendingDirY?: number;
   directionCommitTimer?: number;
@@ -67,6 +69,8 @@ export type MovementStepState = {
   debugAntiFlipActive?: boolean;
   debugDesiredInputX?: number;
   debugDesiredInputY?: number;
+  debugRequestedInputDirX?: number;
+  debugRequestedInputDirY?: number;
   debugRawInputX?: number;
   debugRawInputY?: number;
   debugFilteredInputX?: number;
@@ -95,6 +99,8 @@ export type MovementStepState = {
   debugCarveLockTimer?: number;
   debugCarveSide?: -1 | 0 | 1;
   debugSignedInputVsVelocityAngle?: number;
+  debugMajorDirectionChangeBlocked?: boolean;
+  debugBrakeActive?: boolean;
   debugChargeActive?: boolean;
   debugBaseBodyAngle?: number;
   debugBodyYawOffset?: number;
@@ -185,6 +191,9 @@ export type MovementStepConfig = {
   startupLatchReleaseSpeed?: number;
   startupReleaseMs?: number;
   minTravelDirSpeed?: number;
+  minCommitDistance?: number;
+  directionChangeThresholdDeg?: number;
+  brakeCommitDistanceMul?: number;
   chargeSpeedMul?: number;
   chargeAccelMul?: number;
   chargeTurnMul?: number;

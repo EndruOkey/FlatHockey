@@ -33,6 +33,8 @@ type PlayerState = {
   desiredDirY: number;
   committedDirX: number;
   committedDirY: number;
+  distanceSinceCommit: number;
+  commitNoInputTimer: number;
   pendingDirX: number;
   pendingDirY: number;
   directionCommitTimer: number;
@@ -171,6 +173,8 @@ export class Room {
       desiredDirY: 0,
       committedDirX: 1,
       committedDirY: 0,
+      distanceSinceCommit: 0,
+      commitNoInputTimer: 0,
       pendingDirX: 1,
       pendingDirY: 0,
       directionCommitTimer: 0,
@@ -279,6 +283,8 @@ export class Room {
         desiredDirY: player.desiredDirY,
         committedDirX: player.committedDirX,
         committedDirY: player.committedDirY,
+        distanceSinceCommit: player.distanceSinceCommit,
+        commitNoInputTimer: player.commitNoInputTimer,
         pendingDirX: player.pendingDirX,
         pendingDirY: player.pendingDirY,
         directionCommitTimer: player.directionCommitTimer,
@@ -345,6 +351,8 @@ export class Room {
       player.desiredDirY = Number.isFinite(state.desiredDirY) ? state.desiredDirY! : player.desiredDirY;
       player.committedDirX = Number.isFinite(state.committedDirX) ? state.committedDirX! : player.committedDirX;
       player.committedDirY = Number.isFinite(state.committedDirY) ? state.committedDirY! : player.committedDirY;
+      player.distanceSinceCommit = Number.isFinite(state.distanceSinceCommit) ? state.distanceSinceCommit! : player.distanceSinceCommit;
+      player.commitNoInputTimer = Number.isFinite(state.commitNoInputTimer) ? state.commitNoInputTimer! : player.commitNoInputTimer;
       player.pendingDirX = Number.isFinite(state.pendingDirX) ? state.pendingDirX! : player.pendingDirX;
       player.pendingDirY = Number.isFinite(state.pendingDirY) ? state.pendingDirY! : player.pendingDirY;
       player.directionCommitTimer = Number.isFinite(state.directionCommitTimer) ? state.directionCommitTimer! : player.directionCommitTimer;
@@ -428,6 +436,7 @@ export class Room {
         desiredDirY: p.desiredDirY,
         committedDirX: p.committedDirX,
         committedDirY: p.committedDirY,
+        distanceSinceCommit: p.distanceSinceCommit,
         pendingDirX: p.pendingDirX,
         pendingDirY: p.pendingDirY,
         directionCommitTimer: p.directionCommitTimer,

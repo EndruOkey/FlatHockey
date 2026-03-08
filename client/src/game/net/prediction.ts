@@ -19,6 +19,8 @@ export type PredictedPlayerState = PlayerStateMsg & {
   desiredDirY?: number;
   committedDirX?: number;
   committedDirY?: number;
+  distanceSinceCommit?: number;
+  commitNoInputTimer?: number;
   pendingDirX?: number;
   pendingDirY?: number;
   directionCommitTimer?: number;
@@ -71,6 +73,8 @@ export type PredictedPlayerState = PlayerStateMsg & {
   debugAntiFlipActive?: boolean;
   debugDesiredInputX?: number;
   debugDesiredInputY?: number;
+  debugRequestedInputDirX?: number;
+  debugRequestedInputDirY?: number;
   debugAppliedForwardForce?: number;
   debugAppliedLateralForce?: number;
   debugCommitTimer?: number;
@@ -94,6 +98,8 @@ export type PredictedPlayerState = PlayerStateMsg & {
   debugCarveLockTimer?: number;
   debugCarveSide?: -1 | 0 | 1;
   debugSignedInputVsVelocityAngle?: number;
+  debugMajorDirectionChangeBlocked?: boolean;
+  debugBrakeActive?: boolean;
   debugBaseBodyAngle?: number;
   debugBodyYawOffset?: number;
   debugBodyTurnInput?: number;
@@ -142,6 +148,8 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     desiredDirY: state.desiredDirY,
     committedDirX: state.committedDirX,
     committedDirY: state.committedDirY,
+    distanceSinceCommit: state.distanceSinceCommit,
+    commitNoInputTimer: state.commitNoInputTimer,
     pendingDirX: state.pendingDirX,
     pendingDirY: state.pendingDirY,
     directionCommitTimer: state.directionCommitTimer,
@@ -190,6 +198,8 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     debugAntiFlipActive: state.debugAntiFlipActive,
     debugDesiredInputX: state.debugDesiredInputX,
     debugDesiredInputY: state.debugDesiredInputY,
+    debugRequestedInputDirX: state.debugRequestedInputDirX,
+    debugRequestedInputDirY: state.debugRequestedInputDirY,
     debugAppliedForwardForce: state.debugAppliedForwardForce,
     debugAppliedLateralForce: state.debugAppliedLateralForce,
     debugCommitTimer: state.debugCommitTimer,
@@ -206,6 +216,8 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     debugCarveLockTimer: state.debugCarveLockTimer,
     debugCarveSide: state.debugCarveSide,
     debugSignedInputVsVelocityAngle: state.debugSignedInputVsVelocityAngle,
+    debugMajorDirectionChangeBlocked: state.debugMajorDirectionChangeBlocked,
+    debugBrakeActive: state.debugBrakeActive,
     debugChargeActive: state.chargeActive,
     debugBaseBodyAngle: state.debugBaseBodyAngle,
     debugBodyYawOffset: state.debugBodyYawOffset,
@@ -243,6 +255,8 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.desiredDirY = simState.desiredDirY;
   state.committedDirX = simState.committedDirX;
   state.committedDirY = simState.committedDirY;
+  state.distanceSinceCommit = simState.distanceSinceCommit;
+  state.commitNoInputTimer = simState.commitNoInputTimer;
   state.pendingDirX = simState.pendingDirX;
   state.pendingDirY = simState.pendingDirY;
   state.directionCommitTimer = simState.directionCommitTimer;
@@ -298,6 +312,8 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.debugAntiFlipActive = simState.debugAntiFlipActive;
   state.debugDesiredInputX = simState.debugDesiredInputX;
   state.debugDesiredInputY = simState.debugDesiredInputY;
+  state.debugRequestedInputDirX = simState.debugRequestedInputDirX;
+  state.debugRequestedInputDirY = simState.debugRequestedInputDirY;
   state.debugAppliedForwardForce = simState.debugAppliedForwardForce;
   state.debugAppliedLateralForce = simState.debugAppliedLateralForce;
   state.debugCommitTimer = simState.debugCommitTimer;
@@ -321,6 +337,8 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.debugCarveLockTimer = simState.debugCarveLockTimer;
   state.debugCarveSide = simState.debugCarveSide;
   state.debugSignedInputVsVelocityAngle = simState.debugSignedInputVsVelocityAngle;
+  state.debugMajorDirectionChangeBlocked = simState.debugMajorDirectionChangeBlocked;
+  state.debugBrakeActive = simState.debugBrakeActive;
   state.chargeActive = !!simState.debugChargeActive;
   state.debugBaseBodyAngle = simState.debugBaseBodyAngle;
   state.debugBodyYawOffset = simState.debugBodyYawOffset;
@@ -373,6 +391,13 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     antiFlipActive: !!simState.debugAntiFlipActive,
     desiredInputX: simState.debugDesiredInputX ?? 0,
     desiredInputY: simState.debugDesiredInputY ?? 0,
+    requestedInputDirX: simState.debugRequestedInputDirX ?? simState.debugFilteredInputX ?? 0,
+    requestedInputDirY: simState.debugRequestedInputDirY ?? simState.debugFilteredInputY ?? 0,
+    committedDirX: simState.committedDirX ?? 0,
+    committedDirY: simState.committedDirY ?? 0,
+    distanceSinceCommit: simState.distanceSinceCommit ?? 0,
+    majorDirectionChangeBlocked: !!simState.debugMajorDirectionChangeBlocked,
+    brakeActive: !!simState.debugBrakeActive,
     rawInputX: simState.debugRawInputX ?? input.moveX ?? 0,
     rawInputY: simState.debugRawInputY ?? input.moveY ?? 0,
     filteredInputX: simState.debugFilteredInputX ?? simState.debugDesiredInputX ?? 0,
@@ -449,6 +474,9 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     usedTuning.startupLatchReleaseSpeed = config.startupLatchReleaseSpeed as any;
     usedTuning.startupReleaseMs = config.startupReleaseMs as any;
     usedTuning.minTravelDirSpeed = config.minTravelDirSpeed as any;
+    usedTuning.minCommitDistance = config.minCommitDistance as any;
+    usedTuning.directionChangeThresholdDeg = config.directionChangeThresholdDeg as any;
+    usedTuning.brakeCommitDistanceMul = config.brakeCommitDistanceMul as any;
     usedTuning.startCommitSpeed = config.startCommitSpeed as any;
     usedTuning.startCommitMs = config.startCommitMs as any;
     usedTuning.startInputThreshold = config.startInputThreshold as any;

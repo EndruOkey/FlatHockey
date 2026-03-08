@@ -44,9 +44,17 @@ export function applyMovementStep(
     state.committedDirX = state.desiredDirX;
     state.committedDirY = state.desiredDirY;
   }
+  if (!Number.isFinite(state.distanceSinceCommit)) {
+    state.distanceSinceCommit = 0;
+  }
+  if (!Number.isFinite(state.commitNoInputTimer)) {
+    state.commitNoInputTimer = 0;
+  }
   if (!Number.isFinite(state.pendingDirX) || !Number.isFinite(state.pendingDirY)) {
     state.pendingDirX = state.desiredDirX;
     state.pendingDirY = state.desiredDirY;
+    state.distanceSinceCommit = 0;
+    state.commitNoInputTimer = 0;
   }
   if (!Number.isFinite(state.heading)) {
     state.heading = state.moveAngle;
@@ -231,6 +239,8 @@ export function applyMovementStep(
     state.committedDirY = state.desiredDirY;
     state.pendingDirX = state.desiredDirX;
     state.pendingDirY = state.desiredDirY;
+    state.distanceSinceCommit = 0;
+    state.commitNoInputTimer = 0;
     state.antiFlipTimer = 0;
     state.directionCommitTimer = 0;
     state.oppositeHoldTimer = 0;
