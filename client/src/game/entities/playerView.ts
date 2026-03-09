@@ -20,6 +20,7 @@ export class PlayerView {
   baseRot = 0;
   aimRot = 0;
   moveRot = 0;
+  speed = 0;
   private stickVisualRot = 0;
   private stickDrawRot = 0;
   private leanPx = 0;
@@ -138,13 +139,14 @@ export class PlayerView {
     g.destroy();
   }
 
-  setState(x: number, y: number, rot: number, aimRot?: number, moveRot?: number, baseRot?: number) {
+  setState(x: number, y: number, rot: number, aimRot?: number, moveRot?: number, baseRot?: number, speed?: number) {
     this.x = x;
     this.y = y;
     this.rot = rot;
     this.baseRot = typeof baseRot === 'number' ? baseRot : rot;
     this.aimRot = typeof aimRot === 'number' ? aimRot : rot;
     this.moveRot = typeof moveRot === 'number' ? moveRot : rot;
+    this.speed = typeof speed === 'number' && Number.isFinite(speed) ? Math.max(0, speed) : 0;
   }
 
   setHandedness(handedness: 'L' | 'R') {
@@ -284,7 +286,9 @@ export class PlayerView {
     const edgeAngle = PlayerView.wrapToPi(this.baseRot - this.moveRot);
     const leanMaxAngleRad = Math.max(0.001, (this.visualLeanMaxAngleDeg * Math.PI) / 180);
     const edgeNorm = PlayerView.clamp(edgeAngle / leanMaxAngleRad, -1, 1);
-    const targetLeanPx = this.visualLeanEnabled ? (edgeNorm * this.visualLeanMaxPx) : 0;
+    const leanMinSpeed = 8;
+    const allowLean = this.visualLeanEnabled && this.speed > leanMinSpeed;
+    const targetLeanPx = allowLean ? (edgeNorm * this.visualLeanMaxPx) : 0;
     const omega = 2 / Math.max(0.001, this.visualLeanTauMs / 1000);
     const springK = omega * omega;
     const springC = 2 * this.visualLeanDampingRatio * omega;

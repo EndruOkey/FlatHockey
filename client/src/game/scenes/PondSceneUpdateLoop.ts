@@ -89,7 +89,8 @@ export function runPondSceneUpdate(scene: any) {
         rot: scene.predicted.angle,
         aimRot: scene.predicted.aimAngle ?? scene.predicted.angle,
         moveRot: scene.predicted.moveAngle ?? scene.predicted.angle,
-        baseRot: scene.predicted.baseBodyAngle ?? scene.predicted.angle
+        baseRot: scene.predicted.baseBodyAngle ?? scene.predicted.angle,
+        speed: Math.hypot(scene.predicted.vx ?? 0, scene.predicted.vy ?? 0)
       }, simStepTime);
       scene.ws.send(input);
       scene.inputsSentTimesMs.push(simStepTime);
@@ -117,7 +118,8 @@ export function runPondSceneUpdate(scene: any) {
           rot: scene.predicted.angle,
           aimRot: scene.predicted.aimAngle ?? scene.predicted.angle,
           moveRot: scene.predicted.moveAngle ?? scene.predicted.angle,
-          baseRot: scene.predicted.baseBodyAngle ?? scene.predicted.angle
+          baseRot: scene.predicted.baseBodyAngle ?? scene.predicted.angle,
+          speed: Math.hypot(scene.predicted.vx ?? 0, scene.predicted.vy ?? 0)
         };
       }
       if (state) {
@@ -132,6 +134,7 @@ export function runPondSceneUpdate(scene: any) {
           scene.localRenderState.aimRot = scene.lerpAngle(scene.localRenderState.aimRot ?? state.aimRot ?? state.rot, state.aimRot ?? state.rot, alpha);
           scene.localRenderState.moveRot = scene.lerpAngle(scene.localRenderState.moveRot ?? state.moveRot ?? state.rot, state.moveRot ?? state.rot, alpha);
           scene.localRenderState.baseRot = scene.lerpAngle(scene.localRenderState.baseRot ?? state.baseRot ?? state.rot, state.baseRot ?? state.rot, alpha);
+          scene.localRenderState.speed = (scene.localRenderState.speed ?? 0) + ((state.speed ?? 0) - (scene.localRenderState.speed ?? 0)) * alpha;
         }
         state = scene.localRenderState;
       }
@@ -141,7 +144,15 @@ export function runPondSceneUpdate(scene: any) {
     }
     if (!state) continue;
     const s = scene.worldToScreen(state.x, state.y);
-    view.setState(s.x, s.y, state.rot, state.aimRot ?? state.rot, state.moveRot ?? state.rot, state.baseRot ?? state.rot);
+    view.setState(
+      s.x,
+      s.y,
+      state.rot,
+      state.aimRot ?? state.rot,
+      state.moveRot ?? state.rot,
+      state.baseRot ?? state.rot,
+      state.speed ?? 0
+    );
     view.setVisualLeanConfig({
       enabled: Boolean(tuning.visualLeanEnabled ?? true),
       maxPx: Number(tuning.visualLeanMaxPx ?? 6),

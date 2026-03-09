@@ -87,7 +87,15 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
         scene.predicted = { ...p };
         scene.pendingInputs = [];
         scene.localBuffer.clear();
-        scene.localBuffer.push({ x: p.x, y: p.y, rot: p.angle, aimRot: p.aimAngle, moveRot: p.moveAngle, baseRot: p.baseBodyAngle ?? p.angle }, now);
+        scene.localBuffer.push({
+          x: p.x,
+          y: p.y,
+          rot: p.angle,
+          aimRot: p.aimAngle,
+          moveRot: p.moveAngle,
+          baseRot: p.baseBodyAngle ?? p.angle,
+          speed: Math.hypot(p.vx ?? 0, p.vy ?? 0)
+        }, now);
       } else {
         reconcilePrediction(scene.predicted, p, scene.ackSeq, scene.pendingInputs);
         scene.localBuffer.push({
@@ -96,7 +104,8 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
           rot: scene.predicted.angle,
           aimRot: scene.predicted.aimAngle ?? scene.predicted.angle,
           moveRot: scene.predicted.moveAngle ?? scene.predicted.angle,
-          baseRot: scene.predicted.baseBodyAngle ?? scene.predicted.angle
+          baseRot: scene.predicted.baseBodyAngle ?? scene.predicted.angle,
+          speed: Math.hypot(scene.predicted.vx ?? 0, scene.predicted.vy ?? 0)
         }, now);
       }
     } else {
@@ -106,7 +115,15 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
         continue;
       }
       scene.remoteLastSnapshotTick.set(p.id, snapshot.serverTick);
-      scene.remoteInterpolators.get(p.id)?.push({ x: p.x, y: p.y, rot: p.angle, aimRot: p.aimAngle, moveRot: p.moveAngle, baseRot: p.baseBodyAngle ?? p.angle }, serverTimeMs);
+      scene.remoteInterpolators.get(p.id)?.push({
+        x: p.x,
+        y: p.y,
+        rot: p.angle,
+        aimRot: p.aimAngle,
+        moveRot: p.moveAngle,
+        baseRot: p.baseBodyAngle ?? p.angle,
+        speed: Math.hypot(p.vx ?? 0, p.vy ?? 0)
+      }, serverTimeMs);
     }
   }
 
