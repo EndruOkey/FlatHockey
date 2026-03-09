@@ -45,7 +45,8 @@ export function applyHeadingTractionStep(
   const throttle = input.throttle;
   const steer = input.steer;
   const brake = !!input.brake;
-  const steerOnlyStandstill = throttle === 0 && !brake && Math.abs(steer) > 0 && state.speed <= standstillEpsilon;
+  const steerOnlyNoDrive = throttle === 0 && !brake && Math.abs(steer) > 0;
+  const steerOnlyStandstill = steerOnlyNoDrive && state.speed <= standstillEpsilon;
 
   const targetOmega = steer * turnRate * (brake ? brakeTurnMult : 1);
   state.headingOmega = approachScalar(state.headingOmega, targetOmega, turnAccel * simDt);
@@ -58,6 +59,12 @@ export function applyHeadingTractionStep(
 
   let forwardSpeed = state.vx * fwdX + state.vy * fwdY;
   let lateralSpeed = state.vx * rightX + state.vy * rightY;
+
+  if (steerOnlyNoDrive) {
+    // Hard invariant: A/D alone is pure rotation, never translation.
+    forwardSpeed = 0;
+    lateralSpeed = 0;
+  }
 
   if (throttle > 0) {
     forwardSpeed += forwardAccel * simDt;
@@ -87,6 +94,12 @@ export function applyHeadingTractionStep(
   state.vx = fwdX * forwardSpeed + rightX * lateralSpeed;
   state.vy = fwdY * forwardSpeed + rightY * lateralSpeed;
   state.speed = Math.hypot(state.vx, state.vy);
+
+  if (steerOnlyNoDrive) {
+    state.vx = 0;
+    state.vy = 0;
+    state.speed = 0;
+  }
 
   if (state.speed <= standstillEpsilon) {
     state.vx = 0;
