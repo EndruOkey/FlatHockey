@@ -8,6 +8,15 @@ const FIXED_STEP_MS = 1000 / 60;
 const MAX_SIM_STEPS_PER_FRAME = 3;
 const DT_CLAMP_MS = 34;
 const HITCH_MS = 150;
+const VISUAL_STANDSTILL_EPS = 8;
+
+function isStandstillSteerOnly(isLocalPlayer: boolean, speed: number, input: any): boolean {
+  if (!isLocalPlayer || !input) return false;
+  return speed <= VISUAL_STANDSTILL_EPS
+    && (input.throttle ?? 0) === 0
+    && (input.brake ?? 0) === 0
+    && Math.abs(input.steer ?? 0) > 0;
+}
 
 export function runPondSceneUpdate(scene: any) {
   const now = performance.now();
@@ -113,8 +122,6 @@ export function runPondSceneUpdate(scene: any) {
     let state: any = null;
     if (scene.clientId && id === scene.clientId) {
       const lastInput = scene.lastInputForRender;
-      const steerOnlyNoBrake = !!lastInput && (lastInput.throttle ?? 0) === 0 && (lastInput.brake ?? 0) === 0 && Math.abs(lastInput.steer ?? 0) > 0;
-      const visualStandstillEpsilon = 8;
       state = scene.localBuffer.latest()?.value ?? null;
       if (!state && scene.predicted) {
         state = {
@@ -129,7 +136,7 @@ export function runPondSceneUpdate(scene: any) {
       }
       if (state) {
         const stateSpeed = Math.max(0, state.speed ?? 0);
-        const standstillSteerLock = steerOnlyNoBrake && stateSpeed <= visualStandstillEpsilon;
+        const standstillSteerLock = isStandstillSteerOnly(true, stateSpeed, lastInput);
         if (!scene.localRenderState) {
           scene.localRenderState = { ...state };
         } else {
@@ -191,7 +198,7 @@ export function runPondSceneUpdate(scene: any) {
     if (scene.standstillTrace && scene.clientId && id === scene.clientId) {
       const input = scene.lastInputForRender;
       const speed = Math.hypot(scene.predicted?.vx ?? 0, scene.predicted?.vy ?? 0);
-      const steerOnlyNoBrake = !!input && (input.throttle ?? 0) === 0 && (input.brake ?? 0) === 0 && Math.abs(input.steer ?? 0) > 0;
+      const steerOnlyNoBrake = isStandstillSteerOnly(true, speed, input);
       if (steerOnlyNoBrake) {
         scene.standstillTraceTick += 1;
         if (scene.standstillTraceTick % 6 === 0) {

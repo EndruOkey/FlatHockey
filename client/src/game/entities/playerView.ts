@@ -307,15 +307,19 @@ export class PlayerView {
     this.leanVel += (leanErr * springK - this.leanVel * springC) * safeDt;
     this.leanPx += this.leanVel * safeDt;
 
-    const gripLocalBase = this.getActiveHandLocalInRoot();
+    const gripLocalBase = this.standstillSteerLock ? { x: 0, y: 0 } : this.getActiveHandLocalInRoot();
     const supportDist = Math.max(6, stickLen * PlayerView.SUPPORT_HAND_DIST_RATIO);
 
     // Update order: player root position -> body rotation -> stick rotation.
     this.playerRoot.setPosition(this.x, this.y);
     const rightX = Math.cos(this.rot + Math.PI / 2);
     const rightY = Math.sin(this.rot + Math.PI / 2);
-    const bodyLeanX = rightX * this.leanPx;
-    const bodyLeanY = rightY * this.leanPx;
+    const bodyLeanX = this.standstillSteerLock ? 0 : rightX * this.leanPx;
+    const bodyLeanY = this.standstillSteerLock ? 0 : rightY * this.leanPx;
+    if (this.standstillSteerLock) {
+      this.leanPx = 0;
+      this.leanVel = 0;
+    }
     this.bodyRig.setPosition(bodyLeanX, bodyLeanY);
     this.bodyRig.rotation = this.getBodyRenderRotation();
     const stickBaseLocalOffset = this.standstillSteerLock
@@ -327,15 +331,23 @@ export class PlayerView {
     const sinInv = Math.sin(-bodyRenderRot);
     const handDeltaLocalX = stickBaseLocalOffset.x * cosInv - stickBaseLocalOffset.y * sinInv;
     const handDeltaLocalY = stickBaseLocalOffset.x * sinInv + stickBaseLocalOffset.y * cosInv;
-    this.leadHandSprite.setPosition(
-      handSocket.x + handDeltaLocalX,
-      handSocket.y + handDeltaLocalY
-    );
+    if (this.standstillSteerLock) {
+      this.leadHandSprite.setPosition(handSocket.x, handSocket.y);
+    } else {
+      this.leadHandSprite.setPosition(
+        handSocket.x + handDeltaLocalX,
+        handSocket.y + handDeltaLocalY
+      );
+    }
     const gripLocal = {
       x: gripLocalBase.x + bodyLeanX,
       y: gripLocalBase.y + bodyLeanY
     };
-    this.stickRoot.setPosition(gripLocal.x + stickBaseLocalOffset.x, gripLocal.y + stickBaseLocalOffset.y);
+    if (this.standstillSteerLock) {
+      this.stickRoot.setPosition(0, 0);
+    } else {
+      this.stickRoot.setPosition(gripLocal.x + stickBaseLocalOffset.x, gripLocal.y + stickBaseLocalOffset.y);
+    }
     this.stickRoot.rotation = stickDrawRot;
     this.supportHandSprite.setPosition(supportDist - stickOffsetX, PlayerView.SUPPORT_HAND_Y_OFFSET - stickOffsetY);
 
