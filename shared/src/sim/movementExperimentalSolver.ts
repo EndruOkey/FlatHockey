@@ -55,6 +55,7 @@ export function applyHeadingTractionStep(args: ExperimentalStepArgs): Experiment
   const steer = input.steer;
   const throttle = input.throttle;
   const brakeActive = !!input.brake;
+  const prevSpeed = Math.hypot(state.vx, state.vy);
 
   const turnRate = Math.max(0, config.desiredHeadingTurnRate ?? MOVEMENT_DEFAULTS.desiredHeadingTurnRate ?? 7.2);
   const turnAccel = Math.max(0, config.desiredHeadingTurnAccel ?? MOVEMENT_DEFAULTS.desiredHeadingTurnAccel ?? 32);
@@ -104,6 +105,15 @@ export function applyHeadingTractionStep(args: ExperimentalStepArgs): Experiment
 
   state.vx = forwardX * forwardSpeed + rightX * lateralSpeed;
   state.vy = forwardY * forwardSpeed + rightY * lateralSpeed;
+  // Hard invariant: steering-only input may rotate heading, but must never inject speed.
+  if (throttle === 0 && !brakeActive) {
+    const speedNow = Math.hypot(state.vx, state.vy);
+    if (speedNow > prevSpeed + 1e-6) {
+      const scale = prevSpeed > 1e-6 ? prevSpeed / speedNow : 0;
+      state.vx *= scale;
+      state.vy *= scale;
+    }
+  }
   state.x += state.vx * dt;
   state.y += state.vy * dt;
 
