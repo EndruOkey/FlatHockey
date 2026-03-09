@@ -14,17 +14,13 @@ export function handleServerMessage(scene: any, msg: ServerMessage | { type?: st
     message?: string;
     clientId?: string;
     roomId?: string;
-    movementTuning?: unknown;
-    allowTuningSync?: unknown;
   };
 
   if (m.type === 'welcome' || m.type === 'net:welcome') {
     scene.applyWelcomeLike({
       clientId: String(m.clientId ?? ''),
       roomId: typeof m.roomId === 'string' ? m.roomId : undefined,
-      room: typeof m.room === 'string' ? m.room : undefined,
-      movementTuning: m.movementTuning,
-      allowTuningSync: !!m.allowTuningSync
+      room: typeof m.room === 'string' ? m.room : undefined
     });
     return;
   }
@@ -147,7 +143,7 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
 
 export function buildClientInput(scene: any): InputMsg {
   const tuning = getTuning();
-  const throttle = ((scene.keys.W.isDown ? 1 : 0) - (scene.keys.S.isDown ? 1 : 0)) as -1 | 0 | 1;
+  const throttle = (scene.keys.W.isDown ? 1 : 0) as -1 | 0 | 1;
   const steer = ((scene.keys.D.isDown ? 1 : 0) - (scene.keys.A.isDown ? 1 : 0)) as -1 | 0 | 1;
   const aimAngle = scene.computeMouseAimAngle(CLIENT_FIXED_DT, tuning);
   if (typeof aimAngle === 'number' && Number.isFinite(aimAngle)) {
@@ -160,7 +156,7 @@ export function buildClientInput(scene: any): InputMsg {
     seq: ++scene.seq,
     throttle,
     steer,
-    brake: scene.keys.SPACE.isDown ? 1 : 0,
+    brake: (scene.keys.S.isDown || scene.keys.SPACE.isDown) ? 1 : 0,
     shoot: 0,
     aimAngle
   };

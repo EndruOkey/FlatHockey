@@ -9,17 +9,26 @@ export const MOVEMENT_DEFAULTS: MovementTuning = {
   forwardAccel: 1681.36,
   maxForwardSpeed: 342.5,
   maxReverseSpeed: 120,
-  turnRate: 7.2,
+  turnRate: 4.5,
   turnAccel: 32,
   brakeTurnMult: 1.8,
   brakeDecel: 950,
   coastDecel: 260,
-  forwardDrag: 1.45,
-  lateralDrag: 7.2,
-  brakeLateralDrag: 12,
+  forwardDrag: 1.2,
+  lateralDrag: 6.0,
+  brakeLateralDrag: 18,
   reverseGateSpeed: 45,
   reverseAccelMul: 0.35,
   standstillSpeedEpsilon: 8,
+  ...({
+    headingModeEnabled: true,
+    maxTurnRateLowSpeed: 4.5,
+    maxTurnRateHighSpeed: 3.2,
+    lateralDamping: 6.0,
+    brakeDrag: 18,
+    dragIdle: 3.5,
+    dragMove: 1.2
+  } as Partial<MovementTuning>),
 
   // Max speed aliases used by server/client HUD helpers.
   maxSpeed: 342.5,
@@ -53,6 +62,13 @@ export const MOVEMENT_DEFAULTS: MovementTuning = {
   stickVisualLagMaxDeg: 0,
   drawStickTarget: false,
   drawStickHitbox: false,
+  ...({
+    stickUseSpring: false,
+    stickUseTauSmoothing: true,
+    stickTauMs: 120,
+    stickTauMsBehind: 260,
+    stickTauMinAlpha: 0.02
+  } as Partial<MovementTuning>),
 
   // Puck core.
   puckRadius: 8,
