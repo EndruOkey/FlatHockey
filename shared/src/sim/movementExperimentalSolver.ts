@@ -56,6 +56,7 @@ export function applyHeadingTractionStep(args: ExperimentalStepArgs): Experiment
   const throttle = input.throttle;
   const brakeActive = !!input.brake;
   const prevSpeed = Math.hypot(state.vx, state.vy);
+  const STEER_ONLY_STOP_EPS = 0.5;
 
   const turnRate = Math.max(0, config.desiredHeadingTurnRate ?? MOVEMENT_DEFAULTS.desiredHeadingTurnRate ?? 7.2);
   const turnAccel = Math.max(0, config.desiredHeadingTurnAccel ?? MOVEMENT_DEFAULTS.desiredHeadingTurnAccel ?? 32);
@@ -108,6 +109,14 @@ export function applyHeadingTractionStep(args: ExperimentalStepArgs): Experiment
   // Hard invariant: steering-only input may rotate heading, but must never inject speed.
   if (throttle === 0 && !brakeActive) {
     const speedNow = Math.hypot(state.vx, state.vy);
+    if (prevSpeed <= STEER_ONLY_STOP_EPS) {
+      // At (near) standstill, A/D must be pure heading rotation with zero translation.
+      state.vx = 0;
+      state.vy = 0;
+    } else if (speedNow <= STEER_ONLY_STOP_EPS) {
+      state.vx = 0;
+      state.vy = 0;
+    }
     if (speedNow > prevSpeed + 1e-6) {
       const scale = prevSpeed > 1e-6 ? prevSpeed / speedNow : 0;
       state.vx *= scale;
