@@ -56,7 +56,7 @@ export function applyHeadingTractionStep(args: ExperimentalStepArgs): Experiment
   const throttle = input.throttle;
   const brakeActive = !!input.brake;
   const prevSpeed = Math.hypot(state.vx, state.vy);
-  const STEER_ONLY_STOP_EPS = 0.5;
+  const STEER_ONLY_STOP_EPS = 30;
 
   const turnRate = Math.max(0, config.desiredHeadingTurnRate ?? MOVEMENT_DEFAULTS.desiredHeadingTurnRate ?? 7.2);
   const turnAccel = Math.max(0, config.desiredHeadingTurnAccel ?? MOVEMENT_DEFAULTS.desiredHeadingTurnAccel ?? 32);
@@ -81,6 +81,12 @@ export function applyHeadingTractionStep(args: ExperimentalStepArgs): Experiment
   const rightY = forwardX;
   let forwardSpeed = state.vx * forwardX + state.vy * forwardY;
   let lateralSpeed = state.vx * rightX + state.vy * rightY;
+  const steerOnlyNoBrake = throttle === 0 && !brakeActive && Math.abs(steer) > 0;
+  if (steerOnlyNoBrake && prevSpeed <= STEER_ONLY_STOP_EPS) {
+    // Hard rotate-in-place lock for standstill steering.
+    forwardSpeed = 0;
+    lateralSpeed = 0;
+  }
 
   const requestReverse = throttle < 0;
   const reverseState = stepReverseState(state, requestReverse, brakeActive, Math.abs(forwardSpeed), config, dt);

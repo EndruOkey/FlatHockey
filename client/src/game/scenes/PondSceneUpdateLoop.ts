@@ -8,7 +8,7 @@ const FIXED_STEP_MS = 1000 / 60;
 const MAX_SIM_STEPS_PER_FRAME = 3;
 const DT_CLAMP_MS = 34;
 const HITCH_MS = 150;
-const VISUAL_STANDSTILL_EPS = 8;
+const VISUAL_STANDSTILL_EPS = 60;
 
 function isStandstillSteerOnly(isLocalPlayer: boolean, speed: number, input: any): boolean {
   if (!isLocalPlayer || !input) return false;
