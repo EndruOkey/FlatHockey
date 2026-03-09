@@ -359,7 +359,7 @@ export function createWsServerV2(server: Server, roomManager: RoomManager, cfg: 
 
         const room = roomManager.getOrCreateRoom(active.roomId);
         const existing = room.players.get(active.clientId);
-        const fallbackAim = existing?.aimAngleRaw ?? existing?.aimAngle ?? 0;
+        const fallbackAim = existing?.aimAngle ?? 0;
         room.enqueueInput(active.clientId, toInputMsg(active.clientId, parsed, fallbackAim));
         return;
       }

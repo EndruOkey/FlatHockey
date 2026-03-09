@@ -1,8 +1,7 @@
 import Phaser from 'phaser';
 import { wrapToPi } from '@flathockey/shared';
 import { getTuning } from '../tuning/movementTuning';
-import { applyPredictedInput, CLIENT_FIXED_DT, lastStepTrace } from '../net/prediction';
-import { lastReconcileTrace } from '../net/reconciliation';
+import { applyPredictedInput, CLIENT_FIXED_DT } from '../net/prediction';
 
 const FIXED_STEP_MS = 1000 / 60;
 const MAX_SIM_STEPS_PER_FRAME = 3;
@@ -87,8 +86,7 @@ export function runPondSceneUpdate(scene: any) {
         scene.pendingInputs.splice(0, scene.pendingInputs.length - 240);
       }
       scene.recordInputSample(input, simStepTime);
-      const telemetry = applyPredictedInput(scene.predicted, input, CLIENT_FIXED_DT) as unknown as Record<string, any>;
-      void telemetry;
+      applyPredictedInput(scene.predicted, input, CLIENT_FIXED_DT);
       if (Number.isFinite(scene.predicted.angle)) {
         const diff = wrapToPi(scene.predicted.angle - scene.lastPredictedAngle);
         scene.lastTurnRateDeg = (diff / CLIENT_FIXED_DT) * 180 / Math.PI;
@@ -100,7 +98,7 @@ export function runPondSceneUpdate(scene: any) {
         rot: scene.predicted.angle,
         aimRot: scene.predicted.aimAngle ?? scene.predicted.angle,
         moveRot: scene.predicted.moveAngle ?? scene.predicted.angle,
-        baseRot: scene.predicted.baseBodyAngle ?? scene.predicted.angle,
+        baseRot: scene.predicted.heading ?? scene.predicted.angle,
         speed: Math.hypot(scene.predicted.vx ?? 0, scene.predicted.vy ?? 0)
       }, simStepTime);
       scene.ws.send(input);
@@ -130,7 +128,7 @@ export function runPondSceneUpdate(scene: any) {
           rot: scene.predicted.angle,
           aimRot: scene.predicted.aimAngle ?? scene.predicted.angle,
           moveRot: scene.predicted.moveAngle ?? scene.predicted.angle,
-          baseRot: scene.predicted.baseBodyAngle ?? scene.predicted.angle,
+          baseRot: scene.predicted.heading ?? scene.predicted.angle,
           speed: Math.hypot(scene.predicted.vx ?? 0, scene.predicted.vy ?? 0)
         };
       }
@@ -195,47 +193,6 @@ export function runPondSceneUpdate(scene: any) {
     }
     view.setDebugDrawEnabled(false);
     view.draw(clampedDtMs / 1000);
-    if (scene.standstillTrace && scene.clientId && id === scene.clientId) {
-      const input = scene.lastInputForRender;
-      const speed = Math.hypot(scene.predicted?.vx ?? 0, scene.predicted?.vy ?? 0);
-      const steerOnlyNoBrake = isStandstillSteerOnly(true, speed, input);
-      if (steerOnlyNoBrake) {
-        scene.standstillTraceTick += 1;
-        if (scene.standstillTraceTick % 6 === 0) {
-          const anchors = view.getDebugWorldAnchors();
-          const physicsRootX = scene.worldToScreen(scene.predicted?.x ?? 0, scene.predicted?.y ?? 0).x;
-          const physicsRootY = scene.worldToScreen(scene.predicted?.x ?? 0, scene.predicted?.y ?? 0).y;
-          console.log('[TRACE_STANDSTILL]', {
-            input: {
-              throttle: input?.throttle ?? 0,
-              steer: input?.steer ?? 0,
-              brake: input?.brake ?? 0
-            },
-            preStep: {
-              x: lastStepTrace.preStepX,
-              y: lastStepTrace.preStepY,
-              vx: lastStepTrace.preStepVx,
-              vy: lastStepTrace.preStepVy
-            },
-            postStep: {
-              x: lastStepTrace.postStepX,
-              y: lastStepTrace.postStepY,
-              vx: lastStepTrace.postStepVx,
-              vy: lastStepTrace.postStepVy,
-              deltaPos: lastStepTrace.deltaPos
-            },
-            postReconcile: lastReconcileTrace,
-            physicsRoot: { x: physicsRootX, y: physicsRootY },
-            renderRoot: { x: state.x, y: state.y },
-            bodyRigWorld: { x: anchors.bodyRigWorldX, y: anchors.bodyRigWorldY },
-            stickWorld: { x: anchors.stickWorldX, y: anchors.stickWorldY },
-            heading: scene.predicted?.heading ?? 0,
-            moveAngle: scene.predicted?.moveAngle ?? 0,
-            speed
-          });
-        }
-      }
-    }
   }
 
   scene.updateAndDrawPuck(clampedDtMs / 1000, remoteTargetServerTime);

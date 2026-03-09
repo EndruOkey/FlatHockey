@@ -93,7 +93,7 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
           rot: p.angle,
           aimRot: p.aimAngle,
           moveRot: p.moveAngle,
-          baseRot: p.baseBodyAngle ?? p.angle,
+          baseRot: p.heading ?? p.angle,
           speed: Math.hypot(p.vx ?? 0, p.vy ?? 0)
         }, now);
       } else {
@@ -104,7 +104,7 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
           rot: scene.predicted.angle,
           aimRot: scene.predicted.aimAngle ?? scene.predicted.angle,
           moveRot: scene.predicted.moveAngle ?? scene.predicted.angle,
-          baseRot: scene.predicted.baseBodyAngle ?? scene.predicted.angle,
+          baseRot: scene.predicted.heading ?? scene.predicted.angle,
           speed: Math.hypot(scene.predicted.vx ?? 0, scene.predicted.vy ?? 0)
         }, now);
       }
@@ -121,7 +121,7 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
         rot: p.angle,
         aimRot: p.aimAngle,
         moveRot: p.moveAngle,
-        baseRot: p.baseBodyAngle ?? p.angle,
+        baseRot: p.heading ?? p.angle,
         speed: Math.hypot(p.vx ?? 0, p.vy ?? 0)
       }, serverTimeMs);
     }

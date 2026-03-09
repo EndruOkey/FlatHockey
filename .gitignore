@@ -14,5 +14,7 @@ coverage/
 *.bak.*
 *.swp
 .tmp-ssh-rotate/
+.tmp-ssh-rotate/new_deploy_key
+.tmp-ssh-rotate/new_deploy_key.pub
 *.pem
 *.key

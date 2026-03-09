@@ -1,8 +1,7 @@
 import type { InputMsg, ServerMessage, SnapshotMsg } from '@flathockey/shared';
 import { applyMovementStep, type MovementStepConfig, type MovementStepState } from '@flathockey/shared/sim/movementStep';
 import { WebSocket } from 'ws';
-import { dropPuckFrom, resolveBoardHits, resolvePlayerContacts, stickTarget, updatePuck } from './roomSystems';
-import { clamp, lerpAngle } from './roomMath';
+import { resolveBoardHits, resolvePlayerContacts, updatePuck } from './roomSystems';
 import { type BufferedInput, type PlayerState, type PuckState, ZERO_INPUT } from './room.types';
 
 export class Room {
@@ -28,19 +27,9 @@ export class Room {
   setMovementTuning(patch: Partial<MovementStepConfig>) {
     if (!patch || typeof patch !== 'object') return;
     for (const [k, v] of Object.entries(patch)) {
-      if (k === 'movementModel' || k === 'movementCoreModel') continue;
       if (v === undefined || v === null) continue;
       (this.movementTuning as any)[k] = v;
     }
-    try {
-      console.log('[TUNING_APPLIED]', {
-        headingModeEnabled: this.movementTuning.headingModeEnabled,
-        regimesEnabled: this.movementTuning.regimesEnabled,
-        maxSpeed: this.movementTuning.maxSpeed ?? this.movementTuning.maxSpeedNoPuck,
-        accel: this.movementTuning.accel,
-        speedSplit: this.movementTuning.speedSplit
-      });
-    } catch {}
   }
 
   addClient(clientId: string, ws: WebSocket, name = 'Player') {
@@ -52,52 +41,14 @@ export class Room {
       y: -120 + offset * 0.35,
       vx: 0,
       vy: 0,
-      angle: 0,
-      moveAngle: 0,
-      headingOmega: 0,
-      desiredHeadingAngle: 0,
-      movementModelActive: 'DESIRED_HEADING_TRACTION',
-      inputAngle: 0,
-      desiredDirX: 1,
-      desiredDirY: 0,
-      committedDirX: 1,
-      committedDirY: 0,
-      distanceSinceCommit: 0,
-      reverseDriveState: 'NORMAL',
-      commitNoInputTimer: 0,
-      reverseTransitionActive: false,
-      reverseTransitionTimer: 0,
-      pendingDirX: 1,
-      pendingDirY: 0,
-      directionCommitTimer: 0,
-      oppositeHoldTimer: 0,
-      carveLockTimer: 0,
-      carveSwitchCooldownTimer: 0,
-      carveSide: 0,
-      movementPhase: 'GLIDE',
-      startCommitTimer: 0,
-      startNoInputTimer: 0,
-      startupOppositeLockTimer: 0,
-      startupLatchActive: false,
-      startupReleaseTimer: 0,
-      startDirX: 1,
-      startDirY: 0,
-      lastStableTravelAngle: 0,
-      lastRawInputAngle: 0,
-      antiFlipTimer: 0,
-      baseBodyAngle: 0,
-      bodyYawOffset: 0,
-      bodyTargetAngle: 0,
-      aimAngleRaw: 0,
-      aimAngle: 0,
-      stickAngVel: 0,
-      stickLocalAngle: 0,
-      stamina: 1,
+      speed: 0,
       heading: 0,
-      prevHasInput: false,
-      brakeAssistLeft: 0,
-      startLinearActive: false,
-      stickSide: 1,
+      headingOmega: 0,
+      moveAngle: 0,
+      angle: 0,
+      aimAngle: 0,
+      stamina: 1,
+      reverseState: 'FORWARD',
       prevShoot: false,
       shotCharge: 0,
       lastProcessedSeq: 0,
@@ -146,6 +97,7 @@ export class Room {
     for (const player of this.players.values()) {
       player.hitCooldownLeft = Math.max(0, player.hitCooldownLeft - dt);
       player.stunLeft = Math.max(0, player.stunLeft - dt);
+
       const next = this.consumeNextInput(player);
       if (next) {
         player.lastInputState = next.state;
@@ -158,58 +110,19 @@ export class Room {
         y: player.y,
         vx: player.vx,
         vy: player.vy,
-        stamina: player.stamina,
-        aimAngle: player.aimAngle,
-        aimAngleRaw: player.aimAngleRaw,
-        stickAngVel: player.stickAngVel,
-        moveAngle: player.moveAngle,
-        headingOmega: player.headingOmega,
-        desiredHeadingAngle: player.desiredHeadingAngle,
-        movementModelActive: player.movementModelActive,
-        inputAngle: player.inputAngle,
-        desiredDirX: player.desiredDirX,
-        desiredDirY: player.desiredDirY,
-        committedDirX: player.committedDirX,
-        committedDirY: player.committedDirY,
-        distanceSinceCommit: player.distanceSinceCommit,
-        reverseDriveState: player.reverseDriveState,
-        commitNoInputTimer: player.commitNoInputTimer,
-        reverseTransitionActive: player.reverseTransitionActive,
-        reverseTransitionTimer: player.reverseTransitionTimer,
-        pendingDirX: player.pendingDirX,
-        pendingDirY: player.pendingDirY,
-        directionCommitTimer: player.directionCommitTimer,
-        oppositeHoldTimer: player.oppositeHoldTimer,
-        carveLockTimer: player.carveLockTimer,
-        carveSwitchCooldownTimer: player.carveSwitchCooldownTimer,
-        carveSide: player.carveSide,
-        movementPhase: player.movementPhase,
-        startCommitTimer: player.startCommitTimer,
-        startNoInputTimer: player.startNoInputTimer,
-        startupOppositeLockTimer: player.startupOppositeLockTimer,
-        startupLatchActive: player.startupLatchActive,
-        startupReleaseTimer: player.startupReleaseTimer,
-        startDirX: player.startDirX,
-        startDirY: player.startDirY,
-        lastStableTravelAngle: player.lastStableTravelAngle,
-        lastRawInputAngle: player.lastRawInputAngle,
-        antiFlipTimer: player.antiFlipTimer,
-        baseBodyAngle: player.baseBodyAngle,
-        bodyYawOffset: player.bodyYawOffset,
-        bodyTargetAngle: player.bodyTargetAngle,
-        bodyAngle: player.angle,
+        speed: player.speed,
         heading: player.heading,
-        prevHasInput: player.prevHasInput,
-        brakeAssistLeft: player.brakeAssistLeft,
-        startLinearActive: player.startLinearActive,
-        stickSide: player.stickSide,
-        stickLocalAngle: player.stickLocalAngle
+        headingOmega: player.headingOmega,
+        moveAngle: player.moveAngle,
+        aimAngle: player.aimAngle,
+        stamina: player.stamina,
+        reverseState: player.reverseState
       };
 
-      const playerHasPuck = this.puck.state === 'HELD' && this.puck.ownerId === player.id;
-      const chargeInputActive = false;
       const movementThrottle = player.stunLeft > 0 ? 0 : player.lastInputState.throttle;
       const movementSteer = player.stunLeft > 0 ? 0 : player.lastInputState.steer;
+      const playerHasPuck = this.puck.state === 'HELD' && this.puck.ownerId === player.id;
+
       applyMovementStep(
         state,
         {
@@ -229,67 +142,15 @@ export class Room {
       player.y = state.y;
       player.vx = state.vx;
       player.vy = state.vy;
-      player.stamina = state.stamina;
+      player.speed = state.speed;
       player.heading = state.heading;
-      player.headingOmega = Number.isFinite(state.headingOmega) ? state.headingOmega! : player.headingOmega;
-      player.desiredHeadingAngle = Number.isFinite(state.desiredHeadingAngle) ? state.desiredHeadingAngle! : player.desiredHeadingAngle;
-      player.movementModelActive = 'DESIRED_HEADING_TRACTION';
-      player.moveAngle = Number.isFinite(state.moveAngle) ? state.moveAngle! : (Number.isFinite(player.heading) ? player.heading! : player.moveAngle);
-      player.inputAngle = Number.isFinite(state.inputAngle) ? state.inputAngle! : player.inputAngle;
-      player.desiredDirX = Number.isFinite(state.desiredDirX) ? state.desiredDirX! : player.desiredDirX;
-      player.desiredDirY = Number.isFinite(state.desiredDirY) ? state.desiredDirY! : player.desiredDirY;
-      player.committedDirX = Number.isFinite(state.committedDirX) ? state.committedDirX! : player.committedDirX;
-      player.committedDirY = Number.isFinite(state.committedDirY) ? state.committedDirY! : player.committedDirY;
-      player.distanceSinceCommit = Number.isFinite(state.distanceSinceCommit) ? state.distanceSinceCommit! : player.distanceSinceCommit;
-      player.reverseDriveState = state.reverseDriveState === 'TRANSITION_TO_REVERSE' || state.reverseDriveState === 'REVERSE_READY' ? state.reverseDriveState : 'NORMAL';
-      player.commitNoInputTimer = Number.isFinite(state.commitNoInputTimer) ? state.commitNoInputTimer! : player.commitNoInputTimer;
-      player.reverseTransitionActive = !!state.reverseTransitionActive;
-      player.reverseTransitionTimer = Number.isFinite(state.reverseTransitionTimer) ? state.reverseTransitionTimer! : player.reverseTransitionTimer;
-      player.pendingDirX = Number.isFinite(state.pendingDirX) ? state.pendingDirX! : player.pendingDirX;
-      player.pendingDirY = Number.isFinite(state.pendingDirY) ? state.pendingDirY! : player.pendingDirY;
-      player.directionCommitTimer = Number.isFinite(state.directionCommitTimer) ? state.directionCommitTimer! : player.directionCommitTimer;
-      player.oppositeHoldTimer = Number.isFinite(state.oppositeHoldTimer) ? state.oppositeHoldTimer! : player.oppositeHoldTimer;
-      player.carveLockTimer = Number.isFinite(state.carveLockTimer) ? state.carveLockTimer! : player.carveLockTimer;
-      player.carveSwitchCooldownTimer = Number.isFinite(state.carveSwitchCooldownTimer) ? state.carveSwitchCooldownTimer! : player.carveSwitchCooldownTimer;
-      player.carveSide = state.carveSide === -1 || state.carveSide === 1 ? state.carveSide : 0;
-      player.movementPhase = state.movementPhase ?? player.movementPhase;
-      player.startCommitTimer = Number.isFinite(state.startCommitTimer) ? state.startCommitTimer! : player.startCommitTimer;
-      player.startNoInputTimer = Number.isFinite(state.startNoInputTimer) ? state.startNoInputTimer! : player.startNoInputTimer;
-      player.startupOppositeLockTimer = Number.isFinite(state.startupOppositeLockTimer) ? state.startupOppositeLockTimer! : player.startupOppositeLockTimer;
-      player.startupLatchActive = !!state.startupLatchActive;
-      player.startupReleaseTimer = Number.isFinite(state.startupReleaseTimer) ? state.startupReleaseTimer! : player.startupReleaseTimer;
-      player.startDirX = Number.isFinite(state.startDirX) ? state.startDirX! : player.startDirX;
-      player.startDirY = Number.isFinite(state.startDirY) ? state.startDirY! : player.startDirY;
-      player.lastStableTravelAngle = Number.isFinite(state.lastStableTravelAngle) ? state.lastStableTravelAngle! : player.lastStableTravelAngle;
-      player.lastRawInputAngle = Number.isFinite(state.lastRawInputAngle) ? state.lastRawInputAngle! : player.lastRawInputAngle;
-      player.antiFlipTimer = Number.isFinite(state.antiFlipTimer) ? state.antiFlipTimer! : player.antiFlipTimer;
-      player.baseBodyAngle = Number.isFinite(state.baseBodyAngle) ? state.baseBodyAngle! : player.baseBodyAngle;
-      player.bodyYawOffset = Number.isFinite(state.bodyYawOffset) ? state.bodyYawOffset! : player.bodyYawOffset;
-      player.bodyTargetAngle = Number.isFinite(state.bodyTargetAngle) ? state.bodyTargetAngle! : player.bodyTargetAngle;
-      player.aimAngleRaw = Number.isFinite(state.aimAngleRaw) ? state.aimAngleRaw! : player.aimAngleRaw;
-      player.aimAngle = Number.isFinite(state.aimAngle) ? state.aimAngle : player.aimAngleRaw;
-      player.stickAngVel = state.stickAngVel;
-      player.stickLocalAngle = Number.isFinite(state.stickLocalAngle) ? state.stickLocalAngle! : player.stickLocalAngle;
-      player.prevHasInput = state.prevHasInput;
-      player.brakeAssistLeft = state.brakeAssistLeft;
-      player.startLinearActive = state.startLinearActive;
-      player.stickSide = state.stickSide;
-      player.chargeActive = !!state.debugChargeActive && player.stunLeft <= 0;
-      if (Number.isFinite(state.bodyAngle)) {
-        player.angle = state.bodyAngle!;
-      } else {
-        const mode = this.movementTuning.bodyFacingMode ?? 'MOVE_LAST';
-        if (mode === 'AIM_WHEN_IDLE') {
-          const hasInput = player.lastInputState.throttle !== 0 || player.lastInputState.steer !== 0;
-          player.angle = hasInput ? player.moveAngle : player.aimAngle;
-        } else if (mode === 'BLEND') {
-          const maxSpeed = Math.max(1, this.movementTuning.maxSpeed ?? this.movementTuning.maxSpeedNoPuck ?? 1);
-          const speedNorm = clamp(Math.hypot(player.vx, player.vy) / maxSpeed, 0, 1);
-          player.angle = lerpAngle(player.aimAngle, player.moveAngle, speedNorm);
-        } else {
-          player.angle = player.moveAngle;
-        }
-      }
+      player.headingOmega = state.headingOmega;
+      player.moveAngle = state.moveAngle;
+      player.angle = state.heading;
+      player.aimAngle = state.aimAngle;
+      player.stamina = state.stamina;
+      player.reverseState = state.reverseState;
+      player.chargeActive = false;
     }
 
     this.resolvePlayerContacts();
@@ -320,42 +181,12 @@ export class Room {
         y: p.y,
         vx: p.vx,
         vy: p.vy,
-        angle: p.angle,
-        moveAngle: p.moveAngle,
+        speed: p.speed,
         heading: p.heading,
         headingOmega: p.headingOmega,
-        desiredHeadingAngle: p.desiredHeadingAngle,
-        movementModelActive: p.movementModelActive,
-        inputAngle: p.inputAngle,
-        desiredDirX: p.desiredDirX,
-        desiredDirY: p.desiredDirY,
-        committedDirX: p.committedDirX,
-        committedDirY: p.committedDirY,
-        distanceSinceCommit: p.distanceSinceCommit,
-        reverseDriveState: p.reverseDriveState,
-        reverseTransitionActive: p.reverseTransitionActive,
-        reverseTransitionTimer: p.reverseTransitionTimer,
-        pendingDirX: p.pendingDirX,
-        pendingDirY: p.pendingDirY,
-        directionCommitTimer: p.directionCommitTimer,
-        oppositeHoldTimer: p.oppositeHoldTimer,
-        carveLockTimer: p.carveLockTimer,
-        carveSwitchCooldownTimer: p.carveSwitchCooldownTimer,
-        carveSide: p.carveSide,
-        movementPhase: p.movementPhase,
-        startCommitTimer: p.startCommitTimer,
-        startupOppositeLockTimer: p.startupOppositeLockTimer,
-        startupLatchActive: p.startupLatchActive,
-        startupReleaseTimer: p.startupReleaseTimer,
-        startDirX: p.startDirX,
-        startDirY: p.startDirY,
-        lastStableTravelAngle: p.lastStableTravelAngle,
-        lastRawInputAngle: p.lastRawInputAngle,
-        antiFlipTimer: p.antiFlipTimer,
-        baseBodyAngle: p.baseBodyAngle,
-        bodyTargetAngle: p.bodyTargetAngle,
-        bodyYawOffset: p.bodyYawOffset,
-        aimAngleRaw: p.aimAngleRaw,
+        angle: p.angle,
+        moveAngle: p.moveAngle,
+        reverseState: p.reverseState,
         aimAngle: p.aimAngle,
         chargeActive: p.chargeActive,
         stunLeft: p.stunLeft
@@ -363,21 +194,19 @@ export class Room {
     };
     this.broadcast(msg);
   }
-  private stickTarget(player: PlayerState) {
-    return stickTarget(this, player);
-  }
+
   private updatePuck(dt: number) {
     updatePuck(this, dt);
   }
-  private dropPuckFrom(playerId: string | null) {
-    dropPuckFrom(this, playerId);
-  }
+
   private resolvePlayerContacts() {
     resolvePlayerContacts(this);
   }
+
   private resolveBoardHits() {
     resolveBoardHits(this);
   }
+
   private consumeNextInput(player: PlayerState): BufferedInput | null {
     if (player.inputBuffer.length === 0) return null;
 
@@ -405,4 +234,3 @@ export class Room {
     }
   }
 }
-

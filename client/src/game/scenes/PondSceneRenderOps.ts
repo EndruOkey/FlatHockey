@@ -27,7 +27,7 @@ export function updateCrosshairAndCursor(scene: any) {
 }
 
 export function drawMovementDebugVectors(scene: any) {
-  scene.motionDebugGraphics.clear();
+  void scene;
 }
 
 function stickTargetScreen(view: PlayerView) {
@@ -95,14 +95,7 @@ export function updateAndDrawPuck(scene: any, dtSec: number, remoteTargetServerT
 }
 
 export function updateOverlay(_scene: any) {
-  const scene = _scene;
-  scene.motionDebugGraphics.clear();
-  if (!scene.standstillTrace || !scene.predicted) return;
-  const p = scene.worldToScreen(scene.predicted.x, scene.predicted.y);
-  scene.motionDebugGraphics.lineStyle(2, 0xff4d4d, 0.85);
-  scene.motionDebugGraphics.strokeCircle(p.x, p.y, 6);
-  scene.motionDebugGraphics.lineBetween(p.x - 8, p.y, p.x + 8, p.y);
-  scene.motionDebugGraphics.lineBetween(p.x, p.y - 8, p.x, p.y + 8);
+  void _scene;
 }
 
 export function updateHud(scene: any, dtSec: number) {

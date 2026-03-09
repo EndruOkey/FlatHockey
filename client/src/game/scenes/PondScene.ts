@@ -2,9 +2,8 @@ import Phaser from 'phaser';
 import { SIM_HZ, type InputMsg, PlayerStateMsg, ServerMessage, SnapshotMsg, wrapToPi } from '@flathockey/shared';
 import { WsClient } from '../net/wsClient';
 import { Interpolator, lerpPlayer, type LerpPlayer } from '../net/interpolation';
-import { applyPredictedInput, CLIENT_FIXED_DT, type PredictedPlayerState, setAimInputRateLimited } from '../net/prediction';
+import { CLIENT_FIXED_DT, type PredictedPlayerState, setAimInputRateLimited } from '../net/prediction';
 import { getTuning } from '../tuning/movementTuning';
-import { reconcilePrediction } from '../net/reconciliation';
 import { PlayerView } from '../entities/playerView';
 import { puckStickTuningStore } from '../tuning/puckStickTuningStore';
 import { ENV } from '../../config/env';
@@ -97,13 +96,10 @@ export class PondScene extends Phaser.Scene {
   private hudAcc = 0;
   private perfSamples: DebugSample[] = [];
   private crosshairGraphics!: Phaser.GameObjects.Graphics;
-  private motionDebugGraphics!: Phaser.GameObjects.Graphics;
   private aimCurrentAngle = 0;
   private aimTargetAngle = 0;
   private aimAngleDiff = 0;
   private hasAimState = false;
-  private lastDesiredHeading = 0;
-  private lastMoveAngle = 0;
   private lastAimAngle = 0;
   private aimDistance01 = 1;
   
@@ -119,8 +115,6 @@ export class PondScene extends Phaser.Scene {
   private readonly inputRecordWindowMs = 20_000;
   private localRenderState: LerpPlayer | null = null;
   private lastInputForRender: InputMsg | null = null;
-  private standstillTrace = false;
-  private standstillTraceTick = 0;
 
   constructor() {
     super('PondScene');
@@ -152,7 +146,6 @@ export class PondScene extends Phaser.Scene {
 
     this.puckGraphics = this.add.graphics().setDepth(900);
     this.crosshairGraphics = this.add.graphics().setDepth(1300);
-    this.motionDebugGraphics = this.add.graphics().setDepth(1250);
 
     this.input.on('pointerdown', () => this.game.canvas?.focus());
     if (this.game.canvas) this.game.canvas.tabIndex = 1;
@@ -166,7 +159,6 @@ export class PondScene extends Phaser.Scene {
       window.removeEventListener('focus', this.onFocus);
       this.puckGraphics?.destroy();
       this.crosshairGraphics?.destroy();
-      this.motionDebugGraphics?.destroy();
       if (this.game.canvas) this.game.canvas.style.cursor = '';
     });
 
@@ -184,7 +176,6 @@ export class PondScene extends Phaser.Scene {
     this.simAccumulatorMs = 0;
     this.needsResync = true; // one-shot startup resync — handled in update() so same path as focus/visibility
     this.pendingResyncReason = 'startup';
-    this.standstillTrace = Boolean((window as any).__FH_TRACE_STANDSTILL__);
     console.info('[BUILD_STAMP]', {
       commit: BUILD_VERSION || 'unknown',
       buildTime: BUILD_TIME || 'unknown',
@@ -380,7 +371,7 @@ export class PondScene extends Phaser.Scene {
     this.aimDistance01 = 1;
     if (dist <= deadzone) {
       setAimInputRateLimited(false);
-      return Number.isFinite(this.predicted.aimAngleRaw) ? this.predicted.aimAngleRaw : (Number.isFinite(this.predicted.aimAngle) ? this.predicted.aimAngle : undefined);
+      return Number.isFinite(this.predicted.aimAngle) ? this.predicted.aimAngle : undefined;
     }
 
     const rawTarget = Math.atan2(mouseWorld.y - this.predicted.y, mouseWorld.x - this.predicted.x);
