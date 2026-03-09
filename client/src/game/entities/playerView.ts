@@ -1,6 +1,4 @@
 import Phaser from 'phaser';
-import { puckStickTuningStore } from '../tuning/puckStickTuningStore';
-
 export class PlayerView {
   readonly id: string;
   readonly team: 'A' | 'B';
@@ -94,6 +92,9 @@ export class PlayerView {
     this.bodyRig.add(this.leadHandSprite);
     this.g = scene.add.graphics();
     this.playerRoot.add([this.bodyRig, this.stickRoot, this.g]);
+    this.stickRoot.setVisible(false);
+    this.leadHandSprite.setVisible(false);
+    this.supportHandSprite.setVisible(false);
   }
 
   private static ensureAvatarTexture(scene: Phaser.Scene) {
@@ -254,126 +255,23 @@ export class PlayerView {
   }
 
   getStickBaseWorld(aimRot: number, stickOffsetX: number, stickOffsetY: number) {
-    return PlayerView.getStickBaseWorldFromPose(
-      this.x,
-      this.y,
-      this.rot,
-      this.handedness,
-      aimRot,
-      stickOffsetX,
-      stickOffsetY
-    );
+    // Stick is disabled: gameplay anchor is player center.
+    return { x: this.x, y: this.y };
   }
 
-  draw(dtSec = 1 / 60) {
-    const tuning = puckStickTuningStore.get();
-    const stickLen = tuning.stickLength;
-    const stickOffsetX = tuning.stickOffsetX;
-    const stickOffsetY = tuning.stickOffsetY;
-    const lag = Math.max(0, Math.min(1, tuning.stickVisualLag));
-    const lagMaxDeg = tuning.stickVisualLagMaxDeg;
-    const lagMaxRad = (lagMaxDeg * Math.PI) / 180;
-    const safeDt = PlayerView.clamp(dtSec, 1 / 240, 1 / 20);
-    let delta = this.aimRot - this.stickVisualRot;
-    while (delta > Math.PI) delta -= Math.PI * 2;
-    while (delta < -Math.PI) delta += Math.PI * 2;
-    const visualDeadzone = (0.18 * Math.PI) / 180;
-    if (Math.abs(delta) <= visualDeadzone) {
-      this.stickVisualRot = this.aimRot;
-    } else {
-      const clampedDelta = Math.max(-lagMaxRad, Math.min(lagMaxRad, delta));
-      const deltaNorm = PlayerView.clamp(Math.abs(clampedDelta) / Math.max(lagMaxRad, 0.0001), 0, 1);
-      const adaptiveLag = lag * (1 - 0.45 * deltaNorm);
-      const visualTauMs = PlayerView.clamp(28 + adaptiveLag * 120, 20, 180);
-      const alpha = 1 - Math.exp(-safeDt / (visualTauMs / 1000));
-      const targetVisualRot = this.stickVisualRot + clampedDelta * alpha;
-      const maxVisualSpeed = ((540 + 520 * deltaNorm) * Math.PI) / 180;
-      this.stickVisualRot = PlayerView.approachAngle(this.stickVisualRot, targetVisualRot, maxVisualSpeed * safeDt);
-    }
+  draw(_dtSec = 1 / 60) {
+    this.stickVisualRot = this.aimRot;
+    this.stickDrawRot = this.aimRot;
+    this.leanPx = 0;
+    this.leanVel = 0;
 
-    const stickWorldRot = this.stickVisualRot;
-    const stickDrawRot = stickWorldRot + PlayerView.STICK_SPRITE_OFFSET_RAD;
-    this.stickDrawRot = stickDrawRot;
-    const edgeAngle = PlayerView.wrapToPi(this.baseRot - this.moveRot);
-    const leanMaxAngleRad = Math.max(0.001, (this.visualLeanMaxAngleDeg * Math.PI) / 180);
-    const edgeNorm = PlayerView.clamp(edgeAngle / leanMaxAngleRad, -1, 1);
-    const leanMinSpeed = 8;
-    const allowLean = this.visualLeanEnabled && this.speed > leanMinSpeed;
-    const targetLeanPx = allowLean && !this.standstillSteerLock ? (edgeNorm * this.visualLeanMaxPx) : 0;
-    const omega = 2 / Math.max(0.001, this.visualLeanTauMs / 1000);
-    const springK = omega * omega;
-    const springC = 2 * this.visualLeanDampingRatio * omega;
-    const leanErr = targetLeanPx - this.leanPx;
-    this.leanVel += (leanErr * springK - this.leanVel * springC) * safeDt;
-    this.leanPx += this.leanVel * safeDt;
-
-    const gripLocalBase = this.standstillSteerLock ? { x: 0, y: 0 } : this.getActiveHandLocalInRoot();
-    const supportDist = Math.max(6, stickLen * PlayerView.SUPPORT_HAND_DIST_RATIO);
-
-    // Update order: player root position -> body rotation -> stick rotation.
+    // Stick/hands disabled; keep root fully movement-authoritative.
     this.playerRoot.setPosition(this.x, this.y);
-    const rightX = Math.cos(this.rot + Math.PI / 2);
-    const rightY = Math.sin(this.rot + Math.PI / 2);
-    const bodyLeanX = this.standstillSteerLock ? 0 : rightX * this.leanPx;
-    const bodyLeanY = this.standstillSteerLock ? 0 : rightY * this.leanPx;
-    if (this.standstillSteerLock) {
-      this.leanPx = 0;
-      this.leanVel = 0;
-    }
-    this.bodyRig.setPosition(bodyLeanX, bodyLeanY);
+    this.bodyRig.setPosition(0, 0);
     this.bodyRig.rotation = this.getBodyRenderRotation();
-    const stickBaseLocalOffset = this.standstillSteerLock
-      ? { x: 0, y: 0 }
-      : PlayerView.rotateLocal(stickOffsetX, stickOffsetY, stickWorldRot);
-    const handSocket = this.getActiveHandSocketLocal();
-    const bodyRenderRot = this.getBodyRenderRotation();
-    const cosInv = Math.cos(-bodyRenderRot);
-    const sinInv = Math.sin(-bodyRenderRot);
-    const handDeltaLocalX = stickBaseLocalOffset.x * cosInv - stickBaseLocalOffset.y * sinInv;
-    const handDeltaLocalY = stickBaseLocalOffset.x * sinInv + stickBaseLocalOffset.y * cosInv;
-    if (this.standstillSteerLock) {
-      this.leadHandSprite.setPosition(handSocket.x, handSocket.y);
-    } else {
-      this.leadHandSprite.setPosition(
-        handSocket.x + handDeltaLocalX,
-        handSocket.y + handDeltaLocalY
-      );
-    }
-    const gripLocal = {
-      x: gripLocalBase.x + bodyLeanX,
-      y: gripLocalBase.y + bodyLeanY
-    };
-    if (this.standstillSteerLock) {
-      this.stickRoot.setPosition(0, 0);
-    } else {
-      this.stickRoot.setPosition(gripLocal.x + stickBaseLocalOffset.x, gripLocal.y + stickBaseLocalOffset.y);
-    }
-    this.stickRoot.rotation = stickDrawRot;
-    this.supportHandSprite.setPosition(supportDist - stickOffsetX, PlayerView.SUPPORT_HAND_Y_OFFSET - stickOffsetY);
-
-    const shaftLen = Math.max(4, stickLen);
-    const shaftThickness = 4;
-    const bladeLen = 12;
-    const bladeThickness = 6;
+    this.stickRoot.setPosition(0, 0);
+    this.stickRoot.rotation = 0;
     this.stickGfx.clear();
-    // Shaft: grip starts exactly at local x=0 (container pivot).
-    this.stickGfx.fillStyle(0x111111, 0.55);
-    this.stickGfx.fillRoundedRect(0, -(shaftThickness + 2) * 0.5, shaftLen, shaftThickness + 2, 2);
-    this.stickGfx.fillStyle(0xf5b000, 1);
-    this.stickGfx.fillRoundedRect(0, -shaftThickness * 0.5, shaftLen, shaftThickness, 2);
-    // Grip knob at pivot.
-    this.stickGfx.fillStyle(0x111111, 1);
-    this.stickGfx.fillCircle(0, 0, 3);
-    // Blade near stick tip.
-    this.stickGfx.fillStyle(0xf5b000, 1);
-    this.stickGfx.fillRoundedRect(shaftLen - 2, 0, bladeLen, bladeThickness, 2);
-    if (this.debugDrawEnabled) {
-      // Tip debug in local stick space.
-      this.stickGfx.fillStyle(0x000000, 0.5);
-      this.stickGfx.fillCircle(shaftLen, 0, 6);
-      this.stickGfx.fillStyle(0xffcc00, 1);
-      this.stickGfx.fillCircle(shaftLen, 0, 4.5);
-    }
 
     if (!this.debugDrawEnabled) {
       this.g.clear();
@@ -381,26 +279,10 @@ export class PlayerView {
     }
 
     this.g.clear();
-    // Debug: socket and rig pivot should overlap.
-    this.g.fillStyle(0x00ff00, 1);
-    this.g.fillCircle(gripLocal.x, gripLocal.y, 2);
-    this.g.fillStyle(0xffff00, 1);
-    this.g.fillCircle(this.stickRoot.x, this.stickRoot.y, 2);
-    this.g.lineStyle(1, 0x66ffcc, 0.6);
-    this.g.lineBetween(gripLocal.x, gripLocal.y, this.stickRoot.x, this.stickRoot.y);
-    // Rotation clarity lines.
     const bodyLen = 26;
-    const stickLenDbg = 30;
     const bodyRot = this.getBodyRenderRotation();
     this.g.lineStyle(1.5, 0xffffff, 0.8);
     this.g.lineBetween(0, 0, Math.cos(bodyRot) * bodyLen, Math.sin(bodyRot) * bodyLen);
-    this.g.lineStyle(1.5, 0xffd54a, 0.9);
-    this.g.lineBetween(
-      this.stickRoot.x,
-      this.stickRoot.y,
-      this.stickRoot.x + Math.cos(stickDrawRot) * stickLenDbg,
-      this.stickRoot.y + Math.sin(stickDrawRot) * stickLenDbg
-    );
   }
 
   getStickRotation(): number {

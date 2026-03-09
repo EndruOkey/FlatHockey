@@ -15,15 +15,10 @@ const RINK = {
 type Vec2 = { x: number; y: number };
 
 export function stickTarget(room: any, player: any): Vec2 {
-  const puckStick = resolvePuckStickTuning(room.movementTuning);
-  const ang = player.aimAngle;
-  const offsetX = puckStick.stickOffsetX;
-  const offsetY = puckStick.stickOffsetY;
-  const cos = Math.cos(ang);
-  const sin = Math.sin(ang);
+  // Stick removed: gameplay anchor is player center.
   return {
-    x: player.x + offsetX * cos - offsetY * sin,
-    y: player.y + offsetX * sin + offsetY * cos
+    x: player.x,
+    y: player.y
   };
 }
 
@@ -299,4 +294,3 @@ export function resolveBoardHits(room: any) {
     }
   }
 }
-

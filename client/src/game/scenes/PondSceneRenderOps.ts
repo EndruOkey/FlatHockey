@@ -118,7 +118,7 @@ export function updateHud(scene: any, dtSec: number) {
     `Model: headingTraction`,
     `Seq/Ack: ${scene.seq}/${scene.ackSeq}`,
     `Pending: ${scene.pendingInputs.length}`,
-    'W accelerate | S brake/reverse | A/D steer | SPACE hard brake | E/LMB shoot'
+    'W accelerate | S brake/reverse | A/D steer | SPACE hard brake'
   ].join('\n');
   if (next !== scene.lastHudText) {
     scene.lastHudText = next;

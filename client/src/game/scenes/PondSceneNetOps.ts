@@ -161,7 +161,7 @@ export function buildClientInput(scene: any): InputMsg {
     throttle,
     steer,
     brake: scene.keys.SPACE.isDown ? 1 : 0,
-    shoot: (scene.keys.E.isDown || scene.input.activePointer.leftButtonDown()) ? 1 : 0,
+    shoot: 0,
     aimAngle
   };
 }

@@ -383,14 +383,7 @@ export class PondScene extends Phaser.Scene {
       return Number.isFinite(this.predicted.aimAngleRaw) ? this.predicted.aimAngleRaw : (Number.isFinite(this.predicted.aimAngle) ? this.predicted.aimAngle : undefined);
     }
 
-    const handedness = tuning.handedness === 'L' ? 'L' : 'R';
-    const handPivot = PlayerView.getActiveHandWorldFromPose(
-      this.predicted.x,
-      this.predicted.y,
-      Number.isFinite(this.predicted.baseBodyAngle) ? this.predicted.baseBodyAngle! : this.predicted.angle,
-      handedness
-    );
-    const rawTarget = Math.atan2(mouseWorld.y - handPivot.y, mouseWorld.x - handPivot.x);
+    const rawTarget = Math.atan2(mouseWorld.y - this.predicted.y, mouseWorld.x - this.predicted.x);
     if (!this.hasAimState) {
       this.hasAimState = true;
       this.aimCurrentAngle = rawTarget;
