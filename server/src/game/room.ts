@@ -78,6 +78,7 @@ export class Room {
       state: {
         throttle: input.throttle < 0 ? -1 : input.throttle > 0 ? 1 : 0,
         steer: input.steer < 0 ? -1 : input.steer > 0 ? 1 : 0,
+        _heading: typeof input._heading === 'number' ? input._heading : undefined,
         brake: input.brake ? 1 : 0,
         shoot: input.shoot ? 1 : 0,
         aimAngle: typeof input.aimAngle === 'number' ? input.aimAngle : player.aimAngle
@@ -121,6 +122,7 @@ export class Room {
 
       const movementThrottle = player.stunLeft > 0 ? 0 : player.lastInputState.throttle;
       const movementSteer = player.stunLeft > 0 ? 0 : player.lastInputState.steer;
+      const movementHeading = player.stunLeft > 0 ? undefined : player.lastInputState._heading;
       const playerHasPuck = this.puck.state === 'HELD' && this.puck.ownerId === player.id;
 
       applyMovementStep(
@@ -128,6 +130,7 @@ export class Room {
         {
           throttle: movementThrottle,
           steer: movementSteer,
+          _heading: movementHeading,
           brake: !!player.lastInputState.brake,
           aimAngle: player.lastInputState.aimAngle
         },

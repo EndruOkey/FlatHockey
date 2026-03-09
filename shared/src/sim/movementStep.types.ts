@@ -17,6 +17,7 @@ export type MovementStepState = {
 export type MovementStepInput = {
   throttle: -1 | 0 | 1;
   steer: -1 | 0 | 1;
+  _heading?: number;
   brake: boolean;
   shoot?: boolean;
   aimAngle?: number;

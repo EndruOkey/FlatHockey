@@ -16,6 +16,9 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       const brake = data.brake ? 1 : 0;
       const shoot = (data as any).shoot ? 1 : 0;
       const aimAngle = typeof data.aimAngle === 'number' ? data.aimAngle : undefined;
+      const _heading = typeof (data as any)._heading === 'number' && Number.isFinite((data as any)._heading)
+        ? (data as any)._heading
+        : undefined;
 
       return {
         type: 'input',
@@ -23,18 +26,11 @@ export function parseClientMessage(raw: string): ClientMessage | null {
         seq: Math.max(0, Math.floor(data.seq)),
         throttle,
         steer,
+        _heading,
         brake,
         shoot,
         aimAngle
       };
-    }
-
-    if (data.type === 'debug:setMovementTuning') {
-      // allow any object; server will further validate/ignore when not allowed
-      return {
-        type: 'debug:setMovementTuning',
-        config: (data as any).config || {}
-      } as ClientMessage;
     }
 
     if (data.type === 'net:ping') {

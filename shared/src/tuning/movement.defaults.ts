@@ -6,20 +6,20 @@ export type MovementTuning = MovementStepConfig & {
 
 export const MOVEMENT_DEFAULTS: MovementTuning = {
   // Heading traction movement.
-  forwardAccel: 1681.36,
-  maxForwardSpeed: 342.5,
-  maxReverseSpeed: 120,
-  turnRate: 4.5,
-  turnAccel: 32,
+  forwardAccel: 1400,
+  maxForwardSpeed: 340,
+  maxReverseSpeed: 0,
+  turnRate: 4.2,
+  turnAccel: 18.0,
   brakeTurnMult: 1.8,
-  brakeDecel: 950,
-  coastDecel: 260,
+  brakeDecel: 380,
+  coastDecel: 90,
   forwardDrag: 1.2,
-  lateralDrag: 6.0,
-  brakeLateralDrag: 18,
+  lateralDrag: 8.0,
+  brakeLateralDrag: 9,
   reverseGateSpeed: 45,
   reverseAccelMul: 0.35,
-  standstillSpeedEpsilon: 8,
+  standstillSpeedEpsilon: 6,
   ...({
     headingModeEnabled: true,
     maxTurnRateLowSpeed: 4.5,
@@ -31,9 +31,9 @@ export const MOVEMENT_DEFAULTS: MovementTuning = {
   } as Partial<MovementTuning>),
 
   // Max speed aliases used by server/client HUD helpers.
-  maxSpeed: 342.5,
-  maxSpeedNoPuck: 342.5,
-  maxSpeedWithPuck: 342.5,
+  maxSpeed: 340,
+  maxSpeedNoPuck: 340,
+  maxSpeedWithPuck: 340,
   staminaRegen: 0.23,
 
   // Aim + crosshair.

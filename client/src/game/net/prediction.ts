@@ -58,6 +58,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     {
       throttle: input.throttle,
       steer: input.steer,
+      _heading: input._heading,
       brake: !!input.brake,
       shoot: !!input.shoot,
       aimAngle: Number.isFinite(input.aimAngle) ? input.aimAngle : simState.aimAngle

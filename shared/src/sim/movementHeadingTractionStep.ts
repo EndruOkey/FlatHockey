@@ -2,14 +2,6 @@ import { MOVEMENT_DEFAULTS } from '../tuning/movement.defaults';
 import { approachScalar, clamp, wrapToPi } from './movementMath';
 import type { MovementStepConfig, MovementStepInput, MovementStepState } from './movementStep.types';
 
-function resolveMaxForwardSpeed(config: MovementStepConfig): number {
-  if (typeof config.maxForwardSpeed === 'number') return Math.max(1, config.maxForwardSpeed);
-  if (typeof config.maxSpeed === 'number') return Math.max(1, config.maxSpeed);
-  if (config.hasPuck && typeof config.maxSpeedWithPuck === 'number') return Math.max(1, config.maxSpeedWithPuck);
-  if (typeof config.maxSpeedNoPuck === 'number') return Math.max(1, config.maxSpeedNoPuck);
-  return Math.max(1, MOVEMENT_DEFAULTS.maxForwardSpeed ?? MOVEMENT_DEFAULTS.maxSpeed ?? 342.5);
-}
-
 export function applyHeadingTractionStep(
   state: MovementStepState,
   input: MovementStepInput,
@@ -17,107 +9,85 @@ export function applyHeadingTractionStep(
   config: MovementStepConfig
 ) {
   const simDt = clamp(dt, 0.001, 0.05);
-  const turnRate = Math.max(0, config.turnRate ?? MOVEMENT_DEFAULTS.turnRate ?? 7.2);
-  const turnAccel = Math.max(0, config.turnAccel ?? MOVEMENT_DEFAULTS.turnAccel ?? 32);
-  const brakeTurnMult = Math.max(1, config.brakeTurnMult ?? MOVEMENT_DEFAULTS.brakeTurnMult ?? 1.8);
-  const forwardAccel = Math.max(0, config.forwardAccel ?? MOVEMENT_DEFAULTS.forwardAccel ?? 1681.36);
-  const maxForwardSpeed = resolveMaxForwardSpeed(config);
-  const maxReverseSpeed = clamp(
-    config.maxReverseSpeed ?? MOVEMENT_DEFAULTS.maxReverseSpeed ?? maxForwardSpeed * 0.35,
+  const turnRate = config.turnRate ?? MOVEMENT_DEFAULTS.turnRate ?? 4.2;
+  const turnAccel = config.turnAccel ?? MOVEMENT_DEFAULTS.turnAccel ?? 18.0;
+  const forwardAccel = config.forwardAccel ?? MOVEMENT_DEFAULTS.forwardAccel ?? 1400;
+  const maxSpeed = Math.max(
     1,
-    maxForwardSpeed
+    config.maxForwardSpeed ?? config.maxSpeed ?? MOVEMENT_DEFAULTS.maxForwardSpeed ?? 340
   );
-  const reverseAccelMul = clamp(config.reverseAccelMul ?? MOVEMENT_DEFAULTS.reverseAccelMul ?? 0.35, 0.05, 1);
-  const brakeDecel = Math.max(0, config.brakeDecel ?? MOVEMENT_DEFAULTS.brakeDecel ?? 950);
-  const coastDecel = Math.max(0, config.coastDecel ?? MOVEMENT_DEFAULTS.coastDecel ?? 260);
-  const forwardDrag = Math.max(0, config.forwardDrag ?? MOVEMENT_DEFAULTS.forwardDrag ?? 1.45);
-  const lateralDrag = Math.max(0, config.lateralDrag ?? MOVEMENT_DEFAULTS.lateralDrag ?? 7.2);
-  const brakeLateralDrag = Math.max(
-    lateralDrag,
-    config.brakeLateralDrag ?? MOVEMENT_DEFAULTS.brakeLateralDrag ?? 12
-  );
-  const reverseGateSpeed = Math.max(0, config.reverseGateSpeed ?? MOVEMENT_DEFAULTS.reverseGateSpeed ?? 45);
-  const standstillEpsilon = Math.max(
-    0,
-    config.standstillSpeedEpsilon ?? MOVEMENT_DEFAULTS.standstillSpeedEpsilon ?? 8
-  );
+  const brakeDecel = config.brakeDecel ?? MOVEMENT_DEFAULTS.brakeDecel ?? 380;
+  const spaceDecel = brakeDecel * 2.2;
+  const coastDecel = config.coastDecel ?? MOVEMENT_DEFAULTS.coastDecel ?? 90;
+  const forwardDrag = config.forwardDrag ?? MOVEMENT_DEFAULTS.forwardDrag ?? 1.2;
+  const lateralDrag = config.lateralDrag ?? MOVEMENT_DEFAULTS.lateralDrag ?? 8.0;
+  const spaceLateralDrag = lateralDrag * 2.5;
+  const standstillEps = config.standstillSpeedEpsilon ?? MOVEMENT_DEFAULTS.standstillSpeedEpsilon ?? 6;
 
   const throttle = input.throttle;
-  const steer = input.steer;
   const brake = !!input.brake;
-  const steerOnlyNoDrive = throttle === 0 && !brake && Math.abs(steer) > 0;
-  const steerOnlyStandstill = steerOnlyNoDrive && state.speed <= standstillEpsilon;
+  const isSpace = brake && throttle === 0;
 
-  const targetOmega = steer * turnRate * (brake ? brakeTurnMult : 1);
+  const steer = input.steer ?? 0;
+  const targetOmega = steer * turnRate;
   state.headingOmega = approachScalar(state.headingOmega, targetOmega, turnAccel * simDt);
-  state.heading = wrapToPi(state.heading + state.headingOmega * simDt);
+
+  if (typeof input._heading === 'number' && Number.isFinite(input._heading)) {
+    state.heading = wrapToPi(input._heading);
+  } else {
+    state.heading = wrapToPi(state.heading + state.headingOmega * simDt);
+  }
 
   const fwdX = Math.cos(state.heading);
   const fwdY = Math.sin(state.heading);
-  const rightX = -fwdY;
-  const rightY = fwdX;
+  const latX = -fwdY;
+  const latY = fwdX;
 
-  let forwardSpeed = state.vx * fwdX + state.vy * fwdY;
-  let lateralSpeed = state.vx * rightX + state.vy * rightY;
+  let fwdSpeed = state.vx * fwdX + state.vy * fwdY;
+  let latSpeed = state.vx * latX + state.vy * latY;
 
-  if (steerOnlyNoDrive) {
-    // Hard invariant: A/D alone is pure rotation, never translation.
-    forwardSpeed = 0;
-    lateralSpeed = 0;
+  if (Math.abs(steer) > 0 && throttle > 0) {
+    const totalSpeed = Math.hypot(fwdSpeed, latSpeed);
+    fwdSpeed = totalSpeed * Math.sign(fwdSpeed || 1);
+    latSpeed = 0;
   }
 
   if (throttle > 0) {
-    forwardSpeed += forwardAccel * simDt;
-  } else if (throttle < 0) {
-    if (forwardSpeed > reverseGateSpeed) {
-      forwardSpeed = approachScalar(forwardSpeed, 0, brakeDecel * simDt);
-    } else {
-      forwardSpeed -= forwardAccel * reverseAccelMul * simDt;
-    }
+    fwdSpeed += forwardAccel * simDt;
+  } else if (brake) {
+    const decel = isSpace ? spaceDecel : brakeDecel;
+    fwdSpeed = approachScalar(fwdSpeed, 0, decel * simDt);
   } else {
-    forwardSpeed = approachScalar(forwardSpeed, 0, coastDecel * simDt);
+    fwdSpeed = approachScalar(fwdSpeed, 0, coastDecel * simDt);
   }
 
-  if (brake) {
-    forwardSpeed = approachScalar(forwardSpeed, 0, brakeDecel * simDt);
-  }
+  fwdSpeed *= Math.exp(-forwardDrag * simDt);
+  latSpeed *= Math.exp(-(isSpace ? spaceLateralDrag : lateralDrag) * simDt);
 
-  forwardSpeed *= Math.exp(-forwardDrag * simDt);
-  lateralSpeed *= Math.exp(-(brake ? brakeLateralDrag : lateralDrag) * simDt);
+  fwdSpeed = clamp(fwdSpeed, 0, maxSpeed);
 
-  forwardSpeed = clamp(forwardSpeed, -maxReverseSpeed, maxForwardSpeed);
-  if (steerOnlyStandstill) {
-    forwardSpeed = 0;
-    lateralSpeed = 0;
-  }
+  if (Math.abs(fwdSpeed) < standstillEps && !brake && throttle === 0) fwdSpeed = 0;
+  if (Math.abs(latSpeed) < standstillEps * 0.5) latSpeed = 0;
 
-  state.vx = fwdX * forwardSpeed + rightX * lateralSpeed;
-  state.vy = fwdY * forwardSpeed + rightY * lateralSpeed;
+  state.vx = fwdX * fwdSpeed + latX * latSpeed;
+  state.vy = fwdY * fwdSpeed + latY * latSpeed;
   state.speed = Math.hypot(state.vx, state.vy);
-
-  if (steerOnlyNoDrive) {
-    state.vx = 0;
-    state.vy = 0;
-    state.speed = 0;
-  }
-
-  if (state.speed <= standstillEpsilon) {
-    state.vx = 0;
-    state.vy = 0;
-    state.speed = 0;
-  }
 
   state.x += state.vx * simDt;
   state.y += state.vy * simDt;
-  if (state.speed > 0) {
-    state.moveAngle = Math.atan2(state.vy, state.vx);
-  } else {
-    state.moveAngle = state.heading;
-  }
+
+  state.moveAngle = state.speed > standstillEps
+    ? Math.atan2(state.vy, state.vx)
+    : state.heading;
 
   if (Number.isFinite(input.aimAngle)) {
     state.aimAngle = wrapToPi(input.aimAngle!);
   }
-  state.stamina = clamp(state.stamina + (MOVEMENT_DEFAULTS.staminaRegen ?? 0.23) * simDt, 0, 1);
-  state.reverseState = forwardSpeed < -0.5 ? 'REVERSING' : 'FORWARD';
+
+  state.stamina = clamp(
+    state.stamina + (MOVEMENT_DEFAULTS.staminaRegen ?? 0.23) * simDt,
+    0,
+    1
+  );
+  state.reverseState = 'FORWARD';
 }
