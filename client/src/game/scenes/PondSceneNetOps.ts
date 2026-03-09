@@ -143,23 +143,23 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
 
 export function buildClientInput(scene: any): InputMsg {
   const tuning = getTuning();
+
+  // Inicializace headingu z predicted state při prvním volání
   if (!Number.isFinite(scene._localHeading)) {
     scene._localHeading =
       Number.isFinite(scene.predicted?.heading) ? scene.predicted.heading :
-      Number.isFinite(scene.predicted?.angle) ? scene.predicted.angle : 0;
+      Number.isFinite(scene.predicted?.angle)   ? scene.predicted.angle   : 0;
   }
 
-  const turnRate = 4.2;
+  // A/D točí heading
+  const turnRate = 4.2; // rad/s
   if (scene.keys.A.isDown) scene._localHeading -= turnRate * CLIENT_FIXED_DT;
   if (scene.keys.D.isDown) scene._localHeading += turnRate * CLIENT_FIXED_DT;
   scene._localHeading = wrapToPi(scene._localHeading);
 
+  // W = vpřed, S nebo SPACE = brzda
   const throttle: -1 | 0 | 1 = scene.keys.W.isDown ? 1 : 0;
-  const brake = scene.keys.S.isDown || scene.keys.SPACE.isDown;
-  const moveX = Math.cos(scene._localHeading);
-  const moveY = Math.sin(scene._localHeading);
-  void moveX;
-  void moveY;
+  const brake = scene.keys.S.isDown || scene.keys.SPACE.isDown ? 1 : 0;
 
   const aimAngle = scene.computeMouseAimAngle(CLIENT_FIXED_DT, tuning);
   if (typeof aimAngle === 'number' && Number.isFinite(aimAngle)) {
@@ -172,9 +172,9 @@ export function buildClientInput(scene: any): InputMsg {
     seq: ++scene.seq,
     throttle,
     steer: 0,
-    brake: brake ? 1 : 0,
+    brake,
     shoot: 0,
     aimAngle,
-    _heading: scene._localHeading
+    _heading: scene._localHeading,
   };
 }
