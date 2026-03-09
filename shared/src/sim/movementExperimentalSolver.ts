@@ -82,8 +82,8 @@ export function applyHeadingTractionStep(args: ExperimentalStepArgs): Experiment
   let forwardSpeed = state.vx * forwardX + state.vy * forwardY;
   let lateralSpeed = state.vx * rightX + state.vy * rightY;
   const steerOnlyNoBrake = throttle === 0 && !brakeActive && Math.abs(steer) > 0;
-  if (steerOnlyNoBrake && prevSpeed <= STEER_ONLY_STOP_EPS) {
-    // Hard rotate-in-place lock for standstill steering.
+  if (steerOnlyNoBrake) {
+    // Nuclear lock: steer-only input is pure heading rotation with no translation.
     forwardSpeed = 0;
     lateralSpeed = 0;
   }
@@ -115,7 +115,7 @@ export function applyHeadingTractionStep(args: ExperimentalStepArgs): Experiment
   // Hard invariant: steering-only input may rotate heading, but must never inject speed.
   if (throttle === 0 && !brakeActive) {
     const speedNow = Math.hypot(state.vx, state.vy);
-    if (prevSpeed <= STEER_ONLY_STOP_EPS) {
+    if (steerOnlyNoBrake || prevSpeed <= STEER_ONLY_STOP_EPS) {
       // At (near) standstill, A/D must be pure heading rotation with zero translation.
       state.vx = 0;
       state.vy = 0;
