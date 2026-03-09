@@ -27,7 +27,6 @@ export const MOVEMENT_DEFAULTS: MovementTuning = {
   staminaDrainMulWithPuck: 1.2,
   headingModeEnabled: true,
   movementModel: 'desiredHeadingTraction',
-  movementCoreModel: 'DESIRED_HEADING_TRACTION',
   maxTurnRateLowSpeed: 7.2,
   maxTurnRateHighSpeed: 0.62,
   inputDirectionTauMs: 110,

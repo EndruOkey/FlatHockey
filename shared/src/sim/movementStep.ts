@@ -1,6 +1,6 @@
 import { MOVEMENT_DEFAULTS } from '../tuning/movement.defaults';
 import { resetMovementDebugState } from './movementStepDebug';
-import { applyExperimentalMovementStep } from './movementExperimentalSolver';
+import { applyHeadingTractionStep } from './movementExperimentalSolver';
 import { approachScalar, clamp, expBlend, lerp, lerpAngle, smoothstep01, wrapToPi } from './movementMath';
 import { ensureMovementStateBase } from './movementStateInit';
 import type { MovementStepConfig, MovementStepInput, MovementStepState } from './movementStep.types';
@@ -10,13 +10,6 @@ export { approachAngle, wrapToPi } from './movementMath';
 
 const BASE_DEFAULTS: MovementStepConfig = { ...MOVEMENT_DEFAULTS };
 export const DEFAULTS: MovementStepConfig = { ...BASE_DEFAULTS };
-
-function normalizeMovementModel(config: MovementStepConfig): 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION' {
-  const raw = (config.movementModel ?? config.movementCoreModel ?? DEFAULTS.movementModel ?? DEFAULTS.movementCoreModel ?? 'desiredHeadingTraction') as string;
-  if (raw === 'SKATE_STEERING' || raw === 'skateSteering') return 'SKATE_STEERING';
-  if (raw === 'DESIRED_HEADING_TRACTION' || raw === 'desiredHeadingTraction') return 'DESIRED_HEADING_TRACTION';
-  return 'DESIRED_HEADING_TRACTION';
-}
 
 export function applyMovementStep(
   state: MovementStepState,
@@ -50,7 +43,6 @@ export function applyMovementStep(
     state.stickLocalAngle = wrapToPi(fallbackAim - state.bodyAngle!);
   }
 
-  const movementModel = normalizeMovementModel(config);
   state.stamina = clamp(state.stamina + (config.staminaRegen ?? DEFAULTS.staminaRegen!) * simDt, 0, 1);
   const sprinting = false;
   const maxSpeedAlias = config.maxSpeed;
@@ -103,7 +95,7 @@ export function applyMovementStep(
   let turnIntentAngle = state.moveAngle!;
   let turnResistance = 0;
 
-  const result = applyExperimentalMovementStep(movementModel, {
+  const result = applyHeadingTractionStep({
     state,
     input,
     dt: simDt,
@@ -263,7 +255,7 @@ export function applyMovementStep(
   state.debugTurnIntentAngle = turnIntentAngle;
   state.debugVelocityDesiredDeltaDeg = wrapToPi(desiredMoveAngleDebug - debugVelocityAngle) * (180 / Math.PI);
   state.debugTurnResistance = turnResistance;
-  state.movementModelActive = movementModel;
+  state.movementModelActive = 'DESIRED_HEADING_TRACTION';
 }
 
 

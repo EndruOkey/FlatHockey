@@ -25,8 +25,7 @@ export type PlayerState = {
   moveAngle: number;
   headingOmega: number;
   desiredHeadingAngle: number;
-  movementModel: 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION';
-  movementModelActive: 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION';
+  movementModelActive: 'DESIRED_HEADING_TRACTION';
   inputAngle: number;
   desiredDirX: number;
   desiredDirY: number;
@@ -77,8 +76,6 @@ export type PlayerState = {
   chargeActive: boolean;
   hitCooldownLeft: number;
   stunLeft: number;
-  debugMovementModelRequested?: 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION';
-  debugMovementModelSource?: 'serverPlayerState' | 'roomTuning';
 };
 
 export type PuckState = {

@@ -51,7 +51,6 @@ export class PondScene extends Phaser.Scene {
   private roomId: string | null = null;
   private wsConnected = false;
   private allowTuningSync = false;
-  private allowMovementModelSync = false;
 
   private players = new Map<string, PlayerView>();
   private remoteInterpolators = new Map<string, Interpolator<LerpPlayer>>();
@@ -283,20 +282,12 @@ export class PondScene extends Phaser.Scene {
     return view;
   }
 
-  private applyWelcomeLike(msg: { clientId: string; roomId?: string; room?: string; movementTuning?: unknown; allowTuningSync?: boolean; allowMovementModelSync?: boolean }) {
+  private applyWelcomeLike(msg: { clientId: string; roomId?: string; room?: string; movementTuning?: unknown; allowTuningSync?: boolean }) {
     this.resetPendingInputState(true);
     this.clientId = msg.clientId;
     this.roomId = msg.roomId ?? msg.room ?? this.roomId ?? 'pond-1';
     this.allowTuningSync = !!msg.allowTuningSync;
-    this.allowMovementModelSync = !!msg.allowMovementModelSync;
-    const serverTuning = msg.movementTuning as Record<string, unknown> | undefined;
-    const core = typeof serverTuning?.movementCoreModel === 'string' ? serverTuning.movementCoreModel : undefined;
-    const model = typeof serverTuning?.movementModel === 'string' ? serverTuning.movementModel : undefined;
-    const normalized = core === 'SKATE_STEERING' || model === 'skateSteering'
-      ? { movementCoreModel: 'SKATE_STEERING' as const, movementModel: 'skateSteering' as const }
-      : { movementCoreModel: 'DESIRED_HEADING_TRACTION' as const, movementModel: 'desiredHeadingTraction' as const };
-    setTuningKey('movementModel', normalized.movementModel);
-    setTuningKey('movementCoreModel', normalized.movementCoreModel);
+    setTuningKey('movementModel', 'desiredHeadingTraction');
   }
 
   private onServerMessage(msg: ServerMessage | { type?: string; [key: string]: unknown }) {
@@ -460,20 +451,8 @@ export class PondScene extends Phaser.Scene {
   }
 
   cycleMovementModel() {
-    const current = this.predicted?.movementModelActive === 'SKATE_STEERING' ? 'SKATE_STEERING' : 'DESIRED_HEADING_TRACTION';
-    const next = current === 'SKATE_STEERING' ? 'DESIRED_HEADING_TRACTION' : 'SKATE_STEERING';
-    const nextWire = next === 'SKATE_STEERING' ? 'skateSteering' : 'desiredHeadingTraction';
-    setTuningKey('movementModel', nextWire);
-    setTuningKey('movementCoreModel', next);
-    if (this.allowMovementModelSync) {
-      this.ws.send({
-        type: 'debug:setMovementModel',
-        movementModel: nextWire
-      });
-    } else {
-      console.warn('[MOVEMENT_MODEL] server does not allow movement model sync');
-    }
-    console.log(`[MOVEMENT_MODEL] switched to ${next}`);
+    setTuningKey('movementModel', 'desiredHeadingTraction');
+    console.log('[MOVEMENT_MODEL] runtime switching removed; using heading traction only');
   }
   
   update(_time: number, _deltaMs: number) {

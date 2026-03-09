@@ -22,9 +22,9 @@ export function reconcilePrediction(
   (predicted as any).headingOmega = (authoritative as any).headingOmega ?? 0;
   (predicted as any).desiredHeadingAngle = (authoritative as any).desiredHeadingAngle ?? (authoritative as any).heading ?? (authoritative as any).moveAngle;
   (predicted as any).movementModelActive = (authoritative as any).movementModelActive ?? 'DESIRED_HEADING_TRACTION';
-  (predicted as any).debugMovementModelRequested = (authoritative as any).movementModelRequested ?? (predicted as any).movementModelActive;
-  (predicted as any).debugMovementModelAuthoritative = (authoritative as any).movementModelAuthoritative ?? (predicted as any).movementModelActive;
-  (predicted as any).debugMovementModelSource = (authoritative as any).movementModelSource ?? 'serverPlayerState';
+  (predicted as any).debugMovementModelRequested = 'DESIRED_HEADING_TRACTION';
+  (predicted as any).debugMovementModelAuthoritative = 'DESIRED_HEADING_TRACTION';
+  (predicted as any).debugMovementModelSource = 'serverPlayerState';
   (predicted as any).inputAngle = (authoritative as any).inputAngle ?? (authoritative as any).moveAngle;
   (predicted as any).desiredDirX = (authoritative as any).desiredDirX ?? Math.cos((authoritative as any).inputAngle ?? (authoritative as any).moveAngle ?? 0);
   (predicted as any).desiredDirY = (authoritative as any).desiredDirY ?? Math.sin((authoritative as any).inputAngle ?? (authoritative as any).moveAngle ?? 0);

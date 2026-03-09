@@ -338,7 +338,7 @@ export function updateOverlay(scene: any) {
     ? `phase=${String(telemetry.movementPhase ?? 'GLIDE')} lowSteerOff=${telemetry.lowSpeedSteeringDisabled ? 'on' : 'off'} lowStart=${telemetry.lowSpeedStartupActive ? 'on' : 'off'} latch=${telemetry.startupLatchActive ? 'on' : 'off'} latchIgn=${telemetry.latchedInputIgnored ? 'on' : 'off'} latchRel=${(Number(telemetry.startupReleaseTimer ?? 0) * 1000).toFixed(0)}ms travelLock=${telemetry.travelDirLocked ? 'on' : 'off'} minSteer=${Number(telemetry.minSteerSpeed ?? 0).toFixed(1)} startCommit=${telemetry.startCommitActive ? 'on' : 'off'} startTimer=${(Number(telemetry.startCommitTimer ?? 0) * 1000).toFixed(0)}ms startDir=(${Number(telemetry.startDirX ?? 0).toFixed(2)}, ${Number(telemetry.startDirY ?? 0).toFixed(2)}) effStart=(${Number(telemetry.effectiveStartDirX ?? 0).toFixed(2)}, ${Number(telemetry.effectiveStartDirY ?? 0).toFixed(2)}) carveLock=${(Number(telemetry.carveLockTimer ?? 0) * 1000).toFixed(0)}ms carveSide=${Number(telemetry.carveSide ?? 0)} signed=${(Number(telemetry.signedInputVsVelocityAngle ?? 0) * 180 / Math.PI).toFixed(1)}deg commit=${(Number(telemetry.commitTimer ?? 0) * 1000).toFixed(0)}ms hold=${(Number(telemetry.oppositeHoldTimer ?? 0) * 1000).toFixed(0)}ms steerDir=(${Number(telemetry.steerDirX ?? 0).toFixed(2)}, ${Number(telemetry.steerDirY ?? 0).toFixed(2)})`
     : null;
   const modelLine = tuning.showAngleDiff
-    ? `model req=${String(telemetry.movementModelRequested ?? 'desiredHeadingTraction')} auth=${String(telemetry.movementModelAuthoritative ?? telemetry.movementModel ?? 'desiredHeadingTraction')} stepUsed=${String(telemetry.movementModelStepUsed ?? telemetry.movementModel ?? 'desiredHeadingTraction')} src=${String(telemetry.movementModelSource ?? 'localPrediction')} heading=${(Number(telemetry.headingAngle ?? 0) * 180 / Math.PI).toFixed(1)}deg omega=${(Number(telemetry.headingOmega ?? 0) * 180 / Math.PI).toFixed(1)}deg/s fwd=${Number(telemetry.forwardSpeedLocal ?? 0).toFixed(1)} lat=${Number(telemetry.lateralSpeedLocal ?? 0).toFixed(1)} desired=${(Number(telemetry.desiredHeadingAngle ?? 0) * 180 / Math.PI).toFixed(1)} err=${Number(telemetry.headingErrorDeg ?? 0).toFixed(1)} steer=${Number(telemetry.steerInput ?? 0).toFixed(2)} throttle=${Number(telemetry.throttleInput ?? 0).toFixed(2)}`
+    ? `model=headingTraction heading=${(Number(telemetry.headingAngle ?? 0) * 180 / Math.PI).toFixed(1)}deg omega=${(Number(telemetry.headingOmega ?? 0) * 180 / Math.PI).toFixed(1)}deg/s fwd=${Number(telemetry.forwardSpeedLocal ?? 0).toFixed(1)} lat=${Number(telemetry.lateralSpeedLocal ?? 0).toFixed(1)} desired=${(Number(telemetry.desiredHeadingAngle ?? 0) * 180 / Math.PI).toFixed(1)} err=${Number(telemetry.headingErrorDeg ?? 0).toFixed(1)} steer=${Number(telemetry.steerInput ?? 0).toFixed(2)} throttle=${Number(telemetry.throttleInput ?? 0).toFixed(2)}`
     : null;
 
   if (scene.debugEnabled) {
@@ -481,14 +481,12 @@ export function updateHud(scene: any, dtSec: number) {
   scene.hudAcc = 0;
   const telemetry = (lastTelemetry || {}) as Record<string, any>;
   const tuning = getTuning();
-  const requestedModel = (tuning.movementCoreModel === 'SKATE_STEERING' || tuning.movementModel === 'skateSteering') ? 'skateSteering' : 'desiredHeadingTraction';
-  const requestedAuthoritative = String(telemetry.movementModelRequested ?? requestedModel);
-  const activeModel = scene.predicted?.movementModelActive === 'SKATE_STEERING' ? 'skateSteering' : 'desiredHeadingTraction';
+  const activeModel = 'headingTraction';
   const next = [
     `Room: ${scene.roomId ?? '-'}`,
     `Client: ${scene.clientId ?? '-'}`,
     `Build: ${BUILD_VERSION || 'dev-local'}`,
-    `Model (req/auth/active): ${requestedModel} / ${requestedAuthoritative} / ${activeModel}`,
+    `Model: ${activeModel}`,
     `Seq/Ack: ${scene.seq}/${scene.ackSeq}`,
     `Pending: ${scene.pendingInputs.length}`,
     'WASD move | SPACE brake | RMB charge/crosscheck | E/LMB shoot | F8 model switch'

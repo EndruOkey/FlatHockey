@@ -2,8 +2,6 @@ import { MOVEMENT_DEFAULTS } from '../tuning/movement.defaults';
 import { approachScalar, clamp, wrapToPi } from './movementMath';
 import type { MovementStepConfig, MovementStepInput, MovementStepState } from './movementStep.types';
 
-export type ExperimentalMovementModel = 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION';
-
 export type ExperimentalStepArgs = {
   state: MovementStepState;
   input: MovementStepInput;
@@ -23,45 +21,13 @@ export type ExperimentalStepResult = {
 
 type ReverseDriveState = 'NORMAL' | 'TRANSITION_TO_REVERSE' | 'REVERSE_READY';
 
-function resetStateForModelSwitch(state: MovementStepState, model: ExperimentalMovementModel) {
-  const prev = state.movementModelActive;
-  if (prev === model) return;
-  const speed = Math.hypot(state.vx, state.vy);
-  const heading = Number.isFinite(state.heading)
-    ? state.heading!
-    : (Number.isFinite(state.moveAngle) ? state.moveAngle! : (speed > 0.001 ? Math.atan2(state.vy, state.vx) : 0));
-  state.heading = heading;
-  state.moveAngle = speed > 0.001 ? Math.atan2(state.vy, state.vx) : heading;
-  state.inputAngle = heading;
-  state.headingOmega = 0;
-  state.desiredHeadingAngle = heading;
-  state.committedDirX = Math.cos(heading);
-  state.committedDirY = Math.sin(heading);
-  state.desiredDirX = state.committedDirX;
-  state.desiredDirY = state.committedDirY;
-  state.pendingDirX = state.committedDirX;
-  state.pendingDirY = state.committedDirY;
-  state.distanceSinceCommit = 0;
-  state.commitNoInputTimer = 0;
-  state.reverseDriveState = 'NORMAL';
-  state.reverseTransitionActive = false;
-  state.reverseTransitionTimer = 0;
-  state.directionCommitTimer = 0;
-  state.oppositeHoldTimer = 0;
-  state.carveLockTimer = 0;
-  state.carveSwitchCooldownTimer = 0;
-  state.carveSide = 0;
-  state.movementModelActive = model;
-}
-
-function stepReverseState(state: MovementStepState, throttleInput: number, brake: boolean, forwardSpeedAbs: number, config: MovementStepConfig, dt: number) {
+function stepReverseState(state: MovementStepState, oppositeRequested: boolean, brake: boolean, forwardSpeedAbs: number, config: MovementStepConfig, dt: number) {
   const reverseEnterSpeed = Math.max(0, config.reverseEnterSpeed ?? MOVEMENT_DEFAULTS.reverseEnterSpeed ?? 42);
   const reverseMinDurationSec = Math.max(0, (config.reverseMinDurationMs ?? MOVEMENT_DEFAULTS.reverseMinDurationMs ?? 140) / 1000);
   let reverseState: ReverseDriveState = state.reverseDriveState === 'TRANSITION_TO_REVERSE' || state.reverseDriveState === 'REVERSE_READY'
     ? state.reverseDriveState
     : 'NORMAL';
   let reverseTimer = Math.max(0, state.reverseTransitionTimer ?? 0);
-  const oppositeRequested = throttleInput < -0.2;
 
   if (reverseState === 'NORMAL') {
     if (oppositeRequested && brake && forwardSpeedAbs > reverseEnterSpeed * 0.5) {
@@ -88,59 +54,32 @@ function stepReverseState(state: MovementStepState, throttleInput: number, brake
   return reverseState;
 }
 
-export function applyExperimentalMovementStep(model: ExperimentalMovementModel, args: ExperimentalStepArgs): ExperimentalStepResult {
+export function applyHeadingTractionStep(args: ExperimentalStepArgs): ExperimentalStepResult {
   const { state, input, dt, config, rawInputX, rawInputY, hasInput, prevMoveAngle } = args;
-  resetStateForModelSwitch(state, model);
 
   const brakeActive = !!input.buttons.brake;
+  const reverseThreshold = clamp(config.reverseThreshold ?? MOVEMENT_DEFAULTS.reverseThreshold ?? -0.35, -1, 0);
   const forwardAccel = Math.max(0, config.forwardAccel ?? MOVEMENT_DEFAULTS.forwardAccel ?? 1500);
   const forwardMaxSpeed = Math.max(1, config.forwardMaxSpeed ?? MOVEMENT_DEFAULTS.forwardMaxSpeed ?? 342.5);
   const reverseAccelMul = clamp(config.reverseAccelMul ?? config.reverseAccelMult ?? MOVEMENT_DEFAULTS.reverseAccelMul ?? 0.22, 0.05, 1);
-  const brakeForce = Math.max(0, config.brakeForce ?? config.brakeDrag ?? MOVEMENT_DEFAULTS.brakeDrag ?? 4.8) * 32;
+  const brakeForce = Math.max(0, config.brakeForce ?? MOVEMENT_DEFAULTS.brakeForce ?? 150);
   const lateralDamping = Math.max(0, config.lateralDamping ?? MOVEMENT_DEFAULTS.lateralDamping ?? 0.18);
   const forwardDamping = Math.max(0, config.forwardDamping ?? MOVEMENT_DEFAULTS.forwardDamping ?? 2.1);
   const brakeTurnMult = Math.max(1, config.brakeTurnMult ?? MOVEMENT_DEFAULTS.brakeTurnMult ?? 1.8);
+  const headingTurnRate = Math.max(0, config.desiredHeadingTurnRate ?? MOVEMENT_DEFAULTS.desiredHeadingTurnRate ?? 7.2);
+  const headingTurnAccel = Math.max(0, config.desiredHeadingTurnAccel ?? MOVEMENT_DEFAULTS.desiredHeadingTurnAccel ?? 32);
 
   let headingAngle = Number.isFinite(state.heading) ? state.heading! : (Number.isFinite(state.moveAngle) ? state.moveAngle! : 0);
   let headingOmega = Number.isFinite(state.headingOmega) ? state.headingOmega! : 0;
   let desiredHeading = Number.isFinite(state.desiredHeadingAngle) ? state.desiredHeadingAngle! : headingAngle;
-  let steerInput = 0;
-  let throttleInput = 0;
-
-  if (model === 'SKATE_STEERING') {
-    steerInput = clamp(rawInputX, -1, 1);
-    throttleInput = clamp(-rawInputY, -1, 1);
-    const headingTurnRate = Math.max(0, config.headingTurnRate ?? MOVEMENT_DEFAULTS.headingTurnRate ?? 4.9);
-    const headingTurnAccel = Math.max(0, config.headingTurnAccel ?? MOVEMENT_DEFAULTS.headingTurnAccel ?? 24);
-    const targetOmega = steerInput * headingTurnRate * (brakeActive ? brakeTurnMult : 1);
-    headingOmega = approachScalar(headingOmega, targetOmega, headingTurnAccel * dt);
-    headingOmega *= Math.exp(-2.2 * dt);
-    headingAngle = wrapToPi(headingAngle + headingOmega * dt);
-    desiredHeading = headingAngle;
-  } else {
-    const inputMag = clamp(Math.hypot(rawInputX, rawInputY), 0, 1);
-    if (hasInput) desiredHeading = Math.atan2(rawInputY, rawInputX);
-    const desiredHeadingTurnRate = Math.max(0, config.desiredHeadingTurnRate ?? MOVEMENT_DEFAULTS.desiredHeadingTurnRate ?? 7.2);
-    const desiredHeadingTurnAccel = Math.max(0, config.desiredHeadingTurnAccel ?? MOVEMENT_DEFAULTS.desiredHeadingTurnAccel ?? 32);
-    const responseCurve = Math.max(0.1, config.headingResponseCurve ?? MOVEMENT_DEFAULTS.headingResponseCurve ?? 1.2);
-    const headingError = wrapToPi(desiredHeading - headingAngle);
-    const errNorm = Math.pow(Math.min(1, Math.abs(headingError) / Math.PI), responseCurve);
-    const targetOmega = Math.sign(headingError) * errNorm * desiredHeadingTurnRate * (brakeActive ? brakeTurnMult : 1);
-    headingOmega = approachScalar(headingOmega, targetOmega, desiredHeadingTurnAccel * dt);
-    headingOmega *= Math.exp(-1.6 * dt);
-    headingAngle = wrapToPi(headingAngle + headingOmega * dt);
-    steerInput = clamp(headingError / (Math.PI * 0.5), -1, 1);
-    const dirX = Math.cos(desiredHeading);
-    const dirY = Math.sin(desiredHeading);
-    const desiredDotForward = clamp(dirX * Math.cos(headingAngle) + dirY * Math.sin(headingAngle), -1, 1);
-    if (!hasInput) {
-      throttleInput = 0;
-    } else if (desiredDotForward < -0.35) {
-      throttleInput = -inputMag;
-    } else {
-      throttleInput = inputMag;
-    }
-  }
+  const inputMag = clamp(Math.hypot(rawInputX, rawInputY), 0, 1);
+  if (hasInput) desiredHeading = Math.atan2(rawInputY, rawInputX);
+  const headingError = wrapToPi(desiredHeading - headingAngle);
+  const steerInput = clamp(headingError / (Math.PI * 0.5), -1, 1);
+  const targetOmega = steerInput * headingTurnRate * (brakeActive ? brakeTurnMult : 1);
+  headingOmega = approachScalar(headingOmega, targetOmega, headingTurnAccel * dt);
+  headingOmega *= Math.exp(-2.2 * dt);
+  headingAngle = wrapToPi(headingAngle + headingOmega * dt);
 
   const fx = Math.cos(headingAngle);
   const fy = Math.sin(headingAngle);
@@ -148,12 +87,16 @@ export function applyExperimentalMovementStep(model: ExperimentalMovementModel, 
   const ry = fx;
   let forwardSpeed = state.vx * fx + state.vy * fy;
   let lateralSpeed = state.vx * rx + state.vy * ry;
-  const reverseState = stepReverseState(state, throttleInput, brakeActive, Math.abs(forwardSpeed), config, dt);
+  const desiredDotHeading = hasInput ? clamp(Math.cos(wrapToPi(desiredHeading - headingAngle)), -1, 1) : 0;
+  const oppositeRequested = hasInput && desiredDotHeading < reverseThreshold;
+  const reverseState = stepReverseState(state, oppositeRequested, brakeActive, Math.abs(forwardSpeed), config, dt);
+  const canReverseDrive = reverseState === 'REVERSE_READY' && brakeActive;
+  const throttleInput = !hasInput ? 0 : (oppositeRequested ? (canReverseDrive ? -inputMag : 0) : inputMag);
 
   if (throttleInput > 0) {
     forwardSpeed += forwardAccel * throttleInput * dt;
   } else if (throttleInput < 0) {
-    if (reverseState === 'REVERSE_READY' && brakeActive) {
+    if (canReverseDrive) {
       forwardSpeed += forwardAccel * reverseAccelMul * throttleInput * dt;
     } else {
       forwardSpeed = approachScalar(forwardSpeed, 0, brakeForce * (brakeActive ? 1.4 : 1) * dt);
@@ -199,16 +142,8 @@ export function applyExperimentalMovementStep(model: ExperimentalMovementModel, 
   state.distanceSinceCommit = Math.max(0, (state.distanceSinceCommit ?? 0) + Math.hypot(state.x - prevX, state.y - prevY));
   state.commitNoInputTimer = hasInput ? 0 : Math.max(0, (state.commitNoInputTimer ?? 0) + dt);
 
-  const headingError = wrapToPi(desiredHeading - headingAngle);
-  state.debugMovementModel = model === 'SKATE_STEERING' ? 'skateSteering' : 'desiredHeadingTraction';
-  state.debugMovementModelStepUsed = state.debugMovementModel;
-  state.debugMovementModelAuthoritative = model;
-  if (state.debugMovementModelRequested !== 'SKATE_STEERING' && state.debugMovementModelRequested !== 'DESIRED_HEADING_TRACTION') {
-    state.debugMovementModelRequested = model;
-  }
-  if (state.debugMovementModelSource !== 'serverPlayerState' && state.debugMovementModelSource !== 'roomTuning') {
-    state.debugMovementModelSource = 'localPrediction';
-  }
+  state.debugMovementModel = 'desiredHeadingTraction';
+  state.debugMovementModelStepUsed = 'desiredHeadingTraction';
   state.debugHeadingAngle = headingAngle;
   state.debugHeadingOmega = headingOmega;
   state.debugForwardSpeed = forwardSpeed;

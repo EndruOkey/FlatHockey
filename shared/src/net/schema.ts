@@ -51,15 +51,6 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       } as ClientMessage;
     }
 
-    if (data.type === 'debug:setMovementModel') {
-      const movementModelRaw = typeof (data as any).movementModel === 'string' ? (data as any).movementModel : '';
-      if (movementModelRaw !== 'skateSteering' && movementModelRaw !== 'desiredHeadingTraction') return null;
-      return {
-        type: 'debug:setMovementModel',
-        movementModel: movementModelRaw
-      } as ClientMessage;
-    }
-
     if (data.type === 'net:ping') {
       if (typeof (data as any).nonce !== 'number') return null;
       return {

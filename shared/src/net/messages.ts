@@ -24,10 +24,7 @@ export type PlayerStateMsg = {
   heading?: number;
   headingOmega?: number;
   desiredHeadingAngle?: number;
-  movementModelActive?: 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION';
-  movementModelRequested?: 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION';
-  movementModelAuthoritative?: 'SKATE_STEERING' | 'DESIRED_HEADING_TRACTION';
-  movementModelSource?: 'serverPlayerState' | 'roomTuning';
+  movementModelActive?: 'DESIRED_HEADING_TRACTION';
   inputAngle?: number;
   desiredDirX?: number;
   desiredDirY?: number;
@@ -92,7 +89,6 @@ export type WelcomeMsg = {
   // "sync" toggle when not allowed.
   movementTuning?: Partial<import('../sim/movementStep').MovementStepConfig>;
   allowTuningSync?: boolean;
-  allowMovementModelSync?: boolean;
 };
 
 export type NetWelcomeMsg = {
@@ -102,7 +98,6 @@ export type NetWelcomeMsg = {
   serverTick: number;
   movementTuning?: Partial<import('../sim/movementStep').MovementStepConfig>;
   allowTuningSync?: boolean;
-  allowMovementModelSync?: boolean;
 };
 
 export type JoinRejectMsg = {
@@ -113,11 +108,6 @@ export type JoinRejectMsg = {
 export type DebugSetMovementTuningMsg = {
   type: 'debug:setMovementTuning';
   config: Partial<import('../sim/movementStep').MovementStepConfig>;
-};
-
-export type DebugSetMovementModelMsg = {
-  type: 'debug:setMovementModel';
-  movementModel: 'skateSteering' | 'desiredHeadingTraction';
 };
 
 export type JoinMsg = {
@@ -136,5 +126,5 @@ export type NetPongMsg = {
   nonce: number;
 };
 
-export type ClientMessage = InputMsg | DebugSetMovementTuningMsg | DebugSetMovementModelMsg | NetPingMsg | JoinMsg;
+export type ClientMessage = InputMsg | DebugSetMovementTuningMsg | NetPingMsg | JoinMsg;
 export type ServerMessage = WelcomeMsg | NetWelcomeMsg | JoinRejectMsg | SnapshotMsg | NetPongMsg;

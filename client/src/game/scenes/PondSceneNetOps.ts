@@ -16,7 +16,6 @@ export function handleServerMessage(scene: any, msg: ServerMessage | { type?: st
     roomId?: string;
     movementTuning?: unknown;
     allowTuningSync?: unknown;
-    allowMovementModelSync?: unknown;
   };
 
   if (m.type === 'welcome' || m.type === 'net:welcome') {
@@ -25,8 +24,7 @@ export function handleServerMessage(scene: any, msg: ServerMessage | { type?: st
       roomId: typeof m.roomId === 'string' ? m.roomId : undefined,
       room: typeof m.room === 'string' ? m.room : undefined,
       movementTuning: m.movementTuning,
-      allowTuningSync: !!m.allowTuningSync,
-      allowMovementModelSync: !!m.allowMovementModelSync
+      allowTuningSync: !!m.allowTuningSync
     });
     return;
   }

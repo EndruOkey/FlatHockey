@@ -27,6 +27,7 @@ function smoothstep(edge0: number, edge1: number, x: number): number {
 export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg, dt = CLIENT_FIXED_DT) {
   const tuning = getTuning();
   const config: MovementStepConfig = { ...tuning };
+  delete (config as any).movementCoreModel;
 
   // Keep alias and canonical max-speed fields aligned.
   if (typeof tuning.maxSpeed === 'number') {
@@ -34,9 +35,7 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     config.maxSpeedNoPuck = tuning.maxSpeed;
     config.maxSpeedWithPuck = tuning.maxSpeed;
   }
-  const authoritativeModel = state.movementModelActive === 'SKATE_STEERING' ? 'skateSteering' : 'desiredHeadingTraction';
-  config.movementModel = authoritativeModel;
-  config.movementCoreModel = state.movementModelActive === 'SKATE_STEERING' ? 'SKATE_STEERING' : 'DESIRED_HEADING_TRACTION';
+  config.movementModel = 'desiredHeadingTraction';
 
   const prevVx = state.vx;
   const prevVy = state.vy;
@@ -378,9 +377,9 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     commitUnlockReason: simState.debugCommitUnlockReason ?? 'NONE',
     minHeadingAuthorityActive: !!simState.debugMinHeadingAuthorityActive,
     movementModel: simState.debugMovementModel ?? 'desiredHeadingTraction',
-    movementModelRequested: simState.debugMovementModelRequested === 'SKATE_STEERING' ? 'skateSteering' : 'desiredHeadingTraction',
-    movementModelAuthoritative: simState.debugMovementModelAuthoritative === 'SKATE_STEERING' ? 'skateSteering' : 'desiredHeadingTraction',
-    movementModelSource: simState.debugMovementModelSource ?? 'localPrediction',
+    movementModelRequested: 'desiredHeadingTraction',
+    movementModelAuthoritative: 'desiredHeadingTraction',
+    movementModelSource: 'serverPlayerState',
     movementModelStepUsed: simState.debugMovementModelStepUsed ?? simState.debugMovementModel ?? 'desiredHeadingTraction',
     headingAngle: simState.debugHeadingAngle ?? simState.heading ?? 0,
     headingOmega: simState.debugHeadingOmega ?? simState.headingOmega ?? 0,
