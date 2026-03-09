@@ -1,7 +1,7 @@
 import type { InputMsg } from '@flathockey/shared';
 import { applyMovementStep, type MovementStepConfig, type MovementStepState } from '@flathockey/shared/sim/movementStep';
 import { MOVEMENT_DEFAULTS } from '@flathockey/shared/tuning/movement.defaults';
-import { getTuning } from '../debug/movementTuning';
+import { getTuning } from '../tuning/movementTuning';
 import { syncUsedTuning } from './predictionUsedTuning';
 import type { PredictedPlayerState } from './predictionState.types';
 export type { PredictedPlayerState } from './predictionState.types';
@@ -166,16 +166,11 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   applyMovementStep(
     simState,
     {
-      moveX: input.moveX,
-      moveY: input.moveY,
-      aimAngleRaw: typeof input.aimAngleRaw === 'number'
-        ? input.aimAngleRaw
-        : (typeof input.aimAngle === 'number' ? input.aimAngle : (state.aimAngleRaw ?? state.angle)),
-      bodyTurn: 0,
-      buttons: {
-        sprint: !!input.sprint,
-        brake: !!input.brake
-      }
+      throttle: input.throttle,
+      steer: input.steer,
+      brake: !!input.brake,
+      shoot: !!input.shoot,
+      aimAngle: typeof input.aimAngle === 'number' ? input.aimAngle : (state.aimAngleRaw ?? state.angle)
     },
     dt,
     config
@@ -314,17 +309,15 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
 
   const speed = Math.hypot(state.vx, state.vy);
   const maxSpeed = (config.maxSpeed ?? config.maxSpeedNoPuck ?? 1);
-  const wishLen = Math.hypot(input.moveX, input.moveY);
-  const wishX = wishLen > 0 ? input.moveX / wishLen : 0;
-  const wishY = wishLen > 0 ? input.moveY / wishLen : 0;
-  const forwardSpeed = wishLen > 0 ? (state.vx * wishX + state.vy * wishY) : 0;
-  const lateralSpeed = wishLen > 0
-    ? Math.hypot(state.vx - wishX * forwardSpeed, state.vy - wishY * forwardSpeed)
-    : 0;
+  const heading = Number.isFinite(simState.heading) ? simState.heading! : (simState.moveAngle ?? 0);
+  const hx = Math.cos(heading);
+  const hy = Math.sin(heading);
+  const forwardSpeed = state.vx * hx + state.vy * hy;
+  const lateralSpeed = state.vx * (-hy) + state.vy * hx;
 
   const beforeDir = prevSpeed > 0 ? Math.atan2(prevVy, prevVx) : (state.moveAngle ?? 0);
   const afterDir = speed > 0 ? Math.atan2(state.vy, state.vx) : beforeDir;
-  let driftAngle = Math.abs(afterDir - (wishLen > 0 ? Math.atan2(wishY, wishX) : afterDir));
+  let driftAngle = Math.abs(afterDir - heading);
   if (driftAngle > Math.PI) driftAngle = Math.PI * 2 - driftAngle;
 
   let blendT = 0;
@@ -390,8 +383,8 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     steerInput: simState.debugSteerInput ?? 0,
     throttleInput: simState.debugThrottleInput ?? 0,
     brakeActive: !!simState.debugBrakeActive,
-    rawInputX: simState.debugRawInputX ?? input.moveX ?? 0,
-    rawInputY: simState.debugRawInputY ?? input.moveY ?? 0,
+    rawInputX: simState.debugRawInputX ?? input.steer ?? 0,
+    rawInputY: simState.debugRawInputY ?? input.throttle ?? 0,
     filteredInputX: simState.debugFilteredInputX ?? simState.debugDesiredInputX ?? 0,
     filteredInputY: simState.debugFilteredInputY ?? simState.debugDesiredInputY ?? 0,
     appliedForwardForce: simState.debugAppliedForwardForce ?? 0,

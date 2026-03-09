@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { wrapToPi } from '@flathockey/shared';
-import { getTuning } from '../debug/movementTuning';
+import { getTuning } from '../tuning/movementTuning';
 import { applyPredictedInput, CLIENT_FIXED_DT } from '../net/prediction';
 
 const FIXED_STEP_MS = 1000 / 60;
@@ -20,14 +20,6 @@ export function runPondSceneUpdate(scene: any) {
   let frameDtMs = now - scene.lastFrameTimeMs;
   scene.lastFrameTimeMs = now;
 
-  if (Phaser.Input.Keyboard.JustDown(scene.debugToggleKey)) {
-    scene.debugEnabled = !scene.debugEnabled;
-    const state = scene.debugEnabled ? 'ON' : 'OFF';
-    console.log(`[TUNING] toggle ${state}`);
-    console.log(`[TUNING] sceneKey=${scene.scene.key}, cam=${scene.cameras?.main ? 'main' : 'none'}, scale=${scene.scale.width}x${scene.scale.height}`);
-    for (const view of scene.players.values()) view.setDebugDrawEnabled(scene.debugEnabled);
-  }
-
   if (Phaser.Input.Keyboard.JustDown(scene.recorderToggleKey)) {
     if (scene.inputRecorderEnabled) {
       scene.inputRecorderEnabled = false;
@@ -42,14 +34,6 @@ export function runPondSceneUpdate(scene: any) {
     if (scene.replayEnabled) scene.stopReplay();
     else scene.startReplay();
   }
-  if (Phaser.Input.Keyboard.JustDown(scene.modelToggleKey)) {
-    try {
-      scene.cycleMovementModel();
-    } catch (err) {
-      console.error('[MOVEMENT_MODEL] switch failed', err);
-    }
-  }
-
   if (scene.needsResync) {
     scene.needsResync = false;
     const t = performance.now();
@@ -93,11 +77,7 @@ export function runPondSceneUpdate(scene: any) {
       }
       scene.recordInputSample(input, simStepTime);
       const telemetry = applyPredictedInput(scene.predicted, input, CLIENT_FIXED_DT) as unknown as Record<string, any>;
-      if (telemetry) {
-        scene.debugCurrentSpeed = telemetry.currentSpeed ?? scene.debugCurrentSpeed;
-        scene.debugSteeringStrength = telemetry.driftAngle ?? scene.debugSteeringStrength;
-        scene.debugSpeedRatio = telemetry.speedRatio ?? scene.debugSpeedRatio;
-      }
+      void telemetry;
       if (Number.isFinite(scene.predicted.angle)) {
         const diff = wrapToPi(scene.predicted.angle - scene.lastPredictedAngle);
         scene.lastTurnRateDeg = (diff / CLIENT_FIXED_DT) * 180 / Math.PI;
@@ -175,15 +155,13 @@ export function runPondSceneUpdate(scene: any) {
     } else {
       view.setHandedness('R');
     }
-    view.setDebugDrawEnabled(scene.debugEnabled);
+    view.setDebugDrawEnabled(false);
     view.draw(clampedDtMs / 1000);
   }
 
   scene.updateAndDrawPuck(clampedDtMs / 1000, remoteTargetServerTime);
-  scene.drawMovementDebugVectors();
   scene.updateCrosshairAndCursor();
   scene.perfSamples.push({ t: scene.renderClockMs, dtMs: frameDtMs });
   scene.updateOverlay();
-  scene.netDebugOverlay?.update();
   scene.updateHud(clampedDtMs / 1000);
 }

@@ -1,5 +1,5 @@
 import type { MovementStepConfig } from '@flathockey/shared/sim/movementStep';
-import { usedTuning } from '../debug/movementTuning';
+import { usedTuning } from '../tuning/movementTuning';
 
 export function syncUsedTuning(config: MovementStepConfig) {
   try {

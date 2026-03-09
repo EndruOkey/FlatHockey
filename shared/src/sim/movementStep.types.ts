@@ -138,16 +138,11 @@ export type MovementStepState = {
 };
 
 export type MovementStepInput = {
-  moveX: number;
-  moveY: number;
+  throttle: -1 | 0 | 1;
+  steer: -1 | 0 | 1;
+  brake: boolean;
+  shoot?: boolean;
   aimAngle?: number;
-  aimAngleRaw?: number;
-  aimDistance01?: number;
-  bodyTurn?: number;
-  buttons: {
-    sprint: boolean;
-    brake: boolean;
-  };
 };
 
 export type MovementStepConfig = {

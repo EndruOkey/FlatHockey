@@ -183,22 +183,18 @@ function parseV2Message(obj: JsonRecord): ClientMessageV2 | null {
 
 function toInputMsg(clientId: string, msg: ClientInputV2, fallbackAim: number): InputMsg {
   const keys = msg.keys ?? {};
-  const moveX = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
-  const moveY = (keys.s ? 1 : 0) - (keys.w ? 1 : 0);
+  const throttle = (keys.w ? 1 : 0) - (keys.s ? 1 : 0);
+  const steer = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
   const shoot = keys.e ? 1 : 0;
   return {
     type: 'input',
     clientId,
     seq: msg.seq,
-    moveX: moveX < 0 ? -1 : moveX > 0 ? 1 : 0,
-    moveY: moveY < 0 ? -1 : moveY > 0 ? 1 : 0,
-    sprint: keys.shift ? 1 : 0,
+    throttle: throttle < 0 ? -1 : throttle > 0 ? 1 : 0,
+    steer: steer < 0 ? -1 : steer > 0 ? 1 : 0,
     brake: keys.space ? 1 : 0,
     shoot,
-    aimAngleRaw: typeof msg.pointer?.aim === 'number' ? msg.pointer.aim : fallbackAim,
-    aimAngle: typeof msg.pointer?.aim === 'number' ? msg.pointer.aim : fallbackAim,
-    aimDistance01: 1,
-    bodyTurn: 0
+    aimAngle: typeof msg.pointer?.aim === 'number' ? msg.pointer.aim : fallbackAim
   };
 }
 

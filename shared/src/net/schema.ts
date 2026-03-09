@@ -8,38 +8,24 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     if (data.type === 'input') {
       if (typeof data.clientId !== 'string') return null;
       if (typeof data.seq !== 'number') return null;
-      if (typeof data.moveX !== 'number' || typeof data.moveY !== 'number') return null;
-      if (typeof data.sprint !== 'number' || typeof data.brake !== 'number') return null;
+      if (typeof (data as any).throttle !== 'number' || typeof (data as any).steer !== 'number') return null;
+      if (typeof data.brake !== 'number') return null;
 
-      const moveX = data.moveX < 0 ? -1 : data.moveX > 0 ? 1 : 0;
-      const moveY = data.moveY < 0 ? -1 : data.moveY > 0 ? 1 : 0;
-      const sprint = data.sprint ? 1 : 0;
+      const throttle = (data as any).throttle < 0 ? -1 : (data as any).throttle > 0 ? 1 : 0;
+      const steer = (data as any).steer < 0 ? -1 : (data as any).steer > 0 ? 1 : 0;
       const brake = data.brake ? 1 : 0;
       const shoot = (data as any).shoot ? 1 : 0;
       const aimAngle = typeof data.aimAngle === 'number' ? data.aimAngle : undefined;
-      const aimAngleRaw = typeof (data as any).aimAngleRaw === 'number' ? (data as any).aimAngleRaw : undefined;
-      const aimDistance01Raw = typeof (data as any).aimDistance01 === 'number' ? (data as any).aimDistance01 : undefined;
-      const aimDistance01 = typeof aimDistance01Raw === 'number'
-        ? Math.max(0, Math.min(1, aimDistance01Raw))
-        : undefined;
-      const bodyTurnRaw = typeof (data as any).bodyTurn === 'number' ? (data as any).bodyTurn : undefined;
-      const bodyTurn = typeof bodyTurnRaw === 'number'
-        ? Math.max(-1, Math.min(1, bodyTurnRaw))
-        : undefined;
 
       return {
         type: 'input',
         clientId: data.clientId,
         seq: Math.max(0, Math.floor(data.seq)),
-        moveX,
-        moveY,
-        sprint,
+        throttle,
+        steer,
         brake,
         shoot,
-        aimAngle,
-        aimAngleRaw,
-        aimDistance01,
-        bodyTurn
+        aimAngle
       };
     }
 

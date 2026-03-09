@@ -2,18 +2,15 @@ import Phaser from 'phaser';
 import { SIM_HZ, type InputMsg, PlayerStateMsg, ServerMessage, SnapshotMsg, wrapToPi } from '@flathockey/shared';
 import { WsClient } from '../net/wsClient';
 import { Interpolator, lerpPlayer, type LerpPlayer } from '../net/interpolation';
-import { applyPredictedInput, CLIENT_FIXED_DT, type PredictedPlayerState, lastTelemetry, setAimInputRateLimited } from '../net/prediction';
-import { getTuning, getTuningApplyCount, setTuningKey, usedTuning } from '../debug/movementTuning';
-import { NetDebugOverlay } from '../debug/netDebugOverlay';
-import { setNetDebugMetrics } from '../debug/netDebugState';
-import { setMovementDebugMetrics } from '../debug/devPanelTelemetryState';
+import { applyPredictedInput, CLIENT_FIXED_DT, type PredictedPlayerState, setAimInputRateLimited } from '../net/prediction';
+import { getTuning, setTuningKey } from '../tuning/movementTuning';
 import { reconcilePrediction } from '../net/reconciliation';
 import { PlayerView } from '../entities/playerView';
 import { puckStickTuningStore } from '../tuning/puckStickTuningStore';
 import { ENV } from '../../config/env';
 import { BUILD_VERSION } from '../../config/version';
 import { applySnapshot, buildClientInput, handleServerMessage } from './PondSceneNetOps';
-import { drawMovementDebugVectors as drawMovementDebugVectorsOp, updateAndDrawPuck as updateAndDrawPuckOp, updateCrosshairAndCursor as updateCrosshairAndCursorOp, updateHud as updateHudOp, updateOverlay as updateOverlayOp } from './PondSceneRenderOps';
+import { updateAndDrawPuck as updateAndDrawPuckOp, updateCrosshairAndCursor as updateCrosshairAndCursorOp, updateHud as updateHudOp, updateOverlay as updateOverlayOp } from './PondSceneRenderOps';
 import { runPondSceneUpdate } from './PondSceneUpdateLoop';
 
 const CLIENT_SIM_HZ = 60;
@@ -93,19 +90,14 @@ export class PondScene extends Phaser.Scene {
   private latestServerTick = 0;
 
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
-  private debugToggleKey!: Phaser.Input.Keyboard.Key;
   private recorderToggleKey!: Phaser.Input.Keyboard.Key;
   private replayToggleKey!: Phaser.Input.Keyboard.Key;
-  private modelToggleKey!: Phaser.Input.Keyboard.Key;
-  private debugEnabled = true;
-  private debugOverlay!: Phaser.GameObjects.Text;
   private hud!: Phaser.GameObjects.Text;
   private lastHudText = '';
   private hudAcc = 0;
   private perfSamples: DebugSample[] = [];
   private crosshairGraphics!: Phaser.GameObjects.Graphics;
   private motionDebugGraphics!: Phaser.GameObjects.Graphics;
-  private netDebugOverlay: NetDebugOverlay | null = null;
   private aimCurrentAngle = 0;
   private aimTargetAngle = 0;
   private aimAngleDiff = 0;
@@ -115,14 +107,6 @@ export class PondScene extends Phaser.Scene {
   private lastAimAngle = 0;
   private aimDistance01 = 1;
   
-  // telemetry for debug
-  private debugCurrentSpeed = 0;
-  private debugSteeringStrength = 0;
-  private debugSpeedRatio = 0;
-  private lastTuningVersion = 0;
-  private tuningApplySampleLastTs = performance.now();
-  private tuningApplySampleLastCount = 0;
-  private tuningApplyCountPerSec = 0;
   private inputsSentTimesMs: number[] = [];
   private lastInputVector = { x: 0, y: 0 };
   private lastPointerVector = { x: 0, y: 0 };
@@ -153,9 +137,7 @@ export class PondScene extends Phaser.Scene {
   create() {
     this.drawBackground();
 
-    this.keys = this.input.keyboard!.addKeys('W,A,S,D,E,SPACE,F3,F8,F9,F10') as Record<string, Phaser.Input.Keyboard.Key>;
-    this.debugToggleKey = this.keys.F3;
-    this.modelToggleKey = this.keys.F8;
+    this.keys = this.input.keyboard!.addKeys('W,A,S,D,E,SPACE,F9,F10') as Record<string, Phaser.Input.Keyboard.Key>;
     this.recorderToggleKey = this.keys.F9;
     this.replayToggleKey = this.keys.F10;
 
@@ -165,15 +147,9 @@ export class PondScene extends Phaser.Scene {
       color: '#d7f4ff'
     }).setScrollFactor(0).setDepth(1000);
 
-    this.debugOverlay = this.add.text(12, 150, '', {
-      fontFamily: 'monospace',
-      fontSize: '13px',
-      color: '#fff0aa'
-    }).setScrollFactor(0).setDepth(1000);
     this.puckGraphics = this.add.graphics().setDepth(900);
     this.crosshairGraphics = this.add.graphics().setDepth(1300);
     this.motionDebugGraphics = this.add.graphics().setDepth(1250);
-    this.netDebugOverlay = new NetDebugOverlay(this);
 
     this.input.on('pointerdown', () => this.game.canvas?.focus());
     if (this.game.canvas) this.game.canvas.tabIndex = 1;
@@ -188,8 +164,6 @@ export class PondScene extends Phaser.Scene {
       this.puckGraphics?.destroy();
       this.crosshairGraphics?.destroy();
       this.motionDebugGraphics?.destroy();
-      this.netDebugOverlay?.destroy();
-      this.netDebugOverlay = null;
       if (this.game.canvas) this.game.canvas.style.cursor = '';
     });
 
@@ -276,7 +250,7 @@ export class PondScene extends Phaser.Scene {
     if (this.players.has(id)) return this.players.get(id)!;
     const team = this.clientId && id === this.clientId ? 'A' : 'B';
     const view = new PlayerView(this, id, team);
-    view.setDebugDrawEnabled(this.debugEnabled);
+    view.setDebugDrawEnabled(false);
     this.players.set(id, view);
     this.remoteInterpolators.set(id, new Interpolator<LerpPlayer>(120));
     return view;
@@ -425,10 +399,6 @@ export class PondScene extends Phaser.Scene {
     updateCrosshairAndCursorOp(this);
   }
 
-  private drawMovementDebugVectors() {
-    drawMovementDebugVectorsOp(this);
-  }
-
   private stickTargetScreen(view: PlayerView) {
     const tuning = puckStickTuningStore.get();
     return view.getStickBaseWorld(view.aimRot, tuning.stickOffsetX, tuning.stickOffsetY);
@@ -452,7 +422,6 @@ export class PondScene extends Phaser.Scene {
 
   cycleMovementModel() {
     setTuningKey('movementModel', 'desiredHeadingTraction');
-    console.log('[MOVEMENT_MODEL] runtime switching removed; using heading traction only');
   }
   
   update(_time: number, _deltaMs: number) {

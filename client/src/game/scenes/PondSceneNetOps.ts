@@ -1,7 +1,7 @@
 import type { InputMsg, ServerMessage, SnapshotMsg } from '@flathockey/shared';
 import { CLIENT_FIXED_DT } from '../net/prediction';
 import { reconcilePrediction } from '../net/reconciliation';
-import { getTuning } from '../debug/movementTuning';
+import { getTuning } from '../tuning/movementTuning';
 
 const SERVER_TICK_MS = 1000 / 20;
 
@@ -130,29 +130,21 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
 
 export function buildClientInput(scene: any): InputMsg {
   const tuning = getTuning();
-  const moveX = ((scene.keys.D.isDown ? 1 : 0) - (scene.keys.A.isDown ? 1 : 0)) as -1 | 0 | 1;
-  const moveY = ((scene.keys.S.isDown ? 1 : 0) - (scene.keys.W.isDown ? 1 : 0)) as -1 | 0 | 1;
-  scene.lastInputVector = { x: moveX, y: moveY };
-  const moveLen = Math.hypot(moveX, moveY);
-  if (moveLen > 0.0001) scene.lastMoveAngle = Math.atan2(moveY / moveLen, moveX / moveLen);
+  const throttle = ((scene.keys.W.isDown ? 1 : 0) - (scene.keys.S.isDown ? 1 : 0)) as -1 | 0 | 1;
+  const steer = ((scene.keys.D.isDown ? 1 : 0) - (scene.keys.A.isDown ? 1 : 0)) as -1 | 0 | 1;
   const aimAngle = scene.computeMouseAimAngle(CLIENT_FIXED_DT, tuning);
   if (typeof aimAngle === 'number' && Number.isFinite(aimAngle)) {
     scene.lastAimAngle = aimAngle;
   }
-  scene.lastDesiredHeading = scene.lastMoveAngle;
 
   return {
     type: 'input',
     clientId: scene.clientId ?? '',
     seq: ++scene.seq,
-    moveX,
-    moveY,
-    sprint: scene.input.activePointer.rightButtonDown() ? 1 : 0,
+    throttle,
+    steer,
     brake: scene.keys.SPACE.isDown ? 1 : 0,
     shoot: (scene.keys.E.isDown || scene.input.activePointer.leftButtonDown()) ? 1 : 0,
-    aimAngle,
-    aimAngleRaw: aimAngle,
-    aimDistance01: scene.aimDistance01,
-    bodyTurn: 0
+    aimAngle
   };
 }

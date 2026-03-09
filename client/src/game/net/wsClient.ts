@@ -128,27 +128,21 @@ export class WsClient {
     } catch {}
   }
 
-  // Keep legacy input fields intact for the current authoritative server,
-  // while also attaching WS2-style fields for compatibility.
   private toV2WireMessage(msg: any): any {
     if (!msg || msg.type !== 'input') return msg;
 
-    const hasLegacyFields =
-      typeof msg.moveX === 'number' ||
-      typeof msg.moveY === 'number' ||
-      typeof msg.sprint === 'number' ||
+    const hasMovementFields =
+      typeof msg.throttle === 'number' ||
+      typeof msg.steer === 'number' ||
       typeof msg.brake === 'number' ||
       typeof msg.shoot === 'number' ||
-      typeof msg.aimAngleRaw === 'number' ||
       typeof msg.aimAngle === 'number';
 
-    if (!hasLegacyFields) return msg;
+    if (!hasMovementFields) return msg;
 
-    const moveX = Number(msg.moveX ?? 0);
-    const moveY = Number(msg.moveY ?? 0);
-    const aim = typeof msg.aimAngleRaw === 'number'
-      ? msg.aimAngleRaw
-      : (typeof msg.aimAngle === 'number' ? msg.aimAngle : undefined);
+    const throttle = Number(msg.throttle ?? 0);
+    const steer = Number(msg.steer ?? 0);
+    const aim = typeof msg.aimAngle === 'number' ? msg.aimAngle : undefined;
 
     return {
       ...msg,
@@ -156,11 +150,11 @@ export class WsClient {
       dt: typeof msg.dt === 'number' && Number.isFinite(msg.dt) ? msg.dt : undefined,
       pointer: typeof aim === 'number' ? { aim } : undefined,
       keys: {
-        w: moveY < 0,
-        a: moveX < 0,
-        s: moveY > 0,
-        d: moveX > 0,
-        shift: !!msg.sprint,
+        w: throttle > 0,
+        a: steer < 0,
+        s: throttle < 0,
+        d: steer > 0,
+        shift: false,
         space: !!msg.brake,
         e: !!msg.shoot
       }

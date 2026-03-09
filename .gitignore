@@ -13,3 +13,6 @@ coverage/
 *.tscat.save
 *.bak.*
 *.swp
+.tmp-ssh-rotate/
+*.pem
+*.key

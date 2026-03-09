@@ -23,18 +23,13 @@ export function applyMovementStep(
   let startLinearActive = false;
   resetMovementDebugState(state);
 
-  const rawX = clamp(input.moveX, -1, 1);
-  const rawY = clamp(input.moveY, -1, 1);
-  const inputLen = Math.hypot(rawX, rawY);
-  const hasInput = inputLen > 0.0001;
-  const inputNx = hasInput ? rawX / inputLen : 0;
-  const inputNy = hasInput ? rawY / inputLen : 0;
+  const rawX = input.steer;
+  const rawY = input.throttle;
+  const hasInput = rawX !== 0 || rawY !== 0;
   state.debugRawInputX = rawX;
   state.debugRawInputY = rawY;
   ensureMovementStateBase(state);
-  const inputAimRaw = Number.isFinite(input.aimAngleRaw)
-    ? input.aimAngleRaw!
-    : (Number.isFinite(input.aimAngle) ? input.aimAngle! : (Number.isFinite(state.aimAngleRaw) ? state.aimAngleRaw! : state.aimAngle));
+  const inputAimRaw = Number.isFinite(input.aimAngle) ? input.aimAngle! : (Number.isFinite(state.aimAngleRaw) ? state.aimAngleRaw! : state.aimAngle);
   if (state.stickSide !== -1 && state.stickSide !== 1) {
     state.stickSide = (wrapToPi(inputAimRaw - state.bodyAngle!) >= 0 ? 1 : -1);
   }
@@ -88,9 +83,7 @@ export function applyMovementStep(
 
   let desiredMoveAngleDebug = Number.isFinite(state.moveAngle) ? state.moveAngle! : 0;
   const prevMoveAngle = state.moveAngle!;
-  const rawDesiredMoveAngle = hasInput
-    ? wrapToPi((mouseDrivesMove && Number.isFinite(inputAimRaw)) ? inputAimRaw : Math.atan2(inputNy, inputNx))
-    : state.moveAngle!;
+  const rawDesiredMoveAngle = Number.isFinite(state.heading) ? state.heading! : state.moveAngle!;
   state.debugRawInputAngle = rawDesiredMoveAngle;
   let turnIntentAngle = state.moveAngle!;
   let turnResistance = 0;
@@ -100,9 +93,6 @@ export function applyMovementStep(
     input,
     dt: simDt,
     config,
-    rawInputX: rawX,
-    rawInputY: rawY,
-    hasInput,
     prevMoveAngle
   });
   desiredMoveAngleDebug = result.desiredMoveAngle;
@@ -124,8 +114,7 @@ export function applyMovementStep(
   if (bodyOrientationModel === 'C') {
     const hybridAimAngle = wrapToPi(inputAimRaw);
     const aimBlendBySpeed = lerp(bodyAimWeightLowSpeed, bodyAimWeightHighSpeed, velocityInfluence);
-    const aimFocus = clamp(input.aimDistance01 ?? 1, 0, 1);
-    effectiveAimBias = clamp(aimBlendBySpeed * lerp(0.5, 1, aimFocus), 0, 1);
+    effectiveAimBias = clamp(aimBlendBySpeed, 0, 1);
     rawBodyTargetAngle = lerpAngle(movementBodyTargetAngle, hybridAimAngle, effectiveAimBias);
   }
   if (!Number.isFinite(state.bodyTargetAngle)) {
@@ -239,9 +228,7 @@ export function applyMovementStep(
   state.brakeAssistLeft = brakeAssistLeft;
   state.startLinearActive = startLinearActive;
   state.debugStartModeActive = startLinearActive;
-  const debugHeading = Number.isFinite(state.moveAngle)
-    ? state.moveAngle!
-    : (hasInput ? Math.atan2(inputNy, inputNx) : Math.atan2(state.vy, state.vx));
+  const debugHeading = Number.isFinite(state.moveAngle) ? state.moveAngle! : Math.atan2(state.vy, state.vx);
   const dhx = Math.cos(debugHeading);
   const dhy = Math.sin(debugHeading);
   const debugVelocityAngle = finalSpeedNow > 0.001 ? Math.atan2(state.vy, state.vx) : debugHeading;

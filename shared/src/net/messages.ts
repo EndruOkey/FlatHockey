@@ -2,15 +2,11 @@ export type InputMsg = {
   type: 'input';
   clientId: string;
   seq: number;
-  moveX: -1 | 0 | 1;
-  moveY: -1 | 0 | 1;
-  sprint: 0 | 1;
+  throttle: -1 | 0 | 1;
+  steer: -1 | 0 | 1;
   brake: 0 | 1;
   shoot?: 0 | 1;
   aimAngle?: number;
-  aimAngleRaw?: number;
-  aimDistance01?: number;
-  bodyTurn?: number; // legacy/inactive
 };
 
 export type PlayerStateMsg = {

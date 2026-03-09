@@ -9,6 +9,12 @@ export function applyPlayerMovement(
   tuningPatch: Partial<import('@flathockey/shared/sim/movementStep').MovementStepConfig> = {}
 ) {
   const input = player.latestInput;
+  const throttle = typeof (input as any).throttle === 'number'
+    ? ((input as any).throttle < 0 ? -1 : (input as any).throttle > 0 ? 1 : 0)
+    : 0;
+  const steer = typeof (input as any).steer === 'number'
+    ? ((input as any).steer < 0 ? -1 : (input as any).steer > 0 ? 1 : 0)
+    : 0;
   const state = {
     x: player.body.position.x,
     y: player.body.position.y,
@@ -21,13 +27,11 @@ export function applyPlayerMovement(
   applyMovementStep(
     state,
     {
-      moveX: input.moveX,
-      moveY: input.moveY,
+      throttle,
+      steer,
+      brake: !!input.buttons.brake,
+      shoot: !!input.buttons.shoot,
       aimAngle: input.aimAngle,
-      buttons: {
-        sprint: input.buttons.sprint,
-        brake: input.buttons.brake
-      }
     },
     dt,
     { hasPuck, ...tuningPatch }

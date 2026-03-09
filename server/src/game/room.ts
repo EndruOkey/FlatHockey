@@ -125,18 +125,11 @@ export class Room {
     const buffered: BufferedInput = {
       seq: input.seq,
       state: {
-        moveX: input.moveX < 0 ? -1 : input.moveX > 0 ? 1 : 0,
-        moveY: input.moveY < 0 ? -1 : input.moveY > 0 ? 1 : 0,
-        sprint: input.sprint ? 1 : 0,
+        throttle: input.throttle < 0 ? -1 : input.throttle > 0 ? 1 : 0,
+        steer: input.steer < 0 ? -1 : input.steer > 0 ? 1 : 0,
         brake: input.brake ? 1 : 0,
         shoot: input.shoot ? 1 : 0,
-        aimAngleRaw: typeof input.aimAngleRaw === 'number'
-          ? input.aimAngleRaw
-          : (typeof input.aimAngle === 'number' ? input.aimAngle : player.aimAngleRaw ?? player.aimAngle),
-        aimDistance01: typeof input.aimDistance01 === 'number'
-          ? clamp(input.aimDistance01, 0, 1)
-          : 1,
-        bodyTurn: 0
+        aimAngle: typeof input.aimAngle === 'number' ? input.aimAngle : player.aimAngle
       }
     };
 
@@ -214,21 +207,16 @@ export class Room {
       };
 
       const playerHasPuck = this.puck.state === 'HELD' && this.puck.ownerId === player.id;
-      const chargeInputActive = !!player.lastInputState.sprint && !playerHasPuck && player.stunLeft <= 0;
-      const movementInputX = player.stunLeft > 0 ? 0 : player.lastInputState.moveX;
-      const movementInputY = player.stunLeft > 0 ? 0 : player.lastInputState.moveY;
+      const chargeInputActive = false;
+      const movementThrottle = player.stunLeft > 0 ? 0 : player.lastInputState.throttle;
+      const movementSteer = player.stunLeft > 0 ? 0 : player.lastInputState.steer;
       applyMovementStep(
         state,
         {
-          moveX: movementInputX,
-          moveY: movementInputY,
-          aimAngleRaw: player.lastInputState.aimAngleRaw,
-          aimDistance01: player.lastInputState.aimDistance01,
-          bodyTurn: 0,
-          buttons: {
-            sprint: chargeInputActive,
-            brake: !!player.lastInputState.brake
-          }
+          throttle: movementThrottle,
+          steer: movementSteer,
+          brake: !!player.lastInputState.brake,
+          aimAngle: player.lastInputState.aimAngle
         },
         dt,
         {
@@ -293,7 +281,7 @@ export class Room {
       } else {
         const mode = this.movementTuning.bodyFacingMode ?? 'MOVE_LAST';
         if (mode === 'AIM_WHEN_IDLE') {
-          const hasInput = Math.hypot(player.lastInputState.moveX, player.lastInputState.moveY) > 0.0001;
+          const hasInput = player.lastInputState.throttle !== 0 || player.lastInputState.steer !== 0;
           player.angle = hasInput ? player.moveAngle : player.aimAngle;
         } else if (mode === 'BLEND') {
           const maxSpeed = Math.max(1, this.movementTuning.maxSpeed ?? this.movementTuning.maxSpeedNoPuck ?? 1);

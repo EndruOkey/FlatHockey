@@ -13,9 +13,9 @@ export function applyMovementV4Solver(args: MovementV4Args): MovementV4Result {
   const hasInput = rawLen > 0.0001;
   const rawNx = hasInput ? rawInputX / rawLen : 0;
   const rawNy = hasInput ? rawInputY / rawLen : 0;
-  const brakeActive = !!input.buttons.brake;
+  const brakeActive = !!(input as any).brake;
 
-  const chargeActive = !!input.buttons.sprint && !hasPuck;
+  const chargeActive = false;
   state.debugChargeActive = chargeActive;
 
   const inputVectorResponsiveness = Math.max(1, config.inputVectorResponsiveness ?? config.inputVectorTauMs ?? MOVEMENT_DEFAULTS.inputVectorResponsiveness ?? MOVEMENT_DEFAULTS.inputVectorTauMs ?? 95);
