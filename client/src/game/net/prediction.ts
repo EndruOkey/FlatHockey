@@ -1,9 +1,10 @@
 import type { InputMsg } from '@flathockey/shared';
-import { applyMovementStep, type MovementStepConfig, type MovementStepState } from '@flathockey/shared/sim/movementStep';
+import type { MovementStepConfig, MovementStepState } from '@flathockey/shared/sim/movementStep';
 import { MOVEMENT_DEFAULTS } from '@flathockey/shared/tuning/movement.defaults';
 import { getTuning } from '../tuning/movementTuning';
 import { syncUsedTuning } from './predictionUsedTuning';
 import type { PredictedPlayerState } from './predictionState.types';
+import { applyHeadingMovementStep } from './movementHeadingSolver';
 export type { PredictedPlayerState } from './predictionState.types';
 
 export let lastTelemetry: Record<string, any> = {};
@@ -35,7 +36,6 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     config.maxSpeedNoPuck = tuning.maxSpeed;
     config.maxSpeedWithPuck = tuning.maxSpeed;
   }
-  config.movementModel = 'desiredHeadingTraction';
 
   const prevVx = state.vx;
   const prevVy = state.vy;
@@ -163,13 +163,13 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     debugActiveBodyModel: state.debugActiveBodyModel
   };
 
-  applyMovementStep(
+  applyHeadingMovementStep(
     simState,
     {
       throttle: input.throttle,
       steer: input.steer,
-      brake: !!input.brake,
-      shoot: !!input.shoot,
+      brake: input.brake ?? 0,
+      shoot: input.shoot ?? 0,
       aimAngle: typeof input.aimAngle === 'number' ? input.aimAngle : (state.aimAngleRaw ?? state.angle)
     },
     dt,
@@ -370,8 +370,8 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
     commitUnlockReason: simState.debugCommitUnlockReason ?? 'NONE',
     minHeadingAuthorityActive: !!simState.debugMinHeadingAuthorityActive,
     movementModel: simState.debugMovementModel ?? 'desiredHeadingTraction',
-    movementModelRequested: 'desiredHeadingTraction',
-    movementModelAuthoritative: 'desiredHeadingTraction',
+    movementModelRequested: simState.debugMovementModelRequested ?? 'DESIRED_HEADING_TRACTION',
+    movementModelAuthoritative: simState.debugMovementModelAuthoritative ?? 'DESIRED_HEADING_TRACTION',
     movementModelSource: 'serverPlayerState',
     movementModelStepUsed: simState.debugMovementModelStepUsed ?? simState.debugMovementModel ?? 'desiredHeadingTraction',
     headingAngle: simState.debugHeadingAngle ?? simState.heading ?? 0,

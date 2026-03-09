@@ -3,7 +3,7 @@ import { SIM_HZ, type InputMsg, PlayerStateMsg, ServerMessage, SnapshotMsg, wrap
 import { WsClient } from '../net/wsClient';
 import { Interpolator, lerpPlayer, type LerpPlayer } from '../net/interpolation';
 import { applyPredictedInput, CLIENT_FIXED_DT, type PredictedPlayerState, setAimInputRateLimited } from '../net/prediction';
-import { getTuning, setTuningKey } from '../tuning/movementTuning';
+import { getTuning } from '../tuning/movementTuning';
 import { reconcilePrediction } from '../net/reconciliation';
 import { PlayerView } from '../entities/playerView';
 import { puckStickTuningStore } from '../tuning/puckStickTuningStore';
@@ -261,7 +261,6 @@ export class PondScene extends Phaser.Scene {
     this.clientId = msg.clientId;
     this.roomId = msg.roomId ?? msg.room ?? this.roomId ?? 'pond-1';
     this.allowTuningSync = !!msg.allowTuningSync;
-    setTuningKey('movementModel', 'desiredHeadingTraction');
   }
 
   private onServerMessage(msg: ServerMessage | { type?: string; [key: string]: unknown }) {
@@ -420,10 +419,6 @@ export class PondScene extends Phaser.Scene {
     updateHudOp(this, dtSec);
   }
 
-  cycleMovementModel() {
-    setTuningKey('movementModel', 'desiredHeadingTraction');
-  }
-  
   update(_time: number, _deltaMs: number) {
     runPondSceneUpdate(this);
   }

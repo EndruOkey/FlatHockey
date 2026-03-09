@@ -221,7 +221,6 @@ export class Room {
         dt,
         {
           ...this.movementTuning,
-          movementModel: 'desiredHeadingTraction',
           hasPuck: playerHasPuck
         }
       );
