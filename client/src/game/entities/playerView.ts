@@ -21,6 +21,7 @@ export class PlayerView {
   aimRot = 0;
   moveRot = 0;
   speed = 0;
+  standstillSteerLock = false;
   private stickVisualRot = 0;
   private stickDrawRot = 0;
   private leanPx = 0;
@@ -139,7 +140,16 @@ export class PlayerView {
     g.destroy();
   }
 
-  setState(x: number, y: number, rot: number, aimRot?: number, moveRot?: number, baseRot?: number, speed?: number) {
+  setState(
+    x: number,
+    y: number,
+    rot: number,
+    aimRot?: number,
+    moveRot?: number,
+    baseRot?: number,
+    speed?: number,
+    standstillSteerLock?: boolean
+  ) {
     this.x = x;
     this.y = y;
     this.rot = rot;
@@ -147,6 +157,7 @@ export class PlayerView {
     this.aimRot = typeof aimRot === 'number' ? aimRot : rot;
     this.moveRot = typeof moveRot === 'number' ? moveRot : rot;
     this.speed = typeof speed === 'number' && Number.isFinite(speed) ? Math.max(0, speed) : 0;
+    this.standstillSteerLock = !!standstillSteerLock;
   }
 
   setHandedness(handedness: 'L' | 'R') {
@@ -288,7 +299,7 @@ export class PlayerView {
     const edgeNorm = PlayerView.clamp(edgeAngle / leanMaxAngleRad, -1, 1);
     const leanMinSpeed = 8;
     const allowLean = this.visualLeanEnabled && this.speed > leanMinSpeed;
-    const targetLeanPx = allowLean ? (edgeNorm * this.visualLeanMaxPx) : 0;
+    const targetLeanPx = allowLean && !this.standstillSteerLock ? (edgeNorm * this.visualLeanMaxPx) : 0;
     const omega = 2 / Math.max(0.001, this.visualLeanTauMs / 1000);
     const springK = omega * omega;
     const springC = 2 * this.visualLeanDampingRatio * omega;
@@ -307,7 +318,9 @@ export class PlayerView {
     const bodyLeanY = rightY * this.leanPx;
     this.bodyRig.setPosition(bodyLeanX, bodyLeanY);
     this.bodyRig.rotation = this.getBodyRenderRotation();
-    const stickBaseLocalOffset = PlayerView.rotateLocal(stickOffsetX, stickOffsetY, stickWorldRot);
+    const stickBaseLocalOffset = this.standstillSteerLock
+      ? { x: 0, y: 0 }
+      : PlayerView.rotateLocal(stickOffsetX, stickOffsetY, stickWorldRot);
     const handSocket = this.getActiveHandSocketLocal();
     const bodyRenderRot = this.getBodyRenderRotation();
     const cosInv = Math.cos(-bodyRenderRot);
@@ -384,6 +397,17 @@ export class PlayerView {
 
   getStickWorldAngle(): number {
     return this.stickVisualRot;
+  }
+
+  getDebugWorldAnchors() {
+    return {
+      rootX: this.playerRoot.x,
+      rootY: this.playerRoot.y,
+      bodyRigWorldX: this.playerRoot.x + this.bodyRig.x,
+      bodyRigWorldY: this.playerRoot.y + this.bodyRig.y,
+      stickWorldX: this.playerRoot.x + this.stickRoot.x,
+      stickWorldY: this.playerRoot.y + this.stickRoot.y
+    };
   }
 
   getAimRotation(): number {

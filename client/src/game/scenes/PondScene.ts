@@ -8,7 +8,7 @@ import { reconcilePrediction } from '../net/reconciliation';
 import { PlayerView } from '../entities/playerView';
 import { puckStickTuningStore } from '../tuning/puckStickTuningStore';
 import { ENV } from '../../config/env';
-import { BUILD_VERSION } from '../../config/version';
+import { BUILD_TIME, BUILD_VERSION } from '../../config/version';
 import { applySnapshot, buildClientInput, handleServerMessage } from './PondSceneNetOps';
 import { updateAndDrawPuck as updateAndDrawPuckOp, updateCrosshairAndCursor as updateCrosshairAndCursorOp, updateHud as updateHudOp, updateOverlay as updateOverlayOp } from './PondSceneRenderOps';
 import { runPondSceneUpdate } from './PondSceneUpdateLoop';
@@ -118,6 +118,9 @@ export class PondScene extends Phaser.Scene {
   private recordedInputs: Array<{ tMs: number; input: InputMsg }> = [];
   private readonly inputRecordWindowMs = 20_000;
   private localRenderState: LerpPlayer | null = null;
+  private lastInputForRender: InputMsg | null = null;
+  private standstillTrace = false;
+  private standstillTraceTick = 0;
 
   constructor() {
     super('PondScene');
@@ -181,6 +184,12 @@ export class PondScene extends Phaser.Scene {
     this.simAccumulatorMs = 0;
     this.needsResync = true; // one-shot startup resync — handled in update() so same path as focus/visibility
     this.pendingResyncReason = 'startup';
+    this.standstillTrace = Boolean((window as any).__FH_TRACE_STANDSTILL__);
+    console.info('[BUILD_STAMP]', {
+      commit: BUILD_VERSION || 'unknown',
+      buildTime: BUILD_TIME || 'unknown',
+      wsUrl: resolveWsUrl()
+    });
   }
 
   private onVisibilityChange = () => {

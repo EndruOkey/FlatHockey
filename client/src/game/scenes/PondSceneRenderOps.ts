@@ -1,6 +1,6 @@
 import { getTuning } from '../tuning/movementTuning';
 import { puckStickTuningStore } from '../tuning/puckStickTuningStore';
-import { BUILD_VERSION } from '../../config/version';
+import { BUILD_TIME, BUILD_VERSION } from '../../config/version';
 import { PlayerView } from '../entities/playerView';
 
 export function updateCrosshairAndCursor(scene: any) {
@@ -95,6 +95,14 @@ export function updateAndDrawPuck(scene: any, dtSec: number, remoteTargetServerT
 }
 
 export function updateOverlay(_scene: any) {
+  const scene = _scene;
+  scene.motionDebugGraphics.clear();
+  if (!scene.standstillTrace || !scene.predicted) return;
+  const p = scene.worldToScreen(scene.predicted.x, scene.predicted.y);
+  scene.motionDebugGraphics.lineStyle(2, 0xff4d4d, 0.85);
+  scene.motionDebugGraphics.strokeCircle(p.x, p.y, 6);
+  scene.motionDebugGraphics.lineBetween(p.x - 8, p.y, p.x + 8, p.y);
+  scene.motionDebugGraphics.lineBetween(p.x, p.y - 8, p.x, p.y + 8);
 }
 
 export function updateHud(scene: any, dtSec: number) {
@@ -106,6 +114,7 @@ export function updateHud(scene: any, dtSec: number) {
     `Room: ${scene.roomId ?? '-'}`,
     `Client: ${scene.clientId ?? '-'}`,
     `Build: ${BUILD_VERSION || 'dev-local'}`,
+    `BuildTime: ${BUILD_TIME || '-'}`,
     `Model: headingTraction`,
     `Seq/Ack: ${scene.seq}/${scene.ackSeq}`,
     `Pending: ${scene.pendingInputs.length}`,

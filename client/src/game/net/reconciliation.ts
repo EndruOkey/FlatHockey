@@ -2,12 +2,18 @@ import type { InputMsg, PlayerStateMsg } from '@flathockey/shared';
 import { wrapToPi } from '@flathockey/shared';
 import { applyPredictedInput } from './prediction';
 
+export let lastReconcileTrace: Record<string, any> = {};
+
 export function reconcilePrediction(
   predicted: PlayerStateMsg,
   authoritative: PlayerStateMsg,
   ackSeq: number,
   pendingInputs: InputMsg[]
 ) {
+  const preX = predicted.x;
+  const preY = predicted.y;
+  const preVx = predicted.vx;
+  const preVy = predicted.vy;
   while (pendingInputs.length > 0 && pendingInputs[0].seq <= ackSeq) {
     pendingInputs.shift();
   }
@@ -70,6 +76,21 @@ export function reconcilePrediction(
   for (const input of pendingInputs) {
     applyPredictedInput(predicted, input);
   }
+  lastReconcileTrace = {
+    ackSeq,
+    pendingCount: pendingInputs.length,
+    preReconcileX: preX,
+    preReconcileY: preY,
+    postReconcileX: predicted.x,
+    postReconcileY: predicted.y,
+    preReconcileVx: preVx,
+    preReconcileVy: preVy,
+    postReconcileVx: predicted.vx,
+    postReconcileVy: predicted.vy,
+    deltaPos: Math.hypot(predicted.x - preX, predicted.y - preY),
+    speed: Math.hypot(predicted.vx, predicted.vy),
+    heading: (predicted as any).heading ?? (predicted as any).moveAngle ?? 0
+  };
 
   return pendingInputs;
 }

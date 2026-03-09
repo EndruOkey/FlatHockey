@@ -9,6 +9,7 @@ export type { PredictedPlayerState } from './predictionState.types';
 
 export let lastTelemetry: Record<string, any> = {};
 export let lastAimInputRateLimited = false;
+export let lastStepTrace: Record<string, any> = {};
 
 export function setAimInputRateLimited(flag: boolean) {
   lastAimInputRateLimited = !!flag;
@@ -40,6 +41,8 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   const prevVx = state.vx;
   const prevVy = state.vy;
   const prevSpeed = Math.hypot(prevVx, prevVy);
+  const preStepX = state.x;
+  const preStepY = state.y;
 
   const simState: MovementStepState = {
     x: state.x,
@@ -306,6 +309,26 @@ export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg
   state.debugBodyYawOffset = simState.debugBodyYawOffset;
   state.debugBodyTurnInput = simState.debugBodyTurnInput;
   state.debugActiveBodyModel = simState.debugActiveBodyModel;
+  const postStepX = state.x;
+  const postStepY = state.y;
+  const postStepSpeed = Math.hypot(state.vx, state.vy);
+  lastStepTrace = {
+    throttle: input.throttle ?? 0,
+    steer: input.steer ?? 0,
+    brake: input.brake ?? 0,
+    preStepX,
+    preStepY,
+    postStepX,
+    postStepY,
+    deltaPos: Math.hypot(postStepX - preStepX, postStepY - preStepY),
+    preStepVx: prevVx,
+    preStepVy: prevVy,
+    postStepVx: state.vx,
+    postStepVy: state.vy,
+    speed: postStepSpeed,
+    heading: state.heading ?? 0,
+    moveAngle: state.moveAngle ?? 0
+  };
 
   const speed = Math.hypot(state.vx, state.vy);
   const maxSpeed = (config.maxSpeed ?? config.maxSpeedNoPuck ?? 1);

@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { wrapToPi } from '@flathockey/shared';
 import { getTuning } from '../tuning/movementTuning';
-import { applyPredictedInput, CLIENT_FIXED_DT } from '../net/prediction';
+import { applyPredictedInput, CLIENT_FIXED_DT, lastStepTrace } from '../net/prediction';
+import { lastReconcileTrace } from '../net/reconciliation';
 
 const FIXED_STEP_MS = 1000 / 60;
 const MAX_SIM_STEPS_PER_FRAME = 3;
@@ -71,6 +72,7 @@ export function runPondSceneUpdate(scene: any) {
     if (scene.clientId && scene.predicted && scene.wsConnected) {
       let input = scene.nextReplayInput();
       if (!input) input = scene.buildInput();
+      scene.lastInputForRender = input;
       scene.pendingInputs.push(input);
       if (scene.pendingInputs.length > 240) {
         scene.pendingInputs.splice(0, scene.pendingInputs.length - 240);
@@ -110,6 +112,9 @@ export function runPondSceneUpdate(scene: any) {
   for (const [id, view] of scene.players.entries()) {
     let state: any = null;
     if (scene.clientId && id === scene.clientId) {
+      const lastInput = scene.lastInputForRender;
+      const steerOnlyNoBrake = !!lastInput && (lastInput.throttle ?? 0) === 0 && (lastInput.brake ?? 0) === 0 && Math.abs(lastInput.steer ?? 0) > 0;
+      const visualStandstillEpsilon = 8;
       state = scene.localBuffer.latest()?.value ?? null;
       if (!state && scene.predicted) {
         state = {
@@ -123,18 +128,32 @@ export function runPondSceneUpdate(scene: any) {
         };
       }
       if (state) {
+        const stateSpeed = Math.max(0, state.speed ?? 0);
+        const standstillSteerLock = steerOnlyNoBrake && stateSpeed <= visualStandstillEpsilon;
         if (!scene.localRenderState) {
           scene.localRenderState = { ...state };
         } else {
           const tauMs = 24;
           const alpha = 1 - Math.exp(-Math.max(0, clampedDtMs) / Math.max(1, tauMs));
-          scene.localRenderState.x += (state.x - scene.localRenderState.x) * alpha;
-          scene.localRenderState.y += (state.y - scene.localRenderState.y) * alpha;
+          if (standstillSteerLock) {
+            // Hard visual lock at standstill steer-only: no positional interpolation tail.
+            scene.localRenderState.x = state.x;
+            scene.localRenderState.y = state.y;
+          } else {
+            scene.localRenderState.x += (state.x - scene.localRenderState.x) * alpha;
+            scene.localRenderState.y += (state.y - scene.localRenderState.y) * alpha;
+          }
           scene.localRenderState.rot = scene.lerpAngle(scene.localRenderState.rot, state.rot, alpha);
           scene.localRenderState.aimRot = scene.lerpAngle(scene.localRenderState.aimRot ?? state.aimRot ?? state.rot, state.aimRot ?? state.rot, alpha);
           scene.localRenderState.moveRot = scene.lerpAngle(scene.localRenderState.moveRot ?? state.moveRot ?? state.rot, state.moveRot ?? state.rot, alpha);
           scene.localRenderState.baseRot = scene.lerpAngle(scene.localRenderState.baseRot ?? state.baseRot ?? state.rot, state.baseRot ?? state.rot, alpha);
           scene.localRenderState.speed = (scene.localRenderState.speed ?? 0) + ((state.speed ?? 0) - (scene.localRenderState.speed ?? 0)) * alpha;
+        }
+        if (standstillSteerLock) {
+          scene.localRenderState.speed = 0;
+          (scene.localRenderState as any).standstillSteerLock = true;
+        } else {
+          (scene.localRenderState as any).standstillSteerLock = false;
         }
         state = scene.localRenderState;
       }
@@ -151,7 +170,8 @@ export function runPondSceneUpdate(scene: any) {
       state.aimRot ?? state.rot,
       state.moveRot ?? state.rot,
       state.baseRot ?? state.rot,
-      state.speed ?? 0
+      state.speed ?? 0,
+      !!(state as any).standstillSteerLock
     );
     view.setVisualLeanConfig({
       enabled: Boolean(tuning.visualLeanEnabled ?? true),
@@ -168,6 +188,47 @@ export function runPondSceneUpdate(scene: any) {
     }
     view.setDebugDrawEnabled(false);
     view.draw(clampedDtMs / 1000);
+    if (scene.standstillTrace && scene.clientId && id === scene.clientId) {
+      const input = scene.lastInputForRender;
+      const speed = Math.hypot(scene.predicted?.vx ?? 0, scene.predicted?.vy ?? 0);
+      const steerOnlyNoBrake = !!input && (input.throttle ?? 0) === 0 && (input.brake ?? 0) === 0 && Math.abs(input.steer ?? 0) > 0;
+      if (steerOnlyNoBrake) {
+        scene.standstillTraceTick += 1;
+        if (scene.standstillTraceTick % 6 === 0) {
+          const anchors = view.getDebugWorldAnchors();
+          const physicsRootX = scene.worldToScreen(scene.predicted?.x ?? 0, scene.predicted?.y ?? 0).x;
+          const physicsRootY = scene.worldToScreen(scene.predicted?.x ?? 0, scene.predicted?.y ?? 0).y;
+          console.log('[TRACE_STANDSTILL]', {
+            input: {
+              throttle: input?.throttle ?? 0,
+              steer: input?.steer ?? 0,
+              brake: input?.brake ?? 0
+            },
+            preStep: {
+              x: lastStepTrace.preStepX,
+              y: lastStepTrace.preStepY,
+              vx: lastStepTrace.preStepVx,
+              vy: lastStepTrace.preStepVy
+            },
+            postStep: {
+              x: lastStepTrace.postStepX,
+              y: lastStepTrace.postStepY,
+              vx: lastStepTrace.postStepVx,
+              vy: lastStepTrace.postStepVy,
+              deltaPos: lastStepTrace.deltaPos
+            },
+            postReconcile: lastReconcileTrace,
+            physicsRoot: { x: physicsRootX, y: physicsRootY },
+            renderRoot: { x: state.x, y: state.y },
+            bodyRigWorld: { x: anchors.bodyRigWorldX, y: anchors.bodyRigWorldY },
+            stickWorld: { x: anchors.stickWorldX, y: anchors.stickWorldY },
+            heading: scene.predicted?.heading ?? 0,
+            moveAngle: scene.predicted?.moveAngle ?? 0,
+            speed
+          });
+        }
+      }
+    }
   }
 
   scene.updateAndDrawPuck(clampedDtMs / 1000, remoteTargetServerTime);
