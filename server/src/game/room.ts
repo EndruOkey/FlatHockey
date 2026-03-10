@@ -1,7 +1,7 @@
 import type { InputMsg, ServerMessage, SnapshotMsg } from '@flathockey/shared';
-import { applyMovementStep, type MovementStepConfig, type MovementStepState } from '@flathockey/shared/sim/movementStep';
 import { WebSocket } from 'ws';
-import { resolveBoardHits, resolvePlayerContacts, updatePuck } from './roomSystems';
+import type { GameplayConfig } from '@flathockey/shared/tuning/gameplayConfig.types';
+import { updatePuck } from './roomSystems';
 import { type BufferedInput, type PlayerState, type PuckState, ZERO_INPUT } from './room.types';
 
 export class Room {
@@ -9,7 +9,7 @@ export class Room {
   readonly players = new Map<string, PlayerState>();
   readonly sockets = new Map<string, WebSocket>();
   serverTick = 0;
-  movementTuning: Partial<MovementStepConfig> = {};
+  gameplayConfig: Partial<GameplayConfig> = {};
   puck: PuckState = {
     state: 'FREE',
     ownerId: null,
@@ -24,11 +24,11 @@ export class Room {
     this.id = id;
   }
 
-  setMovementTuning(patch: Partial<MovementStepConfig>) {
+  setGameplayConfig(patch: Partial<GameplayConfig>) {
     if (!patch || typeof patch !== 'object') return;
     for (const [k, v] of Object.entries(patch)) {
       if (v === undefined || v === null) continue;
-      (this.movementTuning as any)[k] = v;
+      (this.gameplayConfig as any)[k] = v;
     }
   }
 
@@ -42,13 +42,9 @@ export class Room {
       vx: 0,
       vy: 0,
       speed: 0,
-      heading: 0,
-      headingOmega: 0,
-      moveAngle: 0,
       angle: 0,
       aimAngle: 0,
       stamina: 1,
-      reverseState: 'FORWARD',
       prevShoot: false,
       shotCharge: 0,
       lastProcessedSeq: 0,
@@ -76,10 +72,6 @@ export class Room {
     const buffered: BufferedInput = {
       seq: input.seq,
       state: {
-        throttle: input.throttle < 0 ? -1 : input.throttle > 0 ? 1 : 0,
-        steer: input.steer < 0 ? -1 : input.steer > 0 ? 1 : 0,
-        heading: typeof input._heading === 'number' ? input._heading : undefined,
-        brake: input.brake ? 1 : 0,
         shoot: input.shoot ? 1 : 0,
         aimAngle: typeof input.aimAngle === 'number' ? input.aimAngle : player.aimAngle
       }
@@ -105,59 +97,15 @@ export class Room {
         player.lastProcessedSeq = next.seq;
         player.inputGapTicks = 0;
       }
-
-      const state: MovementStepState = {
-        x: player.x,
-        y: player.y,
-        vx: player.vx,
-        vy: player.vy,
-        speed: player.speed,
-        heading: player.heading,
-        headingOmega: player.headingOmega,
-        moveAngle: player.moveAngle,
-        aimAngle: player.aimAngle,
-        stamina: player.stamina,
-        reverseState: player.reverseState
-      };
-
-      const movementThrottle = player.stunLeft > 0 ? 0 : player.lastInputState.throttle;
-      const movementSteer = player.stunLeft > 0 ? 0 : player.lastInputState.steer;
-      const movementHeading = player.stunLeft > 0 ? undefined : player.lastInputState.heading;
-      const playerHasPuck = this.puck.state === 'HELD' && this.puck.ownerId === player.id;
-
-      applyMovementStep(
-        state,
-        {
-          throttle: movementThrottle,
-          steer: movementSteer,
-          heading: movementHeading,
-          brake: !!player.lastInputState.brake,
-          aimAngle: player.lastInputState.aimAngle
-        },
-        dt,
-        {
-          ...this.movementTuning,
-          hasPuck: playerHasPuck
-        }
-      );
-
-      player.x = state.x;
-      player.y = state.y;
-      player.vx = state.vx;
-      player.vy = state.vy;
-      player.speed = state.speed;
-      player.heading = state.heading;
-      player.headingOmega = state.headingOmega;
-      player.moveAngle = state.moveAngle;
-      player.angle = state.heading;
-      player.aimAngle = state.aimAngle;
-      player.stamina = state.stamina;
-      player.reverseState = state.reverseState;
+      player.vx = 0;
+      player.vy = 0;
+      player.speed = 0;
+      if (Number.isFinite(player.lastInputState.aimAngle)) {
+        player.aimAngle = player.lastInputState.aimAngle;
+        player.angle = player.lastInputState.aimAngle;
+      }
       player.chargeActive = false;
     }
-
-    this.resolvePlayerContacts();
-    this.resolveBoardHits();
     this.updatePuck(dt);
   }
 
@@ -185,11 +133,7 @@ export class Room {
         vx: p.vx,
         vy: p.vy,
         speed: p.speed,
-        heading: p.heading,
-        headingOmega: p.headingOmega,
         angle: p.angle,
-        moveAngle: p.moveAngle,
-        reverseState: p.reverseState,
         aimAngle: p.aimAngle,
         chargeActive: p.chargeActive,
         stunLeft: p.stunLeft
@@ -200,14 +144,6 @@ export class Room {
 
   private updatePuck(dt: number) {
     updatePuck(this, dt);
-  }
-
-  private resolvePlayerContacts() {
-    resolvePlayerContacts(this);
-  }
-
-  private resolveBoardHits() {
-    resolveBoardHits(this);
   }
 
   private consumeNextInput(player: PlayerState): BufferedInput | null {

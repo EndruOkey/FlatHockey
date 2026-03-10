@@ -1,4 +1,3 @@
-import { MOVEMENT_DEFAULTS } from '@flathockey/shared/tuning/movement.defaults';
 import { resolvePuckStickTuning } from '@flathockey/shared/tuning/puckStickTuning';
 
 function clamp(v: number, lo: number, hi: number): number {
@@ -31,7 +30,7 @@ export function dropPuckFrom(room: any, playerId: string | null) {
 }
 
 export function updatePuck(room: any, dt: number) {
-  const puckStick = resolvePuckStickTuning(room.movementTuning);
+  const puckStick = resolvePuckStickTuning(room.gameplayConfig);
   const pickupRadius = puckStick.pickupRadius;
   const pickupMaxSpeed = puckStick.pickupMaxPuckSpeed;
   const pickupMaxRelativeSpeed = puckStick.pickupMaxRelativeSpeed;
@@ -174,122 +173,6 @@ export function updatePuck(room: any, dt: number) {
           owner.shotCharge = 0;
           owner.prevShoot = !!owner.lastInputState.shoot;
         }
-      }
-    }
-  }
-}
-
-export function resolvePlayerContacts(room: any) {
-  const players = [...room.players.values()];
-  if (players.length < 2) return;
-
-  const playerRadius = 18;
-  const bumpForce = 110;
-  const minHitSpeed = Number(room.movementTuning.minHitSpeed ?? MOVEMENT_DEFAULTS.minHitSpeed ?? 290);
-  const hitForce = Number(room.movementTuning.hitForce ?? MOVEMENT_DEFAULTS.hitForce ?? 420);
-  const hitCooldownTime = Number(room.movementTuning.hitCooldownTime ?? MOVEMENT_DEFAULTS.hitCooldownTime ?? 0.35);
-  const postHitSpeedRetention = clamp(
-    Number(room.movementTuning.postHitSpeedRetention ?? MOVEMENT_DEFAULTS.postHitSpeedRetention ?? 0.38),
-    0,
-    1
-  );
-
-  for (let i = 0; i < players.length; i += 1) {
-    for (let j = i + 1; j < players.length; j += 1) {
-      const a = players[i];
-      const b = players[j];
-      const dx = b.x - a.x;
-      const dy = b.y - a.y;
-      const dist = Math.hypot(dx, dy);
-      const minDist = playerRadius * 2;
-      if (dist > minDist) continue;
-      const safeDist = Math.max(dist, 0.0001);
-      const nx = dx / safeDist;
-      const ny = dy / safeDist;
-      const overlap = minDist - safeDist;
-      if (overlap > 0) {
-        const push = overlap * 0.5;
-        a.x -= nx * push;
-        a.y -= ny * push;
-        b.x += nx * push;
-        b.y += ny * push;
-      }
-
-      const relVx = a.vx - b.vx;
-      const relVy = a.vy - b.vy;
-      const closingSpeed = Math.abs(relVx * nx + relVy * ny);
-
-      const aCanHit = a.chargeActive && a.hitCooldownLeft <= 0 && a.stunLeft <= 0;
-      const bCanHit = b.chargeActive && b.hitCooldownLeft <= 0 && b.stunLeft <= 0;
-      const shouldHit = closingSpeed >= minHitSpeed && (aCanHit || bCanHit);
-      if (!shouldHit) {
-        a.vx -= nx * bumpForce;
-        a.vy -= ny * bumpForce;
-        b.vx += nx * bumpForce;
-        b.vy += ny * bumpForce;
-        continue;
-      }
-
-      if (aCanHit && bCanHit) {
-        a.vx -= nx * hitForce * 0.8;
-        a.vy -= ny * hitForce * 0.8;
-        b.vx += nx * hitForce * 0.8;
-        b.vy += ny * hitForce * 0.8;
-        a.hitCooldownLeft = hitCooldownTime;
-        b.hitCooldownLeft = hitCooldownTime;
-        dropPuckFrom(room, a.id);
-        dropPuckFrom(room, b.id);
-        continue;
-      }
-
-      const attacker = aCanHit ? a : b;
-      const target = aCanHit ? b : a;
-      const dir = aCanHit ? 1 : -1;
-      target.vx += nx * hitForce * dir;
-      target.vy += ny * hitForce * dir;
-      attacker.vx *= postHitSpeedRetention;
-      attacker.vy *= postHitSpeedRetention;
-      attacker.hitCooldownLeft = hitCooldownTime;
-      dropPuckFrom(room, target.id);
-    }
-  }
-}
-
-export function resolveBoardHits(room: any) {
-  const playerRadius = 18;
-  const boardStunMinSpeed = Number(room.movementTuning.boardStunMinSpeed ?? MOVEMENT_DEFAULTS.boardStunMinSpeed ?? 280);
-  const boardStunDuration = Number(room.movementTuning.boardStunDuration ?? MOVEMENT_DEFAULTS.boardStunDuration ?? 0.55);
-
-  for (const p of room.players.values()) {
-    const preImpactSpeed = Math.hypot(p.vx, p.vy);
-    let hitBoard = false;
-    if (p.x < RINK.left + playerRadius) {
-      p.x = RINK.left + playerRadius;
-      p.vx = Math.abs(p.vx) * 0.18;
-      hitBoard = true;
-    } else if (p.x > RINK.right - playerRadius) {
-      p.x = RINK.right - playerRadius;
-      p.vx = -Math.abs(p.vx) * 0.18;
-      hitBoard = true;
-    }
-    if (p.y < RINK.top + playerRadius) {
-      p.y = RINK.top + playerRadius;
-      p.vy = Math.abs(p.vy) * 0.18;
-      hitBoard = true;
-    } else if (p.y > RINK.bottom - playerRadius) {
-      p.y = RINK.bottom - playerRadius;
-      p.vy = -Math.abs(p.vy) * 0.18;
-      hitBoard = true;
-    }
-    if (!hitBoard) continue;
-
-    if (p.chargeActive && preImpactSpeed >= boardStunMinSpeed) {
-      p.stunLeft = Math.max(p.stunLeft, boardStunDuration);
-      p.chargeActive = false;
-      p.vx *= 0.35;
-      p.vy *= 0.35;
-      if (room.puck.state === 'HELD' && room.puck.ownerId === p.id) {
-        dropPuckFrom(room, p.id);
       }
     }
   }

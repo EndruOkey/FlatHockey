@@ -8,26 +8,13 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     if (data.type === 'input') {
       if (typeof data.clientId !== 'string') return null;
       if (typeof data.seq !== 'number') return null;
-      if (typeof (data as any).throttle !== 'number' || typeof (data as any).steer !== 'number') return null;
-      if (typeof data.brake !== 'number') return null;
-
-      const throttle = (data as any).throttle < 0 ? -1 : (data as any).throttle > 0 ? 1 : 0;
-      const steer = (data as any).steer < 0 ? -1 : (data as any).steer > 0 ? 1 : 0;
-      const brake = data.brake ? 1 : 0;
       const shoot = (data as any).shoot ? 1 : 0;
       const aimAngle = typeof data.aimAngle === 'number' ? data.aimAngle : undefined;
-      const _heading = typeof (data as any)._heading === 'number' && Number.isFinite((data as any)._heading)
-        ? (data as any)._heading
-        : undefined;
 
       return {
         type: 'input',
         clientId: data.clientId,
         seq: Math.max(0, Math.floor(data.seq)),
-        throttle,
-        steer,
-        _heading,
-        brake,
         shoot,
         aimAngle
       };

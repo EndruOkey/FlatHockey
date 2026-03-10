@@ -1,10 +1,10 @@
 import {
   PUCK_STICK_DEFAULTS,
-  puckStickPatchToMovementPatch,
+  puckStickPatchToGameplayPatch,
   resolvePuckStickTuning,
   type PuckStickTuning
 } from '@flathockey/shared/tuning/puckStickTuning';
-import { movementTuningStore } from '@flathockey/shared/tuning/movementTuningStore';
+import { gameplayConfigStore } from '@flathockey/shared/tuning/gameplayConfigStore';
 
 export type { PuckStickTuning };
 export const PUCK_STICK_DEFAULTS_LOCAL: PuckStickTuning = { ...PUCK_STICK_DEFAULTS };
@@ -13,19 +13,19 @@ type PuckStickListener = (t: PuckStickTuning) => void;
 
 export const puckStickTuningStore = {
   get(): PuckStickTuning {
-    return resolvePuckStickTuning(movementTuningStore.get());
+    return resolvePuckStickTuning(gameplayConfigStore.get());
   },
 
   set<K extends keyof PuckStickTuning>(key: K, value: PuckStickTuning[K]) {
-    movementTuningStore.apply(puckStickPatchToMovementPatch({ [key]: value } as Partial<PuckStickTuning>));
+    gameplayConfigStore.apply(puckStickPatchToGameplayPatch({ [key]: value } as Partial<PuckStickTuning>));
   },
 
   apply(preset: Partial<PuckStickTuning>) {
-    movementTuningStore.apply(puckStickPatchToMovementPatch(preset));
+    gameplayConfigStore.apply(puckStickPatchToGameplayPatch(preset));
   },
 
   resetToDefaults() {
-    movementTuningStore.apply(puckStickPatchToMovementPatch(PUCK_STICK_DEFAULTS));
+    gameplayConfigStore.apply(puckStickPatchToGameplayPatch(PUCK_STICK_DEFAULTS));
   },
 
   snapshot(): PuckStickTuning {
@@ -33,6 +33,6 @@ export const puckStickTuningStore = {
   },
 
   subscribe(listener: PuckStickListener) {
-    return movementTuningStore.subscribe((t) => listener(resolvePuckStickTuning(t)));
+    return gameplayConfigStore.subscribe((t) => listener(resolvePuckStickTuning(t)));
   }
 };

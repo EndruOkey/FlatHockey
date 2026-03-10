@@ -1,9 +1,9 @@
 import Phaser from 'phaser';
-import { SIM_HZ, type InputMsg, PlayerStateMsg, ServerMessage, SnapshotMsg, wrapToPi } from '@flathockey/shared';
+import { SIM_HZ, type InputMsg, PlayerStateMsg, ServerMessage, SnapshotMsg } from '@flathockey/shared';
 import { WsClient } from '../net/wsClient';
 import { Interpolator, lerpPlayer, type LerpPlayer } from '../net/interpolation';
-import { CLIENT_FIXED_DT, type PredictedPlayerState, setAimInputRateLimited } from '../net/prediction';
-import { getTuning } from '../tuning/movementTuning';
+import { type PredictedPlayerState, setAimInputRateLimited } from '../net/prediction';
+import { getTuning } from '../tuning/gameplayConfig';
 import { PlayerView } from '../entities/playerView';
 import { puckStickTuningStore } from '../tuning/puckStickTuningStore';
 import { ENV } from '../../config/env';
@@ -11,6 +11,7 @@ import { BUILD_TIME, BUILD_VERSION } from '../../config/version';
 import { applySnapshot, buildClientInput, handleServerMessage } from './PondSceneNetOps';
 import { updateAndDrawPuck as updateAndDrawPuckOp, updateCrosshairAndCursor as updateCrosshairAndCursorOp, updateHud as updateHudOp, updateOverlay as updateOverlayOp } from './PondSceneRenderOps';
 import { runPondSceneUpdate } from './PondSceneUpdateLoop';
+import { wrapToPi } from '../util/math';
 
 const CLIENT_SIM_HZ = 60;
 const FIXED_STEP_MS = 1000 / CLIENT_SIM_HZ;
@@ -415,4 +416,3 @@ export class PondScene extends Phaser.Scene {
     runPondSceneUpdate(this);
   }
 }
-

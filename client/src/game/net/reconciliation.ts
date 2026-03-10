@@ -16,11 +16,7 @@ export function reconcilePrediction(
   predicted.vx = authoritative.vx;
   predicted.vy = authoritative.vy;
   predicted.speed = authoritative.speed;
-  predicted.heading = authoritative.heading;
-  predicted.headingOmega = authoritative.headingOmega;
   predicted.angle = authoritative.angle;
-  predicted.moveAngle = authoritative.moveAngle;
-  predicted.reverseState = authoritative.reverseState;
   predicted.aimAngle = authoritative.aimAngle;
   predicted.chargeActive = authoritative.chargeActive;
   predicted.stunLeft = authoritative.stunLeft;

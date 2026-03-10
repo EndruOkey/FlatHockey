@@ -12,9 +12,7 @@ export class PlayerView {
   y = 0;
   rot = 0;
   aimRot = 0;
-  moveRot = 0;
   speed = 0;
-  standstillSteerLock = false;
 
   private static readonly SPRITE_FORWARD_OFFSET_RAD = Math.PI / 2;
 
@@ -76,36 +74,17 @@ export class PlayerView {
     y: number,
     rot: number,
     aimRot?: number,
-    moveRot?: number,
-    _baseRot?: number,
-    speed?: number,
-    standstillSteerLock?: boolean
+    speed?: number
   ) {
     this.x = x;
     this.y = y;
     this.rot = rot;
     this.aimRot = typeof aimRot === 'number' ? aimRot : rot;
-    this.moveRot = typeof moveRot === 'number' ? moveRot : rot;
     this.speed = typeof speed === 'number' && Number.isFinite(speed) ? Math.max(0, speed) : 0;
-    this.standstillSteerLock = !!standstillSteerLock;
-  }
-
-  setHandedness(_handedness: 'L' | 'R') {
-    // Stick was removed, handedness is ignored.
   }
 
   setDebugDrawEnabled(enabled: boolean) {
     this.debugDrawEnabled = enabled;
-  }
-
-  setVisualLeanConfig(_opts: {
-    enabled: boolean;
-    maxPx: number;
-    tauMs: number;
-    dampingRatio: number;
-    maxAngleDeg: number;
-  }) {
-    // Lean offsets are disabled during movement reset.
   }
 
   getStickBaseWorld(_aimRot: number, _stickOffsetX: number, _stickOffsetY: number) {

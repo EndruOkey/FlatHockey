@@ -1,4 +1,4 @@
-import { getTuning } from '../tuning/movementTuning';
+import { getTuning } from '../tuning/gameplayConfig';
 import { puckStickTuningStore } from '../tuning/puckStickTuningStore';
 import { BUILD_TIME, BUILD_VERSION } from '../../config/version';
 import { PlayerView } from '../entities/playerView';
@@ -108,10 +108,9 @@ export function updateHud(scene: any, dtSec: number) {
     `Client: ${scene.clientId ?? '-'}`,
     `Build: ${BUILD_VERSION || 'dev-local'}`,
     `BuildTime: ${BUILD_TIME || '-'}`,
-    `Model: headingTraction`,
     `Seq/Ack: ${scene.seq}/${scene.ackSeq}`,
     `Pending: ${scene.pendingInputs.length}`,
-    'W accelerate | S brake/reverse | A/D steer | SPACE hard brake'
+    'Mouse aim | E shoot'
   ].join('\n');
   if (next !== scene.lastHudText) {
     scene.lastHudText = next;

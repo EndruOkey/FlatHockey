@@ -1,5 +1,5 @@
-import type { MovementStepConfig } from '../sim/movementStep';
-import { MOVEMENT_DEFAULTS } from './movement.defaults';
+import type { GameplayConfig } from './gameplayConfig.types';
+import { GAMEPLAY_DEFAULTS } from './gameplay.defaults';
 
 export type PuckStickTuning = {
   stickOffsetX: number;
@@ -41,45 +41,45 @@ export type PuckStickTuning = {
 };
 
 export const PUCK_STICK_DEFAULTS: PuckStickTuning = {
-  stickOffsetX: MOVEMENT_DEFAULTS.stickOffsetX ?? 22,
-  stickOffsetY: MOVEMENT_DEFAULTS.stickOffsetY ?? 0,
-  stickLength: MOVEMENT_DEFAULTS.stickLength ?? 30,
-  stickTipRadius: MOVEMENT_DEFAULTS.stickTipRadius ?? 12,
-  stickVisualLag: MOVEMENT_DEFAULTS.stickVisualLag ?? 0.2,
-  stickVisualLagMaxDeg: MOVEMENT_DEFAULTS.stickVisualLagMaxDeg ?? 18,
+  stickOffsetX: GAMEPLAY_DEFAULTS.stickOffsetX ?? 22,
+  stickOffsetY: GAMEPLAY_DEFAULTS.stickOffsetY ?? 0,
+  stickLength: GAMEPLAY_DEFAULTS.stickLength ?? 30,
+  stickTipRadius: GAMEPLAY_DEFAULTS.stickTipRadius ?? 12,
+  stickVisualLag: GAMEPLAY_DEFAULTS.stickVisualLag ?? 0.2,
+  stickVisualLagMaxDeg: GAMEPLAY_DEFAULTS.stickVisualLagMaxDeg ?? 18,
 
-  puckRadius: MOVEMENT_DEFAULTS.puckRadius ?? 8,
-  maxSpeed: MOVEMENT_DEFAULTS.puckMaxSpeed ?? 560,
-  linearDamping: MOVEMENT_DEFAULTS.puckLinearDamping ?? 3.2,
-  restitution: MOVEMENT_DEFAULTS.puckRestitution ?? 0.18,
-  surfaceDrag: MOVEMENT_DEFAULTS.puckSurfaceDrag ?? 0.04,
+  puckRadius: GAMEPLAY_DEFAULTS.puckRadius ?? 8,
+  maxSpeed: GAMEPLAY_DEFAULTS.puckMaxSpeed ?? 560,
+  linearDamping: GAMEPLAY_DEFAULTS.puckLinearDamping ?? 3.2,
+  restitution: GAMEPLAY_DEFAULTS.puckRestitution ?? 0.18,
+  surfaceDrag: GAMEPLAY_DEFAULTS.puckSurfaceDrag ?? 0.04,
 
-  pickupRadius: MOVEMENT_DEFAULTS.puckPickupRadius ?? 22,
-  pickupMaxPuckSpeed: MOVEMENT_DEFAULTS.puckPickupMaxSpeed ?? 220,
-  pickupMaxRelativeSpeed: MOVEMENT_DEFAULTS.puckPickupMaxRelativeSpeed ?? 180,
-  magnetRadius: MOVEMENT_DEFAULTS.puckMagnetRadius ?? 30,
-  magnetStrength: MOVEMENT_DEFAULTS.puckMagnetStrength ?? 90,
-  magnetMaxForce: MOVEMENT_DEFAULTS.puckMagnetMaxForce ?? 120,
-  holdSpringK: MOVEMENT_DEFAULTS.puckHoldSpringK ?? 28,
-  holdDampingC: MOVEMENT_DEFAULTS.puckHoldDampingC ?? 10,
-  holdMaxError: MOVEMENT_DEFAULTS.puckHoldMaxError ?? 46,
-  pickupCooldownMs: MOVEMENT_DEFAULTS.puckPickupCooldownMs ?? 280,
+  pickupRadius: GAMEPLAY_DEFAULTS.puckPickupRadius ?? 22,
+  pickupMaxPuckSpeed: GAMEPLAY_DEFAULTS.puckPickupMaxSpeed ?? 220,
+  pickupMaxRelativeSpeed: GAMEPLAY_DEFAULTS.puckPickupMaxRelativeSpeed ?? 180,
+  magnetRadius: GAMEPLAY_DEFAULTS.puckMagnetRadius ?? 30,
+  magnetStrength: GAMEPLAY_DEFAULTS.puckMagnetStrength ?? 90,
+  magnetMaxForce: GAMEPLAY_DEFAULTS.puckMagnetMaxForce ?? 120,
+  holdSpringK: GAMEPLAY_DEFAULTS.puckHoldSpringK ?? 28,
+  holdDampingC: GAMEPLAY_DEFAULTS.puckHoldDampingC ?? 10,
+  holdMaxError: GAMEPLAY_DEFAULTS.puckHoldMaxError ?? 46,
+  pickupCooldownMs: GAMEPLAY_DEFAULTS.puckPickupCooldownMs ?? 280,
 
-  shotBaseImpulse: MOVEMENT_DEFAULTS.puckShotBaseImpulse ?? 240,
-  shotChargeRate: MOVEMENT_DEFAULTS.puckShotChargeRate ?? 1.8,
-  shotChargeMult: MOVEMENT_DEFAULTS.puckShotChargeMult ?? 300,
-  shotMaxImpulse: MOVEMENT_DEFAULTS.puckShotMaxImpulse ?? 620,
-  shotMinHoldMs: MOVEMENT_DEFAULTS.puckShotMinHoldMs ?? 40,
+  shotBaseImpulse: GAMEPLAY_DEFAULTS.puckShotBaseImpulse ?? 240,
+  shotChargeRate: GAMEPLAY_DEFAULTS.puckShotChargeRate ?? 1.8,
+  shotChargeMult: GAMEPLAY_DEFAULTS.puckShotChargeMult ?? 300,
+  shotMaxImpulse: GAMEPLAY_DEFAULTS.puckShotMaxImpulse ?? 620,
+  shotMinHoldMs: GAMEPLAY_DEFAULTS.puckShotMinHoldMs ?? 40,
 
-  drawStickTarget: MOVEMENT_DEFAULTS.drawStickTarget ?? false,
-  drawStickHitbox: MOVEMENT_DEFAULTS.drawStickHitbox ?? false,
-  drawPickupRadius: MOVEMENT_DEFAULTS.puckDrawPickupRadius ?? false,
-  drawMagnetRadius: MOVEMENT_DEFAULTS.puckDrawMagnetRadius ?? false,
-  drawPuckState: MOVEMENT_DEFAULTS.puckDrawState ?? false,
-  drawPuckVelocity: MOVEMENT_DEFAULTS.puckDrawVelocity ?? false
+  drawStickTarget: GAMEPLAY_DEFAULTS.drawStickTarget ?? false,
+  drawStickHitbox: GAMEPLAY_DEFAULTS.drawStickHitbox ?? false,
+  drawPickupRadius: GAMEPLAY_DEFAULTS.puckDrawPickupRadius ?? false,
+  drawMagnetRadius: GAMEPLAY_DEFAULTS.puckDrawMagnetRadius ?? false,
+  drawPuckState: GAMEPLAY_DEFAULTS.puckDrawState ?? false,
+  drawPuckVelocity: GAMEPLAY_DEFAULTS.puckDrawVelocity ?? false
 };
 
-export function resolvePuckStickTuning(config: Partial<MovementStepConfig>): PuckStickTuning {
+export function resolvePuckStickTuning(config: Partial<GameplayConfig>): PuckStickTuning {
   return {
     stickOffsetX: config.stickOffsetX ?? PUCK_STICK_DEFAULTS.stickOffsetX,
     stickOffsetY: config.stickOffsetY ?? PUCK_STICK_DEFAULTS.stickOffsetY,
@@ -120,8 +120,8 @@ export function resolvePuckStickTuning(config: Partial<MovementStepConfig>): Puc
   };
 }
 
-export function puckStickPatchToMovementPatch(patch: Partial<PuckStickTuning>): Partial<MovementStepConfig> {
-  const out: Partial<MovementStepConfig> = {};
+export function puckStickPatchToGameplayPatch(patch: Partial<PuckStickTuning>): Partial<GameplayConfig> {
+  const out: Partial<GameplayConfig> = {};
   if (patch.stickOffsetX !== undefined) out.stickOffsetX = patch.stickOffsetX;
   if (patch.stickOffsetY !== undefined) out.stickOffsetY = patch.stickOffsetY;
   if (patch.stickLength !== undefined) out.stickLength = patch.stickLength;

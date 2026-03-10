@@ -22,22 +22,13 @@ type ClientInputV2 = {
   type: 'input';
   seq: number;
   dt?: number;
-  _heading?: number;
   pointer?: {
     x?: number;
     y?: number;
     aim?: number;
   };
   keys?: {
-    w?: boolean;
-    a?: boolean;
-    s?: boolean;
-    d?: boolean;
-    shift?: boolean;
-    space?: boolean;
     e?: boolean;
-    c?: boolean;
-    v?: boolean;
   };
 };
 
@@ -147,9 +138,6 @@ function parseV2Message(obj: JsonRecord): ClientMessageV2 | null {
       type,
       seq: Math.max(0, Math.floor(obj.seq)),
       dt: typeof obj.dt === 'number' && Number.isFinite(obj.dt) ? obj.dt : undefined,
-      _heading: typeof obj._heading === 'number' && Number.isFinite(obj._heading)
-        ? obj._heading
-        : undefined,
       pointer: pointer
         ? {
             x: typeof pointer.x === 'number' && Number.isFinite(pointer.x) ? pointer.x : undefined,
@@ -159,15 +147,7 @@ function parseV2Message(obj: JsonRecord): ClientMessageV2 | null {
         : undefined,
       keys: keys
         ? {
-            w: bool(keys.w),
-            a: bool(keys.a),
-            s: bool(keys.s),
-            d: bool(keys.d),
-            shift: bool(keys.shift),
-            space: bool(keys.space),
-            e: bool(keys.e),
-            c: bool(keys.c),
-            v: bool(keys.v)
+            e: bool(keys.e)
           }
         : undefined
     };
@@ -187,22 +167,13 @@ function parseV2Message(obj: JsonRecord): ClientMessageV2 | null {
 
 function toInputMsg(clientId: string, msg: ClientInputV2, fallbackAim: number): InputMsg {
   const keys = msg.keys ?? {};
-  const throttle = keys.w ? 1 : 0;
-  const brake = (keys.s || keys.space) ? 1 : 0;
   const shoot = keys.e ? 1 : 0;
-  const heading = typeof msg._heading === 'number' && Number.isFinite(msg._heading)
-    ? msg._heading
-    : undefined;
   return {
     type: 'input',
     clientId,
     seq: msg.seq,
-    throttle: throttle as 1 | 0,
-    steer: 0,
-    brake: brake as 0 | 1,
     shoot,
-    aimAngle: typeof msg.pointer?.aim === 'number' ? msg.pointer.aim : fallbackAim,
-    _heading: heading
+    aimAngle: typeof msg.pointer?.aim === 'number' ? msg.pointer.aim : fallbackAim
   };
 }
 

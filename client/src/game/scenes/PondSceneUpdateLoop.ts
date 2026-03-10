@@ -1,21 +1,11 @@
 import Phaser from 'phaser';
-import { wrapToPi } from '@flathockey/shared';
-import { getTuning } from '../tuning/movementTuning';
+import { wrapToPi } from '../util/math';
 import { applyPredictedInput, CLIENT_FIXED_DT } from '../net/prediction';
 
 const FIXED_STEP_MS = 1000 / 60;
 const MAX_SIM_STEPS_PER_FRAME = 3;
 const DT_CLAMP_MS = 34;
 const HITCH_MS = 150;
-const VISUAL_STANDSTILL_EPS = 60;
-
-function isStandstillSteerOnly(isLocalPlayer: boolean, speed: number, input: any): boolean {
-  if (!isLocalPlayer || !input) return false;
-  return speed <= VISUAL_STANDSTILL_EPS
-    && (input.throttle ?? 0) === 0
-    && (input.brake ?? 0) === 0
-    && Math.abs(input.steer ?? 0) > 0;
-}
 
 export function runPondSceneUpdate(scene: any) {
   const now = performance.now();
@@ -43,6 +33,7 @@ export function runPondSceneUpdate(scene: any) {
     if (scene.replayEnabled) scene.stopReplay();
     else scene.startReplay();
   }
+
   if (scene.needsResync) {
     scene.needsResync = false;
     const t = performance.now();
@@ -97,8 +88,6 @@ export function runPondSceneUpdate(scene: any) {
         y: scene.predicted.y,
         rot: scene.predicted.angle,
         aimRot: scene.predicted.aimAngle ?? scene.predicted.angle,
-        moveRot: scene.predicted.moveAngle ?? scene.predicted.angle,
-        baseRot: scene.predicted.heading ?? scene.predicted.angle,
         speed: Math.hypot(scene.predicted.vx ?? 0, scene.predicted.vy ?? 0)
       }, simStepTime);
       scene.ws.send(input);
@@ -115,11 +104,9 @@ export function runPondSceneUpdate(scene: any) {
   }
 
   const remoteTargetServerTime = scene.estimateServerNowMs(now) - scene.remoteInterpDelayMs;
-  const tuning = getTuning();
   for (const [id, view] of scene.players.entries()) {
     let state: any = null;
     if (scene.clientId && id === scene.clientId) {
-      const lastInput = scene.lastInputForRender;
       state = scene.localBuffer.latest()?.value ?? null;
       if (!state && scene.predicted) {
         state = {
@@ -127,38 +114,24 @@ export function runPondSceneUpdate(scene: any) {
           y: scene.predicted.y,
           rot: scene.predicted.angle,
           aimRot: scene.predicted.aimAngle ?? scene.predicted.angle,
-          moveRot: scene.predicted.moveAngle ?? scene.predicted.angle,
-          baseRot: scene.predicted.heading ?? scene.predicted.angle,
           speed: Math.hypot(scene.predicted.vx ?? 0, scene.predicted.vy ?? 0)
         };
       }
       if (state) {
-        const stateSpeed = Math.max(0, state.speed ?? 0);
-        const standstillSteerLock = isStandstillSteerOnly(true, stateSpeed, lastInput);
         if (!scene.localRenderState) {
           scene.localRenderState = { ...state };
         } else {
           const tauMs = 24;
           const alpha = 1 - Math.exp(-Math.max(0, clampedDtMs) / Math.max(1, tauMs));
-          if (standstillSteerLock) {
-            // Hard visual lock at standstill steer-only: no positional interpolation tail.
-            scene.localRenderState.x = state.x;
-            scene.localRenderState.y = state.y;
-          } else {
-            scene.localRenderState.x += (state.x - scene.localRenderState.x) * alpha;
-            scene.localRenderState.y += (state.y - scene.localRenderState.y) * alpha;
-          }
+          scene.localRenderState.x += (state.x - scene.localRenderState.x) * alpha;
+          scene.localRenderState.y += (state.y - scene.localRenderState.y) * alpha;
           scene.localRenderState.rot = scene.lerpAngle(scene.localRenderState.rot, state.rot, alpha);
-          scene.localRenderState.aimRot = scene.lerpAngle(scene.localRenderState.aimRot ?? state.aimRot ?? state.rot, state.aimRot ?? state.rot, alpha);
-          scene.localRenderState.moveRot = scene.lerpAngle(scene.localRenderState.moveRot ?? state.moveRot ?? state.rot, state.moveRot ?? state.rot, alpha);
-          scene.localRenderState.baseRot = scene.lerpAngle(scene.localRenderState.baseRot ?? state.baseRot ?? state.rot, state.baseRot ?? state.rot, alpha);
+          scene.localRenderState.aimRot = scene.lerpAngle(
+            scene.localRenderState.aimRot ?? state.aimRot ?? state.rot,
+            state.aimRot ?? state.rot,
+            alpha
+          );
           scene.localRenderState.speed = (scene.localRenderState.speed ?? 0) + ((state.speed ?? 0) - (scene.localRenderState.speed ?? 0)) * alpha;
-        }
-        if (standstillSteerLock) {
-          scene.localRenderState.speed = 0;
-          (scene.localRenderState as any).standstillSteerLock = true;
-        } else {
-          (scene.localRenderState as any).standstillSteerLock = false;
         }
         state = scene.localRenderState;
       }
@@ -173,24 +146,8 @@ export function runPondSceneUpdate(scene: any) {
       s.y,
       state.rot,
       state.aimRot ?? state.rot,
-      state.moveRot ?? state.rot,
-      state.baseRot ?? state.rot,
-      state.speed ?? 0,
-      !!(state as any).standstillSteerLock
+      state.speed ?? 0
     );
-    view.setVisualLeanConfig({
-      enabled: Boolean(tuning.visualLeanEnabled ?? true),
-      maxPx: Number(tuning.visualLeanMaxPx ?? 6),
-      tauMs: Number(tuning.visualLeanTauMs ?? 120),
-      dampingRatio: Number(tuning.visualLeanDampingRatio ?? 1.0),
-      maxAngleDeg: Number(tuning.visualLeanMaxAngleDeg ?? 60)
-    });
-    if (scene.clientId && id === scene.clientId) {
-      const handedness = tuning.handedness === 'L' ? 'L' : 'R';
-      view.setHandedness(handedness);
-    } else {
-      view.setHandedness('R');
-    }
     view.setDebugDrawEnabled(false);
     view.draw(clampedDtMs / 1000);
   }

@@ -1,7 +1,7 @@
 import type { InputMsg, ServerMessage, SnapshotMsg } from '@flathockey/shared';
 import { CLIENT_FIXED_DT } from '../net/prediction';
 import { reconcilePrediction } from '../net/reconciliation';
-import { getTuning } from '../tuning/movementTuning';
+import { getTuning } from '../tuning/gameplayConfig';
 
 const SERVER_TICK_MS = 1000 / 20;
 
@@ -14,17 +14,13 @@ export function handleServerMessage(scene: any, msg: ServerMessage | { type?: st
     message?: string;
     clientId?: string;
     roomId?: string;
-    movementTuning?: unknown;
-    allowTuningSync?: unknown;
   };
 
   if (m.type === 'welcome' || m.type === 'net:welcome') {
     scene.applyWelcomeLike({
       clientId: String(m.clientId ?? ''),
       roomId: typeof m.roomId === 'string' ? m.roomId : undefined,
-      room: typeof m.room === 'string' ? m.room : undefined,
-      movementTuning: m.movementTuning,
-      allowTuningSync: !!m.allowTuningSync
+      room: typeof m.room === 'string' ? m.room : undefined
     });
     return;
   }
@@ -92,8 +88,6 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
           y: p.y,
           rot: p.angle,
           aimRot: p.aimAngle,
-          moveRot: p.moveAngle,
-          baseRot: p.heading ?? p.angle,
           speed: Math.hypot(p.vx ?? 0, p.vy ?? 0)
         }, now);
       } else {
@@ -101,10 +95,8 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
         scene.localBuffer.push({
           x: scene.predicted.x,
           y: scene.predicted.y,
-          rot: scene.predicted.angle ?? scene.predicted.heading ?? 0,
+          rot: scene.predicted.angle ?? 0,
           aimRot: scene.predicted.aimAngle ?? scene.predicted.angle ?? 0,
-          moveRot: scene.predicted.moveAngle ?? scene.predicted.angle ?? 0,
-          baseRot: scene.predicted.heading ?? scene.predicted.angle ?? 0,
           speed: Math.hypot(scene.predicted.vx ?? 0, scene.predicted.vy ?? 0)
         }, now);
       }
@@ -120,8 +112,6 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
         y: p.y,
         rot: p.angle,
         aimRot: p.aimAngle,
-        moveRot: p.moveAngle,
-        baseRot: p.heading ?? p.angle,
         speed: Math.hypot(p.vx ?? 0, p.vy ?? 0)
       }, serverTimeMs);
     }
@@ -147,16 +137,6 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
 
 export function buildClientInput(scene: any): InputMsg {
   const tuning = getTuning();
-
-  // WASD → desired world-space direction.
-  // W = up on screen (negative Y in Phaser), S = down, A = left, D = right.
-  const wx = (scene.keys.D.isDown ? 1 : 0) - (scene.keys.A.isDown ? 1 : 0);
-  const wy = (scene.keys.S.isDown ? 1 : 0) - (scene.keys.W.isDown ? 1 : 0);
-  const hasMovement = wx !== 0 || wy !== 0;
-  const desiredHeading = hasMovement ? Math.atan2(wy, wx) : undefined;
-  const throttle: -1 | 0 | 1 = hasMovement ? 1 : 0;
-  const brake = scene.keys.SPACE.isDown ? 1 : 0;
-
   const aimAngle = scene.computeMouseAimAngle(CLIENT_FIXED_DT, tuning);
   if (typeof aimAngle === 'number' && Number.isFinite(aimAngle)) {
     scene.lastAimAngle = aimAngle;
@@ -166,11 +146,7 @@ export function buildClientInput(scene: any): InputMsg {
     type: 'input',
     clientId: scene.clientId ?? '',
     seq: ++scene.seq,
-    throttle,
-    steer: 0,
-    brake,
-    shoot: 0,
-    aimAngle,
-    _heading: desiredHeading,
+    shoot: scene.keys.E.isDown ? 1 : 0,
+    aimAngle
   };
 }
