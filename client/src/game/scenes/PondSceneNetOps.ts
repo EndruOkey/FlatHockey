@@ -149,11 +149,18 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
 export function buildClientInput(scene: any): InputMsg {
   const tuning = getTuning();
 
-  // Inicializace headingu z predicted state při prvním volání
-  if (!Number.isFinite(scene._localHeading)) {
-    scene._localHeading =
+  // Inicializace headingu – resyncuj ze serveru dokud hráč nezačal točit
+  if (!scene._localHeadingInitialized) {
+    const serverHeading =
       Number.isFinite(scene.predicted?.heading) ? scene.predicted.heading :
-      Number.isFinite(scene.predicted?.angle)   ? scene.predicted.angle   : 0;
+      Number.isFinite(scene.predicted?.angle)   ? scene.predicted.angle   : null;
+
+    if (serverHeading !== null) {
+      scene._localHeading = serverHeading;
+      scene._localHeadingInitialized = true;
+    } else {
+      if (!Number.isFinite(scene._localHeading)) scene._localHeading = 0;
+    }
   }
 
   // A/D točí heading hráče
