@@ -1,7 +1,17 @@
 import { MOVEMENT_DEFAULTS } from '../tuning/movement.defaults';
-import { approachScalar, clamp, wrapToPi } from './movementMath';
+import { approachAngle, clamp, wrapToPi } from './movementMath';
 import type { MovementStepConfig, MovementStepInput, MovementStepState } from './movementStep.types';
 
+/**
+ * Velocity-based movement step.
+ *
+ * input.heading = desired world-space direction (angle) from WASD.
+ *   W=-π/2 (up), D=0 (right), S=π/2 (down), A=π (left), diagonals in between.
+ *
+ * The visual heading (state.heading) follows the actual velocity direction
+ * at a limited turn rate — it never snaps instantly and cannot be spun
+ * via rapid input changes.
+ */
 export function applyHeadingTractionStep(
   state: MovementStepState,
   input: MovementStepInput,
@@ -9,79 +19,81 @@ export function applyHeadingTractionStep(
   config: MovementStepConfig
 ) {
   const simDt = clamp(dt, 0.001, 0.05);
-  const turnRate = config.turnRate ?? MOVEMENT_DEFAULTS.turnRate ?? 4.2;
-  const turnAccel = config.turnAccel ?? MOVEMENT_DEFAULTS.turnAccel ?? 18.0;
-  const brakeTurnMult = config.brakeTurnMult ?? MOVEMENT_DEFAULTS.brakeTurnMult ?? 1;
-  const forwardAccel = config.forwardAccel ?? MOVEMENT_DEFAULTS.forwardAccel ?? 1400;
-  const maxSpeed = Math.max(
-    1,
-    config.maxForwardSpeed ?? config.maxSpeed ?? MOVEMENT_DEFAULTS.maxForwardSpeed ?? 340
-  );
-  const brakeDecel = config.brakeDecel ?? MOVEMENT_DEFAULTS.brakeDecel ?? 380;
-  const spaceDecel = brakeDecel * 2.2;
-  const coastDecel = config.coastDecel ?? MOVEMENT_DEFAULTS.coastDecel ?? 90;
-  const forwardDrag = config.forwardDrag ?? MOVEMENT_DEFAULTS.forwardDrag ?? 1.2;
-  const lateralDrag = config.lateralDrag ?? MOVEMENT_DEFAULTS.lateralDrag ?? 8.0;
-  const spaceLateralDrag = lateralDrag * 2.5;
+
+  const forwardAccel  = config.forwardAccel  ?? MOVEMENT_DEFAULTS.forwardAccel  ?? 1400;
+  const maxSpeed      = Math.max(1, config.maxForwardSpeed ?? config.maxSpeed ?? MOVEMENT_DEFAULTS.maxForwardSpeed ?? 340);
+  const brakeDecel    = config.brakeDecel    ?? MOVEMENT_DEFAULTS.brakeDecel    ?? 600;
+  const coastDecel    = config.coastDecel    ?? MOVEMENT_DEFAULTS.coastDecel    ?? 120;
+  const drag          = config.forwardDrag   ?? MOVEMENT_DEFAULTS.forwardDrag   ?? 1.4;
+  // How fast the visual heading can rotate to match the velocity direction (rad/s).
+  const turnRate      = config.turnRate      ?? MOVEMENT_DEFAULTS.turnRate      ?? 6.0;
   const standstillEps = config.standstillSpeedEpsilon ?? MOVEMENT_DEFAULTS.standstillSpeedEpsilon ?? 6;
 
-  const throttle = input.throttle;
-  const brake = !!input.brake;
-  const isBraking = brake;
-  const isSpace = brake && throttle === 0;
+  const throttle = input.throttle > 0;
+  const brake    = !!input.brake;
 
-  const steer = input.steer ?? 0;
-  if (typeof input.heading === 'number' && Number.isFinite(input.heading)) {
-    // Client sent explicit heading, so we use it directly.
-    state.heading = wrapToPi(input.heading);
-    state.headingOmega = 0;
-  } else {
-    const targetOmega = steer * turnRate * (isBraking ? brakeTurnMult : 1);
-    state.headingOmega = approachScalar(state.headingOmega, targetOmega, turnAccel * simDt);
-    state.heading = wrapToPi(state.heading + state.headingOmega * simDt);
-  }
+  // Desired world-space direction sent by the client (atan2 of WASD vector).
+  const hasDesiredDir  = typeof input.heading === 'number' && Number.isFinite(input.heading);
+  const desiredHeading = hasDesiredDir ? input.heading! : state.heading;
 
-  const fwdX = Math.cos(state.heading);
-  const fwdY = Math.sin(state.heading);
-  const latX = -fwdY;
-  const latY = fwdX;
-
-  let fwdSpeed = state.vx * fwdX + state.vy * fwdY;
-  let latSpeed = state.vx * latX + state.vy * latY;
-
-  if (Math.abs(steer) > 0 && throttle > 0) {
-    const totalSpeed = Math.hypot(fwdSpeed, latSpeed);
-    fwdSpeed = totalSpeed * Math.sign(fwdSpeed || 1);
-    latSpeed = 0;
-  }
-
-  if (throttle > 0) {
-    fwdSpeed += forwardAccel * simDt;
+  // ── Acceleration / deceleration ──────────────────────────────────────────
+  if (throttle) {
+    state.vx += Math.cos(desiredHeading) * forwardAccel * simDt;
+    state.vy += Math.sin(desiredHeading) * forwardAccel * simDt;
   } else if (brake) {
-    const decel = isSpace ? spaceDecel : brakeDecel;
-    fwdSpeed = approachScalar(fwdSpeed, 0, decel * simDt);
+    const speed = Math.hypot(state.vx, state.vy);
+    if (speed > standstillEps) {
+      const factor = Math.max(0, 1 - (brakeDecel * simDt) / speed);
+      state.vx *= factor;
+      state.vy *= factor;
+    } else {
+      state.vx = 0;
+      state.vy = 0;
+    }
   } else {
-    fwdSpeed = approachScalar(fwdSpeed, 0, coastDecel * simDt);
+    const speed = Math.hypot(state.vx, state.vy);
+    if (speed > standstillEps) {
+      const factor = Math.max(0, 1 - (coastDecel * simDt) / speed);
+      state.vx *= factor;
+      state.vy *= factor;
+    } else {
+      state.vx = 0;
+      state.vy = 0;
+    }
   }
 
-  fwdSpeed *= Math.exp(-forwardDrag * simDt);
-  latSpeed *= Math.exp(-(isSpace ? spaceLateralDrag : lateralDrag) * simDt);
+  // ── Drag (uniform, simulates ice friction) ────────────────────────────────
+  const dragFactor = Math.exp(-drag * simDt);
+  state.vx *= dragFactor;
+  state.vy *= dragFactor;
 
-  fwdSpeed = clamp(fwdSpeed, 0, maxSpeed);
-
-  if (Math.abs(fwdSpeed) < standstillEps && !brake && throttle === 0) fwdSpeed = 0;
-  if (Math.abs(latSpeed) < standstillEps * 0.5) latSpeed = 0;
-
-  state.vx = fwdX * fwdSpeed + latX * latSpeed;
-  state.vy = fwdY * fwdSpeed + latY * latSpeed;
+  // ── Speed cap ─────────────────────────────────────────────────────────────
   state.speed = Math.hypot(state.vx, state.vy);
+  if (state.speed > maxSpeed) {
+    state.vx = (state.vx / state.speed) * maxSpeed;
+    state.vy = (state.vy / state.speed) * maxSpeed;
+    state.speed = maxSpeed;
+  }
 
+  // ── Hard standstill ───────────────────────────────────────────────────────
+  if (state.speed < standstillEps && !throttle) {
+    state.vx    = 0;
+    state.vy    = 0;
+    state.speed = 0;
+  }
+
+  // ── Visual heading follows velocity direction (rate-limited) ──────────────
+  if (state.speed > standstillEps) {
+    const velocityAngle = Math.atan2(state.vy, state.vx);
+    state.heading   = approachAngle(state.heading, velocityAngle, turnRate * simDt);
+    state.moveAngle = velocityAngle;
+  }
+  // When stationary, heading and moveAngle retain their last values.
+  state.headingOmega = 0;
+
+  // ── Position integration ──────────────────────────────────────────────────
   state.x += state.vx * simDt;
   state.y += state.vy * simDt;
-
-  state.moveAngle = state.speed > standstillEps
-    ? Math.atan2(state.vy, state.vx)
-    : state.heading;
 
   if (Number.isFinite(input.aimAngle)) {
     state.aimAngle = wrapToPi(input.aimAngle!);

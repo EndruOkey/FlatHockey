@@ -1,5 +1,4 @@
 import type { InputMsg, ServerMessage, SnapshotMsg } from '@flathockey/shared';
-import { wrapToPi } from '@flathockey/shared';
 import { CLIENT_FIXED_DT } from '../net/prediction';
 import { reconcilePrediction } from '../net/reconciliation';
 import { getTuning } from '../tuning/movementTuning';
@@ -99,19 +98,13 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
         }, now);
       } else {
         reconcilePrediction(scene.predicted, p, scene.ackSeq, scene.pendingInputs);
-        // Use _localHeading for rot so reconciliation never shows a stale server
-        // angle when pending inputs were empty (all ACKed). The heading field
-        // on predicted is the authoritative physics heading after replay.
-        const reconcileRot = scene._localHeadingInitialized
-          ? scene._localHeading
-          : (scene.predicted.angle ?? scene.predicted.heading ?? 0);
         scene.localBuffer.push({
           x: scene.predicted.x,
           y: scene.predicted.y,
-          rot: reconcileRot,
-          aimRot: scene.predicted.aimAngle ?? reconcileRot,
-          moveRot: scene.predicted.moveAngle ?? reconcileRot,
-          baseRot: reconcileRot,
+          rot: scene.predicted.angle ?? scene.predicted.heading ?? 0,
+          aimRot: scene.predicted.aimAngle ?? scene.predicted.angle ?? 0,
+          moveRot: scene.predicted.moveAngle ?? scene.predicted.angle ?? 0,
+          baseRot: scene.predicted.heading ?? scene.predicted.angle ?? 0,
           speed: Math.hypot(scene.predicted.vx ?? 0, scene.predicted.vy ?? 0)
         }, now);
       }
@@ -155,29 +148,14 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
 export function buildClientInput(scene: any): InputMsg {
   const tuning = getTuning();
 
-  // Inicializace headingu – resyncuj ze serveru dokud hráč nezačal točit
-  if (!scene._localHeadingInitialized) {
-    const serverHeading =
-      Number.isFinite(scene.predicted?.heading) ? scene.predicted.heading :
-      Number.isFinite(scene.predicted?.angle)   ? scene.predicted.angle   : null;
-
-    if (serverHeading !== null) {
-      scene._localHeading = serverHeading;
-      scene._localHeadingInitialized = true;
-    } else {
-      if (!Number.isFinite(scene._localHeading)) scene._localHeading = 0;
-    }
-  }
-
-  // A/D točí heading hráče
-  const turnRate = 4.2; // rad/s
-  if (scene.keys.A.isDown) scene._localHeading -= turnRate * CLIENT_FIXED_DT;
-  if (scene.keys.D.isDown) scene._localHeading += turnRate * CLIENT_FIXED_DT;
-  scene._localHeading = wrapToPi(scene._localHeading);
-
-  // W = vpřed, S nebo SPACE = brzda
-  const throttle: -1 | 0 | 1 = scene.keys.W.isDown ? 1 : 0;
-  const brake = (scene.keys.S.isDown || scene.keys.SPACE.isDown) ? 1 : 0;
+  // WASD → desired world-space direction.
+  // W = up on screen (negative Y in Phaser), S = down, A = left, D = right.
+  const wx = (scene.keys.D.isDown ? 1 : 0) - (scene.keys.A.isDown ? 1 : 0);
+  const wy = (scene.keys.S.isDown ? 1 : 0) - (scene.keys.W.isDown ? 1 : 0);
+  const hasMovement = wx !== 0 || wy !== 0;
+  const desiredHeading = hasMovement ? Math.atan2(wy, wx) : undefined;
+  const throttle: -1 | 0 | 1 = hasMovement ? 1 : 0;
+  const brake = scene.keys.SPACE.isDown ? 1 : 0;
 
   const aimAngle = scene.computeMouseAimAngle(CLIENT_FIXED_DT, tuning);
   if (typeof aimAngle === 'number' && Number.isFinite(aimAngle)) {
@@ -193,6 +171,6 @@ export function buildClientInput(scene: any): InputMsg {
     brake,
     shoot: 0,
     aimAngle,
-    _heading: scene._localHeading,
+    _heading: desiredHeading,
   };
 }

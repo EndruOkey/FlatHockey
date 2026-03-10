@@ -258,9 +258,6 @@ export class PondScene extends Phaser.Scene {
     this.resetPendingInputState(true);
     this.clientId = msg.clientId;
     this.roomId = msg.roomId ?? msg.room ?? this.roomId ?? 'pond-1';
-    // Reset heading so it resyncs from server state on next snapshot.
-    (this as any)._localHeadingInitialized = false;
-    (this as any)._localHeading = undefined;
     this.predicted = null;
     this.hasReceivedFirstSnapshot = false;
   }
