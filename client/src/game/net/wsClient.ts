@@ -133,7 +133,6 @@ export class WsClient {
 
     const hasMovementFields =
       typeof msg.throttle === 'number' ||
-      typeof msg.steer === 'number' ||
       typeof msg.brake === 'number' ||
       typeof msg.shoot === 'number' ||
       typeof msg.aimAngle === 'number';
@@ -141,19 +140,24 @@ export class WsClient {
     if (!hasMovementFields) return msg;
 
     const throttle = Number(msg.throttle ?? 0);
-    const steer = Number(msg.steer ?? 0);
     const aim = typeof msg.aimAngle === 'number' ? msg.aimAngle : undefined;
 
     return {
-      ...msg,
+      type: msg.type,
+      clientId: msg.clientId,
       seq: Number.isFinite(msg.seq) ? Math.max(0, Math.floor(msg.seq)) : 0,
       dt: typeof msg.dt === 'number' && Number.isFinite(msg.dt) ? msg.dt : undefined,
+      // Desired world-space movement direction from WASD (atan2 of input vector).
+      _heading: typeof msg._heading === 'number' && Number.isFinite(msg._heading)
+        ? msg._heading
+        : undefined,
       pointer: typeof aim === 'number' ? { aim } : undefined,
       keys: {
+        // w = any WASD movement input; direction is carried by _heading above.
         w: throttle > 0,
-        a: steer < 0,
-        s: throttle < 0,
-        d: steer > 0,
+        a: false,
+        s: false,
+        d: false,
         shift: false,
         space: !!msg.brake,
         e: !!msg.shoot
