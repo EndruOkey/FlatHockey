@@ -22,6 +22,7 @@ type ClientInputV2 = {
   type: 'input';
   seq: number;
   dt?: number;
+  _heading?: number;
   pointer?: {
     x?: number;
     y?: number;
@@ -146,6 +147,9 @@ function parseV2Message(obj: JsonRecord): ClientMessageV2 | null {
       type,
       seq: Math.max(0, Math.floor(obj.seq)),
       dt: typeof obj.dt === 'number' && Number.isFinite(obj.dt) ? obj.dt : undefined,
+      _heading: typeof obj._heading === 'number' && Number.isFinite(obj._heading)
+        ? obj._heading
+        : undefined,
       pointer: pointer
         ? {
             x: typeof pointer.x === 'number' && Number.isFinite(pointer.x) ? pointer.x : undefined,
@@ -183,18 +187,22 @@ function parseV2Message(obj: JsonRecord): ClientMessageV2 | null {
 
 function toInputMsg(clientId: string, msg: ClientInputV2, fallbackAim: number): InputMsg {
   const keys = msg.keys ?? {};
-  const throttle = (keys.w ? 1 : 0) - (keys.s ? 1 : 0);
-  const steer = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
+  const throttle = keys.w ? 1 : 0;
+  const brake = (keys.s || keys.space) ? 1 : 0;
   const shoot = keys.e ? 1 : 0;
+  const heading = typeof msg._heading === 'number' && Number.isFinite(msg._heading)
+    ? msg._heading
+    : undefined;
   return {
     type: 'input',
     clientId,
     seq: msg.seq,
-    throttle: throttle < 0 ? -1 : throttle > 0 ? 1 : 0,
-    steer: steer < 0 ? -1 : steer > 0 ? 1 : 0,
-    brake: keys.space ? 1 : 0,
+    throttle: throttle as 1 | 0,
+    steer: 0,
+    brake: brake as 0 | 1,
     shoot,
-    aimAngle: typeof msg.pointer?.aim === 'number' ? msg.pointer.aim : fallbackAim
+    aimAngle: typeof msg.pointer?.aim === 'number' ? msg.pointer.aim : fallbackAim,
+    _heading: heading
   };
 }
 

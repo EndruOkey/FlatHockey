@@ -3,7 +3,7 @@ import type { ReverseState } from '@flathockey/shared/sim/movementStep';
 export type InputState = {
   throttle: -1 | 0 | 1;
   steer: -1 | 0 | 1;
-  _heading?: number;
+  heading?: number;
   brake: 0 | 1;
   shoot: 0 | 1;
   aimAngle: number;

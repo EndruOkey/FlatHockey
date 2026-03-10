@@ -11,6 +11,7 @@ export function applyHeadingTractionStep(
   const simDt = clamp(dt, 0.001, 0.05);
   const turnRate = config.turnRate ?? MOVEMENT_DEFAULTS.turnRate ?? 4.2;
   const turnAccel = config.turnAccel ?? MOVEMENT_DEFAULTS.turnAccel ?? 18.0;
+  const brakeTurnMult = config.brakeTurnMult ?? MOVEMENT_DEFAULTS.brakeTurnMult ?? 1;
   const forwardAccel = config.forwardAccel ?? MOVEMENT_DEFAULTS.forwardAccel ?? 1400;
   const maxSpeed = Math.max(
     1,
@@ -26,15 +27,17 @@ export function applyHeadingTractionStep(
 
   const throttle = input.throttle;
   const brake = !!input.brake;
+  const isBraking = brake;
   const isSpace = brake && throttle === 0;
 
   const steer = input.steer ?? 0;
-  const targetOmega = steer * turnRate;
-  state.headingOmega = approachScalar(state.headingOmega, targetOmega, turnAccel * simDt);
-
-  if (typeof input._heading === 'number' && Number.isFinite(input._heading)) {
-    state.heading = wrapToPi(input._heading);
+  if (typeof input.heading === 'number' && Number.isFinite(input.heading)) {
+    // Client sent explicit heading, so we use it directly.
+    state.heading = wrapToPi(input.heading);
+    state.headingOmega = 0;
   } else {
+    const targetOmega = steer * turnRate * (isBraking ? brakeTurnMult : 1);
+    state.headingOmega = approachScalar(state.headingOmega, targetOmega, turnAccel * simDt);
     state.heading = wrapToPi(state.heading + state.headingOmega * simDt);
   }
 
