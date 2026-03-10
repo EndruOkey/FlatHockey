@@ -99,13 +99,19 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
         }, now);
       } else {
         reconcilePrediction(scene.predicted, p, scene.ackSeq, scene.pendingInputs);
+        // Use _localHeading for rot so reconciliation never shows a stale server
+        // angle when pending inputs were empty (all ACKed). The heading field
+        // on predicted is the authoritative physics heading after replay.
+        const reconcileRot = scene._localHeadingInitialized
+          ? scene._localHeading
+          : (scene.predicted.angle ?? scene.predicted.heading ?? 0);
         scene.localBuffer.push({
           x: scene.predicted.x,
           y: scene.predicted.y,
-          rot: scene.predicted.angle,
-          aimRot: scene.predicted.aimAngle ?? scene.predicted.angle,
-          moveRot: scene.predicted.moveAngle ?? scene.predicted.angle,
-          baseRot: scene.predicted.heading ?? scene.predicted.angle,
+          rot: reconcileRot,
+          aimRot: scene.predicted.aimAngle ?? reconcileRot,
+          moveRot: scene.predicted.moveAngle ?? reconcileRot,
+          baseRot: reconcileRot,
           speed: Math.hypot(scene.predicted.vx ?? 0, scene.predicted.vy ?? 0)
         }, now);
       }
