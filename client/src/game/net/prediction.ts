@@ -16,7 +16,8 @@ export function getAimInputRateLimited() {
 }
 
 export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg, _dt = CLIENT_FIXED_DT) {
-  if (!Number.isFinite(input.aimAngle)) return;
-  state.aimAngle = input.aimAngle;
-  state.angle = input.aimAngle;
+  const aimAngle = input.aimAngle;
+  if (typeof aimAngle !== 'number' || !Number.isFinite(aimAngle)) return;
+  state.aimAngle = aimAngle;
+  state.angle = aimAngle;
 }

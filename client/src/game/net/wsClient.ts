@@ -142,7 +142,6 @@ export class WsClient {
       type: msg.type,
       clientId: msg.clientId,
       seq: Number.isFinite(msg.seq) ? Math.max(0, Math.floor(msg.seq)) : 0,
-      dt: typeof msg.dt === 'number' && Number.isFinite(msg.dt) ? msg.dt : undefined,
       pointer: typeof aim === 'number' ? { aim } : undefined,
       keys: {
         e: !!msg.shoot

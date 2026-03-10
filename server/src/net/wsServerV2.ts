@@ -21,10 +21,7 @@ type ClientJoinV2 = {
 type ClientInputV2 = {
   type: 'input';
   seq: number;
-  dt?: number;
   pointer?: {
-    x?: number;
-    y?: number;
     aim?: number;
   };
   keys?: {
@@ -96,10 +93,6 @@ function isObject(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object' && !Array.isArray(v);
 }
 
-function clamp(v: number, lo: number, hi: number): number {
-  return Math.max(lo, Math.min(hi, v));
-}
-
 function bool(v: unknown): boolean {
   return v === true;
 }
@@ -137,11 +130,8 @@ function parseV2Message(obj: JsonRecord): ClientMessageV2 | null {
     return {
       type,
       seq: Math.max(0, Math.floor(obj.seq)),
-      dt: typeof obj.dt === 'number' && Number.isFinite(obj.dt) ? obj.dt : undefined,
       pointer: pointer
         ? {
-            x: typeof pointer.x === 'number' && Number.isFinite(pointer.x) ? pointer.x : undefined,
-            y: typeof pointer.y === 'number' && Number.isFinite(pointer.y) ? pointer.y : undefined,
             aim: typeof pointer.aim === 'number' && Number.isFinite(pointer.aim) ? pointer.aim : undefined
           }
         : undefined,

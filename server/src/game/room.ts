@@ -39,21 +39,14 @@ export class Room {
       name,
       x: -220 + offset,
       y: -120 + offset * 0.35,
-      vx: 0,
-      vy: 0,
-      speed: 0,
       angle: 0,
       aimAngle: 0,
-      stamina: 1,
       prevShoot: false,
       shotCharge: 0,
       lastProcessedSeq: 0,
       lastInputState: { ...ZERO_INPUT },
       inputBuffer: [],
-      inputGapTicks: 0,
-      chargeActive: false,
-      hitCooldownLeft: 0,
-      stunLeft: 0
+      inputGapTicks: 0
     });
     this.sockets.set(clientId, ws);
   }
@@ -88,23 +81,16 @@ export class Room {
     this.serverTick += 1;
 
     for (const player of this.players.values()) {
-      player.hitCooldownLeft = Math.max(0, player.hitCooldownLeft - dt);
-      player.stunLeft = Math.max(0, player.stunLeft - dt);
-
       const next = this.consumeNextInput(player);
       if (next) {
         player.lastInputState = next.state;
         player.lastProcessedSeq = next.seq;
         player.inputGapTicks = 0;
       }
-      player.vx = 0;
-      player.vy = 0;
-      player.speed = 0;
       if (Number.isFinite(player.lastInputState.aimAngle)) {
         player.aimAngle = player.lastInputState.aimAngle;
         player.angle = player.lastInputState.aimAngle;
       }
-      player.chargeActive = false;
     }
     this.updatePuck(dt);
   }
@@ -130,13 +116,8 @@ export class Room {
         id: p.id,
         x: p.x,
         y: p.y,
-        vx: p.vx,
-        vy: p.vy,
-        speed: p.speed,
         angle: p.angle,
-        aimAngle: p.aimAngle,
-        chargeActive: p.chargeActive,
-        stunLeft: p.stunLeft
+        aimAngle: p.aimAngle
       }))
     };
     this.broadcast(msg);

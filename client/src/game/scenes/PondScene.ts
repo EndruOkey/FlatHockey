@@ -1,28 +1,18 @@
 import Phaser from 'phaser';
-import { SIM_HZ, type InputMsg, PlayerStateMsg, ServerMessage, SnapshotMsg } from '@flathockey/shared';
+import type { InputMsg, ServerMessage } from '@flathockey/shared';
 import { WsClient } from '../net/wsClient';
 import { Interpolator, lerpPlayer, type LerpPlayer } from '../net/interpolation';
 import { type PredictedPlayerState, setAimInputRateLimited } from '../net/prediction';
 import { getTuning } from '../tuning/gameplayConfig';
 import { PlayerView } from '../entities/playerView';
-import { puckStickTuningStore } from '../tuning/puckStickTuningStore';
 import { ENV } from '../../config/env';
 import { BUILD_TIME, BUILD_VERSION } from '../../config/version';
-import { applySnapshot, buildClientInput, handleServerMessage } from './PondSceneNetOps';
+import { buildClientInput, handleServerMessage } from './PondSceneNetOps';
 import { updateAndDrawPuck as updateAndDrawPuckOp, updateCrosshairAndCursor as updateCrosshairAndCursorOp, updateHud as updateHudOp, updateOverlay as updateOverlayOp } from './PondSceneRenderOps';
 import { runPondSceneUpdate } from './PondSceneUpdateLoop';
 import { wrapToPi } from '../util/math';
 
-const CLIENT_SIM_HZ = 60;
-const FIXED_STEP_MS = 1000 / CLIENT_SIM_HZ;
-const MAX_SIM_STEPS_PER_FRAME = 3;
-const DT_CLAMP_MS = 34;
-const HITCH_MS = 150;
-const INTERP_DELAY_MS = 180;
-const SERVER_TICK_MS = 1000 / SIM_HZ;
 const REMOTE_INTERP_DELAY_DEFAULT_MS = 120;
-
-type DebugSample = { t: number; dtMs: number };
 
 export function resolveWsUrl(): string {
   const host = window.location.hostname;
@@ -64,29 +54,18 @@ export class PondScene extends Phaser.Scene {
   private simAccumulatorMs = 0;
   private renderClockMs = 0;
   private lastFrameTimeMs = 0;
-  private simStepsThisFrame = 0;
-  private simCapHitCount = 0;
 
   // resync / startup helpers
   private hasReceivedFirstSnapshot = false;
-  private resyncCount = 0;
   private pendingResyncReason: string | null = null;
-  private lastResyncReason: string | null = null;
-  private lastResyncAtMs = 0;
 
   private needsResync = false;
-  private hitchCount = 0;
-  private lastHitchMs = 0;
 
-  private latestSnapshotAtMs = 0;
-  private snapshotReceiveTimes: number[] = [];
   private newestSnapshotServerMs = 0;
   private serverTimeOffsetMs = 0;
   private hasServerClock = false;
-  private droppedSnapshots = 0;
   private remoteLastSnapshotTick = new Map<string, number>();
   private remoteInterpDelayMs = REMOTE_INTERP_DELAY_DEFAULT_MS;
-  private latestServerTick = 0;
 
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private recorderToggleKey!: Phaser.Input.Keyboard.Key;
@@ -94,26 +73,13 @@ export class PondScene extends Phaser.Scene {
   private hud!: Phaser.GameObjects.Text;
   private lastHudText = '';
   private hudAcc = 0;
-  private perfSamples: DebugSample[] = [];
   private crosshairGraphics!: Phaser.GameObjects.Graphics;
-  private aimCurrentAngle = 0;
-  private aimTargetAngle = 0;
-  private aimAngleDiff = 0;
-  private hasAimState = false;
-  private lastAimAngle = 0;
-  private aimDistance01 = 1;
-  
-  private inputsSentTimesMs: number[] = [];
-  private lastPointerVector = { x: 0, y: 0 };
-  private lastTurnRateDeg = 0;
-  private lastPredictedAngle = 0;
   private inputRecorderEnabled = false;
   private replayEnabled = false;
   private replayIndex = 0;
   private recordedInputs: Array<{ tMs: number; input: InputMsg }> = [];
   private readonly inputRecordWindowMs = 20_000;
   private localRenderState: LerpPlayer | null = null;
-  private lastInputForRender: InputMsg | null = null;
 
   constructor() {
     super('PondScene');
@@ -133,7 +99,7 @@ export class PondScene extends Phaser.Scene {
   create() {
     this.drawBackground();
 
-    this.keys = this.input.keyboard!.addKeys('W,A,S,D,E,SPACE,F9,F10') as Record<string, Phaser.Input.Keyboard.Key>;
+    this.keys = this.input.keyboard!.addKeys('E,F9,F10') as Record<string, Phaser.Input.Keyboard.Key>;
     this.recorderToggleKey = this.keys.F9;
     this.replayToggleKey = this.keys.F10;
 
@@ -247,8 +213,7 @@ export class PondScene extends Phaser.Scene {
 
   private ensurePlayerView(id: string) {
     if (this.players.has(id)) return this.players.get(id)!;
-    const team = this.clientId && id === this.clientId ? 'A' : 'B';
-    const view = new PlayerView(this, id, team);
+    const view = new PlayerView(this);
     view.setDebugDrawEnabled(false);
     this.players.set(id, view);
     this.remoteInterpolators.set(id, new Interpolator<LerpPlayer>(120));
@@ -265,10 +230,6 @@ export class PondScene extends Phaser.Scene {
 
   private onServerMessage(msg: ServerMessage | { type?: string; [key: string]: unknown }) {
     handleServerMessage(this, msg);
-  }
-
-  private consumeSnapshot(snapshot: SnapshotMsg) {
-    applySnapshot(this, snapshot);
   }
 
   private buildInput(): InputMsg {
@@ -334,8 +295,8 @@ export class PondScene extends Phaser.Scene {
     const newest = interpolator.newestTime();
     if (oldest === null || newest === null) return null;
 
-    const clamped = Math.max(oldest, Math.min(newest, targetTime));
-    return interpolator.sample(clamped, lerpPlayer) ?? interpolator.latest()?.value ?? null;
+    const sampleTime = Math.max(oldest, Math.min(newest, targetTime));
+    return interpolator.sample(sampleTime, lerpPlayer) ?? interpolator.latest()?.value ?? null;
   }
 
   private estimateServerNowMs(nowMs: number): number {
@@ -350,14 +311,8 @@ export class PondScene extends Phaser.Scene {
     return wrapToPi(a + d * t);
   }
 
-  private clamp(v: number, lo: number, hi: number): number {
-    return Math.max(lo, Math.min(hi, v));
-  }
-
   private computeMouseAimAngle(_dtSec: number, tuning = getTuning()): number | undefined {
     if (!tuning.aimEnabled || !this.predicted) {
-      this.hasAimState = false;
-      this.aimDistance01 = 1;
       setAimInputRateLimited(false);
       return undefined;
     }
@@ -366,23 +321,13 @@ export class PondScene extends Phaser.Scene {
     const deadzone = Math.max(0, tuning.aimDeadzonePx ?? 32);
     const dx = mouseWorld.x - this.predicted.x;
     const dy = mouseWorld.y - this.predicted.y;
-    this.lastPointerVector = { x: dx, y: dy };
     const dist = Math.hypot(dx, dy);
-    this.aimDistance01 = 1;
     if (dist <= deadzone) {
       setAimInputRateLimited(false);
       return Number.isFinite(this.predicted.aimAngle) ? this.predicted.aimAngle : undefined;
     }
 
     const rawTarget = Math.atan2(mouseWorld.y - this.predicted.y, mouseWorld.x - this.predicted.x);
-    if (!this.hasAimState) {
-      this.hasAimState = true;
-      this.aimCurrentAngle = rawTarget;
-      this.aimTargetAngle = rawTarget;
-    }
-    this.aimCurrentAngle = rawTarget;
-    this.aimTargetAngle = rawTarget;
-    this.aimAngleDiff = 0;
     setAimInputRateLimited(false);
     return rawTarget;
   }
@@ -391,17 +336,8 @@ export class PondScene extends Phaser.Scene {
     updateCrosshairAndCursorOp(this);
   }
 
-  private stickTargetScreen(view: PlayerView) {
-    const tuning = puckStickTuningStore.get();
-    return view.getStickBaseWorld(view.aimRot, tuning.stickOffsetX, tuning.stickOffsetY);
-  }
-
   private updateAndDrawPuck(dtSec: number, remoteTargetServerTime: number) {
     updateAndDrawPuckOp(this, dtSec, remoteTargetServerTime);
-  }
-
-  private getPerfStats() {
-    return { fps: 0, dtMax: 0 };
   }
 
   private updateOverlay() {

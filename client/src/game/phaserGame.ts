@@ -5,7 +5,6 @@ export function createPhaserGame(parent: HTMLElement) {
   return new Phaser.Game({
     type: Phaser.AUTO,
     parent,
-    // pauseOnBlur: false, (deprecated property)
     backgroundColor: '#07141a',
     scale: {
       mode: Phaser.Scale.RESIZE,

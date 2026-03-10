@@ -12,10 +12,5 @@
     "esModuleInterop": true,
     "skipLibCheck": true
   },
-  "include": ["src/**/*"],
-  "exclude": [
-    "src/game/systems/**/*",
-    "src/game/world.ts",
-    "src/game/entities/**/*"
-  ]
+  "include": ["src/**/*"]
 }

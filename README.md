@@ -10,8 +10,7 @@ npm run dev
 ```
 
 - Client: `http://localhost:5173`
-- Server WS: `ws://localhost:8080/ws`
-- Server WS v2: `ws://localhost:8080/ws2`
+- Server WS: `ws://localhost:8080/ws2`
 
 ## Build
 
@@ -46,7 +45,7 @@ Server serves `client/dist` if built.
 
 ## Backend v2 Protocol (`/ws2`)
 
-New server-authoritative protocol v2 runs in parallel with legacy `/ws`.
+Current server-authoritative protocol uses `/ws2` only.
 
 Client flow:
 1. `hello` (`proto: 2`)

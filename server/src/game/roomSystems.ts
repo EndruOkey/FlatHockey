@@ -13,7 +13,7 @@ const RINK = {
 
 type Vec2 = { x: number; y: number };
 
-export function stickTarget(room: any, player: any): Vec2 {
+function stickTarget(player: any): Vec2 {
   // Stick removed: gameplay anchor is player center.
   return {
     x: player.x,
@@ -66,7 +66,7 @@ export function updatePuck(room: any, dt: number) {
       if (justPressedShoot) owner.shotCharge = 0;
       if (shooting) owner.shotCharge = clamp(owner.shotCharge + shotChargeRate * dt, 0, 1);
 
-      const target = stickTarget(room, owner);
+      const target = stickTarget(owner);
       const dx = target.x - room.puck.x;
       const dy = target.y - room.puck.y;
       const fx = dx * holdSpringK - room.puck.vx * holdDampingC;
@@ -103,7 +103,7 @@ export function updatePuck(room: any, dt: number) {
       let bestTarget: Vec2 | null = null;
       let bestDist = Infinity;
       for (const player of room.players.values()) {
-        const t = stickTarget(room, player);
+        const t = stickTarget(player);
         const d = Math.hypot(room.puck.x - t.x, room.puck.y - t.y);
         if (d < magnetRadius && d < bestDist) {
           bestDist = d;
@@ -156,10 +156,9 @@ export function updatePuck(room: any, dt: number) {
       let bestId: string | null = null;
       let bestDist = Infinity;
       for (const player of room.players.values()) {
-        const t = stickTarget(room, player);
+        const t = stickTarget(player);
         const d = Math.hypot(room.puck.x - t.x, room.puck.y - t.y);
-        const relSpeed = Math.hypot(room.puck.vx - player.vx, room.puck.vy - player.vy);
-        const canCapture = relSpeed <= pickupMaxRelativeSpeed || speed <= pickupMaxSpeed;
+        const canCapture = speed <= Math.max(pickupMaxSpeed, pickupMaxRelativeSpeed);
         if (d < pickupRadius && canCapture && d < bestDist) {
           bestDist = d;
           bestId = player.id;

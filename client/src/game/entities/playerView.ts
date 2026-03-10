@@ -1,8 +1,6 @@
 import Phaser from 'phaser';
 
 export class PlayerView {
-  readonly id: string;
-  readonly team: 'A' | 'B';
   private root: Phaser.GameObjects.Container;
   private body: Phaser.GameObjects.Image;
   private debugGfx: Phaser.GameObjects.Graphics;
@@ -12,13 +10,10 @@ export class PlayerView {
   y = 0;
   rot = 0;
   aimRot = 0;
-  speed = 0;
 
   private static readonly SPRITE_FORWARD_OFFSET_RAD = Math.PI / 2;
 
-  constructor(scene: Phaser.Scene, id: string, team: 'A' | 'B') {
-    this.id = id;
-    this.team = team;
+  constructor(scene: Phaser.Scene) {
     PlayerView.ensureAvatarTexture(scene);
 
     this.root = scene.add.container(0, 0);
@@ -73,14 +68,12 @@ export class PlayerView {
     x: number,
     y: number,
     rot: number,
-    aimRot?: number,
-    speed?: number
+    aimRot?: number
   ) {
     this.x = x;
     this.y = y;
     this.rot = rot;
     this.aimRot = typeof aimRot === 'number' ? aimRot : rot;
-    this.speed = typeof speed === 'number' && Number.isFinite(speed) ? Math.max(0, speed) : 0;
   }
 
   setDebugDrawEnabled(enabled: boolean) {
@@ -104,29 +97,6 @@ export class PlayerView {
     this.debugGfx.clear();
     this.debugGfx.lineStyle(1.5, 0xffffff, 0.8);
     this.debugGfx.lineBetween(0, 0, Math.cos(this.body.rotation) * 26, Math.sin(this.body.rotation) * 26);
-  }
-
-  getStickRotation() {
-    return this.aimRot;
-  }
-
-  getStickWorldAngle() {
-    return this.aimRot;
-  }
-
-  getDebugWorldAnchors() {
-    return {
-      rootX: this.root.x,
-      rootY: this.root.y,
-      bodyRigWorldX: this.root.x,
-      bodyRigWorldY: this.root.y,
-      stickWorldX: this.root.x,
-      stickWorldY: this.root.y
-    };
-  }
-
-  getAimRotation() {
-    return this.aimRot;
   }
 
   destroy() {

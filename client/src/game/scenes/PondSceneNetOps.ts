@@ -56,11 +56,7 @@ export function handleServerMessage(scene: any, msg: ServerMessage | { type?: st
 export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
   const now = performance.now();
   const serverTimeMs = snapshot.serverTick * SERVER_TICK_MS;
-  scene.latestServerTick = snapshot.serverTick;
-  scene.latestSnapshotAtMs = now;
   scene.newestSnapshotServerMs = Math.max(scene.newestSnapshotServerMs, serverTimeMs);
-  scene.snapshotReceiveTimes.push(now);
-  scene.snapshotReceiveTimes = scene.snapshotReceiveTimes.filter((t: number) => t >= now - 1000);
   const observedOffset = now - serverTimeMs;
   if (!scene.hasServerClock) {
     scene.serverTimeOffsetMs = observedOffset;
@@ -87,8 +83,7 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
           x: p.x,
           y: p.y,
           rot: p.angle,
-          aimRot: p.aimAngle,
-          speed: Math.hypot(p.vx ?? 0, p.vy ?? 0)
+          aimRot: p.aimAngle
         }, now);
       } else {
         reconcilePrediction(scene.predicted, p, scene.ackSeq, scene.pendingInputs);
@@ -96,14 +91,12 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
           x: scene.predicted.x,
           y: scene.predicted.y,
           rot: scene.predicted.angle ?? 0,
-          aimRot: scene.predicted.aimAngle ?? scene.predicted.angle ?? 0,
-          speed: Math.hypot(scene.predicted.vx ?? 0, scene.predicted.vy ?? 0)
+          aimRot: scene.predicted.aimAngle ?? scene.predicted.angle ?? 0
         }, now);
       }
     } else {
       const lastTick = scene.remoteLastSnapshotTick.get(p.id);
       if (typeof lastTick === 'number' && snapshot.serverTick <= lastTick) {
-        scene.droppedSnapshots += 1;
         continue;
       }
       scene.remoteLastSnapshotTick.set(p.id, snapshot.serverTick);
@@ -111,8 +104,7 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
         x: p.x,
         y: p.y,
         rot: p.angle,
-        aimRot: p.aimAngle,
-        speed: Math.hypot(p.vx ?? 0, p.vy ?? 0)
+        aimRot: p.aimAngle
       }, serverTimeMs);
     }
   }
@@ -138,9 +130,6 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
 export function buildClientInput(scene: any): InputMsg {
   const tuning = getTuning();
   const aimAngle = scene.computeMouseAimAngle(CLIENT_FIXED_DT, tuning);
-  if (typeof aimAngle === 'number' && Number.isFinite(aimAngle)) {
-    scene.lastAimAngle = aimAngle;
-  }
 
   return {
     type: 'input',

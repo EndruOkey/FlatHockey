@@ -10,13 +10,8 @@ export type PlayerStateMsg = {
   id: string;
   x: number;
   y: number;
-  vx: number;
-  vy: number;
-  speed: number;
   angle: number;
   aimAngle: number;
-  chargeActive?: boolean;
-  stunLeft?: number;
 };
 
 export type SnapshotMsg = {

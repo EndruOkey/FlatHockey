@@ -26,10 +26,6 @@ export function updateCrosshairAndCursor(scene: any) {
   scene.crosshairGraphics.fillCircle(x, y, 1.5);
 }
 
-export function drawMovementDebugVectors(scene: any) {
-  void scene;
-}
-
 function stickTargetScreen(view: PlayerView) {
   const tuning = puckStickTuningStore.get();
   return view.getStickBaseWorld(view.aimRot, tuning.stickOffsetX, tuning.stickOffsetY);

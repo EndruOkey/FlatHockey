@@ -1,5 +1,4 @@
 import Phaser from 'phaser';
-import { wrapToPi } from '../util/math';
 import { applyPredictedInput, CLIENT_FIXED_DT } from '../net/prediction';
 
 const FIXED_STEP_MS = 1000 / 60;
@@ -43,16 +42,11 @@ export function runPondSceneUpdate(scene: any) {
     scene.input.keyboard?.resetKeys();
     const localLatest = scene.localBuffer.latest();
     if (localLatest) scene.localBuffer.push(localLatest.value, t);
-    scene.resyncCount += 1;
-    scene.lastResyncReason = scene.pendingResyncReason ?? scene.lastResyncReason ?? 'resync';
     scene.pendingResyncReason = null;
-    scene.lastResyncAtMs = t;
     frameDtMs = 0;
   }
 
   if (frameDtMs > HITCH_MS) {
-    scene.hitchCount += 1;
-    scene.lastHitchMs = frameDtMs;
     scene.simAccumulatorMs = 0;
     frameDtMs = 0;
   }
@@ -71,35 +65,23 @@ export function runPondSceneUpdate(scene: any) {
     if (scene.clientId && scene.predicted && scene.wsConnected) {
       let input = scene.nextReplayInput();
       if (!input) input = scene.buildInput();
-      scene.lastInputForRender = input;
       scene.pendingInputs.push(input);
       if (scene.pendingInputs.length > 240) {
         scene.pendingInputs.splice(0, scene.pendingInputs.length - 240);
       }
       scene.recordInputSample(input, simStepTime);
       applyPredictedInput(scene.predicted, input, CLIENT_FIXED_DT);
-      if (Number.isFinite(scene.predicted.angle)) {
-        const diff = wrapToPi(scene.predicted.angle - scene.lastPredictedAngle);
-        scene.lastTurnRateDeg = (diff / CLIENT_FIXED_DT) * 180 / Math.PI;
-        scene.lastPredictedAngle = scene.predicted.angle;
-      }
       scene.localBuffer.push({
         x: scene.predicted.x,
         y: scene.predicted.y,
         rot: scene.predicted.angle,
-        aimRot: scene.predicted.aimAngle ?? scene.predicted.angle,
-        speed: Math.hypot(scene.predicted.vx ?? 0, scene.predicted.vy ?? 0)
+        aimRot: scene.predicted.aimAngle ?? scene.predicted.angle
       }, simStepTime);
       scene.ws.send(input);
-      scene.inputsSentTimesMs.push(simStepTime);
-      const cutoff = simStepTime - 1000;
-      scene.inputsSentTimesMs = scene.inputsSentTimesMs.filter((t: number) => t >= cutoff);
     }
   }
-  scene.simStepsThisFrame = steps;
 
   if (scene.simAccumulatorMs >= FIXED_STEP_MS) {
-    scene.simCapHitCount += 1;
     scene.simAccumulatorMs = Math.min(scene.simAccumulatorMs, FIXED_STEP_MS);
   }
 
@@ -113,8 +95,7 @@ export function runPondSceneUpdate(scene: any) {
           x: scene.predicted.x,
           y: scene.predicted.y,
           rot: scene.predicted.angle,
-          aimRot: scene.predicted.aimAngle ?? scene.predicted.angle,
-          speed: Math.hypot(scene.predicted.vx ?? 0, scene.predicted.vy ?? 0)
+          aimRot: scene.predicted.aimAngle ?? scene.predicted.angle
         };
       }
       if (state) {
@@ -131,7 +112,6 @@ export function runPondSceneUpdate(scene: any) {
             state.aimRot ?? state.rot,
             alpha
           );
-          scene.localRenderState.speed = (scene.localRenderState.speed ?? 0) + ((state.speed ?? 0) - (scene.localRenderState.speed ?? 0)) * alpha;
         }
         state = scene.localRenderState;
       }
@@ -145,8 +125,7 @@ export function runPondSceneUpdate(scene: any) {
       s.x,
       s.y,
       state.rot,
-      state.aimRot ?? state.rot,
-      state.speed ?? 0
+      state.aimRot ?? state.rot
     );
     view.setDebugDrawEnabled(false);
     view.draw(clampedDtMs / 1000);
@@ -154,7 +133,6 @@ export function runPondSceneUpdate(scene: any) {
 
   scene.updateAndDrawPuck(clampedDtMs / 1000, remoteTargetServerTime);
   scene.updateCrosshairAndCursor();
-  scene.perfSamples.push({ t: scene.renderClockMs, dtMs: frameDtMs });
   scene.updateOverlay();
   scene.updateHud(clampedDtMs / 1000);
 }

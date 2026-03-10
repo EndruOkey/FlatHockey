@@ -83,14 +83,12 @@ export type LerpPlayer = {
   y: number;
   rot: number;
   aimRot?: number;
-  speed?: number;
 };
 export const lerpPlayer = (a: LerpPlayer, b: LerpPlayer, t: number): LerpPlayer => ({
   x: lerp(a.x, b.x, t),
   y: lerp(a.y, b.y, t),
   rot: lerpAngle(a.rot, b.rot, t),
-  aimRot: lerpAngle(a.aimRot ?? a.rot, b.aimRot ?? b.rot, t),
-  speed: lerp(a.speed ?? 0, b.speed ?? 0, t)
+  aimRot: lerpAngle(a.aimRot ?? a.rot, b.aimRot ?? b.rot, t)
 });
 
 export type LerpPuck = { x: number; y: number };
