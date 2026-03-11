@@ -2,10 +2,11 @@ import type { MovementAxis } from './movementTypes';
 
 const TWO_PI = Math.PI * 2;
 const DIAGONAL_ROTATION_MULTIPLIER = 0.95;
-const DIAGONAL_TRACTION_MULTIPLIER = 0.93;
-const HIGH_SPEED_TRACTION_MULTIPLIER = 0.48;
-const STOP_TRACTION_MULTIPLIER = 1.3;
-const BACKWARDS_TRACTION_MULTIPLIER = 0.88;
+const DIAGONAL_TRACTION_MULTIPLIER = 0.95;
+const DIAGONAL_DESIRED_SLEW_MULTIPLIER = 0.97;
+const HIGH_SPEED_TRACTION_MULTIPLIER = 0.17;
+const LOW_SPEED_TRACTION_MULTIPLIER = 0.64;
+const STOP_TRACTION_MULTIPLIER = 1.18;
 
 export type BodyTurnInput = {
   currentHeading: number;
@@ -36,7 +37,6 @@ export type TravelSteeringInput = {
   dt: number;
   traction: number;
   diagonal: boolean;
-  backwardsActive: boolean;
   stopActive: boolean;
   turnPenalty: number;
 };
@@ -54,6 +54,25 @@ export function computeDesiredHeading(moveX: MovementAxis, moveY: MovementAxis, 
   const length = Math.hypot(moveX, moveY);
   if (length <= 0) return wrapAngle(fallbackHeading);
   return Math.atan2(moveY / length, moveX / length);
+}
+
+export function smoothDesiredHeading(input: {
+  previousDesiredHeading: number;
+  rawDesiredHeading: number;
+  speed: number;
+  maxSpeed: number;
+  dt: number;
+  diagonal: boolean;
+}) {
+  const speedRatio = clamp(input.speed / Math.max(1, input.maxSpeed), 0, 1);
+  let slewRate = lerp(9.2, 5.8, speedRatio);
+  if (input.diagonal) {
+    slewRate *= DIAGONAL_DESIRED_SLEW_MULTIPLIER;
+  }
+
+  const delta = shortestAngleDelta(input.previousDesiredHeading, input.rawDesiredHeading);
+  const maxStep = Math.max(0, slewRate * Math.max(0, input.dt));
+  return wrapAngle(input.previousDesiredHeading + clamp(delta, -maxStep, maxStep));
 }
 
 export function computeBodyTurn(input: BodyTurnInput): BodyTurnResult {
@@ -83,13 +102,10 @@ export function computeBodyTurn(input: BodyTurnInput): BodyTurnResult {
 
 export function computeTravelSteering(input: TravelSteeringInput): TravelSteeringResult {
   const speedRatio = clamp(input.speed / Math.max(1, input.maxSpeed), 0, 1);
-  let steeringRate = input.traction * lerp(1.35, HIGH_SPEED_TRACTION_MULTIPLIER, speedRatio);
+  let steeringRate = input.traction * lerp(LOW_SPEED_TRACTION_MULTIPLIER, HIGH_SPEED_TRACTION_MULTIPLIER, speedRatio);
 
   if (input.diagonal) {
     steeringRate *= DIAGONAL_TRACTION_MULTIPLIER;
-  }
-  if (input.backwardsActive) {
-    steeringRate *= BACKWARDS_TRACTION_MULTIPLIER;
   }
   if (input.stopActive) {
     steeringRate *= STOP_TRACTION_MULTIPLIER;
@@ -107,9 +123,9 @@ export function computeTravelSteering(input: TravelSteeringInput): TravelSteerin
     steeringDelta,
     steeringRate,
     mismatch,
-    turnPenaltyMultiplier: clamp(1 - input.turnPenalty * Math.pow(normalizedMismatch, 1.05), 0.25, 1),
+    turnPenaltyMultiplier: clamp(1 - input.turnPenalty * Math.pow(normalizedMismatch, 1.4), 0.72, 1),
     carveFactor: clamp(
-      (Math.abs(steeringDelta) / Math.max(maxStep, 0.0001)) * speedRatio * Math.max(0, 1 - normalizedMismatch * 1.4),
+      (Math.abs(steeringDelta) / Math.max(maxStep, 0.0001)) * speedRatio * Math.max(0, 1 - normalizedMismatch * 0.9),
       0,
       1
     )

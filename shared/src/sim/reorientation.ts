@@ -1,39 +1,55 @@
 import { shortestAngleDelta, wrapAngle } from './turning';
 
-const BACKWARDS_HYSTERESIS_RAD = (14 * Math.PI) / 180;
-
-export type BackwardsResolutionInput = {
+export type ForwardHeadingTargetInput = {
   hasMovement: boolean;
-  manualOverride: boolean;
-  wasBackwards: boolean;
-  bodyHeading: number;
+  currentHeading: number;
   desiredTravelHeading: number;
-  backwardsAngle: number;
 };
 
-export type BackwardsResolution = {
-  active: boolean;
+export type ForwardHeadingTarget = {
   desiredBodyHeading: number;
-  mismatchAngle: number;
 };
 
-export function resolveBackwardsSkating(input: BackwardsResolutionInput): BackwardsResolution {
+export type ForwardTravelAlignmentInput = {
+  bodyHeading: number;
+  travelHeading: number;
+  speed: number;
+  maxSpeed: number;
+};
+
+export type ForwardTravelAlignment = {
+  travelHeading: number;
+  mismatch: number;
+};
+
+export function resolveForwardHeadingTarget(input: ForwardHeadingTargetInput): ForwardHeadingTarget {
   if (!input.hasMovement) {
     return {
-      active: input.wasBackwards,
-      desiredBodyHeading: wrapAngle(input.bodyHeading),
-      mismatchAngle: 0
+      desiredBodyHeading: wrapAngle(input.currentHeading)
     };
   }
 
-  const mismatchAngle = Math.abs(shortestAngleDelta(input.bodyHeading, input.desiredTravelHeading));
-  const enterAngle = input.backwardsAngle;
-  const exitAngle = Math.max(Math.PI * 0.45, enterAngle - BACKWARDS_HYSTERESIS_RAD);
-  const active = input.manualOverride || mismatchAngle >= (input.wasBackwards ? exitAngle : enterAngle);
+  return {
+    desiredBodyHeading: wrapAngle(input.desiredTravelHeading)
+  };
+}
+
+export function resolveForwardTravelAlignment(input: ForwardTravelAlignmentInput): ForwardTravelAlignment {
+  const speedRatio = clamp(input.speed / Math.max(1, input.maxSpeed), 0, 1);
+  const maxMismatch = lerp(Math.PI * 0.4, Math.PI * 0.495, Math.pow(speedRatio, 0.9));
+  const rawDelta = shortestAngleDelta(input.bodyHeading, input.travelHeading);
+  const clampedDelta = clamp(rawDelta, -maxMismatch, maxMismatch);
 
   return {
-    active,
-    desiredBodyHeading: wrapAngle(input.desiredTravelHeading + (active ? Math.PI : 0)),
-    mismatchAngle
+    travelHeading: wrapAngle(input.bodyHeading + clampedDelta),
+    mismatch: Math.abs(clampedDelta)
   };
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function lerp(a: number, b: number, t: number) {
+  return a + (b - a) * t;
 }

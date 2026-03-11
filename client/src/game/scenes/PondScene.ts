@@ -109,7 +109,7 @@ export class PondScene extends Phaser.Scene {
   create() {
     this.drawBackground();
 
-    this.keys = this.input.keyboard!.addKeys('W,A,S,D,E,C,SPACE,F9,F10') as Record<string, Phaser.Input.Keyboard.Key>;
+    this.keys = this.input.keyboard!.addKeys('W,A,S,D,E,SPACE,F9,F10') as Record<string, Phaser.Input.Keyboard.Key>;
     this.recorderToggleKey = this.keys.F9;
     this.replayToggleKey = this.keys.F10;
 

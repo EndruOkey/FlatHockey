@@ -1,8 +1,8 @@
 import { GAMEPLAY_DEFAULTS } from '../tuning/gameplay.defaults';
 import type { GameplayConfig } from '../tuning/gameplayConfig.types';
 import { applyHockeyStop, shouldTriggerHockeyStop } from './hockeyStop';
-import { resolveBackwardsSkating } from './reorientation';
-import { computeBodyTurn, computeDesiredHeading, computeTravelSteering, shortestAngleDelta, wrapAngle } from './turning';
+import { resolveForwardHeadingTarget, resolveForwardTravelAlignment } from './reorientation';
+import { computeBodyTurn, computeDesiredHeading, computeTravelSteering, shortestAngleDelta, smoothDesiredHeading, wrapAngle } from './turning';
 import type {
   LocomotionState,
   MovementAxis,
@@ -14,7 +14,7 @@ import type {
   RinkBounds
 } from './movementTypes';
 
-const MAX_CARVE_BONUS = 0.04;
+const MAX_CARVE_BONUS = 0.065;
 const SMALL_SPEED_EPSILON = 6;
 
 export const DEFAULT_RINK_BOUNDS: RinkBounds = {
@@ -59,22 +59,6 @@ export function resolvePlayerMovementConfig(config: Partial<GameplayConfig>): Re
       0,
       0.25
     ),
-    backwardsAngle: degToRad(clamp(config.playerBackwardsAngleDeg ?? GAMEPLAY_DEFAULTS.playerBackwardsAngleDeg ?? 120, 90, 175)),
-    backwardsRotationMultiplier: clamp(
-      config.playerBackwardsRotationMultiplier ?? GAMEPLAY_DEFAULTS.playerBackwardsRotationMultiplier ?? 0.6,
-      0.2,
-      1.4
-    ),
-    backwardsAccelerationMultiplier: clamp(
-      config.playerBackwardsAccelerationMultiplier ?? GAMEPLAY_DEFAULTS.playerBackwardsAccelerationMultiplier ?? 0.7,
-      0.2,
-      1.4
-    ),
-    backwardsSpeedMultiplier: clamp(
-      config.playerBackwardsSpeedMultiplier ?? GAMEPLAY_DEFAULTS.playerBackwardsSpeedMultiplier ?? 0.85,
-      0.2,
-      1.2
-    ),
     rinkBounds: DEFAULT_RINK_BOUNDS
   };
 }
@@ -105,71 +89,102 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
   const diagonal = moveX !== 0 && moveY !== 0;
   const currentSpeed = Math.hypot(state.vx, state.vy);
   const currentHeading = resolveHeading(state.angle, 0);
+  const previousDesiredHeading = resolveHeading(state.desiredHeading, currentHeading);
+  const previousInputHeading = resolveHeading(state.inputHeading, previousDesiredHeading);
   const currentTravelHeading = resolveTravelHeading(state, currentSpeed, currentHeading);
-  const desiredTravelHeading = hasMovement
+  const rawDesiredHeading = hasMovement
     ? computeDesiredHeading(moveX, moveY, currentTravelHeading)
+    : currentTravelHeading;
+  const desiredTravelHeading = hasMovement
+    ? smoothDesiredHeading({
+        previousDesiredHeading,
+        rawDesiredHeading,
+        speed: currentSpeed,
+        maxSpeed: config.moveSpeed,
+        dt,
+        diagonal
+      })
     : currentTravelHeading;
   const stopRequested = shouldTriggerHockeyStop(isPressed(input.stop));
   const stop = applyHockeyStop(currentSpeed, dt, config.stopDeceleration, stopRequested.stopRequested);
-  const backwardsState = resolveBackwardsSkating({
+  const headingTarget = resolveForwardHeadingTarget({
     hasMovement,
-    manualOverride: isPressed(input.backwards),
-    wasBackwards: !!state.backwards,
-    bodyHeading: currentHeading,
-    desiredTravelHeading,
-    backwardsAngle: config.backwardsAngle
+    currentHeading,
+    desiredTravelHeading
   });
   const bodyTurn = computeBodyTurn({
     currentHeading,
-    desiredHeading: hasMovement ? backwardsState.desiredBodyHeading : currentHeading,
+    desiredHeading: headingTarget.desiredBodyHeading,
     speed: currentSpeed,
     maxSpeed: config.moveSpeed,
     dt,
     diagonal,
     rotationSpeed: config.rotationSpeed,
     lowSpeedRotationSpeed: config.lowSpeedRotationSpeed,
-    rotationMultiplier: (backwardsState.active ? config.backwardsRotationMultiplier : 1) * stop.rotationMultiplier
+    rotationMultiplier: stop.rotationMultiplier
   });
-  const travelTargetHeading = backwardsState.active ? wrapAngle(bodyTurn.heading + Math.PI) : bodyTurn.heading;
   const steering = computeTravelSteering({
     currentTravelHeading,
-    targetHeading: travelTargetHeading,
+    targetHeading: bodyTurn.heading,
     speed: currentSpeed,
     maxSpeed: config.moveSpeed,
     dt,
     traction: config.traction * stop.tractionMultiplier,
     diagonal,
-    backwardsActive: backwardsState.active,
     stopActive: stopRequested.stopRequested,
     turnPenalty: config.turnPenalty
   });
+  const forwardAlignment = resolveForwardTravelAlignment({
+    bodyHeading: bodyTurn.heading,
+    travelHeading: steering.travelHeading,
+    speed: currentSpeed,
+    maxSpeed: config.moveSpeed
+  });
   const responsePenalty = Math.min(
     steering.turnPenaltyMultiplier,
-    computeIntentPenalty(currentTravelHeading, desiredTravelHeading, hasMovement, stopRequested.stopRequested)
+    computeIntentPenalty(
+      currentTravelHeading,
+      desiredTravelHeading,
+      hasMovement,
+      stopRequested.stopRequested,
+      currentSpeed,
+      config.moveSpeed
+    ),
+    computeForwardAlignmentPenalty(forwardAlignment.mismatch)
   );
 
   const driveFactor = computeDriveFactor({
     hasMovement,
     speed: currentSpeed,
     moveSpeed: config.moveSpeed,
+    currentTravelHeading,
     desiredTravelHeading,
-    travelTargetHeading,
+    bodyHeading: bodyTurn.heading,
     stopActive: stopRequested.stopRequested
   });
-  const targetSpeed = resolveTargetSpeed(hasMovement, backwardsState.active, config) * driveFactor;
-  const acceleration = config.acceleration * (backwardsState.active ? config.backwardsAccelerationMultiplier : 1);
+  const bodyDriveFactor = computeBodyDriveFactor(bodyTurn.remainingAngle, currentSpeed, config.moveSpeed);
+  const intentFlipDriveFactor = computeIntentFlipDriveFactor(
+    previousInputHeading,
+    rawDesiredHeading,
+    hasMovement,
+    currentSpeed,
+    config.moveSpeed
+  );
+  const driveScale = Math.min(driveFactor, bodyDriveFactor, intentFlipDriveFactor);
+  const targetSpeed = resolveTargetSpeed(hasMovement, config) * driveScale;
+  const acceleration = config.acceleration * lerp(0.18, 1, driveScale);
   const baseSpeed = stopRequested.stopRequested
     ? stop.speed
     : approachSpeed(
         currentSpeed,
-        targetSpeed * responsePenalty * (1 + computeCarveBonus(steering, bodyTurn, currentSpeed, config)),
+        targetSpeed * lerp(0.78, 1, responsePenalty) * (1 + computeCarveBonus(steering, bodyTurn, forwardAlignment.mismatch, currentSpeed, config)),
         acceleration,
-        config.passiveDeceleration + config.moveSpeed * (1 - responsePenalty) * 0.9,
+        config.passiveDeceleration + config.moveSpeed * (1 - responsePenalty) * 0.08,
         dt
       );
   const turnDrag = stopRequested.stopRequested
     ? 0
-    : config.moveSpeed * (1 - responsePenalty) * Math.max(0, dt) * 1.05;
+    : config.moveSpeed * (1 - responsePenalty) * Math.max(0, dt) * 0.03;
   let nextSpeed = Math.max(0, baseSpeed - turnDrag);
 
   if (!hasMovement && !stopRequested.stopRequested) {
@@ -180,8 +195,9 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
     nextSpeed = 0;
   }
 
-  let nextVelocityX = Math.cos(steering.travelHeading) * nextSpeed;
-  let nextVelocityY = Math.sin(steering.travelHeading) * nextSpeed;
+  const nextTravelHeading = nextSpeed > 0 ? wrapAngle(forwardAlignment.travelHeading) : wrapAngle(currentTravelHeading);
+  let nextVelocityX = Math.cos(nextTravelHeading) * nextSpeed;
+  let nextVelocityY = Math.sin(nextTravelHeading) * nextSpeed;
 
   if (dt > 0) {
     const unclampedX = state.x + nextVelocityX * dt;
@@ -196,14 +212,13 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
   state.vx = nextVelocityX;
   state.vy = nextVelocityY;
   state.angle = wrapAngle(bodyTurn.heading);
-  state.travelHeading = nextSpeed > 0 ? wrapAngle(steering.travelHeading) : wrapAngle(state.travelHeading);
-  state.desiredHeading = wrapAngle(bodyTurn.desiredHeading);
-  state.backwards = backwardsState.active && (hasMovement || nextSpeed > SMALL_SPEED_EPSILON);
+  state.travelHeading = nextTravelHeading;
+  state.inputHeading = hasMovement ? wrapAngle(rawDesiredHeading) : currentHeading;
+  state.desiredHeading = wrapAngle(desiredTravelHeading);
   state.locomotionState = resolveLocomotionState({
     hasMovement,
     speed: nextSpeed,
-    stopActive: stop.active || stopRequested.stopRequested,
-    backwardsActive: state.backwards
+    stopActive: stop.active || stopRequested.stopRequested
   });
 
   return {
@@ -218,8 +233,7 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
     desiredHeading: state.desiredHeading,
     travelHeading: state.travelHeading,
     locomotionState: state.locomotionState,
-    stopActive: state.locomotionState === 'stopping',
-    backwardsActive: state.backwards
+    stopActive: state.locomotionState === 'stopping'
   };
 }
 
@@ -227,7 +241,7 @@ export function getPlayerMovementDebugState(
   state: PlayerMovementState,
   step?: Pick<
     PlayerMovementStepResult,
-    'vx' | 'vy' | 'speed' | 'heading' | 'desiredHeading' | 'travelHeading' | 'locomotionState' | 'stopActive' | 'backwardsActive'
+    'vx' | 'vy' | 'speed' | 'heading' | 'desiredHeading' | 'travelHeading' | 'locomotionState' | 'stopActive'
   >
 ): PlayerMovementDebugState {
   const velocityX = step?.vx ?? state.vx;
@@ -248,8 +262,7 @@ export function getPlayerMovementDebugState(
     desiredHeading,
     travelHeading,
     locomotionState,
-    stopActive: step?.stopActive ?? locomotionState === 'stopping',
-    backwardsActive: step?.backwardsActive ?? state.backwards
+    stopActive: step?.stopActive ?? locomotionState === 'stopping'
   };
 }
 
@@ -257,12 +270,10 @@ function resolveLocomotionState(input: {
   hasMovement: boolean;
   speed: number;
   stopActive: boolean;
-  backwardsActive: boolean;
 }): LocomotionState {
   if (input.speed <= SMALL_SPEED_EPSILON) return 'idle';
   if (input.stopActive) return 'stopping';
   if (!input.hasMovement) return 'gliding';
-  if (input.backwardsActive) return 'backwards';
   return 'skating';
 }
 
@@ -280,37 +291,77 @@ function resolveTravelHeading(state: PlayerMovementState, speed: number, fallbac
   return fallback;
 }
 
-function resolveTargetSpeed(hasMovement: boolean, backwardsActive: boolean, config: ResolvedPlayerMovementConfig) {
+function resolveTargetSpeed(hasMovement: boolean, config: ResolvedPlayerMovementConfig) {
   if (!hasMovement) return 0;
-  return config.moveSpeed * (backwardsActive ? config.backwardsSpeedMultiplier : 1);
+  return config.moveSpeed;
 }
 
 function computeDriveFactor(input: {
   hasMovement: boolean;
   speed: number;
   moveSpeed: number;
+  currentTravelHeading: number;
   desiredTravelHeading: number;
-  travelTargetHeading: number;
+  bodyHeading: number;
   stopActive: boolean;
 }) {
   if (!input.hasMovement || input.stopActive) return 0;
-  const mismatch = Math.abs(shortestAngleDelta(input.travelTargetHeading, input.desiredTravelHeading));
-  const speedRatio = clamp(input.speed / Math.max(1, input.moveSpeed * 0.35), 0, 1);
-  const alignment = clamp(1 - mismatch / Math.PI, 0, 1);
-  const exponent = lerp(1.9, 1.25, speedRatio);
-  return clamp(Math.pow(alignment, exponent), 0.03, 1);
+  const speedRatio = clamp(input.speed / Math.max(1, input.moveSpeed), 0, 1);
+  const intentMismatch = Math.abs(shortestAngleDelta(input.currentTravelHeading, input.desiredTravelHeading));
+  const bodyMismatch = Math.abs(shortestAngleDelta(input.currentTravelHeading, input.bodyHeading));
+  const combinedMismatch = Math.max(intentMismatch, bodyMismatch * 0.82);
+  const normalized = clamp(combinedMismatch / Math.PI, 0, 1);
+  const easing = lerp(1.7, 1.1, speedRatio);
+  const strength = lerp(0.92, 0.42, speedRatio);
+  const floor = lerp(0.02, 0.48, speedRatio);
+  return clamp(1 - strength * Math.pow(normalized, easing), floor, 1);
+}
+
+function computeBodyDriveFactor(remainingAngle: number, speed: number, moveSpeed: number) {
+  const speedRatio = clamp(speed / Math.max(1, moveSpeed), 0, 1);
+  const normalized = clamp(Math.abs(remainingAngle) / Math.PI, 0, 1);
+  const easing = lerp(1.6, 1.05, speedRatio);
+  const strength = lerp(0.88, 0.32, speedRatio);
+  const floor = lerp(0.04, 0.62, speedRatio);
+  return clamp(1 - strength * Math.pow(normalized, easing), floor, 1);
+}
+
+function computeIntentFlipDriveFactor(
+  previousDesiredHeading: number,
+  desiredTravelHeading: number,
+  hasMovement: boolean,
+  speed: number,
+  moveSpeed: number
+) {
+  if (!hasMovement) return 1;
+  const speedRatio = clamp(speed / Math.max(1, moveSpeed), 0, 1);
+  const mismatch = Math.abs(shortestAngleDelta(previousDesiredHeading, desiredTravelHeading));
+  const normalized = clamp(mismatch / Math.PI, 0, 1);
+  const strength = lerp(0.9, 0.2, speedRatio);
+  const floor = lerp(0.08, 0.72, speedRatio);
+  return clamp(1 - strength * Math.pow(normalized, 1.2), floor, 1);
 }
 
 function computeIntentPenalty(
   currentTravelHeading: number,
   desiredTravelHeading: number,
   hasMovement: boolean,
-  stopActive: boolean
+  stopActive: boolean,
+  speed: number,
+  moveSpeed: number
 ) {
   if (!hasMovement || stopActive) return 1;
   const mismatch = Math.abs(shortestAngleDelta(currentTravelHeading, desiredTravelHeading));
+  const speedRatio = clamp(speed / Math.max(1, moveSpeed), 0, 1);
   const normalized = clamp(mismatch / Math.PI, 0, 1);
-  return clamp(1 - 0.85 * Math.pow(normalized, 1.15), 0.15, 1);
+  const strength = lerp(0.7, 0.28, speedRatio);
+  const floor = lerp(0.38, 0.7, speedRatio);
+  return clamp(1 - strength * Math.pow(normalized, 1.45), floor, 1);
+}
+
+function computeForwardAlignmentPenalty(mismatch: number) {
+  const normalized = clamp(mismatch / (Math.PI * 0.5), 0, 1);
+  return clamp(1 - 0.24 * Math.pow(normalized, 1.25), 0.72, 1);
 }
 
 function approachSpeed(current: number, target: number, acceleration: number, deceleration: number, dt: number) {
@@ -324,6 +375,7 @@ function approachSpeed(current: number, target: number, acceleration: number, de
 function computeCarveBonus(
   steering: ReturnType<typeof computeTravelSteering>,
   bodyTurn: ReturnType<typeof computeBodyTurn>,
+  alignmentMismatch: number,
   speed: number,
   config: ResolvedPlayerMovementConfig
 ) {
@@ -333,10 +385,10 @@ function computeCarveBonus(
     0,
     1
   );
-  const mismatchWindow = clamp(1 - steering.mismatch / (Math.PI * 0.45), 0, 1);
-  const bodySettle = clamp(1 - Math.abs(bodyTurn.remainingAngle) / (Math.PI * 0.35), 0, 1);
+  const driftWindow = clamp(alignmentMismatch / (Math.PI * 0.14), 0, 1) * clamp(1 - alignmentMismatch / (Math.PI * 0.52), 0, 1);
+  const bodySettle = clamp(1 - Math.abs(bodyTurn.remainingAngle) / (Math.PI * 0.7), 0, 1);
   return clamp(
-    config.carveResponse * steering.carveFactor * bodyTurnRatio * speedRatio * mismatchWindow * bodySettle,
+    config.carveResponse * steering.carveFactor * bodyTurnRatio * speedRatio * driftWindow * bodySettle,
     0,
     MAX_CARVE_BONUS
   );
@@ -352,8 +404,4 @@ function clamp(value: number, min: number, max: number) {
 
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
-}
-
-function degToRad(deg: number) {
-  return (deg * Math.PI) / 180;
 }

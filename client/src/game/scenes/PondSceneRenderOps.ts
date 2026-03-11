@@ -106,7 +106,7 @@ export function updateHud(scene: any, dtSec: number) {
     `BuildTime: ${BUILD_TIME || '-'}`,
     `Seq/Ack: ${scene.seq}/${scene.ackSeq}`,
     `Pending: ${scene.pendingInputs.length}`,
-    'Mouse aim | E shoot | Space stop | C backwards'
+    'Mouse aim | E shoot | Space stop'
   ].join('\n');
   if (next !== scene.lastHudText) {
     scene.lastHudText = next;

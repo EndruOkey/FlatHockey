@@ -9,10 +9,6 @@ export type GameplayConfig = {
   playerLowSpeedRotationSpeed?: number;
   playerTurnPenalty?: number;
   playerCarveResponse?: number;
-  playerBackwardsAngleDeg?: number;
-  playerBackwardsRotationMultiplier?: number;
-  playerBackwardsAccelerationMultiplier?: number;
-  playerBackwardsSpeedMultiplier?: number;
 
   playerTurnRateMin?: number;
   playerTurnRateMax?: number;

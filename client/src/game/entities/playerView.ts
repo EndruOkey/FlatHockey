@@ -1,10 +1,13 @@
 import Phaser from 'phaser';
+import { lerpAngle, wrapToPi } from '../util/math';
 
 export class PlayerView {
   private root: Phaser.GameObjects.Container;
   private body: Phaser.GameObjects.Image;
   private debugGfx: Phaser.GameObjects.Graphics;
   private debugDrawEnabled = false;
+  private displayRot = 0;
+  private hasDisplayRot = false;
 
   x = 0;
   y = 0;
@@ -87,7 +90,17 @@ export class PlayerView {
 
   draw(_dtSec = 1 / 60) {
     this.root.setPosition(this.x, this.y);
-    this.body.rotation = this.rot + PlayerView.SPRITE_FORWARD_OFFSET_RAD;
+    if (!this.hasDisplayRot) {
+      this.displayRot = this.rot;
+      this.hasDisplayRot = true;
+    } else {
+      const angularDelta = Math.abs(wrapToPi(this.rot - this.displayRot));
+      const tauSec = angularDelta > 0.5 ? 0.014 : 0.028;
+      const alpha = 1 - Math.exp(-Math.max(0, _dtSec) / Math.max(0.001, tauSec));
+      this.displayRot = lerpAngle(this.displayRot, this.rot, alpha);
+    }
+
+    this.body.rotation = this.displayRot + PlayerView.SPRITE_FORWARD_OFFSET_RAD;
 
     if (!this.debugDrawEnabled) {
       this.debugGfx.clear();

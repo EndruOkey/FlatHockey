@@ -147,7 +147,6 @@ export class WsClient {
       typeof msg.moveY === 'number' ||
       typeof msg.shoot === 'number' ||
       typeof msg.stop === 'number' ||
-      typeof msg.backwards === 'number' ||
       typeof msg.aimAngle === 'number';
 
     if (!hasGameplayFields) return msg;
@@ -159,8 +158,7 @@ export class WsClient {
       moveY: typeof msg.moveY === 'number' ? msg.moveY : undefined,
       aimAngle: typeof msg.aimAngle === 'number' ? msg.aimAngle : undefined,
       shoot: !!msg.shoot,
-      stop: !!msg.stop,
-      backwards: !!msg.backwards
+      stop: !!msg.stop
     };
   }
 
