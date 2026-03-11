@@ -1,15 +1,9 @@
+import { DEFAULT_RINK_BOUNDS } from '@flathockey/shared/sim/playerMovement';
 import { resolvePuckStickTuning } from '@flathockey/shared/tuning/puckStickTuning';
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
 }
-
-const RINK = {
-  left: -560,
-  right: 560,
-  top: -320,
-  bottom: 320
-};
 
 type Vec2 = { x: number; y: number };
 
@@ -137,18 +131,18 @@ export function updatePuck(room: any, dt: number) {
     room.puck.x += room.puck.vx * dt;
     room.puck.y += room.puck.vy * dt;
 
-    if (room.puck.x < RINK.left) {
-      room.puck.x = RINK.left;
+    if (room.puck.x < DEFAULT_RINK_BOUNDS.left) {
+      room.puck.x = DEFAULT_RINK_BOUNDS.left;
       room.puck.vx = Math.abs(room.puck.vx) * restitution;
-    } else if (room.puck.x > RINK.right) {
-      room.puck.x = RINK.right;
+    } else if (room.puck.x > DEFAULT_RINK_BOUNDS.right) {
+      room.puck.x = DEFAULT_RINK_BOUNDS.right;
       room.puck.vx = -Math.abs(room.puck.vx) * restitution;
     }
-    if (room.puck.y < RINK.top) {
-      room.puck.y = RINK.top;
+    if (room.puck.y < DEFAULT_RINK_BOUNDS.top) {
+      room.puck.y = DEFAULT_RINK_BOUNDS.top;
       room.puck.vy = Math.abs(room.puck.vy) * restitution;
-    } else if (room.puck.y > RINK.bottom) {
-      room.puck.y = RINK.bottom;
+    } else if (room.puck.y > DEFAULT_RINK_BOUNDS.bottom) {
+      room.puck.y = DEFAULT_RINK_BOUNDS.bottom;
       room.puck.vy = -Math.abs(room.puck.vy) * restitution;
     }
 
@@ -158,7 +152,8 @@ export function updatePuck(room: any, dt: number) {
       for (const player of room.players.values()) {
         const t = stickTarget(player);
         const d = Math.hypot(room.puck.x - t.x, room.puck.y - t.y);
-        const canCapture = speed <= Math.max(pickupMaxSpeed, pickupMaxRelativeSpeed);
+        const relativeSpeed = Math.hypot(room.puck.vx - (player.vx ?? 0), room.puck.vy - (player.vy ?? 0));
+        const canCapture = speed <= pickupMaxSpeed && relativeSpeed <= pickupMaxRelativeSpeed;
         if (d < pickupRadius && canCapture && d < bestDist) {
           bestDist = d;
           bestId = player.id;
