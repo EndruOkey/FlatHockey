@@ -22,6 +22,8 @@ export type PlayerState = {
   vy: number;
   angle: number;
   travelHeading: number;
+  steeringHeading?: number;
+  inputHeading?: number;
   aimAngle: number;
   desiredHeading: number;
   locomotionState: LocomotionState;

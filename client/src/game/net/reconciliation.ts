@@ -17,6 +17,7 @@ export function reconcilePrediction(
   predicted.vy = authoritative.vy;
   predicted.angle = authoritative.angle;
   predicted.travelHeading = authoritative.travelHeading;
+  predicted.steeringHeading = authoritative.desiredHeading;
   predicted.aimAngle = authoritative.aimAngle;
   predicted.desiredHeading = authoritative.desiredHeading;
   predicted.locomotionState = authoritative.locomotionState;

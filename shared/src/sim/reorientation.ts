@@ -38,11 +38,11 @@ export function resolveForwardTravelAlignment(input: ForwardTravelAlignmentInput
   const speedRatio = clamp(input.speed / Math.max(1, input.maxSpeed), 0, 1);
   const maxMismatch = lerp(Math.PI * 0.4, Math.PI * 0.495, Math.pow(speedRatio, 0.9));
   const rawDelta = shortestAngleDelta(input.bodyHeading, input.travelHeading);
-  const clampedDelta = clamp(rawDelta, -maxMismatch, maxMismatch);
+  const softenedDelta = maxMismatch * Math.tanh(rawDelta / Math.max(0.0001, maxMismatch));
 
   return {
-    travelHeading: wrapAngle(input.bodyHeading + clampedDelta),
-    mismatch: Math.abs(clampedDelta)
+    travelHeading: wrapAngle(input.bodyHeading + softenedDelta),
+    mismatch: Math.abs(softenedDelta)
   };
 }
 

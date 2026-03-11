@@ -46,6 +46,8 @@ export class Room {
       vy: 0,
       angle: 0,
       travelHeading: 0,
+      steeringHeading: 0,
+      inputHeading: 0,
       aimAngle: 0,
       desiredHeading: 0,
       locomotionState: 'idle',

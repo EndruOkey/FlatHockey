@@ -2,7 +2,7 @@ import { GAMEPLAY_DEFAULTS } from '../tuning/gameplay.defaults';
 import type { GameplayConfig } from '../tuning/gameplayConfig.types';
 import { applyHockeyStop, shouldTriggerHockeyStop } from './hockeyStop';
 import { resolveForwardHeadingTarget, resolveForwardTravelAlignment } from './reorientation';
-import { computeBodyTurn, computeDesiredHeading, computeTravelSteering, shortestAngleDelta, smoothDesiredHeading, wrapAngle } from './turning';
+import { advanceSteeringTarget, computeBodyTurn, computeDesiredHeading, computeTravelSteering, shortestAngleDelta, wrapAngle } from './turning';
 import type {
   LocomotionState,
   MovementAxis,
@@ -90,27 +90,28 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
   const currentSpeed = Math.hypot(state.vx, state.vy);
   const currentHeading = resolveHeading(state.angle, 0);
   const previousDesiredHeading = resolveHeading(state.desiredHeading, currentHeading);
+  const previousSteeringHeading = resolveHeading(state.steeringHeading, previousDesiredHeading);
   const previousInputHeading = resolveHeading(state.inputHeading, previousDesiredHeading);
   const currentTravelHeading = resolveTravelHeading(state, currentSpeed, currentHeading);
   const rawDesiredHeading = hasMovement
     ? computeDesiredHeading(moveX, moveY, currentTravelHeading)
     : currentTravelHeading;
-  const desiredTravelHeading = hasMovement
-    ? smoothDesiredHeading({
-        previousDesiredHeading,
+  const steeringHeading = hasMovement
+    ? advanceSteeringTarget({
+        steeringHeading: previousSteeringHeading,
         rawDesiredHeading,
         speed: currentSpeed,
         maxSpeed: config.moveSpeed,
         dt,
         diagonal
       })
-    : currentTravelHeading;
+    : currentHeading;
   const stopRequested = shouldTriggerHockeyStop(isPressed(input.stop));
   const stop = applyHockeyStop(currentSpeed, dt, config.stopDeceleration, stopRequested.stopRequested);
   const headingTarget = resolveForwardHeadingTarget({
     hasMovement,
     currentHeading,
-    desiredTravelHeading
+    desiredTravelHeading: steeringHeading
   });
   const bodyTurn = computeBodyTurn({
     currentHeading,
@@ -144,7 +145,7 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
     steering.turnPenaltyMultiplier,
     computeIntentPenalty(
       currentTravelHeading,
-      desiredTravelHeading,
+      steeringHeading,
       hasMovement,
       stopRequested.stopRequested,
       currentSpeed,
@@ -158,7 +159,7 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
     speed: currentSpeed,
     moveSpeed: config.moveSpeed,
     currentTravelHeading,
-    desiredTravelHeading,
+    desiredTravelHeading: steeringHeading,
     bodyHeading: bodyTurn.heading,
     stopActive: stopRequested.stopRequested
   });
@@ -213,8 +214,9 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
   state.vy = nextVelocityY;
   state.angle = wrapAngle(bodyTurn.heading);
   state.travelHeading = nextTravelHeading;
+  state.steeringHeading = hasMovement ? wrapAngle(steeringHeading) : currentHeading;
   state.inputHeading = hasMovement ? wrapAngle(rawDesiredHeading) : currentHeading;
-  state.desiredHeading = wrapAngle(desiredTravelHeading);
+  state.desiredHeading = wrapAngle(steeringHeading);
   state.locomotionState = resolveLocomotionState({
     hasMovement,
     speed: nextSpeed,

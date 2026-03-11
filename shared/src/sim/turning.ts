@@ -56,8 +56,8 @@ export function computeDesiredHeading(moveX: MovementAxis, moveY: MovementAxis, 
   return Math.atan2(moveY / length, moveX / length);
 }
 
-export function smoothDesiredHeading(input: {
-  previousDesiredHeading: number;
+export function advanceSteeringTarget(input: {
+  steeringHeading: number;
   rawDesiredHeading: number;
   speed: number;
   maxSpeed: number;
@@ -65,14 +65,14 @@ export function smoothDesiredHeading(input: {
   diagonal: boolean;
 }) {
   const speedRatio = clamp(input.speed / Math.max(1, input.maxSpeed), 0, 1);
-  let slewRate = lerp(9.2, 5.8, speedRatio);
+  let slewRate = lerp(7.8, 4.9, speedRatio);
   if (input.diagonal) {
     slewRate *= DIAGONAL_DESIRED_SLEW_MULTIPLIER;
   }
 
-  const delta = shortestAngleDelta(input.previousDesiredHeading, input.rawDesiredHeading);
+  const delta = shortestAngleDelta(input.steeringHeading, input.rawDesiredHeading);
   const maxStep = Math.max(0, slewRate * Math.max(0, input.dt));
-  return wrapAngle(input.previousDesiredHeading + clamp(delta, -maxStep, maxStep));
+  return wrapAngle(input.steeringHeading + clamp(delta, -maxStep, maxStep));
 }
 
 export function computeBodyTurn(input: BodyTurnInput): BodyTurnResult {

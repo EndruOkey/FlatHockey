@@ -16,6 +16,7 @@ export type PlayerMovementState = {
   vy: number;
   angle: number;
   travelHeading: number;
+  steeringHeading?: number;
   inputHeading?: number;
   aimAngle: number;
   desiredHeading: number;
