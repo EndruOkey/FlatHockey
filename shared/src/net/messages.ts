@@ -1,3 +1,4 @@
+import type { RuntimeEnvironment, ServerFeature } from './protocol';
 import type { LocomotionState } from '../sim/movementTypes';
 
 export type InputMsg = {
@@ -44,16 +45,35 @@ export type PuckStateMsg = {
 
 export type WelcomeMsg = {
   type: 'welcome';
+  proto: number;
   clientId: string;
   roomId: string;
   serverTick: number;
+  serverBuild?: string;
+  runtime: RuntimeEnvironment;
+  features: ServerFeature[];
 };
 
 export type NetWelcomeMsg = {
   type: 'net:welcome';
+  proto: number;
   clientId: string;
   roomId: string;
   serverTick: number;
+  serverBuild?: string;
+  runtime: RuntimeEnvironment;
+  features: ServerFeature[];
+};
+
+export type JoinOkMsg = {
+  type: 'join:ok';
+  room: string;
+  tickRate: number;
+  snapshotRate: number;
+  proto: number;
+  serverBuild?: string;
+  runtime: RuntimeEnvironment;
+  features: ServerFeature[];
 };
 
 export type JoinRejectMsg = {
@@ -78,4 +98,4 @@ export type NetPongMsg = {
 };
 
 export type ClientMessage = InputMsg | NetPingMsg | JoinMsg;
-export type ServerMessage = WelcomeMsg | NetWelcomeMsg | JoinRejectMsg | SnapshotMsg | NetPongMsg;
+export type ServerMessage = WelcomeMsg | NetWelcomeMsg | JoinRejectMsg | JoinOkMsg | SnapshotMsg | NetPongMsg;

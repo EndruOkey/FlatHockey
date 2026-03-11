@@ -1,4 +1,5 @@
-﻿import type { ClientMessage, ServerMessage } from '@flathockey/shared';
+import { NET_PROTOCOL_VERSION, type ClientMessage, type ServerMessage } from '@flathockey/shared';
+import { BUILD_VERSION } from '../../config/version';
 
 type Handlers = {
   open?: () => void;
@@ -20,6 +21,7 @@ export class WsClient {
   private reconnectTimer: number | null = null;
   private reconnectAttempt = 0;
   private readonly reconnectDelaysMs = [500, 1000, 2000, 3000, 5000];
+  private reconnectEnabled = true;
 
   private handlers: Handlers = {};
 
@@ -30,9 +32,23 @@ export class WsClient {
 
   connect(url: string) {
     this.connectUrl = url;
+    this.reconnectEnabled = true;
     this.clearReconnectTimer();
     this.reconnectAttempt = 0;
     this.openSocket();
+  }
+
+  disconnect(permanent = false) {
+    if (permanent) {
+      this.reconnectEnabled = false;
+      this.connectUrl = null;
+    }
+    this.clearReconnectTimer();
+    this.stopPing();
+    if (!this.ws) return;
+    try {
+      this.ws.close();
+    } catch {}
   }
 
   isConnected(): boolean {
@@ -51,7 +67,7 @@ export class WsClient {
   }
 
   private scheduleReconnect() {
-    if (!this.connectUrl || this.reconnectTimer !== null) return;
+    if (!this.reconnectEnabled || !this.connectUrl || this.reconnectTimer !== null) return;
 
     const idx = Math.min(this.reconnectAttempt, this.reconnectDelaysMs.length - 1);
     const delay = this.reconnectDelaysMs[idx];
@@ -66,7 +82,6 @@ export class WsClient {
   private openSocket() {
     if (!this.connectUrl) return;
 
-    // reset per-connection state
     this.didHandshake = false;
     this.stopPing();
 
@@ -79,11 +94,7 @@ export class WsClient {
       if (this.ws !== ws) return;
 
       this.reconnectAttempt = 0;
-
-      // handshake + join
       this.sendHelloJoin();
-
-      // keepalive
       this.startPing();
 
       this.handlers.status?.('connected');
@@ -93,6 +104,7 @@ export class WsClient {
     ws.addEventListener('close', () => {
       if (this.ws !== ws) return;
 
+      this.ws = null;
       this.stopPing();
       this.handlers.status?.('disconnected');
       this.handlers.close?.();
@@ -107,7 +119,6 @@ export class WsClient {
       try {
         const msg = JSON.parse(String(ev.data));
 
-        // RTT pong from server
         if (msg && msg.type === 'pong') {
           if (typeof msg.t === 'number') {
             this.rttMs = Math.max(0, Date.now() - msg.t);
@@ -161,14 +172,13 @@ export class WsClient {
 
     const name = `itch-${Math.floor(Math.random() * 9999)}`;
 
-    // hello
     this.send({
       type: 'hello',
-      proto: 2,
+      proto: NET_PROTOCOL_VERSION,
+      clientBuild: BUILD_VERSION,
       name
     });
 
-    // join
     this.send({
       type: 'join',
       mode: 'pond',
@@ -195,13 +205,16 @@ export class WsClient {
   onOpen(cb: () => void) {
     this.handlers.open = cb;
   }
+
   onClose(cb: () => void) {
     this.handlers.close = cb;
   }
-  onMessage(cb: any) {
+
+  onMessage(cb: Handlers['message']) {
     this.handlers.message = cb;
   }
-  onStatus(cb: any) {
+
+  onStatus(cb: Handlers['status']) {
     this.handlers.status = cb;
   }
 }

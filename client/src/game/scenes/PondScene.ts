@@ -1,14 +1,20 @@
 import Phaser from 'phaser';
-import type { InputMsg, ServerMessage } from '@flathockey/shared';
+import type { InputMsg, RuntimeEnvironment, ServerMessage } from '@flathockey/shared';
 import { WsClient } from '../net/wsClient';
 import { Interpolator, lerpPlayer, type LerpPlayer } from '../net/interpolation';
 import { type PredictedPlayerState, setAimInputRateLimited } from '../net/prediction';
+import { getServerHandshakeMismatch } from '../net/serverCompatibility';
 import { getTuning } from '../tuning/gameplayConfig';
 import { PlayerView } from '../entities/playerView';
 import { ENV } from '../../config/env';
 import { BUILD_TIME, BUILD_VERSION } from '../../config/version';
 import { buildClientInput, handleServerMessage } from './PondSceneNetOps';
-import { updateAndDrawPuck as updateAndDrawPuckOp, updateCrosshairAndCursor as updateCrosshairAndCursorOp, updateHud as updateHudOp, updateOverlay as updateOverlayOp } from './PondSceneRenderOps';
+import {
+  updateAndDrawPuck as updateAndDrawPuckOp,
+  updateCrosshairAndCursor as updateCrosshairAndCursorOp,
+  updateHud as updateHudOp,
+  updateOverlay as updateOverlayOp
+} from './PondSceneRenderOps';
 import { runPondSceneUpdate } from './PondSceneUpdateLoop';
 import { wrapToPi } from '../util/math';
 
@@ -16,17 +22,21 @@ const REMOTE_INTERP_DELAY_DEFAULT_MS = 120;
 
 export function resolveWsUrl(): string {
   const host = window.location.hostname;
+  const requireDevWsUrl = () => {
+    if (ENV.WS_DEV) return ENV.WS_DEV;
+    throw new Error('VITE_WS_DEV is not configured');
+  };
 
   if (host === 'localhost' || host === '127.0.0.1') {
     return ENV.WS_LOCAL;
   }
 
   if (ENV.DEV_BUILD) {
-    return ENV.WS_DEV;
+    return requireDevWsUrl();
   }
 
   if (host.includes('flathockey-dev')) {
-    return ENV.WS_DEV;
+    return requireDevWsUrl();
   }
 
   return ENV.WS_PROD;
@@ -37,6 +47,8 @@ export class PondScene extends Phaser.Scene {
   private clientId: string | null = null;
   private roomId: string | null = null;
   private wsConnected = false;
+  private protocolMismatchReason: string | null = null;
+  private expectedRuntime: RuntimeEnvironment = 'unknown';
 
   private players = new Map<string, PlayerView>();
   private remoteInterpolators = new Map<string, Interpolator<LerpPlayer>>();
@@ -55,10 +67,8 @@ export class PondScene extends Phaser.Scene {
   private renderClockMs = 0;
   private lastFrameTimeMs = 0;
 
-  // resync / startup helpers
   private hasReceivedFirstSnapshot = false;
   private pendingResyncReason: string | null = null;
-
   private needsResync = false;
 
   private newestSnapshotServerMs = 0;
@@ -103,11 +113,14 @@ export class PondScene extends Phaser.Scene {
     this.recorderToggleKey = this.keys.F9;
     this.replayToggleKey = this.keys.F10;
 
-    this.hud = this.add.text(12, 12, 'Connecting...', {
-      fontFamily: 'monospace',
-      fontSize: '14px',
-      color: '#d7f4ff'
-    }).setScrollFactor(0).setDepth(1000);
+    this.hud = this.add
+      .text(12, 12, 'Connecting...', {
+        fontFamily: 'monospace',
+        fontSize: '14px',
+        color: '#d7f4ff'
+      })
+      .setScrollFactor(0)
+      .setDepth(1000);
 
     this.puckGraphics = this.add.graphics().setDepth(900);
     this.crosshairGraphics = this.add.graphics().setDepth(1300);
@@ -127,8 +140,10 @@ export class PondScene extends Phaser.Scene {
       if (this.game.canvas) this.game.canvas.style.cursor = '';
     });
 
+    let buildStampWsUrl = 'unresolved';
     try {
       const wsUrl = resolveWsUrl();
+      buildStampWsUrl = wsUrl;
       this.connect(wsUrl);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -139,12 +154,12 @@ export class PondScene extends Phaser.Scene {
     this.lastFrameTimeMs = now;
     this.renderClockMs = now;
     this.simAccumulatorMs = 0;
-    this.needsResync = true; // one-shot startup resync — handled in update() so same path as focus/visibility
+    this.needsResync = true;
     this.pendingResyncReason = 'startup';
     console.info('[BUILD_STAMP]', {
       commit: BUILD_VERSION || 'unknown',
       buildTime: BUILD_TIME || 'unknown',
-      wsUrl: resolveWsUrl()
+      wsUrl: buildStampWsUrl
     });
   }
 
@@ -176,7 +191,11 @@ export class PondScene extends Phaser.Scene {
   }
 
   private connect(wsUrl: string) {
+    this.protocolMismatchReason = null;
+    this.expectedRuntime = this.resolveExpectedRuntime(wsUrl);
+
     this.ws.onStatus((state: 'connecting' | 'connected' | 'disconnected') => {
+      if (this.protocolMismatchReason) return;
       if (state === 'connecting') this.hud.setText('Connecting...');
       if (state === 'connected') this.wsConnected = true;
       if (state === 'disconnected') {
@@ -186,12 +205,14 @@ export class PondScene extends Phaser.Scene {
       }
     });
     this.ws.onOpen(() => {
+      if (this.protocolMismatchReason) return;
       this.wsConnected = true;
       this.resetPendingInputState(true);
       if (!this.roomId) this.roomId = 'pond-1';
     });
 
     this.ws.onClose(() => {
+      if (this.protocolMismatchReason) return;
       this.wsConnected = false;
       this.resetPendingInputState();
       this.hud.setText('Offline (retrying...)');
@@ -228,7 +249,54 @@ export class PondScene extends Phaser.Scene {
     this.hasReceivedFirstSnapshot = false;
   }
 
+  private clearWorldState() {
+    for (const view of this.players.values()) {
+      view.destroy();
+    }
+    this.players.clear();
+    this.remoteInterpolators.clear();
+    this.remoteLastSnapshotTick.clear();
+    this.localBuffer.clear();
+    this.puckFreeBuffer.clear();
+    this.localRenderState = null;
+    this.predicted = null;
+    this.clientId = null;
+    this.roomId = null;
+    this.hasReceivedFirstSnapshot = false;
+    this.hasServerClock = false;
+    this.newestSnapshotServerMs = 0;
+    this.serverTimeOffsetMs = 0;
+    this.needsResync = false;
+    this.pendingResyncReason = 'protocol-mismatch';
+    this.puckSnapshot = { x: 0, y: 0, vx: 0, vy: 0, state: 'FREE', ownerId: null };
+    this.puckRender = { x: 0, y: 0, vx: 0, vy: 0, state: 'FREE', ownerId: null };
+    this.puckGraphics?.clear();
+  }
+
+  failProtocolMismatch(reason: string) {
+    this.protocolMismatchReason = reason;
+    this.wsConnected = false;
+    this.resetPendingInputState(true);
+    this.clearWorldState();
+    this.hudAcc = 0;
+    this.lastHudText = '';
+    this.hud.setText(
+      [
+        'Offline (protocol mismatch)',
+        reason,
+        `Client build: ${BUILD_VERSION || 'unknown'}`,
+        `Expected runtime: ${this.expectedRuntime}`
+      ].join('\n')
+    );
+    this.ws.disconnect(true);
+  }
+
   private onServerMessage(msg: ServerMessage | { type?: string; [key: string]: unknown }) {
+    const mismatch = getServerHandshakeMismatch(msg, this.expectedRuntime);
+    if (mismatch) {
+      this.failProtocolMismatch(mismatch);
+      return;
+    }
     handleServerMessage(this, msg);
   }
 
@@ -350,5 +418,15 @@ export class PondScene extends Phaser.Scene {
 
   update(_time: number, _deltaMs: number) {
     runPondSceneUpdate(this);
+  }
+
+  private resolveExpectedRuntime(wsUrl: string): RuntimeEnvironment {
+    if (wsUrl.startsWith('ws://localhost') || wsUrl.startsWith('ws://127.0.0.1')) {
+      return 'local';
+    }
+    if (ENV.DEV_BUILD || window.location.hostname.includes('flathockey-dev')) {
+      return 'dev';
+    }
+    return 'prod';
   }
 }

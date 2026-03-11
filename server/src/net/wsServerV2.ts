@@ -1,4 +1,11 @@
-import { sanitizeMovementAxis, type InputMsg } from '@flathockey/shared';
+import {
+  NET_PROTOCOL_VERSION,
+  sanitizeMovementAxis,
+  sanitizeRuntimeEnvironment,
+  type InputMsg,
+  type RuntimeEnvironment,
+  type ServerFeature
+} from '@flathockey/shared';
 import { WebSocket, WebSocketServer } from 'ws';
 import type { Server } from 'http';
 import type { RoomManager } from '../game/roomManager';
@@ -72,10 +79,13 @@ type V2Config = {
   heartbeatTimeoutMs: number;
   heartbeatSweepMs: number;
   allowedOrigins: string[];
+  protocolVersion: number;
+  runtimeEnv: RuntimeEnvironment;
+  serverBuild?: string;
+  features: ServerFeature[];
 };
 
 const DEFAULT_ROOM = 'pond-1';
-const V2_PROTO = 2;
 const DEFAULT_CONFIG: V2Config = {
   snapshotRate: Number(process.env.SNAPSHOT_RATE ?? 20),
   tickRate: Number(process.env.TICK_RATE ?? 60),
@@ -86,7 +96,11 @@ const DEFAULT_CONFIG: V2Config = {
   allowedOrigins: String(process.env.ALLOWED_ORIGINS ?? '')
     .split(',')
     .map((v) => v.trim())
-    .filter(Boolean)
+    .filter(Boolean),
+  protocolVersion: NET_PROTOCOL_VERSION,
+  runtimeEnv: sanitizeRuntimeEnvironment(process.env.RUNTIME_ENV),
+  serverBuild: process.env.BUILD_VERSION ?? process.env.GITHUB_SHA ?? 'unknown',
+  features: ['player-state-v2', 'locomotion-v1', 'puck-state-v1']
 };
 
 let nextClientId = 1;
@@ -272,12 +286,19 @@ export function createWsServerV2(server: Server, roomManager: RoomManager, cfg: 
       }
 
       if (parsed.type === 'hello') {
-        if (parsed.proto !== V2_PROTO) {
+        if (parsed.proto !== config.protocolVersion) {
           send(ws, {
             type: 'error',
             code: 'UNSUPPORTED_PROTO',
-            message: `expected_proto_${V2_PROTO}`
+            message: `expected_proto_${config.protocolVersion}`,
+            proto: config.protocolVersion,
+            serverBuild: config.serverBuild,
+            runtime: config.runtimeEnv,
+            features: config.features
           });
+          try {
+            ws.close(1002, 'unsupported_proto');
+          } catch {}
           return;
         }
 
@@ -285,10 +306,13 @@ export function createWsServerV2(server: Server, roomManager: RoomManager, cfg: 
         if (parsed.name && parsed.name.trim()) active.name = parsed.name.trim().slice(0, 32);
         send(ws, {
           type: 'welcome',
-          proto: V2_PROTO,
+          proto: config.protocolVersion,
           clientId: active.clientId,
-          serverTime: Date.now(),
-          room: active.roomId ?? DEFAULT_ROOM
+          roomId: active.roomId ?? DEFAULT_ROOM,
+          serverTick: 0,
+          serverBuild: config.serverBuild,
+          runtime: config.runtimeEnv,
+          features: config.features
         });
         return;
       }
@@ -334,7 +358,11 @@ export function createWsServerV2(server: Server, roomManager: RoomManager, cfg: 
           type: 'join:ok',
           room: roomId,
           tickRate: config.tickRate,
-          snapshotRate: config.snapshotRate
+          snapshotRate: config.snapshotRate,
+          proto: config.protocolVersion,
+          serverBuild: config.serverBuild,
+          runtime: config.runtimeEnv,
+          features: config.features
         });
         return;
       }

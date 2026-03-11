@@ -1,4 +1,5 @@
 export * from './net/messages';
+export * from './net/protocol';
 export * from './net/schema';
 export * from './constants/ticks';
 export * from './sim/movementTypes';

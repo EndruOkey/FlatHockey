@@ -5,11 +5,13 @@ import { fileURLToPath } from 'url';
 import { RoomManager } from './game/roomManager';
 import { createWsServerV2 } from './net/wsServerV2';
 import { FixedLoop } from './game/loop';
-import { SNAPSHOT_HZ } from '@flathockey/shared';
+import { NET_PROTOCOL_VERSION, SNAPSHOT_HZ, SERVER_FEATURES, sanitizeRuntimeEnvironment } from '@flathockey/shared';
 
 const PORT = Number(process.env.PORT ?? 8080);
 const TICK_RATE = Number(process.env.TICK_RATE ?? 60);
 const SNAPSHOT_RATE = Number(process.env.SNAPSHOT_RATE ?? SNAPSHOT_HZ);
+const SERVER_BUILD = process.env.BUILD_VERSION ?? process.env.GITHUB_SHA ?? 'unknown';
+const RUNTIME_ENV = resolveRuntimeEnvironment(PORT, process.env.RUNTIME_ENV);
 
 const app = express();
 const httpServer = createServer(app);
@@ -18,7 +20,11 @@ const startedAt = Date.now();
 const v2RoomManager = new RoomManager();
 const ws2 = createWsServerV2(httpServer, v2RoomManager, {
   tickRate: TICK_RATE,
-  snapshotRate: SNAPSHOT_RATE
+  snapshotRate: SNAPSHOT_RATE,
+  protocolVersion: NET_PROTOCOL_VERSION,
+  runtimeEnv: RUNTIME_ENV,
+  serverBuild: SERVER_BUILD,
+  features: [...SERVER_FEATURES]
 });
 
 let tickCounter = 0;
@@ -39,6 +45,10 @@ app.get('/health', (_req, res) => {
     ts: Date.now(),
     uptimeSec: Math.floor((Date.now() - startedAt) / 1000),
     config: {
+      protocolVersion: NET_PROTOCOL_VERSION,
+      runtimeEnv: RUNTIME_ENV,
+      serverBuild: SERVER_BUILD,
+      features: [...SERVER_FEATURES],
       tickRate: TICK_RATE,
       snapshotRate: SNAPSHOT_RATE
     },
@@ -88,3 +98,12 @@ httpServer.listen(PORT, () => {
   console.log(`[HTTP] listening on :${PORT}`);
   console.log(`[WS2] endpoint ws://localhost:${PORT}/ws2`);
 });
+
+function resolveRuntimeEnvironment(port: number, explicitValue: string | undefined) {
+  const runtime = sanitizeRuntimeEnvironment(explicitValue);
+  if (runtime !== 'unknown') return runtime;
+  if (port === 7777) return 'prod';
+  if (port === 7778) return 'dev';
+  if (port === 8080) return 'local';
+  return 'unknown';
+}

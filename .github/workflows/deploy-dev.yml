@@ -1,10 +1,47 @@
-name: Deploy DEV (disabled)
+name: Deploy DEV backend
 
 on:
+  push:
+    branches: [dev]
   workflow_dispatch:
 
+concurrency:
+  group: deploy-dev-backend
+  cancel-in-progress: true
+
 jobs:
-  info:
+  deploy_backend:
     runs-on: ubuntu-latest
+    env:
+      DEV_HOST: ${{ vars.DEV_HOST }}
+      DEV_USER: ${{ vars.DEV_USER || 'ubuntu' }}
+      DEV_APP_DIR: ${{ vars.DEV_APP_DIR || '/opt/flathockey-dev' }}
+      DEV_SERVICE_NAME: ${{ vars.DEV_SERVICE_NAME || 'flathockey-ws2' }}
+      DEV_HEALTHCHECK_URL: ${{ vars.DEV_HEALTHCHECK_URL || '' }}
     steps:
-      - run: echo "DEV server instance is not configured. Use local dev."
+      - uses: actions/checkout@v4
+
+      - name: Validate DEV deploy config
+        run: |
+          if [ -z "$DEV_HOST" ]; then
+            echo "Missing repository variable DEV_HOST"
+            exit 1
+          fi
+
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEV_SSH_PRIVATE_KEY != '' && secrets.DEV_SSH_PRIVATE_KEY || secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "$DEV_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy backend to DEV
+        run: |
+          ssh "$DEV_USER@$DEV_HOST" "APP_DIR='$DEV_APP_DIR' BRANCH='dev' SERVICE_NAME='$DEV_SERVICE_NAME' bash '$DEV_APP_DIR/deploy/deploy.sh'"
+
+      - name: External DEV health check
+        if: env.DEV_HEALTHCHECK_URL != ''
+        run: curl -fsS "$DEV_HEALTHCHECK_URL"
