@@ -12,6 +12,9 @@ const TICK_RATE = Number(process.env.TICK_RATE ?? 60);
 const SNAPSHOT_RATE = Number(process.env.SNAPSHOT_RATE ?? SNAPSHOT_HZ);
 const SERVER_BUILD = process.env.BUILD_VERSION ?? process.env.GITHUB_SHA ?? 'unknown';
 const RUNTIME_ENV = resolveRuntimeEnvironment(PORT, process.env.RUNTIME_ENV);
+const SERVER_PID = process.pid;
+const SERVER_CWD = process.cwd();
+const SERVER_APP_DIR = path.resolve(SERVER_CWD, '..');
 
 const app = express();
 const httpServer = createServer(app);
@@ -49,6 +52,9 @@ app.get('/health', (_req, res) => {
       runtimeEnv: RUNTIME_ENV,
       serverBuild: SERVER_BUILD,
       features: [...SERVER_FEATURES],
+      pid: SERVER_PID,
+      cwd: SERVER_CWD,
+      appDir: SERVER_APP_DIR,
       tickRate: TICK_RATE,
       snapshotRate: SNAPSHOT_RATE
     },
@@ -95,6 +101,9 @@ const loop = new FixedLoop(
 loop.start();
 
 httpServer.listen(PORT, () => {
+  console.log(
+    `[RUNTIME] pid=${SERVER_PID} build=${SERVER_BUILD} protocol=${NET_PROTOCOL_VERSION} runtime=${RUNTIME_ENV} port=${PORT} cwd=${SERVER_CWD} appDir=${SERVER_APP_DIR}`
+  );
   console.log(`[HTTP] listening on :${PORT}`);
   console.log(`[WS2] endpoint ws://localhost:${PORT}/ws2`);
 });

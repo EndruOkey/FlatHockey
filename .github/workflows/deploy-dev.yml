@@ -17,7 +17,7 @@ jobs:
       DEV_USER: ${{ vars.DEV_USER || 'ubuntu' }}
       DEV_APP_DIR: ${{ vars.DEV_APP_DIR || '/opt/flathockey-dev' }}
       DEV_SERVICE_NAME: ${{ vars.DEV_SERVICE_NAME || 'flathockey-ws2' }}
-      DEV_HEALTHCHECK_URL: ${{ vars.DEV_HEALTHCHECK_URL || '' }}
+      DEV_HEALTHCHECK_URL: ${{ vars.DEV_HEALTHCHECK_URL || 'https://flathockey.fun/dev/health' }}
       DEV_REPO_URL: git@github.com:${{ github.repository }}.git
     steps:
       - uses: actions/checkout@v4
@@ -65,5 +65,4 @@ jobs:
           ssh "$DEV_USER@$DEV_HOST" "APP_DIR='$DEV_APP_DIR' BRANCH='dev' SERVICE_NAME='$DEV_SERVICE_NAME' bash '$DEV_APP_DIR/deploy/deploy.sh'"
 
       - name: External DEV health check
-        if: env.DEV_HEALTHCHECK_URL != ''
         run: curl -fsS "$DEV_HEALTHCHECK_URL"

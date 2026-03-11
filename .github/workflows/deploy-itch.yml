@@ -31,12 +31,8 @@ jobs:
           echo "VITE_BUILD_VERSION=${GITHUB_SHA}" >> $GITHUB_ENV
           echo "VITE_WS_PROD=${{ vars.PROD_WS_URL || 'wss://flathockey.fun/ws2' }}" >> $GITHUB_ENV
           if [ "${GITHUB_REF_NAME}" = "dev" ]; then
-            if [ -z "${{ vars.DEV_WS_URL }}" ]; then
-              echo "Missing repository variable DEV_WS_URL for dev itch deploy"
-              exit 1
-            fi
             echo "VITE_DEV_BUILD=true" >> $GITHUB_ENV
-            echo "VITE_WS_DEV=${{ vars.DEV_WS_URL }}" >> $GITHUB_ENV
+            echo "VITE_WS_DEV=wss://flathockey.fun/dev/ws2" >> $GITHUB_ENV
           else
             echo "VITE_DEV_BUILD=false" >> $GITHUB_ENV
             echo "VITE_WS_DEV=" >> $GITHUB_ENV
