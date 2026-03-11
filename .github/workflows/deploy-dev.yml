@@ -18,6 +18,7 @@ jobs:
       DEV_APP_DIR: ${{ vars.DEV_APP_DIR || '/opt/flathockey-dev' }}
       DEV_SERVICE_NAME: ${{ vars.DEV_SERVICE_NAME || 'flathockey-ws2' }}
       DEV_HEALTHCHECK_URL: ${{ vars.DEV_HEALTHCHECK_URL || '' }}
+      DEV_REPO_URL: https://github.com/${{ github.repository }}.git
     steps:
       - uses: actions/checkout@v4
 
@@ -37,6 +38,24 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           ssh-keyscan -H "$DEV_HOST" >> ~/.ssh/known_hosts
+
+      - name: Bootstrap repo on DEV host
+        run: |
+          ssh "$DEV_USER@$DEV_HOST" "bash -lc '
+            set -e
+            if [ ! -d \"$DEV_APP_DIR/.git\" ]; then
+              sudo mkdir -p \"$DEV_APP_DIR\"
+              sudo chown \"$DEV_USER:$DEV_USER\" \"$DEV_APP_DIR\"
+              if [ -z \"\$(ls -A \"$DEV_APP_DIR\")\" ]; then
+                git clone \"$DEV_REPO_URL\" \"$DEV_APP_DIR\"
+              fi
+            fi
+            if [ ! -f \"$DEV_APP_DIR/deploy/deploy.sh\" ]; then
+              echo \"Missing $DEV_APP_DIR/deploy/deploy.sh\"
+              exit 1
+            fi
+            chmod +x \"$DEV_APP_DIR/deploy/deploy.sh\"
+          '"
 
       - name: Deploy backend to DEV
         run: |
