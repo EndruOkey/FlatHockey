@@ -22,7 +22,10 @@ if ! command -v pnpm >/dev/null 2>&1; then
   PNPM_BIN="/usr/bin/pnpm"
 fi
 
-if git rev-parse --verify HEAD@{1} >/dev/null 2>&1 && git diff --name-only HEAD@{1} HEAD | grep -q "pnpm-lock.yaml"; then
+if [ ! -d node_modules ] || [ ! -x node_modules/.bin/tsc ]; then
+  echo "Dependencies missing -> installing deps"
+  "$PNPM_BIN" install --frozen-lockfile
+elif git rev-parse --verify HEAD@{1} >/dev/null 2>&1 && git diff --name-only HEAD@{1} HEAD | grep -q "pnpm-lock.yaml"; then
   echo "Lockfile changed -> installing deps"
   "$PNPM_BIN" install --frozen-lockfile
 else

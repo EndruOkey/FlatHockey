@@ -18,7 +18,7 @@ jobs:
       DEV_APP_DIR: ${{ vars.DEV_APP_DIR || '/opt/flathockey-dev' }}
       DEV_SERVICE_NAME: ${{ vars.DEV_SERVICE_NAME || 'flathockey-ws2' }}
       DEV_HEALTHCHECK_URL: ${{ vars.DEV_HEALTHCHECK_URL || '' }}
-      DEV_REPO_URL: https://github.com/${{ github.repository }}.git
+      DEV_REPO_URL: git@github.com:${{ github.repository }}.git
     steps:
       - uses: actions/checkout@v4
 
@@ -50,6 +50,9 @@ jobs:
                 git clone \"$DEV_REPO_URL\" \"$DEV_APP_DIR\"
               fi
             fi
+            cd \"$DEV_APP_DIR\"
+            git fetch origin dev
+            git checkout -B dev origin/dev
             if [ ! -f \"$DEV_APP_DIR/deploy/deploy.sh\" ]; then
               echo \"Missing $DEV_APP_DIR/deploy/deploy.sh\"
               exit 1
