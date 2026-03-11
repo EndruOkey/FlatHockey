@@ -6,7 +6,7 @@ export type InputState = {
   shoot: 0 | 1;
   aimAngle: number;
   stop: 0 | 1;
-  reorient: 0 | 1;
+  backwards: 0 | 1;
 };
 
 export type BufferedInput = {
@@ -22,9 +22,11 @@ export type PlayerState = {
   vx: number;
   vy: number;
   angle: number;
+  travelHeading: number;
   aimAngle: number;
   desiredHeading: number;
   locomotionState: LocomotionState;
+  backwards: boolean;
   prevShoot: boolean;
   shotCharge: number;
   lastProcessedSeq: number;
@@ -49,5 +51,5 @@ export const ZERO_INPUT: InputState = {
   shoot: 0,
   aimAngle: 0,
   stop: 0,
-  reorient: 0
+  backwards: 0
 };

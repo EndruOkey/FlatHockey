@@ -166,7 +166,7 @@ export function buildClientInput(scene: any): InputMsg {
     moveY: moveY > 0 ? 1 : moveY < 0 ? -1 : 0,
     shoot: scene.keys.E.isDown ? 1 : 0,
     stop: scene.keys.SPACE.isDown ? 1 : 0,
-    reorient: scene.keys.CTRL.isDown ? 1 : 0,
+    backwards: scene.keys.C.isDown ? 1 : 0,
     aimAngle
   };
 }

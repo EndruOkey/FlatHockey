@@ -1,13 +1,13 @@
 export type MovementAxis = -1 | 0 | 1;
 export type MovementButton = 0 | 1;
-export type LocomotionState = 'idle' | 'driving' | 'gliding' | 'stopping' | 'reorienting';
+export type LocomotionState = 'idle' | 'skating' | 'gliding' | 'stopping' | 'backwards';
 
 export type PlayerMovementInput = {
   moveX?: number;
   moveY?: number;
   aimAngle?: number;
   stop?: number;
-  reorient?: number;
+  backwards?: number;
 };
 
 export type PlayerMovementState = {
@@ -16,9 +16,11 @@ export type PlayerMovementState = {
   vx: number;
   vy: number;
   angle: number;
+  travelHeading: number;
   aimAngle: number;
   desiredHeading: number;
   locomotionState: LocomotionState;
+  backwards: boolean;
 };
 
 export type RinkBounds = {
@@ -34,11 +36,15 @@ export type ResolvedPlayerMovementConfig = {
   acceleration: number;
   passiveDeceleration: number;
   stopDeceleration: number;
-  turnRateMin: number;
-  turnRateMax: number;
-  lowSpeedPivotTurnRate: number;
-  reorientationTurnRate: number;
-  edgeBoostAmount: number;
+  traction: number;
+  rotationSpeed: number;
+  lowSpeedRotationSpeed: number;
+  turnPenalty: number;
+  carveResponse: number;
+  backwardsAngle: number;
+  backwardsRotationMultiplier: number;
+  backwardsAccelerationMultiplier: number;
+  backwardsSpeedMultiplier: number;
   rinkBounds: RinkBounds;
 };
 
@@ -52,9 +58,10 @@ export type PlayerMovementStepResult = {
   speed: number;
   heading: number;
   desiredHeading: number;
+  travelHeading: number;
   locomotionState: LocomotionState;
   stopActive: boolean;
-  reorientationActive: boolean;
+  backwardsActive: boolean;
 };
 
 export type PlayerMovementDebugState = {
@@ -63,7 +70,8 @@ export type PlayerMovementDebugState = {
   velocityY: number;
   heading: number;
   desiredHeading: number;
+  travelHeading: number;
   locomotionState: LocomotionState;
   stopActive: boolean;
-  reorientationActive: boolean;
+  backwardsActive: boolean;
 };

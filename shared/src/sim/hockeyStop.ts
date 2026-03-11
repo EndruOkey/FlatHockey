@@ -1,72 +1,38 @@
-const STOP_ACTIVE_SPEED_EPSILON = 12;
-
-export type HockeyStopDecisionInput = {
-  explicitStop: boolean;
-  velocityX: number;
-  velocityY: number;
-  speed: number;
-  moveDirX: number;
-  moveDirY: number;
-  reverseDotThreshold: number;
-  reverseSpeedThreshold: number;
-};
+const STOP_ACTIVE_SPEED_EPSILON = 10;
 
 export type HockeyStopDecision = {
   stopRequested: boolean;
-  explicitStop: boolean;
-  reverseIntent: boolean;
 };
 
 export type HockeyStopComputation = {
   active: boolean;
-  velocityX: number;
-  velocityY: number;
   speed: number;
+  tractionMultiplier: number;
+  rotationMultiplier: number;
 };
 
-export function shouldTriggerHockeyStop(input: HockeyStopDecisionInput): HockeyStopDecision {
-  const hasMoveIntent = Math.hypot(input.moveDirX, input.moveDirY) > 0;
-  let reverseIntent = false;
-
-  if (hasMoveIntent && input.speed >= input.reverseSpeedThreshold) {
-    const velocityDirX = input.velocityX / Math.max(input.speed, 0.0001);
-    const velocityDirY = input.velocityY / Math.max(input.speed, 0.0001);
-    const dot = velocityDirX * input.moveDirX + velocityDirY * input.moveDirY;
-    reverseIntent = dot <= input.reverseDotThreshold;
-  }
-
+export function shouldTriggerHockeyStop(explicitStop: boolean): HockeyStopDecision {
   return {
-    stopRequested: input.explicitStop || reverseIntent,
-    explicitStop: input.explicitStop,
-    reverseIntent
+    stopRequested: !!explicitStop
   };
 }
 
-export function applyHockeyStop(
-  velocityX: number,
-  velocityY: number,
-  dt: number,
-  deceleration: number,
-  active: boolean
-): HockeyStopComputation {
-  const speed = Math.hypot(velocityX, velocityY);
+export function applyHockeyStop(speed: number, dt: number, deceleration: number, active: boolean): HockeyStopComputation {
   if (!active || speed <= 0 || dt <= 0) {
     return {
       active: false,
-      velocityX,
-      velocityY,
-      speed
+      speed,
+      tractionMultiplier: 1,
+      rotationMultiplier: 1
     };
   }
 
   const nextSpeed = approachScalar(speed, 0, Math.max(0, deceleration) * dt);
-  const scale = speed > 0 ? nextSpeed / speed : 0;
-
   return {
     active: nextSpeed > STOP_ACTIVE_SPEED_EPSILON,
-    velocityX: velocityX * scale,
-    velocityY: velocityY * scale,
-    speed: nextSpeed
+    speed: nextSpeed,
+    tractionMultiplier: 1.25,
+    rotationMultiplier: 1.12
   };
 }
 

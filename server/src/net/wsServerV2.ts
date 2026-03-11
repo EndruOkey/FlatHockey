@@ -33,7 +33,7 @@ type ClientInputV2 = {
   aimAngle?: number;
   shoot?: boolean;
   stop?: boolean;
-  reorient?: boolean;
+  backwards?: boolean;
   pointer?: {
     aim?: number;
   };
@@ -44,7 +44,7 @@ type ClientInputV2 = {
     d?: boolean;
     e?: boolean;
     space?: boolean;
-    ctrl?: boolean;
+    c?: boolean;
   };
 };
 
@@ -100,7 +100,7 @@ const DEFAULT_CONFIG: V2Config = {
   protocolVersion: NET_PROTOCOL_VERSION,
   runtimeEnv: sanitizeRuntimeEnvironment(process.env.RUNTIME_ENV),
   serverBuild: process.env.BUILD_VERSION ?? process.env.GITHUB_SHA ?? 'unknown',
-  features: ['player-state-v2', 'locomotion-v1', 'puck-state-v1']
+  features: ['player-state-v3', 'locomotion-v2', 'puck-state-v1']
 };
 
 let nextClientId = 1;
@@ -176,7 +176,7 @@ function parseV2Message(obj: JsonRecord): ClientMessageV2 | null {
           : undefined;
     const shoot = typeof obj.shoot === 'boolean' ? obj.shoot : bool(keys?.e);
     const stop = typeof obj.stop === 'boolean' ? obj.stop : bool(keys?.space);
-    const reorient = typeof obj.reorient === 'boolean' ? obj.reorient : bool(keys?.ctrl);
+    const backwards = typeof obj.backwards === 'boolean' ? obj.backwards : bool(keys?.c);
     return {
       type,
       seq: Math.max(0, Math.floor(obj.seq)),
@@ -185,7 +185,7 @@ function parseV2Message(obj: JsonRecord): ClientMessageV2 | null {
       aimAngle,
       shoot,
       stop,
-      reorient,
+      backwards,
       pointer,
       keys
     };
@@ -213,7 +213,7 @@ function toInputMsg(clientId: string, msg: ClientInputV2, fallbackAim: number): 
     shoot: msg.shoot ? 1 : 0,
     aimAngle: typeof msg.aimAngle === 'number' ? msg.aimAngle : fallbackAim,
     stop: msg.stop ? 1 : 0,
-    reorient: msg.reorient ? 1 : 0
+    backwards: msg.backwards ? 1 : 0
   };
 }
 

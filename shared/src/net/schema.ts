@@ -11,7 +11,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       if (typeof data.seq !== 'number') return null;
       const shoot = (data as any).shoot ? 1 : 0;
       const stop = (data as any).stop ? 1 : 0;
-      const reorient = (data as any).reorient ? 1 : 0;
+      const backwards = (data as any).backwards ? 1 : 0;
       const moveX = sanitizeMovementAxis((data as any).moveX);
       const moveY = sanitizeMovementAxis((data as any).moveY);
       const aimAngle = typeof data.aimAngle === 'number' ? data.aimAngle : undefined;
@@ -25,7 +25,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
         shoot,
         aimAngle,
         stop,
-        reorient
+        backwards
       };
     }
 

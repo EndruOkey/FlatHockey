@@ -1,6 +1,6 @@
 import { hasRequiredServerFeatures, NET_PROTOCOL_VERSION, type RuntimeEnvironment, sanitizeRuntimeEnvironment } from '@flathockey/shared';
 
-const VALID_LOCOMOTION_STATES = new Set(['idle', 'driving', 'gliding', 'stopping', 'reorienting']);
+const VALID_LOCOMOTION_STATES = new Set(['idle', 'skating', 'gliding', 'stopping', 'backwards']);
 
 type HandshakeLike = {
   type?: unknown;
@@ -64,6 +64,7 @@ export function getSnapshotPlayerStateMismatch(player: unknown) {
     !isFiniteNumber(candidate.vx) ||
     !isFiniteNumber(candidate.vy) ||
     !isFiniteNumber(candidate.angle) ||
+    !isFiniteNumber(candidate.travelHeading) ||
     !isFiniteNumber(candidate.aimAngle) ||
     !isFiniteNumber(candidate.desiredHeading)
   ) {
@@ -71,6 +72,9 @@ export function getSnapshotPlayerStateMismatch(player: unknown) {
   }
   if (typeof candidate.locomotionState !== 'string' || !VALID_LOCOMOTION_STATES.has(candidate.locomotionState)) {
     return `snapshot player ${candidate.id} is missing locomotion state`;
+  }
+  if (typeof candidate.backwards !== 'boolean') {
+    return `snapshot player ${candidate.id} is missing backwards state`;
   }
 
   return null;

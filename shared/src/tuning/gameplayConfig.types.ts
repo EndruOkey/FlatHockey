@@ -4,10 +4,18 @@ export type GameplayConfig = {
   playerAcceleration?: number;
   playerPassiveDeceleration?: number;
   playerStopDeceleration?: number;
+  playerTraction?: number;
+  playerRotationSpeed?: number;
+  playerLowSpeedRotationSpeed?: number;
+  playerTurnPenalty?: number;
+  playerCarveResponse?: number;
+  playerBackwardsAngleDeg?: number;
+  playerBackwardsRotationMultiplier?: number;
+  playerBackwardsAccelerationMultiplier?: number;
+  playerBackwardsSpeedMultiplier?: number;
+
   playerTurnRateMin?: number;
   playerTurnRateMax?: number;
-  playerLowSpeedPivotTurnRate?: number;
-  playerReorientationTurnRate?: number;
   playerEdgeBoostAmount?: number;
 
   aimEnabled?: boolean;

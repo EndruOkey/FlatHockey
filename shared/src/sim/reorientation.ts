@@ -1,63 +1,39 @@
-import { computeTurn, shortestAngleDelta } from './turning';
+import { shortestAngleDelta, wrapAngle } from './turning';
 
-const REORIENTATION_EXIT_ANGLE = 0.16;
+const BACKWARDS_HYSTERESIS_RAD = (14 * Math.PI) / 180;
 
-export type ReorientationInput = {
-  active: boolean;
-  requested: boolean;
+export type BackwardsResolutionInput = {
   hasMovement: boolean;
-  currentHeading: number;
-  desiredHeading: number;
-  speed: number;
-  maxSpeed: number;
-  dt: number;
-  diagonal: boolean;
-  turnRate: number;
+  manualOverride: boolean;
+  wasBackwards: boolean;
+  bodyHeading: number;
+  desiredTravelHeading: number;
+  backwardsAngle: number;
 };
 
-export type ReorientationComputation = {
+export type BackwardsResolution = {
   active: boolean;
-  heading: number;
-  desiredHeading: number;
-  remainingAngle: number;
-  allowDrive: boolean;
-  angularVelocity: number;
+  desiredBodyHeading: number;
+  mismatchAngle: number;
 };
 
-export function applyReorientation(input: ReorientationInput): ReorientationComputation {
-  const wantsReorientation = input.hasMovement && (input.requested || input.active);
-  if (!wantsReorientation) {
+export function resolveBackwardsSkating(input: BackwardsResolutionInput): BackwardsResolution {
+  if (!input.hasMovement) {
     return {
-      active: false,
-      heading: input.currentHeading,
-      desiredHeading: input.desiredHeading,
-      remainingAngle: Math.abs(shortestAngleDelta(input.currentHeading, input.desiredHeading)),
-      allowDrive: true,
-      angularVelocity: 0
+      active: input.wasBackwards,
+      desiredBodyHeading: wrapAngle(input.bodyHeading),
+      mismatchAngle: 0
     };
   }
 
-  const turn = computeTurn({
-    currentHeading: input.currentHeading,
-    desiredHeading: input.desiredHeading,
-    speed: input.speed,
-    maxSpeed: input.maxSpeed,
-    dt: input.dt,
-    diagonal: input.diagonal,
-    turnRateMin: input.turnRate,
-    turnRateMax: input.turnRate,
-    lowSpeedPivotTurnRate: input.turnRate
-  });
-
-  const remainingAngle = Math.abs(shortestAngleDelta(turn.heading, input.desiredHeading));
-  const active = remainingAngle > REORIENTATION_EXIT_ANGLE;
+  const mismatchAngle = Math.abs(shortestAngleDelta(input.bodyHeading, input.desiredTravelHeading));
+  const enterAngle = input.backwardsAngle;
+  const exitAngle = Math.max(Math.PI * 0.45, enterAngle - BACKWARDS_HYSTERESIS_RAD);
+  const active = input.manualOverride || mismatchAngle >= (input.wasBackwards ? exitAngle : enterAngle);
 
   return {
     active,
-    heading: turn.heading,
-    desiredHeading: input.desiredHeading,
-    remainingAngle,
-    allowDrive: !active,
-    angularVelocity: turn.angularVelocity
+    desiredBodyHeading: wrapAngle(input.desiredTravelHeading + (active ? Math.PI : 0)),
+    mismatchAngle
   };
 }

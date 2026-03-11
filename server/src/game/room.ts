@@ -45,9 +45,11 @@ export class Room {
       vx: 0,
       vy: 0,
       angle: 0,
+      travelHeading: 0,
       aimAngle: 0,
       desiredHeading: 0,
       locomotionState: 'idle',
+      backwards: false,
       prevShoot: false,
       shotCharge: 0,
       lastProcessedSeq: 0,
@@ -77,7 +79,7 @@ export class Room {
         shoot: input.shoot ? 1 : 0,
         aimAngle: typeof input.aimAngle === 'number' ? input.aimAngle : player.aimAngle,
         stop: input.stop ? 1 : 0,
-        reorient: input.reorient ? 1 : 0
+        backwards: input.backwards ? 1 : 0
       }
     };
 
@@ -131,9 +133,11 @@ export class Room {
         vx: p.vx,
         vy: p.vy,
         angle: p.angle,
+        travelHeading: p.travelHeading,
         aimAngle: p.aimAngle,
         desiredHeading: p.desiredHeading,
-        locomotionState: p.locomotionState
+        locomotionState: p.locomotionState,
+        backwards: p.backwards
       }))
     };
     this.broadcast(msg);
@@ -151,8 +155,8 @@ export class Room {
     console.debug(
       `[MOVE] room=${this.id} player=${player.id} speed=${debug.speed.toFixed(2)} ` +
         `vx=${debug.velocityX.toFixed(2)} vy=${debug.velocityY.toFixed(2)} ` +
-        `heading=${debug.heading.toFixed(3)} desiredHeading=${debug.desiredHeading.toFixed(3)} ` +
-        `state=${debug.locomotionState} stop=${debug.stopActive ? 1 : 0} reorient=${debug.reorientationActive ? 1 : 0}`
+        `heading=${debug.heading.toFixed(3)} travelHeading=${debug.travelHeading.toFixed(3)} desiredHeading=${debug.desiredHeading.toFixed(3)} ` +
+        `state=${debug.locomotionState} stop=${debug.stopActive ? 1 : 0} backwards=${debug.backwardsActive ? 1 : 0}`
     );
   }
 

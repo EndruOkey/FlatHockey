@@ -10,7 +10,7 @@ export type InputMsg = {
   shoot?: 0 | 1;
   aimAngle?: number;
   stop?: 0 | 1;
-  reorient?: 0 | 1;
+  backwards?: 0 | 1;
 };
 
 export type PlayerStateMsg = {
@@ -20,9 +20,11 @@ export type PlayerStateMsg = {
   vx: number;
   vy: number;
   angle: number;
+  travelHeading: number;
   aimAngle: number;
   desiredHeading: number;
   locomotionState: LocomotionState;
+  backwards: boolean;
 };
 
 export type SnapshotMsg = {
