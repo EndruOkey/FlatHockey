@@ -130,12 +130,18 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
 export function buildClientInput(scene: any): InputMsg {
   const tuning = getTuning();
   const aimAngle = scene.computeMouseAimAngle(CLIENT_FIXED_DT, tuning);
+  const moveX = (scene.keys.D.isDown ? 1 : 0) - (scene.keys.A.isDown ? 1 : 0);
+  const moveY = (scene.keys.S.isDown ? 1 : 0) - (scene.keys.W.isDown ? 1 : 0);
 
   return {
     type: 'input',
     clientId: scene.clientId ?? '',
     seq: ++scene.seq,
+    moveX: moveX > 0 ? 1 : moveX < 0 ? -1 : 0,
+    moveY: moveY > 0 ? 1 : moveY < 0 ? -1 : 0,
     shoot: scene.keys.E.isDown ? 1 : 0,
+    stop: scene.keys.SPACE.isDown ? 1 : 0,
+    reorient: scene.keys.CTRL.isDown ? 1 : 0,
     aimAngle
   };
 }

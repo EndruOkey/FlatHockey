@@ -1,4 +1,15 @@
 export type GameplayConfig = {
+  playerMoveSpeed?: number;
+  playerRadius?: number;
+  playerAcceleration?: number;
+  playerPassiveDeceleration?: number;
+  playerStopDeceleration?: number;
+  playerTurnRateMin?: number;
+  playerTurnRateMax?: number;
+  playerLowSpeedPivotTurnRate?: number;
+  playerReorientationTurnRate?: number;
+  playerEdgeBoostAmount?: number;
+
   aimEnabled?: boolean;
   aimDeadzonePx?: number;
   hideSystemCursor?: boolean;

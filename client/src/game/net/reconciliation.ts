@@ -13,8 +13,12 @@ export function reconcilePrediction(
 
   predicted.x = authoritative.x;
   predicted.y = authoritative.y;
+  predicted.vx = authoritative.vx;
+  predicted.vy = authoritative.vy;
   predicted.angle = authoritative.angle;
   predicted.aimAngle = authoritative.aimAngle;
+  predicted.desiredHeading = authoritative.desiredHeading;
+  predicted.locomotionState = authoritative.locomotionState;
 
   for (const input of pendingInputs) {
     applyPredictedInput(predicted, input);

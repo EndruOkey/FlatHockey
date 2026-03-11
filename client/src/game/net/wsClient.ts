@@ -132,20 +132,24 @@ export class WsClient {
     if (!msg || msg.type !== 'input') return msg;
 
     const hasGameplayFields =
+      typeof msg.moveX === 'number' ||
+      typeof msg.moveY === 'number' ||
       typeof msg.shoot === 'number' ||
+      typeof msg.stop === 'number' ||
+      typeof msg.reorient === 'number' ||
       typeof msg.aimAngle === 'number';
 
     if (!hasGameplayFields) return msg;
-    const aim = typeof msg.aimAngle === 'number' ? msg.aimAngle : undefined;
 
     return {
       type: msg.type,
-      clientId: msg.clientId,
       seq: Number.isFinite(msg.seq) ? Math.max(0, Math.floor(msg.seq)) : 0,
-      pointer: typeof aim === 'number' ? { aim } : undefined,
-      keys: {
-        e: !!msg.shoot
-      }
+      moveX: typeof msg.moveX === 'number' ? msg.moveX : undefined,
+      moveY: typeof msg.moveY === 'number' ? msg.moveY : undefined,
+      aimAngle: typeof msg.aimAngle === 'number' ? msg.aimAngle : undefined,
+      shoot: !!msg.shoot,
+      stop: !!msg.stop,
+      reorient: !!msg.reorient
     };
   }
 

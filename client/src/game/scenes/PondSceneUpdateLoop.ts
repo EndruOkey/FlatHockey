@@ -104,8 +104,9 @@ export function runPondSceneUpdate(scene: any) {
         } else {
           const tauMs = 24;
           const alpha = 1 - Math.exp(-Math.max(0, clampedDtMs) / Math.max(1, tauMs));
-          scene.localRenderState.x += (state.x - scene.localRenderState.x) * alpha;
-          scene.localRenderState.y += (state.y - scene.localRenderState.y) * alpha;
+          // Keep visuals locked to predicted physics position. Only orientation is smoothed.
+          scene.localRenderState.x = state.x;
+          scene.localRenderState.y = state.y;
           scene.localRenderState.rot = scene.lerpAngle(scene.localRenderState.rot, state.rot, alpha);
           scene.localRenderState.aimRot = scene.lerpAngle(
             scene.localRenderState.aimRot ?? state.aimRot ?? state.rot,

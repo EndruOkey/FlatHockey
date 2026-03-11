@@ -1,6 +1,12 @@
+import type { LocomotionState } from '@flathockey/shared';
+
 export type InputState = {
+  moveX: -1 | 0 | 1;
+  moveY: -1 | 0 | 1;
   shoot: 0 | 1;
   aimAngle: number;
+  stop: 0 | 1;
+  reorient: 0 | 1;
 };
 
 export type BufferedInput = {
@@ -13,8 +19,12 @@ export type PlayerState = {
   name: string;
   x: number;
   y: number;
+  vx: number;
+  vy: number;
   angle: number;
   aimAngle: number;
+  desiredHeading: number;
+  locomotionState: LocomotionState;
   prevShoot: boolean;
   shotCharge: number;
   lastProcessedSeq: number;
@@ -34,6 +44,10 @@ export type PuckState = {
 };
 
 export const ZERO_INPUT: InputState = {
+  moveX: 0,
+  moveY: 0,
   shoot: 0,
-  aimAngle: 0
+  aimAngle: 0,
+  stop: 0,
+  reorient: 0
 };

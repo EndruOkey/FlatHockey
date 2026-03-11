@@ -1,4 +1,5 @@
 import type { ClientMessage } from './messages';
+import { sanitizeMovementAxis } from '../sim/playerMovement';
 
 export function parseClientMessage(raw: string): ClientMessage | null {
   try {
@@ -9,14 +10,22 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       if (typeof data.clientId !== 'string') return null;
       if (typeof data.seq !== 'number') return null;
       const shoot = (data as any).shoot ? 1 : 0;
+      const stop = (data as any).stop ? 1 : 0;
+      const reorient = (data as any).reorient ? 1 : 0;
+      const moveX = sanitizeMovementAxis((data as any).moveX);
+      const moveY = sanitizeMovementAxis((data as any).moveY);
       const aimAngle = typeof data.aimAngle === 'number' ? data.aimAngle : undefined;
 
       return {
         type: 'input',
         clientId: data.clientId,
         seq: Math.max(0, Math.floor(data.seq)),
+        moveX,
+        moveY,
         shoot,
-        aimAngle
+        aimAngle,
+        stop,
+        reorient
       };
     }
 

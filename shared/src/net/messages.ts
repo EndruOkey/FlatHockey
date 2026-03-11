@@ -1,17 +1,27 @@
+import type { LocomotionState } from '../sim/movementTypes';
+
 export type InputMsg = {
   type: 'input';
   clientId: string;
   seq: number;
+  moveX?: -1 | 0 | 1;
+  moveY?: -1 | 0 | 1;
   shoot?: 0 | 1;
   aimAngle?: number;
+  stop?: 0 | 1;
+  reorient?: 0 | 1;
 };
 
 export type PlayerStateMsg = {
   id: string;
   x: number;
   y: number;
+  vx: number;
+  vy: number;
   angle: number;
   aimAngle: number;
+  desiredHeading: number;
+  locomotionState: LocomotionState;
 };
 
 export type SnapshotMsg = {

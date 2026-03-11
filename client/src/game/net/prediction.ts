@@ -1,5 +1,6 @@
-import type { InputMsg } from '@flathockey/shared';
+import { resolvePlayerMovementConfig, stepPlayerMovement, type InputMsg } from '@flathockey/shared';
 import type { PredictedPlayerState } from './predictionState.types';
+import { getTuning } from '../tuning/gameplayConfig';
 
 export type { PredictedPlayerState } from './predictionState.types';
 
@@ -15,9 +16,6 @@ export function getAimInputRateLimited() {
   return aimInputRateLimited;
 }
 
-export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg, _dt = CLIENT_FIXED_DT) {
-  const aimAngle = input.aimAngle;
-  if (typeof aimAngle !== 'number' || !Number.isFinite(aimAngle)) return;
-  state.aimAngle = aimAngle;
-  state.angle = aimAngle;
+export function applyPredictedInput(state: PredictedPlayerState, input: InputMsg, dt = CLIENT_FIXED_DT) {
+  stepPlayerMovement(state, input, dt, resolvePlayerMovementConfig(getTuning()));
 }

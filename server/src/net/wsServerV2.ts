@@ -1,7 +1,7 @@
+import { sanitizeMovementAxis, type InputMsg } from '@flathockey/shared';
 import { WebSocket, WebSocketServer } from 'ws';
 import type { Server } from 'http';
 import type { RoomManager } from '../game/roomManager';
-import type { InputMsg } from '@flathockey/shared';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -21,11 +21,23 @@ type ClientJoinV2 = {
 type ClientInputV2 = {
   type: 'input';
   seq: number;
+  moveX?: -1 | 0 | 1;
+  moveY?: -1 | 0 | 1;
+  aimAngle?: number;
+  shoot?: boolean;
+  stop?: boolean;
+  reorient?: boolean;
   pointer?: {
     aim?: number;
   };
   keys?: {
+    w?: boolean;
+    a?: boolean;
+    s?: boolean;
+    d?: boolean;
     e?: boolean;
+    space?: boolean;
+    ctrl?: boolean;
   };
 };
 
@@ -97,6 +109,11 @@ function bool(v: unknown): boolean {
   return v === true;
 }
 
+function keyAxis(negative: boolean, positive: boolean): -1 | 0 | 1 {
+  if (negative === positive) return 0;
+  return negative ? -1 : 1;
+}
+
 function send(ws: WebSocket, payload: JsonRecord) {
   if (ws.readyState !== WebSocket.OPEN) return;
   ws.send(JSON.stringify(payload));
@@ -127,19 +144,36 @@ function parseV2Message(obj: JsonRecord): ClientMessageV2 | null {
     if (typeof obj.seq !== 'number' || !Number.isFinite(obj.seq)) return null;
     const pointer = isObject(obj.pointer) ? obj.pointer : undefined;
     const keys = isObject(obj.keys) ? obj.keys : undefined;
+    const moveX = sanitizeMovementAxis(
+      typeof obj.moveX === 'number' && Number.isFinite(obj.moveX)
+        ? obj.moveX
+        : keyAxis(bool(keys?.a), bool(keys?.d))
+    );
+    const moveY = sanitizeMovementAxis(
+      typeof obj.moveY === 'number' && Number.isFinite(obj.moveY)
+        ? obj.moveY
+        : keyAxis(bool(keys?.w), bool(keys?.s))
+    );
+    const aimAngle =
+      typeof obj.aimAngle === 'number' && Number.isFinite(obj.aimAngle)
+        ? obj.aimAngle
+        : typeof pointer?.aim === 'number' && Number.isFinite(pointer.aim)
+          ? pointer.aim
+          : undefined;
+    const shoot = typeof obj.shoot === 'boolean' ? obj.shoot : bool(keys?.e);
+    const stop = typeof obj.stop === 'boolean' ? obj.stop : bool(keys?.space);
+    const reorient = typeof obj.reorient === 'boolean' ? obj.reorient : bool(keys?.ctrl);
     return {
       type,
       seq: Math.max(0, Math.floor(obj.seq)),
-      pointer: pointer
-        ? {
-            aim: typeof pointer.aim === 'number' && Number.isFinite(pointer.aim) ? pointer.aim : undefined
-          }
-        : undefined,
-      keys: keys
-        ? {
-            e: bool(keys.e)
-          }
-        : undefined
+      moveX,
+      moveY,
+      aimAngle,
+      shoot,
+      stop,
+      reorient,
+      pointer,
+      keys
     };
   }
 
@@ -156,14 +190,16 @@ function parseV2Message(obj: JsonRecord): ClientMessageV2 | null {
 }
 
 function toInputMsg(clientId: string, msg: ClientInputV2, fallbackAim: number): InputMsg {
-  const keys = msg.keys ?? {};
-  const shoot = keys.e ? 1 : 0;
   return {
     type: 'input',
     clientId,
     seq: msg.seq,
-    shoot,
-    aimAngle: typeof msg.pointer?.aim === 'number' ? msg.pointer.aim : fallbackAim
+    moveX: msg.moveX ?? 0,
+    moveY: msg.moveY ?? 0,
+    shoot: msg.shoot ? 1 : 0,
+    aimAngle: typeof msg.aimAngle === 'number' ? msg.aimAngle : fallbackAim,
+    stop: msg.stop ? 1 : 0,
+    reorient: msg.reorient ? 1 : 0
   };
 }
 

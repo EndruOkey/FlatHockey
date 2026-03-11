@@ -1,6 +1,17 @@
 import type { GameplayTuning } from './gameplayConfig.types';
 
 export const GAMEPLAY_DEFAULTS: GameplayTuning = {
+  playerMoveSpeed: 220,
+  playerRadius: 18,
+  playerAcceleration: 720,
+  playerPassiveDeceleration: 320,
+  playerStopDeceleration: 980,
+  playerTurnRateMin: 2.35,
+  playerTurnRateMax: 5.25,
+  playerLowSpeedPivotTurnRate: 4.2,
+  playerReorientationTurnRate: 7.4,
+  playerEdgeBoostAmount: 0.02,
+
   aimEnabled: true,
   aimDeadzonePx: 32,
   hideSystemCursor: true,
@@ -26,7 +37,7 @@ export const GAMEPLAY_DEFAULTS: GameplayTuning = {
 
   puckPickupRadius: 22,
   puckPickupMaxSpeed: 220,
-  puckPickupMaxRelativeSpeed: 180,
+  puckPickupMaxRelativeSpeed: 240,
   puckMagnetRadius: 30,
   puckMagnetStrength: 90,
   puckMagnetMaxForce: 120,
