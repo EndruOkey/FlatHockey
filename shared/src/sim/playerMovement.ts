@@ -204,34 +204,77 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
   const driveScale = Math.min(driveFactor, bodyDriveFactor, intentFlipDriveFactor);
   const targetSpeed = resolveTargetSpeed(hasMovement, config) * driveScale;
   const acceleration = config.acceleration * lerp(0.26, 1, driveScale);
-  const baseSpeed = stopRequested.stopRequested
-    ? stop.speed
-    : approachSpeed(
-        currentSpeed,
-        targetSpeed *
-          lerp(0.78, 1, responsePenalty) *
-          (1 + computeCarveBonus(steering, bodyTurn, forwardAlignment.mismatch, resolvedTurnContext, currentSpeed, config)),
-        acceleration,
-        (config.passiveDeceleration + config.moveSpeed * (1 - responsePenalty) * 0.05) *
-          lerp(1, 0.76, resolvedTurnContext.activeCarve),
-        dt
-      );
+  const carveBonus = computeCarveBonus(
+    steering,
+    bodyTurn,
+    forwardAlignment.mismatch,
+    resolvedTurnContext,
+    currentSpeed,
+    config
+  );
+  const driveTargetSpeed = targetSpeed * lerp(0.78, 1, responsePenalty) * (1 + carveBonus);
+  const driveDeceleration =
+    (config.passiveDeceleration + config.moveSpeed * (1 - responsePenalty) * 0.05) *
+    lerp(1, 0.84, resolvedTurnContext.activeCarve);
+  const driveHeading = resolveDriveHeading({
+    bodyHeading: bodyTurn.heading,
+    steeringHeading,
+    alignmentHeading: forwardAlignment.travelHeading,
+    speed: currentSpeed,
+    moveSpeed: config.moveSpeed,
+    turnContext: resolvedTurnContext
+  });
+  const drivenVelocity = stopRequested.stopRequested
+    ? setVelocityMagnitude(state.vx, state.vy, stop.speed, currentTravelHeading)
+    : !hasMovement
+      ? dampVelocityMagnitude(state.vx, state.vy, config.passiveDeceleration * Math.max(0, dt))
+      : applyDirectionalDrive({
+          vx: state.vx,
+          vy: state.vy,
+          driveHeading,
+          targetSpeed: driveTargetSpeed,
+          acceleration,
+          deceleration: driveDeceleration,
+          dt
+        });
+  const drivenSpeed = Math.hypot(drivenVelocity.x, drivenVelocity.y);
+  const drivenTravelHeading = drivenSpeed > SMALL_SPEED_EPSILON ? Math.atan2(drivenVelocity.y, drivenVelocity.x) : currentTravelHeading;
+  const drivenBodyTravelMismatch = Math.abs(shortestAngleDelta(drivenTravelHeading, bodyTurn.heading));
+  const lateralDecay = stopRequested.stopRequested
+    ? config.stopDeceleration * 0.82
+    : computeLateralDecay({
+        speed: drivenSpeed,
+        moveSpeed: config.moveSpeed,
+        passiveDeceleration: config.passiveDeceleration,
+        responsePenalty,
+        alignmentMismatch: forwardAlignment.mismatch,
+        travelAlignmentError: Math.abs(shortestAngleDelta(drivenTravelHeading, forwardAlignment.travelHeading)),
+        bodyTravelMismatch: drivenBodyTravelMismatch,
+        turnContext: resolvedTurnContext
+      });
+  const alignedVelocity = stopRequested.stopRequested || !hasMovement
+    ? drivenVelocity
+    : dampVelocityLateralComponent(drivenVelocity.x, drivenVelocity.y, forwardAlignment.travelHeading, lateralDecay, dt);
   const turnDrag = stopRequested.stopRequested
     ? 0
-    : config.moveSpeed * (1 - responsePenalty) * Math.max(0, dt) * 0.018 * lerp(1, 0.74, resolvedTurnContext.activeCarve);
-  let nextSpeed = Math.max(0, baseSpeed - turnDrag);
-
-  if (!hasMovement && !stopRequested.stopRequested) {
-    nextSpeed = Math.max(0, currentSpeed - config.passiveDeceleration * Math.max(0, dt));
-  }
+    : config.moveSpeed * (1 - responsePenalty) * Math.max(0, dt) * 0.01 * lerp(1, 0.84, resolvedTurnContext.activeCarve);
+  const draggedVelocity = turnDrag > 0 ? dampVelocityMagnitude(alignedVelocity.x, alignedVelocity.y, turnDrag) : alignedVelocity;
+  const speedCap =
+    stopRequested.stopRequested || !hasMovement
+      ? null
+      : Math.max(currentSpeed, config.moveSpeed * (1 + carveBonus * 0.7));
+  const cappedVelocity = speedCap === null ? draggedVelocity : clampVelocityMagnitude(draggedVelocity.x, draggedVelocity.y, speedCap);
+  let nextVelocityX = cappedVelocity.x;
+  let nextVelocityY = cappedVelocity.y;
+  let nextSpeed = Math.hypot(nextVelocityX, nextVelocityY);
 
   if (nextSpeed <= SMALL_SPEED_EPSILON) {
     nextSpeed = 0;
+    nextVelocityX = 0;
+    nextVelocityY = 0;
   }
 
-  const nextTravelHeading = nextSpeed > 0 ? wrapAngle(forwardAlignment.travelHeading) : wrapAngle(currentTravelHeading);
-  let nextVelocityX = Math.cos(nextTravelHeading) * nextSpeed;
-  let nextVelocityY = Math.sin(nextTravelHeading) * nextSpeed;
+  const nextTravelHeading = nextSpeed > 0 ? Math.atan2(nextVelocityY, nextVelocityX) : wrapAngle(currentTravelHeading);
 
   if (dt > 0) {
     const unclampedX = state.x + nextVelocityX * dt;
@@ -431,6 +474,142 @@ function computeCarveBonus(
   );
 }
 
+function resolveDriveHeading(input: {
+  bodyHeading: number;
+  steeringHeading: number;
+  alignmentHeading: number;
+  speed: number;
+  moveSpeed: number;
+  turnContext: TurnContext;
+}) {
+  const speedRatio = clamp(input.speed / Math.max(1, input.moveSpeed), 0, 1);
+  const steeringLead =
+    clamp(0.06 + input.turnContext.smallCorrection * 0.14 + input.turnContext.turnCommitment * 0.12, 0.04, 0.26) *
+    lerp(1.08, 0.82, speedRatio);
+  const bodyLeadHeading = wrapAngle(
+    input.bodyHeading + shortestAngleDelta(input.bodyHeading, input.steeringHeading) * steeringLead
+  );
+  const alignmentBlend = clamp(
+    lerp(0.74, 0.5, speedRatio) + input.turnContext.smallCorrection * 0.12 - input.turnContext.activeCarve * 0.16,
+    0.34,
+    0.84
+  );
+  return wrapAngle(
+    input.alignmentHeading + shortestAngleDelta(input.alignmentHeading, bodyLeadHeading) * alignmentBlend
+  );
+}
+
+function applyDirectionalDrive(input: {
+  vx: number;
+  vy: number;
+  driveHeading: number;
+  targetSpeed: number;
+  acceleration: number;
+  deceleration: number;
+  dt: number;
+}) {
+  const driveX = Math.cos(input.driveHeading);
+  const driveY = Math.sin(input.driveHeading);
+  const forwardSpeed = input.vx * driveX + input.vy * driveY;
+  const nextForwardSpeed = approachSpeed(
+    forwardSpeed,
+    input.targetSpeed,
+    input.acceleration * (forwardSpeed < 0 ? 1.12 : 1),
+    input.deceleration * (forwardSpeed < 0 ? 1.22 : 1),
+    input.dt
+  );
+  const forwardDelta = nextForwardSpeed - forwardSpeed;
+
+  return {
+    x: input.vx + driveX * forwardDelta,
+    y: input.vy + driveY * forwardDelta
+  };
+}
+
+function computeLateralDecay(input: {
+  speed: number;
+  moveSpeed: number;
+  passiveDeceleration: number;
+  responsePenalty: number;
+  alignmentMismatch: number;
+  travelAlignmentError: number;
+  bodyTravelMismatch: number;
+  turnContext: TurnContext;
+}) {
+  const speedRatio = clamp(input.speed / Math.max(1, input.moveSpeed), 0, 1);
+  const responseTurn = clamp((1 - input.responsePenalty) / 0.28, 0, 1);
+  const coherenceError = clamp(
+    Math.max(input.alignmentMismatch, input.travelAlignmentError) / (Math.PI * 0.36),
+    0,
+    1
+  );
+  const bodyRecovery = clamp((input.bodyTravelMismatch - Math.PI * 0.24) / (Math.PI * 0.18), 0, 1);
+  const baseDecay = (input.passiveDeceleration + input.moveSpeed * 0.28) * lerp(1.24, 0.7, speedRatio);
+  const smallCorrectionTighten = lerp(1, 1.28, input.turnContext.smallCorrection);
+  const committedCarry = lerp(1, 0.78, input.turnContext.turnCommitment);
+  const activeCarveCarry = lerp(1, 0.62, input.turnContext.activeCarve);
+  const redirectCarry = lerp(1, 0.9, responseTurn);
+  const coherenceRecovery = lerp(
+    1,
+    2.9,
+    Math.max(coherenceError * lerp(1, 0.72, input.turnContext.activeCarve), bodyRecovery)
+  );
+
+  return baseDecay * smallCorrectionTighten * committedCarry * activeCarveCarry * redirectCarry * coherenceRecovery;
+}
+
+function dampVelocityLateralComponent(vx: number, vy: number, heading: number, decay: number, dt: number) {
+  const forwardX = Math.cos(heading);
+  const forwardY = Math.sin(heading);
+  const lateralX = -forwardY;
+  const lateralY = forwardX;
+  const forwardSpeed = vx * forwardX + vy * forwardY;
+  const lateralSpeed = vx * lateralX + vy * lateralY;
+  const nextLateralSpeed = moveTowards(lateralSpeed, 0, Math.max(0, decay) * Math.max(0, dt));
+
+  return {
+    x: forwardX * forwardSpeed + lateralX * nextLateralSpeed,
+    y: forwardY * forwardSpeed + lateralY * nextLateralSpeed
+  };
+}
+
+function dampVelocityMagnitude(vx: number, vy: number, amount: number) {
+  const speed = Math.hypot(vx, vy);
+  if (speed <= 0 || amount <= 0) {
+    return { x: vx, y: vy };
+  }
+
+  const nextSpeed = Math.max(0, speed - amount);
+  return setVelocityMagnitude(vx, vy, nextSpeed, Math.atan2(vy, vx));
+}
+
+function setVelocityMagnitude(vx: number, vy: number, magnitude: number, fallbackHeading: number) {
+  const speed = Math.hypot(vx, vy);
+  if (magnitude <= 0) {
+    return { x: 0, y: 0 };
+  }
+  if (speed <= 0) {
+    return {
+      x: Math.cos(fallbackHeading) * magnitude,
+      y: Math.sin(fallbackHeading) * magnitude
+    };
+  }
+
+  const scale = magnitude / speed;
+  return {
+    x: vx * scale,
+    y: vy * scale
+  };
+}
+
+function clampVelocityMagnitude(vx: number, vy: number, maxMagnitude: number) {
+  const speed = Math.hypot(vx, vy);
+  if (speed <= maxMagnitude) {
+    return { x: vx, y: vy };
+  }
+  return setVelocityMagnitude(vx, vy, maxMagnitude, Math.atan2(vy, vx));
+}
+
 type TurnContext = {
   turnMagnitude: number;
   inputHold: number;
@@ -491,4 +670,11 @@ function clamp(value: number, min: number, max: number) {
 
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
+}
+
+function moveTowards(current: number, target: number, maxDelta: number) {
+  if (current < target) {
+    return Math.min(target, current + maxDelta);
+  }
+  return Math.max(target, current - maxDelta);
 }
