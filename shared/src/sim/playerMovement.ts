@@ -137,6 +137,7 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
   });
   const forwardAlignment = resolveForwardTravelAlignment({
     bodyHeading: bodyTurn.heading,
+    desiredTravelHeading: steeringHeading,
     travelHeading: steering.travelHeading,
     speed: currentSpeed,
     maxSpeed: config.moveSpeed
