@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { renderStick } from '../render/stickRenderer';
-import { computeStickPose, type StickPose } from '../stick/stickRig';
+import { computeStickPose, resolveStickMode, type StickMode, type StickPose } from '../stick/stickRig';
 import { lerpAngle, wrapToPi } from '../util/math';
 
 export class PlayerView {
@@ -13,6 +13,8 @@ export class PlayerView {
   private displayRot = 0;
   private hasDisplayRot = false;
   private stickPose: StickPose | null = null;
+  private stickMode: StickMode = 'idle';
+  private stickModeOverride: StickMode | null = null;
 
   x = 0;
   y = 0;
@@ -91,16 +93,32 @@ export class PlayerView {
     this.debugDrawEnabled = enabled;
   }
 
-  getStickPose(): StickPose {
+  setStickMode(mode: StickMode | null) {
+    this.stickModeOverride = mode;
+    this.stickPose = null;
+  }
+
+  getStickMode() {
+    return this.stickMode;
+  }
+
+  getStickPose(): StickPose | null {
     if (!this.stickPose) {
-      this.stickPose = computeStickPose(this.x, this.y, this.aimRot);
+      this.stickPose = this.resolveStickPose();
     }
     return this.stickPose;
   }
 
   getStickBladeWorld() {
     const pose = this.getStickPose();
-    return { x: pose.bladeX, y: pose.bladeY };
+    if (!pose) return null;
+    return { x: pose.bladeTipX, y: pose.bladeTipY };
+  }
+
+  getStickReachWorld() {
+    const pose = this.getStickPose();
+    if (!pose) return null;
+    return { x: pose.reachCenterX, y: pose.reachCenterY };
   }
 
   getStickBaseWorld(_aimRot?: number, _stickOffsetX?: number, _stickOffsetY?: number) {
@@ -120,7 +138,7 @@ export class PlayerView {
     }
 
     this.body.rotation = this.displayRot + PlayerView.SPRITE_FORWARD_OFFSET_RAD;
-    this.stickPose = computeStickPose(this.x, this.y, this.aimRot);
+    this.stickPose = this.resolveStickPose();
     this.stickBehind.clear();
     this.stickFront.clear();
     renderStick(
@@ -142,5 +160,17 @@ export class PlayerView {
 
   destroy() {
     this.root.destroy();
+  }
+
+  private resolveStickPose(): StickPose {
+    const bodyFacingAngle = this.hasDisplayRot ? this.displayRot : this.rot;
+    this.stickMode = this.stickModeOverride ?? resolveStickMode(bodyFacingAngle, this.aimRot);
+    return computeStickPose({
+      playerX: this.x,
+      playerY: this.y,
+      bodyFacingAngle,
+      desiredAimAngle: this.aimRot,
+      mode: this.stickMode
+    });
   }
 }

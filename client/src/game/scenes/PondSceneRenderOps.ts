@@ -27,7 +27,7 @@ export function updateCrosshairAndCursor(scene: any) {
 }
 
 function stickTargetScreen(view: PlayerView) {
-  return view.getStickBladeWorld();
+  return view.getStickBladeWorld() ?? { x: view.x, y: view.y };
 }
 
 export function updateAndDrawPuck(scene: any, dtSec: number, remoteTargetServerTime: number) {

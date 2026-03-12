@@ -12,10 +12,12 @@ export function renderStick(
 ) {
   const pivotX = pose.pivotX - playerX;
   const pivotY = pose.pivotY - playerY;
-  const shaftEndX = pivotX + Math.cos(pose.angle) * pose.shaftLength;
-  const shaftEndY = pivotY + Math.sin(pose.angle) * pose.shaftLength;
-  const bladeX = pose.bladeX - playerX;
-  const bladeY = pose.bladeY - playerY;
+  const shaftEndX = pose.shaftEndX - playerX;
+  const shaftEndY = pose.shaftEndY - playerY;
+  const bladeBaseX = pose.bladeBaseX - playerX;
+  const bladeBaseY = pose.bladeBaseY - playerY;
+  const bladeTipX = pose.bladeTipX - playerX;
+  const bladeTipY = pose.bladeTipY - playerY;
 
   graphics.clear();
 
@@ -28,10 +30,10 @@ export function renderStick(
   graphics.fillCircle(shaftEndX, shaftEndY, STICK_CONFIG.shaftThickness * 0.55);
 
   graphics.lineStyle(STICK_CONFIG.bladeThickness + 2, 0x11161c, 0.16);
-  graphics.lineBetween(shaftEndX, shaftEndY, bladeX, bladeY);
+  graphics.lineBetween(bladeBaseX, bladeBaseY, bladeTipX, bladeTipY);
   graphics.lineStyle(STICK_CONFIG.bladeThickness, BLADE_COLOR, 1);
-  graphics.lineBetween(shaftEndX, shaftEndY, bladeX, bladeY);
+  graphics.lineBetween(bladeBaseX, bladeBaseY, bladeTipX, bladeTipY);
   graphics.fillStyle(BLADE_COLOR, 1);
-  graphics.fillCircle(shaftEndX, shaftEndY, STICK_CONFIG.bladeThickness * 0.5);
-  graphics.fillCircle(bladeX, bladeY, STICK_CONFIG.bladeThickness * 0.48);
+  graphics.fillCircle(bladeBaseX, bladeBaseY, STICK_CONFIG.bladeThickness * 0.5);
+  graphics.fillCircle(bladeTipX, bladeTipY, STICK_CONFIG.bladeThickness * 0.48);
 }
