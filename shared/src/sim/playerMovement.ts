@@ -201,9 +201,19 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
     currentSpeed,
     config.moveSpeed
   );
-  const driveScale = Math.min(driveFactor, bodyDriveFactor, intentFlipDriveFactor);
+  const accelerationResponse = resolveAccelerationResponse({
+    speed: currentSpeed,
+    moveSpeed: config.moveSpeed,
+    turnContext: resolvedTurnContext
+  });
+  const driveScale = clamp(
+    Math.min(driveFactor, bodyDriveFactor, intentFlipDriveFactor) + accelerationResponse.driveScaleLift,
+    0,
+    1
+  );
   const targetSpeed = resolveTargetSpeed(hasMovement, config) * driveScale;
-  const acceleration = config.acceleration * lerp(0.26, 1, driveScale);
+  const acceleration =
+    config.acceleration * lerp(0.28, 1.02, driveScale) * (1 + accelerationResponse.accelerationBoost);
   const carveBonus = computeCarveBonus(
     steering,
     bodyTurn,
@@ -212,7 +222,8 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
     currentSpeed,
     config
   );
-  const driveTargetSpeed = targetSpeed * lerp(0.78, 1, responsePenalty) * (1 + carveBonus);
+  const driveTargetSpeed =
+    targetSpeed * lerp(0.78, 1, responsePenalty) * (1 + carveBonus + accelerationResponse.driveTargetBoost);
   const driveDeceleration =
     (config.passiveDeceleration + config.moveSpeed * (1 - responsePenalty) * 0.05) *
     lerp(1, 0.84, resolvedTurnContext.activeCarve);
@@ -235,6 +246,7 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
           targetSpeed: driveTargetSpeed,
           acceleration,
           deceleration: driveDeceleration,
+          pickupBoost: accelerationResponse.entryPickup,
           dt
         });
   const drivenSpeed = Math.hypot(drivenVelocity.x, drivenVelocity.y);
@@ -257,7 +269,12 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
     : dampVelocityLateralComponent(drivenVelocity.x, drivenVelocity.y, forwardAlignment.travelHeading, lateralDecay, dt);
   const turnDrag = stopRequested.stopRequested
     ? 0
-    : config.moveSpeed * (1 - responsePenalty) * Math.max(0, dt) * 0.01 * lerp(1, 0.84, resolvedTurnContext.activeCarve);
+    : config.moveSpeed *
+        (1 - responsePenalty) *
+        Math.max(0, dt) *
+        0.01 *
+        lerp(1, 0.88, accelerationResponse.turnDragRelief) *
+        lerp(1, 0.84, resolvedTurnContext.activeCarve);
   const draggedVelocity = turnDrag > 0 ? dampVelocityMagnitude(alignedVelocity.x, alignedVelocity.y, turnDrag) : alignedVelocity;
   const speedCap =
     stopRequested.stopRequested || !hasMovement
@@ -474,6 +491,24 @@ function computeCarveBonus(
   );
 }
 
+function resolveAccelerationResponse(input: {
+  speed: number;
+  moveSpeed: number;
+  turnContext: TurnContext;
+}) {
+  const lowSpeedPickup = clamp(1 - input.speed / (Math.max(1, input.moveSpeed) * 0.44), 0, 1);
+  const redirectEntry = input.turnContext.turnCommitment * clamp(1 - input.turnContext.turnDevelopment / 0.58, 0, 1);
+  const redirectPickup = redirectEntry * lerp(0.3, 1, clamp(input.speed / (Math.max(1, input.moveSpeed) * 0.22), 0, 1));
+
+  return {
+    entryPickup: clamp(lowSpeedPickup * 0.85 + redirectPickup, 0, 1),
+    driveScaleLift: lowSpeedPickup * 0.035 + redirectPickup * 0.06,
+    accelerationBoost: lowSpeedPickup * 0.16 + redirectPickup * 0.14,
+    driveTargetBoost: lowSpeedPickup * 0.035 + redirectPickup * 0.05,
+    turnDragRelief: lowSpeedPickup * 0.04 + redirectPickup * 0.12
+  };
+}
+
 function resolveDriveHeading(input: {
   bodyHeading: number;
   steeringHeading: number;
@@ -506,15 +541,18 @@ function applyDirectionalDrive(input: {
   targetSpeed: number;
   acceleration: number;
   deceleration: number;
+  pickupBoost: number;
   dt: number;
 }) {
   const driveX = Math.cos(input.driveHeading);
   const driveY = Math.sin(input.driveHeading);
   const forwardSpeed = input.vx * driveX + input.vy * driveY;
+  const launchWindow = clamp(1 - Math.max(0, forwardSpeed) / Math.max(1, input.targetSpeed * 0.58), 0, 1);
+  const pickupAccelerationBoost = 1 + input.pickupBoost * lerp(0.08, 0.24, launchWindow);
   const nextForwardSpeed = approachSpeed(
     forwardSpeed,
     input.targetSpeed,
-    input.acceleration * (forwardSpeed < 0 ? 1.12 : 1),
+    input.acceleration * pickupAccelerationBoost * (forwardSpeed < 0 ? 1.12 : 1),
     input.deceleration * (forwardSpeed < 0 ? 1.22 : 1),
     input.dt
   );
