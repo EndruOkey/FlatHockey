@@ -1,13 +1,18 @@
 import Phaser from 'phaser';
+import { renderStick } from '../render/stickRenderer';
+import { computeStickPose, type StickPose } from '../stick/stickRig';
 import { lerpAngle, wrapToPi } from '../util/math';
 
 export class PlayerView {
   private root: Phaser.GameObjects.Container;
   private body: Phaser.GameObjects.Image;
+  private stickBehind: Phaser.GameObjects.Graphics;
+  private stickFront: Phaser.GameObjects.Graphics;
   private debugGfx: Phaser.GameObjects.Graphics;
   private debugDrawEnabled = false;
   private displayRot = 0;
   private hasDisplayRot = false;
+  private stickPose: StickPose | null = null;
 
   x = 0;
   y = 0;
@@ -20,10 +25,12 @@ export class PlayerView {
     PlayerView.ensureAvatarTexture(scene);
 
     this.root = scene.add.container(0, 0);
+    this.stickBehind = scene.add.graphics();
     this.body = scene.add.image(0, 0, 'playerHuman');
+    this.stickFront = scene.add.graphics();
     this.body.setOrigin(0.5, 0.5);
     this.debugGfx = scene.add.graphics();
-    this.root.add([this.body, this.debugGfx]);
+    this.root.add([this.stickBehind, this.body, this.stickFront, this.debugGfx]);
   }
 
   private static ensureAvatarTexture(scene: Phaser.Scene) {
@@ -77,15 +84,27 @@ export class PlayerView {
     this.y = y;
     this.rot = rot;
     this.aimRot = typeof aimRot === 'number' ? aimRot : rot;
+    this.stickPose = null;
   }
 
   setDebugDrawEnabled(enabled: boolean) {
     this.debugDrawEnabled = enabled;
   }
 
-  getStickBaseWorld(_aimRot: number, _stickOffsetX: number, _stickOffsetY: number) {
-    // Stick was removed from visuals; gameplay anchor is player root.
-    return { x: this.x, y: this.y };
+  getStickPose(): StickPose {
+    if (!this.stickPose) {
+      this.stickPose = computeStickPose(this.x, this.y, this.aimRot);
+    }
+    return this.stickPose;
+  }
+
+  getStickBladeWorld() {
+    const pose = this.getStickPose();
+    return { x: pose.bladeX, y: pose.bladeY };
+  }
+
+  getStickBaseWorld(_aimRot?: number, _stickOffsetX?: number, _stickOffsetY?: number) {
+    return this.getStickBladeWorld();
   }
 
   draw(_dtSec = 1 / 60) {
@@ -101,6 +120,15 @@ export class PlayerView {
     }
 
     this.body.rotation = this.displayRot + PlayerView.SPRITE_FORWARD_OFFSET_RAD;
+    this.stickPose = computeStickPose(this.x, this.y, this.aimRot);
+    this.stickBehind.clear();
+    this.stickFront.clear();
+    renderStick(
+      this.stickPose.behindBody ? this.stickBehind : this.stickFront,
+      this.stickPose,
+      this.x,
+      this.y
+    );
 
     if (!this.debugDrawEnabled) {
       this.debugGfx.clear();

@@ -27,8 +27,7 @@ export function updateCrosshairAndCursor(scene: any) {
 }
 
 function stickTargetScreen(view: PlayerView) {
-  const tuning = puckStickTuningStore.get();
-  return view.getStickBaseWorld(view.aimRot, tuning.stickOffsetX, tuning.stickOffsetY);
+  return view.getStickBladeWorld();
 }
 
 export function updateAndDrawPuck(scene: any, dtSec: number, remoteTargetServerTime: number) {

@@ -108,11 +108,8 @@ export function runPondSceneUpdate(scene: any) {
           scene.localRenderState.x = state.x;
           scene.localRenderState.y = state.y;
           scene.localRenderState.rot = scene.lerpAngle(scene.localRenderState.rot, state.rot, alpha);
-          scene.localRenderState.aimRot = scene.lerpAngle(
-            scene.localRenderState.aimRot ?? state.aimRot ?? state.rot,
-            state.aimRot ?? state.rot,
-            alpha
-          );
+          // Keep local stick aim locked to current mouse-driven intent instead of visual body smoothing.
+          scene.localRenderState.aimRot = state.aimRot ?? state.rot;
         }
         state = scene.localRenderState;
       }
