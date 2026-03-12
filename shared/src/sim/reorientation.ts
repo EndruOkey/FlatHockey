@@ -36,9 +36,10 @@ export function resolveForwardHeadingTarget(input: ForwardHeadingTargetInput): F
 
 export function resolveForwardTravelAlignment(input: ForwardTravelAlignmentInput): ForwardTravelAlignment {
   const speedRatio = clamp(input.speed / Math.max(1, input.maxSpeed), 0, 1);
-  const maxMismatch = lerp(Math.PI * 0.4, Math.PI * 0.495, Math.pow(speedRatio, 0.9));
+  const maxMismatch = lerp(Math.PI * 0.425, Math.PI * 0.54, Math.pow(speedRatio, 0.8));
   const rawDelta = shortestAngleDelta(input.bodyHeading, input.travelHeading);
-  const softenedDelta = maxMismatch * Math.tanh(rawDelta / Math.max(0.0001, maxMismatch));
+  const carryBias = lerp(1.02, 1.1, speedRatio);
+  const softenedDelta = maxMismatch * Math.tanh((rawDelta * carryBias) / Math.max(0.0001, maxMismatch));
 
   return {
     travelHeading: wrapAngle(input.bodyHeading + softenedDelta),

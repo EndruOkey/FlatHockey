@@ -1,11 +1,11 @@
 import type { MovementAxis } from './movementTypes';
 
 const TWO_PI = Math.PI * 2;
-const DIAGONAL_ROTATION_MULTIPLIER = 0.95;
+const DIAGONAL_ROTATION_MULTIPLIER = 1;
 const DIAGONAL_TRACTION_MULTIPLIER = 0.95;
-const DIAGONAL_DESIRED_SLEW_MULTIPLIER = 0.97;
-const HIGH_SPEED_TRACTION_MULTIPLIER = 0.17;
-const LOW_SPEED_TRACTION_MULTIPLIER = 0.64;
+const DIAGONAL_DESIRED_SLEW_MULTIPLIER = 1.02;
+const HIGH_SPEED_TRACTION_MULTIPLIER = 0.135;
+const LOW_SPEED_TRACTION_MULTIPLIER = 0.635;
 const STOP_TRACTION_MULTIPLIER = 1.18;
 
 export type BodyTurnInput = {
@@ -65,12 +65,14 @@ export function advanceSteeringTarget(input: {
   diagonal: boolean;
 }) {
   const speedRatio = clamp(input.speed / Math.max(1, input.maxSpeed), 0, 1);
-  let slewRate = lerp(7.8, 4.9, speedRatio);
+  let slewRate = lerp(9.2, 6.2, speedRatio);
   if (input.diagonal) {
     slewRate *= DIAGONAL_DESIRED_SLEW_MULTIPLIER;
   }
 
   const delta = shortestAngleDelta(input.steeringHeading, input.rawDesiredHeading);
+  const mismatchRatio = clamp(Math.abs(delta) / (Math.PI * 0.42), 0, 1);
+  slewRate *= lerp(1, 1.18, mismatchRatio);
   const maxStep = Math.max(0, slewRate * Math.max(0, input.dt));
   return wrapAngle(input.steeringHeading + clamp(delta, -maxStep, maxStep));
 }
@@ -86,6 +88,9 @@ export function computeBodyTurn(input: BodyTurnInput): BodyTurnResult {
   turnRate *= Math.max(0.1, input.rotationMultiplier ?? 1);
 
   const delta = shortestAngleDelta(input.currentHeading, desiredHeading);
+  const mismatchRatio = clamp(Math.abs(delta) / (Math.PI * 0.5), 0, 1);
+  const commitBoost = lerp(1.04, 1.12, speedRatio);
+  turnRate *= lerp(1, commitBoost, mismatchRatio);
   const maxStep = Math.max(0, turnRate * Math.max(0, input.dt));
   const appliedDelta = clamp(delta, -maxStep, maxStep);
   const heading = wrapAngle(input.currentHeading + appliedDelta);
@@ -123,9 +128,9 @@ export function computeTravelSteering(input: TravelSteeringInput): TravelSteerin
     steeringDelta,
     steeringRate,
     mismatch,
-    turnPenaltyMultiplier: clamp(1 - input.turnPenalty * Math.pow(normalizedMismatch, 1.4), 0.72, 1),
+    turnPenaltyMultiplier: clamp(1 - input.turnPenalty * Math.pow(normalizedMismatch, 1.55), 0.74, 1),
     carveFactor: clamp(
-      (Math.abs(steeringDelta) / Math.max(maxStep, 0.0001)) * speedRatio * Math.max(0, 1 - normalizedMismatch * 0.9),
+      (Math.abs(steeringDelta) / Math.max(maxStep, 0.0001)) * speedRatio * Math.max(0, 1 - normalizedMismatch * 0.75),
       0,
       1
     )

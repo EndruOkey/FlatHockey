@@ -14,8 +14,8 @@ import type {
   RinkBounds
 } from './movementTypes';
 
-const MAX_CARVE_BONUS = 0.065;
-const SMALL_SPEED_EPSILON = 6;
+const MAX_CARVE_BONUS = 0.092;
+const SMALL_SPEED_EPSILON = 5;
 
 export const DEFAULT_RINK_BOUNDS: RinkBounds = {
   left: -560,
@@ -173,19 +173,19 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
   );
   const driveScale = Math.min(driveFactor, bodyDriveFactor, intentFlipDriveFactor);
   const targetSpeed = resolveTargetSpeed(hasMovement, config) * driveScale;
-  const acceleration = config.acceleration * lerp(0.18, 1, driveScale);
+  const acceleration = config.acceleration * lerp(0.26, 1, driveScale);
   const baseSpeed = stopRequested.stopRequested
     ? stop.speed
     : approachSpeed(
         currentSpeed,
         targetSpeed * lerp(0.78, 1, responsePenalty) * (1 + computeCarveBonus(steering, bodyTurn, forwardAlignment.mismatch, currentSpeed, config)),
         acceleration,
-        config.passiveDeceleration + config.moveSpeed * (1 - responsePenalty) * 0.08,
+        config.passiveDeceleration + config.moveSpeed * (1 - responsePenalty) * 0.05,
         dt
       );
   const turnDrag = stopRequested.stopRequested
     ? 0
-    : config.moveSpeed * (1 - responsePenalty) * Math.max(0, dt) * 0.03;
+    : config.moveSpeed * (1 - responsePenalty) * Math.max(0, dt) * 0.018;
   let nextSpeed = Math.max(0, baseSpeed - turnDrag);
 
   if (!hasMovement && !stopRequested.stopRequested) {
@@ -363,7 +363,7 @@ function computeIntentPenalty(
 
 function computeForwardAlignmentPenalty(mismatch: number) {
   const normalized = clamp(mismatch / (Math.PI * 0.5), 0, 1);
-  return clamp(1 - 0.24 * Math.pow(normalized, 1.25), 0.72, 1);
+  return clamp(1 - 0.17 * Math.pow(normalized, 1.1), 0.82, 1);
 }
 
 function approachSpeed(current: number, target: number, acceleration: number, deceleration: number, dt: number) {
@@ -387,8 +387,8 @@ function computeCarveBonus(
     0,
     1
   );
-  const driftWindow = clamp(alignmentMismatch / (Math.PI * 0.14), 0, 1) * clamp(1 - alignmentMismatch / (Math.PI * 0.52), 0, 1);
-  const bodySettle = clamp(1 - Math.abs(bodyTurn.remainingAngle) / (Math.PI * 0.7), 0, 1);
+  const driftWindow = clamp(alignmentMismatch / (Math.PI * 0.1), 0, 1) * clamp(1 - alignmentMismatch / (Math.PI * 0.68), 0, 1);
+  const bodySettle = clamp(1 - Math.abs(bodyTurn.remainingAngle) / (Math.PI * 0.92), 0, 1);
   return clamp(
     config.carveResponse * steering.carveFactor * bodyTurnRatio * speedRatio * driftWindow * bodySettle,
     0,
