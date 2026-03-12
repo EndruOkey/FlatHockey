@@ -1,6 +1,14 @@
 import Phaser from 'phaser';
 import { renderStick } from '../render/stickRenderer';
-import { computeStickPose, resolveStickMode, type StickMode, type StickPose } from '../stick/stickRig';
+import {
+  STICK_CONFIG,
+  computeStickPose,
+  resolveStickMode,
+  resolveStickSideBlend,
+  resolveStickTargetState,
+  type StickMode,
+  type StickPose
+} from '../stick/stickRig';
 import { lerpAngle, wrapToPi } from '../util/math';
 
 export class PlayerView {
@@ -15,6 +23,10 @@ export class PlayerView {
   private stickPose: StickPose | null = null;
   private stickMode: StickMode = 'idle';
   private stickModeOverride: StickMode | null = null;
+  private currentStickRelativeAngle = 0;
+  private currentSideBlend = 1;
+  private preferredStickSide: -1 | 1 = 1;
+  private hasStickRuntime = false;
 
   x = 0;
   y = 0;
@@ -104,7 +116,7 @@ export class PlayerView {
 
   getStickPose(): StickPose | null {
     if (!this.stickPose) {
-      this.stickPose = this.resolveStickPose();
+      this.stickPose = this.resolveStickPose(1 / 60);
     }
     return this.stickPose;
   }
@@ -138,7 +150,7 @@ export class PlayerView {
     }
 
     this.body.rotation = this.displayRot + PlayerView.SPRITE_FORWARD_OFFSET_RAD;
-    this.stickPose = this.resolveStickPose();
+    this.stickPose = this.resolveStickPose(_dtSec);
     this.stickBehind.clear();
     this.stickFront.clear();
     renderStick(
@@ -162,15 +174,65 @@ export class PlayerView {
     this.root.destroy();
   }
 
-  private resolveStickPose(): StickPose {
+  private resolveStickPose(dtSec: number): StickPose {
     const bodyFacingAngle = this.hasDisplayRot ? this.displayRot : this.rot;
     this.stickMode = this.stickModeOverride ?? resolveStickMode(bodyFacingAngle, this.aimRot);
+    this.ensureStickRuntime(bodyFacingAngle);
+    const targetState = resolveStickTargetState(bodyFacingAngle, this.aimRot);
+    const safeDtSec = Math.max(0, dtSec);
+    const maxRelativeStep = STICK_CONFIG.maxStickAngularSpeed * safeDtSec;
+    this.currentStickRelativeAngle = moveTowards(
+      this.currentStickRelativeAngle,
+      targetState.targetRelativeAngle,
+      maxRelativeStep
+    );
+    this.updatePreferredStickSide();
+    const targetSideBlend = resolveStickSideBlend(this.currentStickRelativeAngle);
+    this.currentSideBlend = moveTowards(
+      this.currentSideBlend,
+      targetSideBlend,
+      STICK_CONFIG.sideBlendSpeed * safeDtSec
+    );
+    const finalStickAngle = wrapToPi(bodyFacingAngle + this.currentStickRelativeAngle);
+
     return computeStickPose({
       playerX: this.x,
       playerY: this.y,
       bodyFacingAngle,
       desiredAimAngle: this.aimRot,
+      finalStickAngle,
+      sideBlend: this.currentSideBlend,
+      preferredSide: this.preferredStickSide,
       mode: this.stickMode
     });
   }
+
+  private ensureStickRuntime(bodyFacingAngle: number) {
+    if (this.hasStickRuntime) return;
+
+    const targetState = resolveStickTargetState(bodyFacingAngle, this.aimRot);
+    this.currentStickRelativeAngle = targetState.targetRelativeAngle;
+    this.preferredStickSide = targetState.targetRelativeAngle < 0 ? -1 : 1;
+    this.currentSideBlend = resolveStickSideBlend(this.currentStickRelativeAngle);
+    this.hasStickRuntime = true;
+  }
+
+  private updatePreferredStickSide() {
+    const hysteresis = STICK_CONFIG.sideSwitchHysteresisRad;
+    if (this.currentStickRelativeAngle > hysteresis) {
+      this.preferredStickSide = 1;
+      return;
+    }
+    if (this.currentStickRelativeAngle < -hysteresis) {
+      this.preferredStickSide = -1;
+      return;
+    }
+  }
+}
+
+function moveTowards(current: number, target: number, maxDelta: number) {
+  if (current < target) {
+    return Math.min(target, current + maxDelta);
+  }
+  return Math.max(target, current - maxDelta);
 }
