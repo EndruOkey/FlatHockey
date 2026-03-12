@@ -86,7 +86,6 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
   const moveY = sanitizeMovementAxis(input.moveY);
   const moveLength = Math.hypot(moveX, moveY);
   const hasMovement = moveLength > 0;
-  const diagonal = moveX !== 0 && moveY !== 0;
   const currentSpeed = Math.hypot(state.vx, state.vy);
   const currentHeading = resolveHeading(state.angle, 0);
   const previousDesiredHeading = resolveHeading(state.desiredHeading, currentHeading);
@@ -102,8 +101,7 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
         rawDesiredHeading,
         speed: currentSpeed,
         maxSpeed: config.moveSpeed,
-        dt,
-        diagonal
+        dt
       })
     : currentHeading;
   const stopRequested = shouldTriggerHockeyStop(isPressed(input.stop));
@@ -119,7 +117,6 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
     speed: currentSpeed,
     maxSpeed: config.moveSpeed,
     dt,
-    diagonal,
     rotationSpeed: config.rotationSpeed,
     lowSpeedRotationSpeed: config.lowSpeedRotationSpeed,
     rotationMultiplier: stop.rotationMultiplier
@@ -131,7 +128,6 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
     maxSpeed: config.moveSpeed,
     dt,
     traction: config.traction * stop.tractionMultiplier,
-    diagonal,
     stopActive: stopRequested.stopRequested,
     turnPenalty: config.turnPenalty
   });

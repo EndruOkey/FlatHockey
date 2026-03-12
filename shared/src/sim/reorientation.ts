@@ -58,10 +58,10 @@ function resolveWrongSideRecovery(travelDelta: number, desiredDelta: number, spe
   if (travelDelta === 0 || desiredDelta === 0) return travelDelta;
   if (Math.sign(travelDelta) === Math.sign(desiredDelta)) return travelDelta;
 
-  const commit = clamp((Math.abs(desiredDelta) - Math.PI * 0.05) / (Math.PI * 0.25), 0, 1);
-  const lateralSeverity = clamp(Math.abs(travelDelta) / (Math.PI * 0.35), 0, 1);
-  const recovery = commit * lerp(0.25, 0.95, speedRatio) * lerp(0.7, 1, lateralSeverity);
-  return travelDelta * lerp(1, 0.12, recovery);
+  const oppositeSideGap = Math.abs(travelDelta) + Math.abs(desiredDelta);
+  const incoherence = clamp((oppositeSideGap - Math.PI * 0.18) / (Math.PI * 0.38), 0, 1);
+  const recovery = incoherence * lerp(0.18, 0.82, speedRatio);
+  return travelDelta * lerp(1, 0.18, recovery);
 }
 
 function clamp(value: number, min: number, max: number) {

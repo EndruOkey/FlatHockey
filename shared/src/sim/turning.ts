@@ -1,9 +1,6 @@
 import type { MovementAxis } from './movementTypes';
 
 const TWO_PI = Math.PI * 2;
-const DIAGONAL_ROTATION_MULTIPLIER = 1;
-const DIAGONAL_TRACTION_MULTIPLIER = 0.95;
-const DIAGONAL_DESIRED_SLEW_MULTIPLIER = 1.02;
 const HIGH_SPEED_TRACTION_MULTIPLIER = 0.135;
 const LOW_SPEED_TRACTION_MULTIPLIER = 0.635;
 const STOP_TRACTION_MULTIPLIER = 1.18;
@@ -14,7 +11,6 @@ export type BodyTurnInput = {
   speed: number;
   maxSpeed: number;
   dt: number;
-  diagonal: boolean;
   rotationSpeed: number;
   lowSpeedRotationSpeed: number;
   rotationMultiplier?: number;
@@ -36,7 +32,6 @@ export type TravelSteeringInput = {
   maxSpeed: number;
   dt: number;
   traction: number;
-  diagonal: boolean;
   stopActive: boolean;
   turnPenalty: number;
 };
@@ -62,13 +57,9 @@ export function advanceSteeringTarget(input: {
   speed: number;
   maxSpeed: number;
   dt: number;
-  diagonal: boolean;
 }) {
   const speedRatio = clamp(input.speed / Math.max(1, input.maxSpeed), 0, 1);
   let slewRate = lerp(9.2, 6.2, speedRatio);
-  if (input.diagonal) {
-    slewRate *= DIAGONAL_DESIRED_SLEW_MULTIPLIER;
-  }
 
   const delta = shortestAngleDelta(input.steeringHeading, input.rawDesiredHeading);
   const mismatchRatio = clamp(Math.abs(delta) / (Math.PI * 0.42), 0, 1);
@@ -81,10 +72,6 @@ export function computeBodyTurn(input: BodyTurnInput): BodyTurnResult {
   const desiredHeading = wrapAngle(input.desiredHeading);
   const speedRatio = clamp(input.speed / Math.max(1, input.maxSpeed), 0, 1);
   let turnRate = lerp(input.lowSpeedRotationSpeed, input.rotationSpeed, speedRatio);
-
-  if (input.diagonal) {
-    turnRate *= DIAGONAL_ROTATION_MULTIPLIER;
-  }
   turnRate *= Math.max(0.1, input.rotationMultiplier ?? 1);
 
   const delta = shortestAngleDelta(input.currentHeading, desiredHeading);
@@ -108,10 +95,6 @@ export function computeBodyTurn(input: BodyTurnInput): BodyTurnResult {
 export function computeTravelSteering(input: TravelSteeringInput): TravelSteeringResult {
   const speedRatio = clamp(input.speed / Math.max(1, input.maxSpeed), 0, 1);
   let steeringRate = input.traction * lerp(LOW_SPEED_TRACTION_MULTIPLIER, HIGH_SPEED_TRACTION_MULTIPLIER, speedRatio);
-
-  if (input.diagonal) {
-    steeringRate *= DIAGONAL_TRACTION_MULTIPLIER;
-  }
   if (input.stopActive) {
     steeringRate *= STOP_TRACTION_MULTIPLIER;
   }
