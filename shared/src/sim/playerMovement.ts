@@ -95,15 +95,37 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
   const rawDesiredHeading = hasMovement
     ? computeDesiredHeading(moveX, moveY, currentTravelHeading)
     : currentTravelHeading;
+  const turnContext = resolveTurnContext({
+    hasMovement,
+    currentHeading,
+    currentTravelHeading,
+    desiredHeading: rawDesiredHeading,
+    rawDesiredHeading,
+    previousInputHeading,
+    speed: currentSpeed,
+    moveSpeed: config.moveSpeed
+  });
   const steeringHeading = hasMovement
     ? advanceSteeringTarget({
         steeringHeading: previousSteeringHeading,
         rawDesiredHeading,
         speed: currentSpeed,
         maxSpeed: config.moveSpeed,
-        dt
+        dt,
+        inputHold: turnContext.inputHold,
+        smallCorrection: turnContext.smallCorrection
       })
     : currentHeading;
+  const resolvedTurnContext = resolveTurnContext({
+    hasMovement,
+    currentHeading,
+    currentTravelHeading,
+    desiredHeading: steeringHeading,
+    rawDesiredHeading,
+    previousInputHeading,
+    speed: currentSpeed,
+    moveSpeed: config.moveSpeed
+  });
   const stopRequested = shouldTriggerHockeyStop(isPressed(input.stop));
   const stop = applyHockeyStop(currentSpeed, dt, config.stopDeceleration, stopRequested.stopRequested);
   const headingTarget = resolveForwardHeadingTarget({
@@ -117,6 +139,10 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
     speed: currentSpeed,
     maxSpeed: config.moveSpeed,
     dt,
+    smallCorrection: resolvedTurnContext.smallCorrection,
+    turnMagnitude: resolvedTurnContext.turnMagnitude,
+    inputHold: resolvedTurnContext.inputHold,
+    turnDevelopment: resolvedTurnContext.turnDevelopment,
     rotationSpeed: config.rotationSpeed,
     lowSpeedRotationSpeed: config.lowSpeedRotationSpeed,
     rotationMultiplier: stop.rotationMultiplier
@@ -127,6 +153,10 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
     speed: currentSpeed,
     maxSpeed: config.moveSpeed,
     dt,
+    smallCorrection: resolvedTurnContext.smallCorrection,
+    turnMagnitude: resolvedTurnContext.turnMagnitude,
+    turnCommitment: resolvedTurnContext.turnCommitment,
+    activeCarve: resolvedTurnContext.activeCarve,
     traction: config.traction * stop.tractionMultiplier,
     stopActive: stopRequested.stopRequested,
     turnPenalty: config.turnPenalty
@@ -136,7 +166,10 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
     desiredTravelHeading: steeringHeading,
     travelHeading: steering.travelHeading,
     speed: currentSpeed,
-    maxSpeed: config.moveSpeed
+    maxSpeed: config.moveSpeed,
+    smallCorrection: resolvedTurnContext.smallCorrection,
+    turnCommitment: resolvedTurnContext.turnCommitment,
+    activeCarve: resolvedTurnContext.activeCarve
   });
   const responsePenalty = Math.min(
     steering.turnPenaltyMultiplier,
@@ -175,14 +208,17 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
     ? stop.speed
     : approachSpeed(
         currentSpeed,
-        targetSpeed * lerp(0.78, 1, responsePenalty) * (1 + computeCarveBonus(steering, bodyTurn, forwardAlignment.mismatch, currentSpeed, config)),
+        targetSpeed *
+          lerp(0.78, 1, responsePenalty) *
+          (1 + computeCarveBonus(steering, bodyTurn, forwardAlignment.mismatch, resolvedTurnContext, currentSpeed, config)),
         acceleration,
-        config.passiveDeceleration + config.moveSpeed * (1 - responsePenalty) * 0.05,
+        (config.passiveDeceleration + config.moveSpeed * (1 - responsePenalty) * 0.05) *
+          lerp(1, 0.76, resolvedTurnContext.activeCarve),
         dt
       );
   const turnDrag = stopRequested.stopRequested
     ? 0
-    : config.moveSpeed * (1 - responsePenalty) * Math.max(0, dt) * 0.018;
+    : config.moveSpeed * (1 - responsePenalty) * Math.max(0, dt) * 0.018 * lerp(1, 0.74, resolvedTurnContext.activeCarve);
   let nextSpeed = Math.max(0, baseSpeed - turnDrag);
 
   if (!hasMovement && !stopRequested.stopRequested) {
@@ -375,6 +411,7 @@ function computeCarveBonus(
   steering: ReturnType<typeof computeTravelSteering>,
   bodyTurn: ReturnType<typeof computeBodyTurn>,
   alignmentMismatch: number,
+  turnContext: TurnContext,
   speed: number,
   config: ResolvedPlayerMovementConfig
 ) {
@@ -386,11 +423,62 @@ function computeCarveBonus(
   );
   const driftWindow = clamp(alignmentMismatch / (Math.PI * 0.1), 0, 1) * clamp(1 - alignmentMismatch / (Math.PI * 0.68), 0, 1);
   const bodySettle = clamp(1 - Math.abs(bodyTurn.remainingAngle) / (Math.PI * 0.92), 0, 1);
+  const phaseBoost = lerp(0.92, 1.22, turnContext.activeCarve) * lerp(0.96, 1.08, turnContext.turnMagnitude);
   return clamp(
-    config.carveResponse * steering.carveFactor * bodyTurnRatio * speedRatio * driftWindow * bodySettle,
+    config.carveResponse * steering.carveFactor * bodyTurnRatio * speedRatio * driftWindow * bodySettle * phaseBoost,
     0,
     MAX_CARVE_BONUS
   );
+}
+
+type TurnContext = {
+  turnMagnitude: number;
+  inputHold: number;
+  turnCommitment: number;
+  turnDevelopment: number;
+  activeCarve: number;
+  smallCorrection: number;
+};
+
+function resolveTurnContext(input: {
+  hasMovement: boolean;
+  currentHeading: number;
+  currentTravelHeading: number;
+  desiredHeading: number;
+  rawDesiredHeading: number;
+  previousInputHeading: number;
+  speed: number;
+  moveSpeed: number;
+}): TurnContext {
+  if (!input.hasMovement) {
+    return {
+      turnMagnitude: 0,
+      inputHold: 0,
+      turnCommitment: 0,
+      turnDevelopment: 0,
+      activeCarve: 0,
+      smallCorrection: 0
+    };
+  }
+
+  const desiredDelta = Math.abs(shortestAngleDelta(input.currentTravelHeading, input.desiredHeading));
+  const bodyLag = Math.abs(shortestAngleDelta(input.currentHeading, input.desiredHeading));
+  const travelLag = Math.abs(shortestAngleDelta(input.currentHeading, input.currentTravelHeading));
+  const inputChange = Math.abs(shortestAngleDelta(input.previousInputHeading, input.rawDesiredHeading));
+  const inputHold = clamp(1 - inputChange / (Math.PI * 0.2), 0, 1);
+  const turnMagnitude = clamp(desiredDelta / (Math.PI * 0.55), 0, 1);
+  const turnDevelopment = desiredDelta > 0.0001 ? clamp(1 - bodyLag / desiredDelta, 0, 1) : 0;
+  const carveRead = clamp(travelLag / (Math.PI * 0.3), 0, 1) * clamp(input.speed / Math.max(1, input.moveSpeed), 0, 1);
+  const turnCommitment = inputHold * turnMagnitude;
+
+  return {
+    turnMagnitude,
+    inputHold,
+    turnCommitment,
+    turnDevelopment,
+    activeCarve: turnCommitment * turnDevelopment * carveRead,
+    smallCorrection: clamp(1 - desiredDelta / (Math.PI * 0.12), 0, 1)
+  };
 }
 
 function isPressed(value: number | undefined) {

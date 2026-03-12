@@ -11,6 +11,10 @@ export type BodyTurnInput = {
   speed: number;
   maxSpeed: number;
   dt: number;
+  smallCorrection: number;
+  turnMagnitude: number;
+  inputHold: number;
+  turnDevelopment: number;
   rotationSpeed: number;
   lowSpeedRotationSpeed: number;
   rotationMultiplier?: number;
@@ -31,6 +35,10 @@ export type TravelSteeringInput = {
   speed: number;
   maxSpeed: number;
   dt: number;
+  smallCorrection: number;
+  turnMagnitude: number;
+  turnCommitment: number;
+  activeCarve: number;
   traction: number;
   stopActive: boolean;
   turnPenalty: number;
@@ -57,13 +65,17 @@ export function advanceSteeringTarget(input: {
   speed: number;
   maxSpeed: number;
   dt: number;
+  inputHold: number;
+  smallCorrection: number;
 }) {
   const speedRatio = clamp(input.speed / Math.max(1, input.maxSpeed), 0, 1);
   let slewRate = lerp(9.2, 6.2, speedRatio);
 
   const delta = shortestAngleDelta(input.steeringHeading, input.rawDesiredHeading);
   const mismatchRatio = clamp(Math.abs(delta) / (Math.PI * 0.42), 0, 1);
-  slewRate *= lerp(1, 1.18, mismatchRatio);
+  const subtleBoost = input.smallCorrection * lerp(0.16, 0.05, speedRatio);
+  const holdBoost = input.inputHold * mismatchRatio * 0.08;
+  slewRate *= lerp(1, 1.18, mismatchRatio) * (1 + subtleBoost + holdBoost);
   const maxStep = Math.max(0, slewRate * Math.max(0, input.dt));
   return wrapAngle(input.steeringHeading + clamp(delta, -maxStep, maxStep));
 }
@@ -76,8 +88,11 @@ export function computeBodyTurn(input: BodyTurnInput): BodyTurnResult {
 
   const delta = shortestAngleDelta(input.currentHeading, desiredHeading);
   const mismatchRatio = clamp(Math.abs(delta) / (Math.PI * 0.5), 0, 1);
-  const commitBoost = lerp(1.04, 1.12, speedRatio);
-  turnRate *= lerp(1, commitBoost, mismatchRatio);
+  const subtleCorrectionBoost = input.smallCorrection * lerp(0.16, 0.05, speedRatio);
+  const committedRedirectBoost = input.turnMagnitude * input.inputHold * lerp(0.08, 0.12, speedRatio);
+  const phaseBoost = input.turnMagnitude * input.turnDevelopment * input.inputHold * lerp(0.02, 0.06, speedRatio);
+  const contextualBoost = 1 + subtleCorrectionBoost + committedRedirectBoost + phaseBoost;
+  turnRate *= lerp(1, contextualBoost, mismatchRatio);
   const maxStep = Math.max(0, turnRate * Math.max(0, input.dt));
   const appliedDelta = clamp(delta, -maxStep, maxStep);
   const heading = wrapAngle(input.currentHeading + appliedDelta);
@@ -95,6 +110,10 @@ export function computeBodyTurn(input: BodyTurnInput): BodyTurnResult {
 export function computeTravelSteering(input: TravelSteeringInput): TravelSteeringResult {
   const speedRatio = clamp(input.speed / Math.max(1, input.maxSpeed), 0, 1);
   let steeringRate = input.traction * lerp(LOW_SPEED_TRACTION_MULTIPLIER, HIGH_SPEED_TRACTION_MULTIPLIER, speedRatio);
+  const subtleCorrectionBoost = input.smallCorrection * lerp(0.24, 0.08, speedRatio);
+  const committedCarry = input.turnCommitment * input.turnMagnitude * lerp(0.03, 0.11, speedRatio);
+  const carveCarry = input.activeCarve * lerp(0.04, 0.22, speedRatio);
+  steeringRate *= clamp(1 + subtleCorrectionBoost - committedCarry - carveCarry, 0.58, 1.28);
   if (input.stopActive) {
     steeringRate *= STOP_TRACTION_MULTIPLIER;
   }
@@ -113,7 +132,10 @@ export function computeTravelSteering(input: TravelSteeringInput): TravelSteerin
     mismatch,
     turnPenaltyMultiplier: clamp(1 - input.turnPenalty * Math.pow(normalizedMismatch, 1.55), 0.74, 1),
     carveFactor: clamp(
-      (Math.abs(steeringDelta) / Math.max(maxStep, 0.0001)) * speedRatio * Math.max(0, 1 - normalizedMismatch * 0.75),
+      (Math.abs(steeringDelta) / Math.max(maxStep, 0.0001)) *
+        speedRatio *
+        Math.max(0, 1 - normalizedMismatch * 0.75) *
+        lerp(1, 1.18, input.activeCarve),
       0,
       1
     )

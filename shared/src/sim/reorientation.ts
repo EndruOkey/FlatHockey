@@ -16,6 +16,9 @@ export type ForwardTravelAlignmentInput = {
   travelHeading: number;
   speed: number;
   maxSpeed: number;
+  smallCorrection: number;
+  turnCommitment: number;
+  activeCarve: number;
 };
 
 export type ForwardTravelAlignment = {
@@ -37,7 +40,9 @@ export function resolveForwardHeadingTarget(input: ForwardHeadingTargetInput): F
 
 export function resolveForwardTravelAlignment(input: ForwardTravelAlignmentInput): ForwardTravelAlignment {
   const speedRatio = clamp(input.speed / Math.max(1, input.maxSpeed), 0, 1);
-  const maxMismatch = lerp(Math.PI * 0.425, Math.PI * 0.54, Math.pow(speedRatio, 0.8));
+  const correctionTighten = lerp(1, 0.82, input.smallCorrection);
+  const carveWiden = lerp(1, 1.16, clamp(input.turnCommitment * 0.55 + input.activeCarve * 0.75, 0, 1));
+  const maxMismatch = lerp(Math.PI * 0.425, Math.PI * 0.54, Math.pow(speedRatio, 0.8)) * correctionTighten * carveWiden;
   const rawDelta = shortestAngleDelta(input.bodyHeading, input.travelHeading);
   const desiredDelta = shortestAngleDelta(input.bodyHeading, input.desiredTravelHeading);
   const softenedDelta = resolveNonExpansiveMismatch(rawDelta, maxMismatch);
