@@ -49,6 +49,8 @@ function playerCarryTargetWorld(scene: any, playerId: string | null) {
 export function updateAndDrawPuck(scene: any, dtSec: number, remoteTargetServerTime: number) {
   const tuning = puckStickTuningStore.get();
   const puckRadius = tuning.puckRadius * Math.max(1, scene.cameraWorldScale ?? 1);
+  const turnoverPulseSec = Math.max(0, scene.puckReadabilityPulseSec ?? 0);
+  scene.puckReadabilityPulseSec = Math.max(0, turnoverPulseSec - dtSec);
   const puckWorld = scene.samplePuckWorld(remoteTargetServerTime);
   const visualOwnerId = typeof scene.getVisualPuckOwnerId === 'function' ? scene.getVisualPuckOwnerId() : scene.puckSnapshot.ownerId;
   const visualHeld = scene.puckSnapshot.state === 'HELD' && !!visualOwnerId;
@@ -90,10 +92,20 @@ export function updateAndDrawPuck(scene: any, dtSec: number, remoteTargetServerT
 
   const puckScreen = scene.worldToScreen(scene.puckRender.x, scene.puckRender.y);
   scene.puckGraphics.clear();
+  if (visualHeld) {
+    scene.puckGraphics.fillStyle(0xf2fbff, 0.1);
+    scene.puckGraphics.fillCircle(puckScreen.x, puckScreen.y, puckRadius + 1.8);
+  }
   scene.puckGraphics.fillStyle(0x111111, 1);
   scene.puckGraphics.fillCircle(puckScreen.x, puckScreen.y, puckRadius);
-  scene.puckGraphics.lineStyle(1, 0xffffff, 0.25);
+  scene.puckGraphics.lineStyle(visualHeld ? 1.8 : 1, visualHeld ? 0xf6fbff : 0xffffff, visualHeld ? 0.52 : 0.25);
   scene.puckGraphics.strokeCircle(puckScreen.x, puckScreen.y, puckRadius);
+  if (turnoverPulseSec > 0) {
+    const pulseAlpha = Math.min(0.34, turnoverPulseSec / 0.14);
+    const pulseRadius = puckRadius + 2 + (1 - pulseAlpha / 0.34) * 4;
+    scene.puckGraphics.lineStyle(2, 0xf4fbff, pulseAlpha);
+    scene.puckGraphics.strokeCircle(puckScreen.x, puckScreen.y, pulseRadius);
+  }
 }
 
 export function updateOverlay(_scene: any) {

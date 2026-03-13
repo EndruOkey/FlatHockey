@@ -37,6 +37,7 @@ export type PlayerState = {
   prevDrop: boolean;
   prevPoke: boolean;
   shotCharge: number;
+  oneTimerGraceMsRemaining: number;
   stickState: StickState;
   stickTimer: number;
   angularVelocity: number;

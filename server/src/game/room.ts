@@ -58,6 +58,7 @@ export class Room {
       prevDrop: false,
       prevPoke: false,
       shotCharge: 0,
+      oneTimerGraceMsRemaining: 0,
       stickState: 'neutral',
       stickTimer: 0,
       angularVelocity: 0,
@@ -75,89 +76,136 @@ export class Room {
   }
 
   enqueueInput(clientId: string, input: InputMsg) {
-    const player = this.players.get(clientId);
-    if (!player) return;
-    if (input.clientId !== clientId) return;
-    if (input.seq <= player.lastProcessedSeq) return;
+    try {
+      const player = this.players.get(clientId);
+      if (!player) return;
+      if (input.clientId !== clientId) return;
+      if (input.seq <= player.lastProcessedSeq) return;
 
-    const buffered: BufferedInput = {
-      seq: input.seq,
-      state: {
-        moveX: input.moveX ?? 0,
-        moveY: input.moveY ?? 0,
-        shoot: input.shoot ? 1 : 0,
-        pass: input.pass ? 1 : 0,
-        drop: input.drop ? 1 : 0,
-        poke: input.poke ? 1 : 0,
-        aimAngle: typeof input.aimAngle === 'number' ? input.aimAngle : player.aimAngle,
-        stop: input.stop ? 1 : 0
+      const buffered: BufferedInput = {
+        seq: input.seq,
+        state: {
+          moveX: input.moveX ?? 0,
+          moveY: input.moveY ?? 0,
+          shoot: input.shoot ? 1 : 0,
+          pass: input.pass ? 1 : 0,
+          drop: input.drop ? 1 : 0,
+          poke: input.poke ? 1 : 0,
+          aimAngle: typeof input.aimAngle === 'number' ? input.aimAngle : player.aimAngle,
+          stop: input.stop ? 1 : 0
+        }
+      };
+
+      player.inputBuffer.push(buffered);
+      player.inputBuffer.sort((a, b) => a.seq - b.seq);
+      if (player.inputBuffer.length > 256) {
+        player.inputBuffer.splice(0, player.inputBuffer.length - 256);
       }
-    };
-
-    player.inputBuffer.push(buffered);
-    player.inputBuffer.sort((a, b) => a.seq - b.seq);
-    if (player.inputBuffer.length > 256) {
-      player.inputBuffer.splice(0, player.inputBuffer.length - 256);
+    } catch (error) {
+      console.error('[ROOM_INPUT_ERROR]', {
+        ts: new Date().toISOString(),
+        room: this.id,
+        clientId,
+        seq: input.seq,
+        stack: error instanceof Error ? error.stack : String(error)
+      });
     }
   }
 
   step(dt: number) {
-    this.serverTick += 1;
-    const movementConfig = resolvePlayerMovementConfig(this.gameplayConfig);
+    try {
+      this.serverTick += 1;
+      const movementConfig = resolvePlayerMovementConfig(this.gameplayConfig);
 
-    for (const player of this.players.values()) {
-      const prevAngle = player.angle;
-      const next = this.consumeNextInput(player);
-      if (next) {
-        player.lastInputState = next.state;
-        player.lastProcessedSeq = next.seq;
-        player.inputGapTicks = 0;
+      for (const player of this.players.values()) {
+        const prevAngle = player.angle;
+        const next = this.consumeNextInput(player);
+        if (next) {
+          player.lastInputState = next.state;
+          player.lastProcessedSeq = next.seq;
+          player.inputGapTicks = 0;
+        }
+        const movement = stepPlayerMovement(player, player.lastInputState, dt, movementConfig);
+        player.vx = movement.vx;
+        player.vy = movement.vy;
+        player.angularVelocity = wrapAngleDelta(player.angle - prevAngle) / Math.max(0.0001, dt);
+        this.logMovementDebug(player, movement);
       }
-      const movement = stepPlayerMovement(player, player.lastInputState, dt, movementConfig);
-      player.vx = movement.vx;
-      player.vy = movement.vy;
-      player.angularVelocity = wrapAngleDelta(player.angle - prevAngle) / Math.max(0.0001, dt);
-      this.logMovementDebug(player, movement);
+      this.updatePuck(dt);
+    } catch (error) {
+      console.error('[ROOM_STEP_ERROR]', {
+        ts: new Date().toISOString(),
+        room: this.id,
+        serverTick: this.serverTick,
+        puck: {
+          state: this.puck.state,
+          ownerId: this.puck.ownerId,
+          x: this.puck.x,
+          y: this.puck.y
+        },
+        players: [...this.players.values()].map((player) => ({
+          id: player.id,
+          x: player.x,
+          y: player.y,
+          stickState: player.stickState,
+          shotCharge: player.shotCharge,
+          lastProcessedSeq: player.lastProcessedSeq
+        })),
+        stack: error instanceof Error ? error.stack : String(error)
+      });
     }
-    this.updatePuck(dt);
   }
 
   broadcastSnapshot() {
-    const ack: Record<string, number> = {};
-    for (const p of this.players.values()) ack[p.id] = p.lastProcessedSeq;
+    try {
+      const ack: Record<string, number> = {};
+      for (const p of this.players.values()) ack[p.id] = p.lastProcessedSeq;
 
-    const msg: SnapshotMsg = {
-      type: 'snapshot',
-      tick: this.serverTick,
-      serverTick: this.serverTick,
-      ack,
-      puck: {
-        state: this.puck.state,
-        ownerId: this.puck.ownerId,
-        x: this.puck.x,
-        y: this.puck.y,
-        vx: this.puck.vx,
-        vy: this.puck.vy
-      },
-      players: [...this.players.values()].map((p) => ({
-        id: p.id,
-        x: p.x,
-        y: p.y,
-        vx: p.vx,
-        vy: p.vy,
-        angle: p.angle,
-        travelHeading: p.travelHeading,
-        intentBoostTimer: p.intentBoostTimer,
-        lastIntentAngle: p.lastIntentAngle,
-        aimAngle: p.aimAngle,
-        desiredHeading: p.desiredHeading,
-        locomotionState: p.locomotionState,
-        stickState: p.stickState,
-        stickTimer: p.stickTimer,
-        shotCharge: p.shotCharge
-      }))
-    };
-    this.broadcast(msg);
+      const msg: SnapshotMsg = {
+        type: 'snapshot',
+        tick: this.serverTick,
+        serverTick: this.serverTick,
+        ack,
+        puck: {
+          state: this.puck.state,
+          ownerId: this.puck.ownerId,
+          x: this.puck.x,
+          y: this.puck.y,
+          vx: this.puck.vx,
+          vy: this.puck.vy
+        },
+        players: [...this.players.values()].map((p) => ({
+          id: p.id,
+          x: p.x,
+          y: p.y,
+          vx: p.vx,
+          vy: p.vy,
+          angle: p.angle,
+          travelHeading: p.travelHeading,
+          intentBoostTimer: p.intentBoostTimer,
+          lastIntentAngle: p.lastIntentAngle,
+          aimAngle: p.aimAngle,
+          desiredHeading: p.desiredHeading,
+          locomotionState: p.locomotionState,
+          stickState: p.stickState,
+          stickTimer: p.stickTimer,
+          shotCharge: p.shotCharge
+        }))
+      };
+      this.broadcast(msg);
+    } catch (error) {
+      console.error('[ROOM_SNAPSHOT_ERROR]', {
+        ts: new Date().toISOString(),
+        room: this.id,
+        serverTick: this.serverTick,
+        puck: {
+          state: this.puck.state,
+          ownerId: this.puck.ownerId
+        },
+        playerCount: this.players.size,
+        stack: error instanceof Error ? error.stack : String(error)
+      });
+    }
   }
 
   private updatePuck(dt: number) {

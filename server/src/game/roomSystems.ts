@@ -16,6 +16,8 @@ type PickupCandidate = {
   pose: ReturnType<typeof computeSemiPhysicalStickPose>;
 };
 
+const BODY_FALLBACK_CAPTURE_SCALE = 0.58;
+
 function stickPose(room: any, player: any, overrideState?: any) {
   const playerRadius = Math.max(12, Number(room.gameplayConfig.playerRadius ?? 18));
   return computeSemiPhysicalStickPose({
@@ -79,7 +81,7 @@ function evaluateCaptureCandidate(
     };
   }
 
-  const bodyRadius = Math.min(pickupRadius * 0.72, pose.bodyZoneRadius) + puckRadius;
+  const bodyRadius = Math.min(pickupRadius * BODY_FALLBACK_CAPTURE_SCALE, pose.bodyZoneRadius) + puckRadius;
   const bodyDist = Math.hypot(puckX - pose.bodyX, puckY - pose.bodyY);
   if (bodyDist <= bodyRadius) {
     return {
@@ -173,6 +175,7 @@ export function updatePuck(room: any, dt: number) {
   const shotChargeMult = puckStick.shotChargeMult;
   const shotMaxImpulse = puckStick.shotMaxImpulse;
   const shotMinHoldMs = puckStick.shotMinHoldMs;
+  const oneTimerGraceMs = Math.max(0, puckStick.oneTimerGraceMs);
   const passImpulse = clamp(
     Math.max(SEMI_PHYSICAL_STICK_CONFIG.passImpulse, shotBaseImpulse * 0.78),
     0,
@@ -188,6 +191,7 @@ export function updatePuck(room: any, dt: number) {
   room.puck.pickupCooldownMs = Math.max(0, room.puck.pickupCooldownMs - dt * 1000);
   for (const player of room.players.values()) {
     player.stickTimer = Math.max(0, player.stickTimer - dt);
+    player.oneTimerGraceMsRemaining = Math.max(0, (player.oneTimerGraceMsRemaining ?? 0) - dt * 1000);
     const hasPuck = room.puck.state === 'HELD' && room.puck.ownerId === player.id;
     const justPressedPoke = !!player.lastInputState.poke && !player.prevPoke;
     if (!hasPuck && justPressedPoke && player.stickState !== 'poke' && player.stickTimer <= 0) {
@@ -219,12 +223,14 @@ export function updatePuck(room: any, dt: number) {
         owner.stickState = 'release';
         owner.stickTimer = SEMI_PHYSICAL_STICK_CONFIG.releaseDurationSec;
         owner.shotCharge = 0;
+        owner.oneTimerGraceMsRemaining = 0;
       } else if (justPressedPass) {
         owner.stickState = 'pass';
         owner.stickTimer = SEMI_PHYSICAL_STICK_CONFIG.passDurationSec;
         const passPose = stickPose(room, owner, 'pass');
         releasePuck(room, owner, passPose, passImpulse, Math.max(80, pickupCooldownMs * 0.8));
         owner.shotCharge = 0;
+        owner.oneTimerGraceMsRemaining = 0;
       } else {
         owner.stickState = shooting
           ? 'charge'
@@ -250,8 +256,10 @@ export function updatePuck(room: any, dt: number) {
           room.puck.ownerId = null;
           room.puck.pickupCooldownMs = Math.max(room.puck.pickupCooldownMs, 80);
           owner.shotCharge = 0;
+          owner.oneTimerGraceMsRemaining = 0;
         } else if (!tryResolveHeldPoke(room, owner, pokeImpulse, puckRadius) && justReleasedShoot) {
-          if (owner.shotCharge * 1000 >= shotMinHoldMs) {
+          const canUseOneTimerGrace = owner.oneTimerGraceMsRemaining > 0;
+          if (owner.shotCharge * 1000 >= shotMinHoldMs || canUseOneTimerGrace) {
             const shotPose = stickPose(room, owner, 'charge');
             const impulse = clamp(shotBaseImpulse + owner.shotCharge * shotChargeMult, 0, shotMaxImpulse);
             releasePuck(room, owner, shotPose, impulse, pickupCooldownMs);
@@ -259,6 +267,7 @@ export function updatePuck(room: any, dt: number) {
             owner.stickTimer = SEMI_PHYSICAL_STICK_CONFIG.releaseDurationSec;
           }
           owner.shotCharge = 0;
+          owner.oneTimerGraceMsRemaining = 0;
         }
       }
     }
@@ -363,6 +372,7 @@ export function updatePuck(room: any, dt: number) {
         const owner = room.players.get(bestCandidate.playerId);
         if (owner) {
           owner.shotCharge = 0;
+          owner.oneTimerGraceMsRemaining = owner.lastInputState.shoot ? oneTimerGraceMs : 0;
           owner.prevShoot = !!owner.lastInputState.shoot;
           owner.prevPass = !!owner.lastInputState.pass;
           owner.prevDrop = !!owner.lastInputState.drop;
@@ -390,6 +400,7 @@ export function updatePuck(room: any, dt: number) {
       if (player.stickState !== 'charge') {
         player.shotCharge = 0;
       }
+      player.oneTimerGraceMsRemaining = 0;
     }
 
     player.prevShoot = !!player.lastInputState.shoot;

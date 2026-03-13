@@ -31,6 +31,7 @@ export type PuckStickTuning = {
   shotChargeMult: number;
   shotMaxImpulse: number;
   shotMinHoldMs: number;
+  oneTimerGraceMs: number;
 
   drawStickTarget: boolean;
   drawStickHitbox: boolean;
@@ -57,8 +58,8 @@ export const PUCK_STICK_DEFAULTS: PuckStickTuning = {
   pickupRadius: GAMEPLAY_DEFAULTS.puckPickupRadius ?? 22,
   pickupMaxPuckSpeed: GAMEPLAY_DEFAULTS.puckPickupMaxSpeed ?? 220,
   pickupMaxRelativeSpeed: GAMEPLAY_DEFAULTS.puckPickupMaxRelativeSpeed ?? 180,
-  magnetRadius: GAMEPLAY_DEFAULTS.puckMagnetRadius ?? 30,
-  magnetStrength: GAMEPLAY_DEFAULTS.puckMagnetStrength ?? 90,
+  magnetRadius: GAMEPLAY_DEFAULTS.puckMagnetRadius ?? 16,
+  magnetStrength: GAMEPLAY_DEFAULTS.puckMagnetStrength ?? 72,
   magnetMaxForce: GAMEPLAY_DEFAULTS.puckMagnetMaxForce ?? 120,
   holdSpringK: GAMEPLAY_DEFAULTS.puckHoldSpringK ?? 28,
   holdDampingC: GAMEPLAY_DEFAULTS.puckHoldDampingC ?? 10,
@@ -70,6 +71,7 @@ export const PUCK_STICK_DEFAULTS: PuckStickTuning = {
   shotChargeMult: GAMEPLAY_DEFAULTS.puckShotChargeMult ?? 300,
   shotMaxImpulse: GAMEPLAY_DEFAULTS.puckShotMaxImpulse ?? 620,
   shotMinHoldMs: GAMEPLAY_DEFAULTS.puckShotMinHoldMs ?? 40,
+  oneTimerGraceMs: GAMEPLAY_DEFAULTS.puckOneTimerGraceMs ?? 100,
 
   drawStickTarget: GAMEPLAY_DEFAULTS.drawStickTarget ?? false,
   drawStickHitbox: GAMEPLAY_DEFAULTS.drawStickHitbox ?? false,
@@ -110,6 +112,7 @@ export function resolvePuckStickTuning(config: Partial<GameplayConfig>): PuckSti
     shotChargeMult: config.puckShotChargeMult ?? PUCK_STICK_DEFAULTS.shotChargeMult,
     shotMaxImpulse: config.puckShotMaxImpulse ?? PUCK_STICK_DEFAULTS.shotMaxImpulse,
     shotMinHoldMs: config.puckShotMinHoldMs ?? PUCK_STICK_DEFAULTS.shotMinHoldMs,
+    oneTimerGraceMs: config.puckOneTimerGraceMs ?? PUCK_STICK_DEFAULTS.oneTimerGraceMs,
 
     drawStickTarget: config.drawStickTarget ?? PUCK_STICK_DEFAULTS.drawStickTarget,
     drawStickHitbox: config.drawStickHitbox ?? PUCK_STICK_DEFAULTS.drawStickHitbox,
@@ -151,6 +154,7 @@ export function puckStickPatchToGameplayPatch(patch: Partial<PuckStickTuning>): 
   if (patch.shotChargeMult !== undefined) out.puckShotChargeMult = patch.shotChargeMult;
   if (patch.shotMaxImpulse !== undefined) out.puckShotMaxImpulse = patch.shotMaxImpulse;
   if (patch.shotMinHoldMs !== undefined) out.puckShotMinHoldMs = patch.shotMinHoldMs;
+  if (patch.oneTimerGraceMs !== undefined) out.puckOneTimerGraceMs = patch.oneTimerGraceMs;
 
   if (patch.drawStickTarget !== undefined) out.drawStickTarget = patch.drawStickTarget;
   if (patch.drawStickHitbox !== undefined) out.drawStickHitbox = patch.drawStickHitbox;

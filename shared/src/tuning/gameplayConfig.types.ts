@@ -51,6 +51,7 @@ export type GameplayConfig = {
   puckShotChargeMult?: number;
   puckShotMaxImpulse?: number;
   puckShotMinHoldMs?: number;
+  puckOneTimerGraceMs?: number;
   puckDrawPickupRadius?: boolean;
   puckDrawMagnetRadius?: boolean;
   puckDrawState?: boolean;

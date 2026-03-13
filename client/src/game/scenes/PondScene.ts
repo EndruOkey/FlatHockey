@@ -40,6 +40,8 @@ export class PondScene extends Phaser.Scene {
   private clientId: string | null = null;
   private roomId: string | null = null;
   private wsConnected = false;
+  private wsTransportOpen = false;
+  private hasReceivedWelcome = false;
   private protocolMismatchReason: string | null = null;
   private expectedRuntime: RuntimeEnvironment = 'unknown';
 
@@ -217,6 +219,9 @@ export class PondScene extends Phaser.Scene {
   private connect(wsUrl: string) {
     this.protocolMismatchReason = null;
     this.expectedRuntime = resolveExpectedRuntime(wsUrl);
+    this.wsConnected = false;
+    this.wsTransportOpen = false;
+    this.hasReceivedWelcome = false;
     console.info('[NET_BOOTSTRAP] CONNECT_START', {
       ts: new Date().toISOString(),
       wsUrl,
@@ -225,24 +230,40 @@ export class PondScene extends Phaser.Scene {
 
     this.ws.onStatus((state: 'connecting' | 'connected' | 'disconnected') => {
       if (this.protocolMismatchReason) return;
-      if (state === 'connecting') this.hud.setText('Connecting...');
-      if (state === 'connected') this.wsConnected = true;
-      if (state === 'disconnected') {
+      if (state === 'connecting') {
+        this.wsTransportOpen = false;
         this.wsConnected = false;
+        this.hasReceivedWelcome = false;
+        this.hud.setText('Connecting...');
+      }
+      if (state === 'connected') {
+        this.wsTransportOpen = true;
+      }
+      if (state === 'disconnected') {
+        this.wsTransportOpen = false;
+        this.wsConnected = false;
+        this.hasReceivedWelcome = false;
         this.resetPendingInputState();
         this.hud.setText('Offline (retrying...)');
       }
     });
     this.ws.onOpen(() => {
       if (this.protocolMismatchReason) return;
-      this.wsConnected = true;
+      this.wsTransportOpen = true;
+      this.wsConnected = false;
       this.resetPendingInputState(true);
       if (!this.roomId) this.roomId = 'pond-1';
+      console.info('[NET_BOOTSTRAP] SOCKET_OPEN', {
+        ts: new Date().toISOString(),
+        awaiting: 'welcome|join:ok|snapshot'
+      });
     });
 
     this.ws.onClose(() => {
       if (this.protocolMismatchReason) return;
+      this.wsTransportOpen = false;
       this.wsConnected = false;
+      this.hasReceivedWelcome = false;
       this.resetPendingInputState();
       this.hud.setText('Offline (retrying...)');
     });
@@ -384,6 +405,8 @@ export class PondScene extends Phaser.Scene {
     this.roomId = msg.roomId ?? msg.room ?? this.roomId ?? 'pond-1';
     this.predicted = null;
     this.hasReceivedFirstSnapshot = false;
+    this.hasReceivedWelcome = true;
+    this.markSessionActive('welcome');
   }
 
   private clearWorldState() {
@@ -400,6 +423,8 @@ export class PondScene extends Phaser.Scene {
     this.predicted = null;
     this.clientId = null;
     this.roomId = null;
+    this.wsTransportOpen = false;
+    this.hasReceivedWelcome = false;
     this.hasReceivedFirstSnapshot = false;
     this.hasServerClock = false;
     this.newestSnapshotServerMs = 0;
@@ -428,6 +453,8 @@ export class PondScene extends Phaser.Scene {
       reason
     });
     this.protocolMismatchReason = reason;
+    this.wsTransportOpen = false;
+    this.hasReceivedWelcome = false;
     this.wsConnected = false;
     this.resetPendingInputState(true);
     this.clearWorldState();
@@ -455,6 +482,27 @@ export class PondScene extends Phaser.Scene {
 
   private buildInput(): InputMsg {
     return buildClientInput(this);
+  }
+
+  private markSessionActive(source: 'welcome' | 'join:ok' | 'snapshot') {
+    const wasActive = this.wsConnected;
+    this.wsConnected = true;
+    if (!wasActive) {
+      console.info('[NET_BOOTSTRAP] SESSION_ACTIVE', {
+        ts: new Date().toISOString(),
+        source,
+        clientId: this.clientId,
+        roomId: this.roomId,
+        transportOpen: this.wsTransportOpen,
+        hasReceivedWelcome: this.hasReceivedWelcome,
+        hasReceivedFirstSnapshot: this.hasReceivedFirstSnapshot
+      });
+    }
+    if (this.hud.text === 'Connecting...' || this.hud.text.startsWith('Joining')) {
+      this.hudAcc = 0;
+      this.lastHudText = '';
+      this.hud.setText('');
+    }
   }
 
   private hasPendingLocalDrop() {

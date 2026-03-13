@@ -54,6 +54,7 @@ export const GAMEPLAY_DEFAULTS: GameplayTuning = {
   puckShotChargeMult: 300,
   puckShotMaxImpulse: 620,
   puckShotMinHoldMs: 40,
+  puckOneTimerGraceMs: 100,
   puckDrawPickupRadius: false,
   puckDrawMagnetRadius: false,
   puckDrawState: false,

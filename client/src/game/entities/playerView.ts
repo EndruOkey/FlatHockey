@@ -248,7 +248,9 @@ export class PlayerView {
     renderPlayerBody(this.bodyLayers, this.bodyRig, this.displayName, renderOptions);
     this.stick.clear();
     if (this.stickPose) {
-      renderStick(this.stick, this.stickPose, this.bodyRig, this.x, this.y);
+      renderStick(this.stick, this.stickPose, this.bodyRig, this.x, this.y, {
+        hasPuck: this.hasPuck
+      });
     }
 
     if (!this.debugDrawEnabled) {

@@ -30,7 +30,10 @@ export function renderStick(
   pose: SemiPhysicalStickPose,
   rig: PlayerBodyRig,
   playerX: number,
-  playerY: number
+  playerY: number,
+  options: {
+    hasPuck?: boolean;
+  } = {}
 ) {
   const leftHandX = rig.leftHandSocket.x;
   const leftHandY = rig.leftHandSocket.y;
@@ -79,4 +82,11 @@ export function renderStick(
   graphics.fillCircle(bladeBaseX, bladeBaseY, BLADE_THICKNESS * 0.5);
   graphics.fillCircle(bladeCenterX, bladeCenterY, BLADE_THICKNESS * 0.42);
   graphics.fillCircle(bladeTipX, bladeTipY, BLADE_THICKNESS * 0.48);
+
+  if (options.hasPuck) {
+    graphics.fillStyle(0xf4fbff, 0.18);
+    graphics.fillCircle(bladeCenterX, bladeCenterY, BLADE_THICKNESS * 1.05);
+    graphics.lineStyle(1.2, 0xffffff, 0.32);
+    graphics.strokeCircle(bladeCenterX, bladeCenterY, BLADE_THICKNESS * 0.82);
+  }
 }

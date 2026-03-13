@@ -73,6 +73,10 @@ type Session = {
   inputWindowStartMs: number;
   inputCountInWindow: number;
   inputRateLimitedInWindow: boolean;
+  lastMessageType: string | null;
+  lastInputSeq: number | null;
+  lastInputSummary: string | null;
+  lastSentType: string | null;
 };
 
 type V2Config = {
@@ -135,6 +139,18 @@ function keyAxis(negative: boolean, positive: boolean): -1 | 0 | 1 {
 function send(ws: WebSocket, payload: JsonRecord) {
   if (ws.readyState !== WebSocket.OPEN) return;
   ws.send(JSON.stringify(payload));
+}
+
+function sendWithContext(session: Session, payload: JsonRecord, context: string) {
+  session.lastSentType = typeof payload.type === 'string' ? payload.type : 'unknown';
+  console.info('[WS2] SEND', {
+    ts: new Date().toISOString(),
+    client: session.clientId,
+    room: session.roomId ?? '-',
+    context,
+    type: session.lastSentType
+  });
+  send(session.ws, payload);
 }
 
 function parseV2Message(obj: JsonRecord): ClientMessageV2 | null {
@@ -263,7 +279,11 @@ export function createWsServerV2(server: Server, roomManager: RoomManager, cfg: 
       lastSeenAtMs: Date.now(),
       inputWindowStartMs: Date.now(),
       inputCountInWindow: 0,
-      inputRateLimitedInWindow: false
+      inputRateLimitedInWindow: false,
+      lastMessageType: null,
+      lastInputSeq: null,
+      lastInputSummary: null,
+      lastSentType: null
     };
     sessions.set(ws, session);
     console.log(`[WS2] CONNECT ts=${ts} client=${clientId} ip=${remoteIp} origin=${origin} url=${reqUrl}`);
@@ -283,138 +303,196 @@ export function createWsServerV2(server: Server, roomManager: RoomManager, cfg: 
       active.lastSeenAtMs = Date.now();
 
       const raw = typeof buf === 'string' ? buf : buf.toString();
-      const obj = safeParse(raw);
-      if (!obj) {
-        send(ws, { type: 'error', code: 'BAD_PAYLOAD', message: 'invalid_json' });
-        return;
-      }
-
-      const parsed = parseV2Message(obj);
-      if (!parsed) {
-        send(ws, { type: 'error', code: 'UNKNOWN_TYPE', message: `unsupported_type:${String(obj.type ?? 'unknown')}` });
-        return;
-      }
-
-      if (parsed.type === 'hello') {
-        if (parsed.proto !== config.protocolVersion) {
-          send(ws, {
-            type: 'error',
-            code: 'UNSUPPORTED_PROTO',
-            message: `expected_proto_${config.protocolVersion}`,
-            proto: config.protocolVersion,
-            serverBuild: config.serverBuild,
-            runtime: config.runtimeEnv,
-            features: config.features
+      try {
+        const obj = safeParse(raw);
+        if (!obj) {
+          console.warn('[WS2] PARSE_FAIL', {
+            ts: new Date().toISOString(),
+            client: active.clientId,
+            room: active.roomId ?? '-',
+            raw: raw.slice(0, 240)
           });
-          try {
-            ws.close(1002, 'unsupported_proto');
-          } catch {}
+          sendWithContext(active, { type: 'error', code: 'BAD_PAYLOAD', message: 'invalid_json' }, 'parse-fail');
           return;
         }
 
-        active.helloReceived = true;
-        if (parsed.name && parsed.name.trim()) active.name = parsed.name.trim().slice(0, 32);
-        send(ws, {
-          type: 'welcome',
-          proto: config.protocolVersion,
-          clientId: active.clientId,
-          roomId: active.roomId ?? DEFAULT_ROOM,
-          serverTick: 0,
-          serverBuild: config.serverBuild,
-          runtime: config.runtimeEnv,
-          features: config.features
+        const parsed = parseV2Message(obj);
+        if (!parsed) {
+          console.warn('[WS2] VALIDATION_FAIL', {
+            ts: new Date().toISOString(),
+            client: active.clientId,
+            room: active.roomId ?? '-',
+            type: String(obj.type ?? 'unknown'),
+            raw: raw.slice(0, 240)
+          });
+          sendWithContext(active, { type: 'error', code: 'UNKNOWN_TYPE', message: `unsupported_type:${String(obj.type ?? 'unknown')}` }, 'validation-fail');
+          return;
+        }
+
+        active.lastMessageType = parsed.type;
+        if (parsed.type === 'input') {
+          active.lastInputSeq = parsed.seq;
+          active.lastInputSummary = summarizeInput(parsed);
+        }
+        console.info('[WS2] RECV', {
+          ts: new Date().toISOString(),
+          client: active.clientId,
+          room: active.roomId ?? '-',
+          type: parsed.type,
+          seq: parsed.type === 'input' ? parsed.seq : undefined,
+          detail: parsed.type === 'input' ? active.lastInputSummary : undefined
         });
-        return;
-      }
 
-      if (parsed.type === 'ping') {
-        send(ws, { type: 'pong', t: parsed.t });
-        return;
-      }
-
-      if (!active.helloReceived) {
-        send(ws, { type: 'error', code: 'HELLO_REQUIRED', message: 'send_hello_before_join_or_input' });
-        return;
-      }
-
-      if (parsed.type === 'join') {
-        const mode = parsed.mode ?? 'pond';
-        if (mode !== 'pond') {
-          send(ws, { type: 'error', code: 'MODE_UNSUPPORTED', message: `mode:${mode}` });
-          return;
-        }
-
-        const roomId = parsed.room || DEFAULT_ROOM;
-        const room = roomManager.getOrCreateRoom(roomId);
-        const alreadyInside = room.players.has(active.clientId);
-        if (!alreadyInside && room.players.size >= config.maxPlayers) {
-          send(ws, { type: 'error', code: 'ROOM_FULL', message: `room:${roomId}` });
-          return;
-        }
-
-        if (active.roomId && active.roomId !== roomId) {
-          const prevRoom = roomManager.getOrCreateRoom(active.roomId);
-          prevRoom.removeClient(active.clientId);
-          if (prevRoom.players.size === 0) roomManager.removeRoom(prevRoom.id);
-        }
-
-        if (!alreadyInside) {
-          room.addClient(active.clientId, ws, active.name);
-        }
-
-        active.roomId = roomId;
-        console.log(`[WS2] JOIN ok client=${active.clientId} room=${roomId} players=${room.players.size}`);
-        send(ws, {
-          type: 'join:ok',
-          room: roomId,
-          tickRate: config.tickRate,
-          snapshotRate: config.snapshotRate,
-          proto: config.protocolVersion,
-          serverBuild: config.serverBuild,
-          runtime: config.runtimeEnv,
-          features: config.features
-        });
-        return;
-      }
-
-      if (parsed.type === 'input') {
-        if (!active.roomId) {
-          send(ws, { type: 'error', code: 'JOIN_REQUIRED', message: 'send_join_before_input' });
-          return;
-        }
-
-        const now = Date.now();
-        if (now - active.inputWindowStartMs >= 1000) {
-          active.inputWindowStartMs = now;
-          active.inputCountInWindow = 0;
-          active.inputRateLimitedInWindow = false;
-        }
-        active.inputCountInWindow += 1;
-        if (active.inputCountInWindow > config.inputRateLimitPerSec) {
-          if (!active.inputRateLimitedInWindow) {
-            active.inputRateLimitedInWindow = true;
-            console.warn(
-              `[WS2] RATE_LIMIT drop client=${active.clientId} room=${active.roomId ?? '-'} count=${active.inputCountInWindow} limit=${config.inputRateLimitPerSec}`
+        if (parsed.type === 'hello') {
+          if (parsed.proto !== config.protocolVersion) {
+            sendWithContext(
+              active,
+              {
+                type: 'error',
+                code: 'UNSUPPORTED_PROTO',
+                message: `expected_proto_${config.protocolVersion}`,
+                proto: config.protocolVersion,
+                serverBuild: config.serverBuild,
+                runtime: config.runtimeEnv,
+                features: config.features
+              },
+              'unsupported-proto'
             );
+            try {
+              ws.close(1002, 'unsupported_proto');
+            } catch {}
+            return;
           }
+
+          active.helloReceived = true;
+          if (parsed.name && parsed.name.trim()) active.name = parsed.name.trim().slice(0, 32);
+          sendWithContext(
+            active,
+            {
+              type: 'welcome',
+              proto: config.protocolVersion,
+              clientId: active.clientId,
+              roomId: active.roomId ?? DEFAULT_ROOM,
+              serverTick: 0,
+              serverBuild: config.serverBuild,
+              runtime: config.runtimeEnv,
+              features: config.features
+            },
+            'hello'
+          );
           return;
         }
 
-        const room = roomManager.getOrCreateRoom(active.roomId);
-        const existing = room.players.get(active.clientId);
-        const fallbackAim = existing?.aimAngle ?? 0;
-        room.enqueueInput(active.clientId, toInputMsg(active.clientId, parsed, fallbackAim));
-        return;
-      }
+        if (parsed.type === 'ping') {
+          sendWithContext(active, { type: 'pong', t: parsed.t }, 'ping');
+          return;
+        }
 
-      if (parsed.type === 'leave') {
-        if (!active.roomId) return;
-        const room = roomManager.getOrCreateRoom(active.roomId);
-        room.removeClient(active.clientId);
-        console.log(`[WS2] LEAVE client=${active.clientId} room=${active.roomId}`);
-        if (room.players.size === 0) roomManager.removeRoom(room.id);
-        active.roomId = null;
-        send(ws, { type: 'leave:ok' });
+        if (!active.helloReceived) {
+          sendWithContext(active, { type: 'error', code: 'HELLO_REQUIRED', message: 'send_hello_before_join_or_input' }, 'hello-required');
+          return;
+        }
+
+        if (parsed.type === 'join') {
+          const mode = parsed.mode ?? 'pond';
+          if (mode !== 'pond') {
+            sendWithContext(active, { type: 'error', code: 'MODE_UNSUPPORTED', message: `mode:${mode}` }, 'join');
+            return;
+          }
+
+          const roomId = parsed.room || DEFAULT_ROOM;
+          const room = roomManager.getOrCreateRoom(roomId);
+          const alreadyInside = room.players.has(active.clientId);
+          if (!alreadyInside && room.players.size >= config.maxPlayers) {
+            sendWithContext(active, { type: 'error', code: 'ROOM_FULL', message: `room:${roomId}` }, 'join');
+            return;
+          }
+
+          if (active.roomId && active.roomId !== roomId) {
+            const prevRoom = roomManager.getOrCreateRoom(active.roomId);
+            prevRoom.removeClient(active.clientId);
+            if (prevRoom.players.size === 0) roomManager.removeRoom(prevRoom.id);
+          }
+
+          if (!alreadyInside) {
+            room.addClient(active.clientId, ws, active.name);
+          }
+
+          active.roomId = roomId;
+          console.log(`[WS2] JOIN ok client=${active.clientId} room=${roomId} players=${room.players.size}`);
+          sendWithContext(
+            active,
+            {
+              type: 'join:ok',
+              room: roomId,
+              tickRate: config.tickRate,
+              snapshotRate: config.snapshotRate,
+              proto: config.protocolVersion,
+              serverBuild: config.serverBuild,
+              runtime: config.runtimeEnv,
+              features: config.features
+            },
+            'join'
+          );
+          return;
+        }
+
+        if (parsed.type === 'input') {
+          if (!active.roomId) {
+            sendWithContext(active, { type: 'error', code: 'JOIN_REQUIRED', message: 'send_join_before_input' }, 'input');
+            return;
+          }
+
+          const now = Date.now();
+          if (now - active.inputWindowStartMs >= 1000) {
+            active.inputWindowStartMs = now;
+            active.inputCountInWindow = 0;
+            active.inputRateLimitedInWindow = false;
+          }
+          active.inputCountInWindow += 1;
+          if (active.inputCountInWindow > config.inputRateLimitPerSec) {
+            if (!active.inputRateLimitedInWindow) {
+              active.inputRateLimitedInWindow = true;
+              console.warn(
+                `[WS2] RATE_LIMIT drop client=${active.clientId} room=${active.roomId ?? '-'} count=${active.inputCountInWindow} limit=${config.inputRateLimitPerSec}`
+              );
+            }
+            return;
+          }
+
+          const room = roomManager.getOrCreateRoom(active.roomId);
+          const existing = room.players.get(active.clientId);
+          const fallbackAim = existing?.aimAngle ?? 0;
+          room.enqueueInput(active.clientId, toInputMsg(active.clientId, parsed, fallbackAim));
+          return;
+        }
+
+        if (parsed.type === 'leave') {
+          if (!active.roomId) return;
+          const room = roomManager.getOrCreateRoom(active.roomId);
+          room.removeClient(active.clientId);
+          console.log(`[WS2] LEAVE client=${active.clientId} room=${active.roomId}`);
+          if (room.players.size === 0) roomManager.removeRoom(room.id);
+          active.roomId = null;
+          sendWithContext(active, { type: 'leave:ok' }, 'leave');
+        }
+      } catch (error) {
+        console.error('[WS2] HANDLER_EXCEPTION', {
+          ts: new Date().toISOString(),
+          client: active.clientId,
+          room: active.roomId ?? '-',
+          lastMessageType: active.lastMessageType,
+          lastInputSeq: active.lastInputSeq,
+          lastInputSummary: active.lastInputSummary,
+          raw: raw.slice(0, 240),
+          stack: error instanceof Error ? error.stack : String(error)
+        });
+        try {
+          sendWithContext(active, { type: 'error', code: 'HANDLER_EXCEPTION', message: 'server_handler_exception' }, 'exception');
+        } catch {}
+        try {
+          ws.close(1011, 'handler_exception');
+        } catch {}
       }
     });
 
@@ -427,12 +505,24 @@ export function createWsServerV2(server: Server, roomManager: RoomManager, cfg: 
         if (room.players.size === 0) roomManager.removeRoom(room.id);
       }
       sessions.delete(ws);
-      console.log(`[WS2] DISCONNECT client=${active.clientId} room=${active.roomId ?? '-'} code=${code} reason=${reason.toString()}`);
+      console.log(
+        `[WS2] DISCONNECT client=${active.clientId} room=${active.roomId ?? '-'} code=${code} reason=${reason.toString()} ` +
+          `lastMessageType=${active.lastMessageType ?? '-'} lastInputSeq=${active.lastInputSeq ?? '-'} lastSentType=${active.lastSentType ?? '-'}`
+      );
     });
 
     ws.on('error', (err) => {
       const active = sessions.get(ws);
-      console.error(`[WS2] ERROR client=${active?.clientId ?? 'unknown'}`, err);
+      console.error('[WS2] SOCKET_ERROR', {
+        ts: new Date().toISOString(),
+        client: active?.clientId ?? 'unknown',
+        room: active?.roomId ?? '-',
+        lastMessageType: active?.lastMessageType ?? '-',
+        lastInputSeq: active?.lastInputSeq ?? '-',
+        lastInputSummary: active?.lastInputSummary ?? '-',
+        lastSentType: active?.lastSentType ?? '-',
+        error: err instanceof Error ? err.stack : String(err)
+      });
     });
   });
 
@@ -444,4 +534,18 @@ export function createWsServerV2(server: Server, roomManager: RoomManager, cfg: 
       players: roomManager.playerCount()
     })
   };
+}
+
+function summarizeInput(msg: ClientInputV2) {
+  return [
+    `seq=${msg.seq}`,
+    `move=(${msg.moveX ?? 0},${msg.moveY ?? 0})`,
+    msg.pass ? 'pass' : null,
+    msg.drop ? 'drop' : null,
+    msg.poke ? 'poke' : null,
+    msg.shoot ? 'shoot' : null,
+    msg.stop ? 'stop' : null
+  ]
+    .filter(Boolean)
+    .join(' ');
 }

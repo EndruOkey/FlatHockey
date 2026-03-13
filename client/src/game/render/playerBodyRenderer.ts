@@ -58,7 +58,7 @@ export function renderPlayerBody(
 }
 
 function renderShadow(graphics: Phaser.GameObjects.Graphics, rig: PlayerBodyRig, options: PlayerBodyRenderOptions) {
-  const alpha = options.hasPuck ? 0.2 : options.isLocalPlayer ? 0.18 : 0.16;
+  const alpha = options.hasPuck ? 0.22 : options.isLocalPlayer ? 0.18 : 0.16;
   graphics.fillStyle(COLORS.shadow, alpha);
   graphics.fillEllipse(
     rig.ringCenter.x,
@@ -69,9 +69,9 @@ function renderShadow(graphics: Phaser.GameObjects.Graphics, rig: PlayerBodyRig,
 }
 
 function renderRing(graphics: Phaser.GameObjects.Graphics, rig: PlayerBodyRig, options: PlayerBodyRenderOptions) {
-  const fillAlpha = options.hasPuck ? 0.2 : options.isLocalPlayer ? 0.18 : 0.12;
-  const strokeAlpha = options.hasPuck ? 0.6 : options.isLocalPlayer ? 0.46 : 0.34;
-  const outerStrokeAlpha = options.hasPuck ? 0.22 : options.isLocalPlayer ? 0.14 : 0;
+  const fillAlpha = options.hasPuck ? 0.26 : options.isLocalPlayer ? 0.18 : 0.12;
+  const strokeAlpha = options.hasPuck ? 0.78 : options.isLocalPlayer ? 0.46 : 0.34;
+  const outerStrokeAlpha = options.hasPuck ? 0.3 : options.isLocalPlayer ? 0.14 : 0;
   graphics.fillStyle(COLORS.ringFill, fillAlpha);
   graphics.fillCircle(rig.ringCenter.x, rig.ringCenter.y, rig.ringRadius);
   if (outerStrokeAlpha > 0) {
@@ -80,6 +80,10 @@ function renderRing(graphics: Phaser.GameObjects.Graphics, rig: PlayerBodyRig, o
   }
   graphics.lineStyle(2, COLORS.ringStroke, strokeAlpha);
   graphics.strokeCircle(rig.ringCenter.x, rig.ringCenter.y, rig.ringRadius);
+  if (options.hasPuck) {
+    graphics.lineStyle(1.5, 0xf2fbff, 0.18);
+    graphics.strokeCircle(rig.ringCenter.x, rig.ringCenter.y, rig.ringRadius - 3);
+  }
 }
 
 function renderLowerBody(graphics: Phaser.GameObjects.Graphics, rig: PlayerBodyRig) {

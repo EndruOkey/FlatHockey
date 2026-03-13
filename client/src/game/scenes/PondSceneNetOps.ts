@@ -17,6 +17,11 @@ export function handleServerMessage(scene: any, msg: ServerMessage | { type?: st
     roomId?: string;
   };
 
+  console.info('[NET_BOOTSTRAP] MESSAGE', {
+    ts: new Date().toISOString(),
+    type: m.type ?? 'unknown'
+  });
+
   if (m.type === 'welcome' || m.type === 'net:welcome') {
     scene.applyWelcomeLike({
       clientId: String(m.clientId ?? ''),
@@ -29,6 +34,9 @@ export function handleServerMessage(scene: any, msg: ServerMessage | { type?: st
   if (m.type === 'join:ok') {
     const room = typeof m.room === 'string' ? m.room : 'pond-1';
     scene.roomId = room;
+    if (typeof scene.markSessionActive === 'function') {
+      scene.markSessionActive('join:ok');
+    }
     return;
   }
 
@@ -62,6 +70,10 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
   if (!Number.isFinite(snapshot.serverTick) || !Array.isArray(snapshot.players)) {
     scene.failProtocolMismatch('snapshot payload is missing required fields');
     return;
+  }
+
+  if (typeof scene.markSessionActive === 'function') {
+    scene.markSessionActive('snapshot');
   }
 
   const now = performance.now();
@@ -150,6 +162,16 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
   }
 
   if (snapshot.puck) {
+    const prevPuckState = scene.puckSnapshot?.state ?? 'FREE';
+    const prevOwnerId = scene.puckSnapshot?.ownerId ?? null;
+    const nextOwnerId = snapshot.puck.ownerId ?? null;
+    const ownerChanged = prevOwnerId !== nextOwnerId;
+    const turnoverOrCapture =
+      (prevPuckState === 'HELD' && (snapshot.puck.state !== 'HELD' || ownerChanged)) ||
+      (snapshot.puck.state === 'HELD' && ownerChanged);
+    if (turnoverOrCapture) {
+      scene.puckReadabilityPulseSec = 0.14;
+    }
     scene.puckSnapshot = {
       x: snapshot.puck.x,
       y: snapshot.puck.y,

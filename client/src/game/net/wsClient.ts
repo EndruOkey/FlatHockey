@@ -156,6 +156,7 @@ export class WsClient {
       try {
         const msg = JSON.parse(String(ev.data));
         this.lastReceivedSummary = summarizeWireMessage(msg);
+        console.info('[WS_CLIENT] RECV', this.lastReceivedSummary);
 
         if (msg && msg.type === 'pong') {
           if (typeof msg.t === 'number') {
@@ -183,6 +184,7 @@ export class WsClient {
     try {
       const wireMsg = this.toV2WireMessage(msg);
       this.lastSentSummary = summarizeWireMessage(wireMsg);
+      console.info('[WS_CLIENT] SEND', this.lastSentSummary);
       this.ws.send(JSON.stringify(wireMsg));
     } catch (error) {
       console.error('[WS_CLIENT] SEND_ERROR', {
@@ -283,6 +285,32 @@ function summarizeWireMessage(msg: any): WireSummary {
   const ts = new Date().toISOString();
   const type = typeof msg?.type === 'string' ? msg.type : 'unknown';
 
+  if (type === 'hello') {
+    return {
+      ts,
+      type,
+      detail: [
+        typeof msg.proto === 'number' ? `proto=${msg.proto}` : null,
+        typeof msg.clientBuild === 'string' ? `build=${msg.clientBuild}` : null
+      ]
+        .filter(Boolean)
+        .join(' ')
+    };
+  }
+
+  if (type === 'join') {
+    return {
+      ts,
+      type,
+      detail: [
+        typeof msg.mode === 'string' ? `mode=${msg.mode}` : null,
+        typeof msg.room === 'string' ? `room=${msg.room}` : null
+      ]
+        .filter(Boolean)
+        .join(' ')
+    };
+  }
+
   if (type === 'input') {
     const parts = [
       typeof msg.seq === 'number' ? `seq=${msg.seq}` : null,
@@ -308,6 +336,14 @@ function summarizeWireMessage(msg: any): WireSummary {
       tick: typeof msg.tick === 'number' ? msg.tick : undefined,
       serverTick: typeof msg.serverTick === 'number' ? msg.serverTick : undefined,
       detail: `players=${Array.isArray(msg.players) ? msg.players.length : 0} puck=${msg.puck?.state ?? 'none'}`
+    };
+  }
+
+  if (type === 'ping' || type === 'pong' || type === 'net:ping' || type === 'net:pong') {
+    return {
+      ts,
+      type,
+      detail: typeof msg.t === 'number' ? `t=${msg.t}` : undefined
     };
   }
 
