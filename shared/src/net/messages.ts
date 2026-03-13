@@ -1,5 +1,6 @@
 import type { RuntimeEnvironment, ServerFeature } from './protocol';
 import type { LocomotionState } from '../sim/movementTypes';
+import type { StickState } from '../stick/semiPhysicalStick';
 
 export type InputMsg = {
   type: 'input';
@@ -8,6 +9,9 @@ export type InputMsg = {
   moveX?: -1 | 0 | 1;
   moveY?: -1 | 0 | 1;
   shoot?: 0 | 1;
+  pass?: 0 | 1;
+  drop?: 0 | 1;
+  poke?: 0 | 1;
   aimAngle?: number;
   stop?: 0 | 1;
 };
@@ -20,9 +24,14 @@ export type PlayerStateMsg = {
   vy: number;
   angle: number;
   travelHeading: number;
+  intentBoostTimer?: number;
+  lastIntentAngle?: number | null;
   aimAngle: number;
   desiredHeading: number;
   locomotionState: LocomotionState;
+  stickState?: StickState;
+  stickTimer?: number;
+  shotCharge?: number;
 };
 
 export type SnapshotMsg = {

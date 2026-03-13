@@ -48,11 +48,19 @@ export class Room {
       travelHeading: 0,
       steeringHeading: 0,
       inputHeading: 0,
+      intentBoostTimer: 0,
+      lastIntentAngle: null,
       aimAngle: 0,
       desiredHeading: 0,
       locomotionState: 'idle',
       prevShoot: false,
+      prevPass: false,
+      prevDrop: false,
+      prevPoke: false,
       shotCharge: 0,
+      stickState: 'neutral',
+      stickTimer: 0,
+      angularVelocity: 0,
       lastProcessedSeq: 0,
       lastInputState: { ...ZERO_INPUT },
       inputBuffer: [],
@@ -78,6 +86,9 @@ export class Room {
         moveX: input.moveX ?? 0,
         moveY: input.moveY ?? 0,
         shoot: input.shoot ? 1 : 0,
+        pass: input.pass ? 1 : 0,
+        drop: input.drop ? 1 : 0,
+        poke: input.poke ? 1 : 0,
         aimAngle: typeof input.aimAngle === 'number' ? input.aimAngle : player.aimAngle,
         stop: input.stop ? 1 : 0
       }
@@ -95,6 +106,7 @@ export class Room {
     const movementConfig = resolvePlayerMovementConfig(this.gameplayConfig);
 
     for (const player of this.players.values()) {
+      const prevAngle = player.angle;
       const next = this.consumeNextInput(player);
       if (next) {
         player.lastInputState = next.state;
@@ -104,6 +116,7 @@ export class Room {
       const movement = stepPlayerMovement(player, player.lastInputState, dt, movementConfig);
       player.vx = movement.vx;
       player.vy = movement.vy;
+      player.angularVelocity = wrapAngleDelta(player.angle - prevAngle) / Math.max(0.0001, dt);
       this.logMovementDebug(player, movement);
     }
     this.updatePuck(dt);
@@ -134,9 +147,14 @@ export class Room {
         vy: p.vy,
         angle: p.angle,
         travelHeading: p.travelHeading,
+        intentBoostTimer: p.intentBoostTimer,
+        lastIntentAngle: p.lastIntentAngle,
         aimAngle: p.aimAngle,
         desiredHeading: p.desiredHeading,
-        locomotionState: p.locomotionState
+        locomotionState: p.locomotionState,
+        stickState: p.stickState,
+        stickTimer: p.stickTimer,
+        shotCharge: p.shotCharge
       }))
     };
     this.broadcast(msg);
@@ -191,4 +209,8 @@ function resolveMovementDebugEveryTicks() {
   const raw = Number(process.env.FLATHOCKEY_DEBUG_MOVEMENT_EVERY_TICKS ?? 15);
   if (!Number.isFinite(raw) || raw < 1) return 15;
   return Math.floor(raw);
+}
+
+function wrapAngleDelta(angle: number) {
+  return Math.atan2(Math.sin(angle), Math.cos(angle));
 }

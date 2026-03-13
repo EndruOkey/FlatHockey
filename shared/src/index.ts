@@ -7,6 +7,7 @@ export * from './sim/playerMovement';
 export * from './sim/turning';
 export * from './sim/hockeyStop';
 export * from './sim/reorientation';
+export * from './stick/semiPhysicalStick';
 export * from './tuning/gameplay.defaults';
 export * from './tuning/gameplayConfigStore';
 export * from './tuning/gameplayConfig.types';

@@ -33,6 +33,10 @@ export function runPondSceneUpdate(scene: any) {
     else scene.startReplay();
   }
 
+  if (Phaser.Input.Keyboard.JustDown(scene.playerRigDebugToggleKey)) {
+    scene.playerRigDebugEnabled = !scene.playerRigDebugEnabled;
+  }
+
   if (scene.needsResync) {
     scene.needsResync = false;
     const t = performance.now();
@@ -75,7 +79,10 @@ export function runPondSceneUpdate(scene: any) {
         x: scene.predicted.x,
         y: scene.predicted.y,
         rot: scene.predicted.angle,
-        aimRot: scene.predicted.aimAngle ?? scene.predicted.angle
+        aimRot: scene.predicted.aimAngle ?? scene.predicted.angle,
+        stickState: scene.predicted.stickState,
+        stickTimer: scene.predicted.stickTimer,
+        shotCharge: scene.predicted.shotCharge
       }, simStepTime);
       scene.ws.send(input);
     }
@@ -86,6 +93,10 @@ export function runPondSceneUpdate(scene: any) {
   }
 
   const remoteTargetServerTime = scene.estimateServerNowMs(now) - scene.remoteInterpDelayMs;
+  const visualPuckOwnerId =
+    typeof scene.getVisualPuckOwnerId === 'function' ? scene.getVisualPuckOwnerId() : scene.puckSnapshot.ownerId;
+  scene.updateHybridCamera(clampedDtMs / 1000, remoteTargetServerTime);
+  scene.playerRenderWorldStates.clear();
   for (const [id, view] of scene.players.entries()) {
     let state: any = null;
     if (scene.clientId && id === scene.clientId) {
@@ -95,7 +106,10 @@ export function runPondSceneUpdate(scene: any) {
           x: scene.predicted.x,
           y: scene.predicted.y,
           rot: scene.predicted.angle,
-          aimRot: scene.predicted.aimAngle ?? scene.predicted.angle
+          aimRot: scene.predicted.aimAngle ?? scene.predicted.angle,
+          stickState: scene.predicted.stickState,
+          stickTimer: scene.predicted.stickTimer,
+          shotCharge: scene.predicted.shotCharge
         };
       }
       if (state) {
@@ -111,6 +125,9 @@ export function runPondSceneUpdate(scene: any) {
           // Keep local stick aim locked to current mouse-driven intent instead of visual body smoothing.
           scene.localRenderState.aimRot = state.aimRot ?? state.rot;
         }
+        scene.localRenderState.stickState = state.stickState;
+        scene.localRenderState.stickTimer = state.stickTimer;
+        scene.localRenderState.shotCharge = state.shotCharge;
         state = scene.localRenderState;
       }
     } else {
@@ -118,6 +135,16 @@ export function runPondSceneUpdate(scene: any) {
       if (interp) state = scene.sampleInterpolated(interp, remoteTargetServerTime);
     }
     if (!state) continue;
+    scene.playerRenderWorldStates.set(id, {
+      x: state.x,
+      y: state.y,
+      rot: state.rot,
+      aimRot: state.aimRot ?? state.rot,
+      stickState: state.stickState,
+      stickTimer: state.stickTimer,
+      shotCharge: state.shotCharge
+    });
+    view.setRenderScale(scene.cameraWorldScale);
     const s = scene.worldToScreen(state.x, state.y);
     view.setState(
       s.x,
@@ -125,7 +152,14 @@ export function runPondSceneUpdate(scene: any) {
       state.rot,
       state.aimRot ?? state.rot
     );
-    view.setDebugDrawEnabled(false);
+    view.setStickVisualState(
+      state.stickState,
+      state.shotCharge ?? 0,
+      state.stickTimer ?? 0,
+      visualPuckOwnerId === id
+    );
+    view.setPresentationState(scene.clientId === id, visualPuckOwnerId === id);
+    view.setDebugDrawEnabled(scene.playerRigDebugEnabled);
     view.draw(clampedDtMs / 1000);
   }
 

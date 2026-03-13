@@ -32,6 +32,9 @@ type ClientInputV2 = {
   moveY?: -1 | 0 | 1;
   aimAngle?: number;
   shoot?: boolean;
+  pass?: boolean;
+  drop?: boolean;
+  poke?: boolean;
   stop?: boolean;
   pointer?: {
     aim?: number;
@@ -42,6 +45,9 @@ type ClientInputV2 = {
     s?: boolean;
     d?: boolean;
     e?: boolean;
+    mouse0?: boolean;
+    mouse1?: boolean;
+    mouse2?: boolean;
     space?: boolean;
   };
 };
@@ -173,6 +179,9 @@ function parseV2Message(obj: JsonRecord): ClientMessageV2 | null {
           ? pointer.aim
           : undefined;
     const shoot = typeof obj.shoot === 'boolean' ? obj.shoot : bool(keys?.e);
+    const pass = typeof obj.pass === 'boolean' ? obj.pass : bool(keys?.mouse0);
+    const drop = typeof obj.drop === 'boolean' ? obj.drop : bool(keys?.mouse1);
+    const poke = typeof obj.poke === 'boolean' ? obj.poke : bool(keys?.mouse2);
     const stop = typeof obj.stop === 'boolean' ? obj.stop : bool(keys?.space);
     return {
       type,
@@ -181,6 +190,9 @@ function parseV2Message(obj: JsonRecord): ClientMessageV2 | null {
       moveY,
       aimAngle,
       shoot,
+      pass,
+      drop,
+      poke,
       stop,
       pointer,
       keys
@@ -207,6 +219,9 @@ function toInputMsg(clientId: string, msg: ClientInputV2, fallbackAim: number): 
     moveX: msg.moveX ?? 0,
     moveY: msg.moveY ?? 0,
     shoot: msg.shoot ? 1 : 0,
+    pass: msg.pass ? 1 : 0,
+    drop: msg.drop ? 1 : 0,
+    poke: msg.poke ? 1 : 0,
     aimAngle: typeof msg.aimAngle === 'number' ? msg.aimAngle : fallbackAim,
     stop: msg.stop ? 1 : 0
   };

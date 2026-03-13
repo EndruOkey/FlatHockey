@@ -92,7 +92,13 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
     if (scene.clientId && p.id === scene.clientId) {
       scene.ackSeq = snapshot.ack[scene.clientId] ?? 0;
       if (!scene.predicted) {
-        scene.predicted = { ...p };
+        scene.predicted = {
+          ...p,
+          intentBoostTimer:
+            typeof p.intentBoostTimer === 'number' && Number.isFinite(p.intentBoostTimer) ? p.intentBoostTimer : 0,
+          lastIntentAngle:
+            typeof p.lastIntentAngle === 'number' && Number.isFinite(p.lastIntentAngle) ? p.lastIntentAngle : null
+        };
         scene.pendingInputs = [];
         scene.localBuffer.clear();
         scene.localBuffer.push(
@@ -100,7 +106,10 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
             x: p.x,
             y: p.y,
             rot: p.angle,
-            aimRot: p.aimAngle
+            aimRot: p.aimAngle,
+            stickState: p.stickState,
+            stickTimer: p.stickTimer,
+            shotCharge: p.shotCharge
           },
           now
         );
@@ -111,7 +120,10 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
             x: scene.predicted.x,
             y: scene.predicted.y,
             rot: scene.predicted.angle ?? 0,
-            aimRot: scene.predicted.aimAngle ?? scene.predicted.angle ?? 0
+            aimRot: scene.predicted.aimAngle ?? scene.predicted.angle ?? 0,
+            stickState: scene.predicted.stickState,
+            stickTimer: scene.predicted.stickTimer,
+            shotCharge: scene.predicted.shotCharge
           },
           now
         );
@@ -127,7 +139,10 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
           x: p.x,
           y: p.y,
           rot: p.angle,
-          aimRot: p.aimAngle
+          aimRot: p.aimAngle,
+          stickState: p.stickState,
+          stickTimer: p.stickTimer,
+          shotCharge: p.shotCharge
         },
         serverTimeMs
       );
@@ -165,6 +180,9 @@ export function buildClientInput(scene: any): InputMsg {
     moveX: moveX > 0 ? 1 : moveX < 0 ? -1 : 0,
     moveY: moveY > 0 ? 1 : moveY < 0 ? -1 : 0,
     shoot: scene.keys.E.isDown ? 1 : 0,
+    pass: scene.input.activePointer.leftButtonDown() ? 1 : 0,
+    drop: typeof scene.input.activePointer.middleButtonDown === 'function' && scene.input.activePointer.middleButtonDown() ? 1 : 0,
+    poke: scene.input.activePointer.rightButtonDown() ? 1 : 0,
     stop: scene.keys.SPACE.isDown ? 1 : 0,
     aimAngle
   };

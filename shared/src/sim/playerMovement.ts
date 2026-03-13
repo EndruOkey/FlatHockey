@@ -16,6 +16,16 @@ import type {
 
 const MAX_CARVE_BONUS = 0.092;
 const SMALL_SPEED_EPSILON = 5;
+const LOW_SPEED_ACCEL_BURST_THRESHOLD_RATIO = 0.42;
+const LOW_SPEED_ACCEL_BURST_MULTIPLIER = 1.5;
+const ACTIVE_INPUT_DRAG_MULTIPLIER = 0.6;
+const LOW_SPEED_REORIENTATION_MULTIPLIER = 1.8;
+const LATERAL_CORRECTION_BOOST = 1.2;
+const INTENT_BOOST_DURATION = 0.12;
+const INTENT_BOOST_DIRECTION_CHANGE_THRESHOLD = (40 * Math.PI) / 180;
+const INTENT_BOOST_LOW_SPEED_THRESHOLD_RATIO = 0.35;
+const INTENT_BOOST_ACCEL_STRENGTH = 0.35;
+const INTENT_BOOST_STEERING_STRENGTH = 0.25;
 
 export const DEFAULT_RINK_BOUNDS: RinkBounds = {
   left: -560,
@@ -92,9 +102,18 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
   const previousSteeringHeading = resolveHeading(state.steeringHeading, previousDesiredHeading);
   const previousInputHeading = resolveHeading(state.inputHeading, previousDesiredHeading);
   const currentTravelHeading = resolveTravelHeading(state, currentSpeed, currentHeading);
+  const activeInputDragMultiplier = hasMovement ? ACTIVE_INPUT_DRAG_MULTIPLIER : 1;
   const rawDesiredHeading = hasMovement
     ? computeDesiredHeading(moveX, moveY, currentTravelHeading)
     : currentTravelHeading;
+  const intentBoost = updateIntentBoostState({
+    state,
+    hasMovement,
+    rawDesiredHeading,
+    speed: currentSpeed,
+    moveSpeed: config.moveSpeed,
+    dt
+  });
   const turnContext = resolveTurnContext({
     hasMovement,
     currentHeading,
@@ -113,7 +132,8 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
         maxSpeed: config.moveSpeed,
         dt,
         inputHold: turnContext.inputHold,
-        smallCorrection: turnContext.smallCorrection
+        smallCorrection: turnContext.smallCorrection,
+        responseMultiplier: intentBoost.steeringMultiplier
       })
     : currentHeading;
   const resolvedTurnContext = resolveTurnContext({
@@ -145,7 +165,7 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
     turnDevelopment: resolvedTurnContext.turnDevelopment,
     rotationSpeed: config.rotationSpeed,
     lowSpeedRotationSpeed: config.lowSpeedRotationSpeed,
-    rotationMultiplier: stop.rotationMultiplier
+    rotationMultiplier: stop.rotationMultiplier * computeLowSpeedTurnMultiplier(currentSpeed, config.moveSpeed)
   });
   const steering = computeTravelSteering({
     currentTravelHeading,
@@ -157,7 +177,7 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
     turnMagnitude: resolvedTurnContext.turnMagnitude,
     turnCommitment: resolvedTurnContext.turnCommitment,
     activeCarve: resolvedTurnContext.activeCarve,
-    traction: config.traction * stop.tractionMultiplier,
+    traction: config.traction * stop.tractionMultiplier * intentBoost.steeringMultiplier,
     stopActive: stopRequested.stopRequested,
     turnPenalty: config.turnPenalty
   });
@@ -213,7 +233,11 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
   );
   const targetSpeed = resolveTargetSpeed(hasMovement, config) * driveScale;
   const acceleration =
-    config.acceleration * lerp(0.28, 1.02, driveScale) * (1 + accelerationResponse.accelerationBoost);
+    config.acceleration *
+    lerp(0.28, 1.02, driveScale) *
+    (1 + accelerationResponse.accelerationBoost) *
+    computeAccelerationBurstMultiplier(currentSpeed, config.moveSpeed, hasMovement, stopRequested.stopRequested) *
+    intentBoost.accelerationMultiplier;
   const carveBonus = computeCarveBonus(
     steering,
     bodyTurn,
@@ -226,7 +250,8 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
     targetSpeed * lerp(0.78, 1, responsePenalty) * (1 + carveBonus + accelerationResponse.driveTargetBoost);
   const driveDeceleration =
     (config.passiveDeceleration + config.moveSpeed * (1 - responsePenalty) * 0.05) *
-    lerp(1, 0.84, resolvedTurnContext.activeCarve);
+    lerp(1, 0.84, resolvedTurnContext.activeCarve) *
+    activeInputDragMultiplier;
   const driveHeading = resolveDriveHeading({
     bodyHeading: bodyTurn.heading,
     steeringHeading,
@@ -263,7 +288,7 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
         travelAlignmentError: Math.abs(shortestAngleDelta(drivenTravelHeading, forwardAlignment.travelHeading)),
         bodyTravelMismatch: drivenBodyTravelMismatch,
         turnContext: resolvedTurnContext
-      });
+      }) * computeLateralCorrectionBoost(drivenTravelHeading, steeringHeading, drivenSpeed, config.moveSpeed);
   const alignedVelocity = stopRequested.stopRequested || !hasMovement
     ? drivenVelocity
     : dampVelocityLateralComponent(drivenVelocity.x, drivenVelocity.y, forwardAlignment.travelHeading, lateralDecay, dt);
@@ -273,6 +298,7 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
         (1 - responsePenalty) *
         Math.max(0, dt) *
         0.01 *
+        activeInputDragMultiplier *
         lerp(1, 0.88, accelerationResponse.turnDragRelief) *
         lerp(1, 0.84, resolvedTurnContext.activeCarve);
   const draggedVelocity = turnDrag > 0 ? dampVelocityMagnitude(alignedVelocity.x, alignedVelocity.y, turnDrag) : alignedVelocity;
@@ -507,6 +533,74 @@ function resolveAccelerationResponse(input: {
     driveTargetBoost: lowSpeedPickup * 0.035 + redirectPickup * 0.05,
     turnDragRelief: lowSpeedPickup * 0.04 + redirectPickup * 0.12
   };
+}
+
+function updateIntentBoostState(input: {
+  state: PlayerMovementState;
+  hasMovement: boolean;
+  rawDesiredHeading: number;
+  speed: number;
+  moveSpeed: number;
+  dt: number;
+}) {
+  const decayedTimer = Math.max(0, input.state.intentBoostTimer - Math.max(0, input.dt));
+  const previousIntentAngle = Number.isFinite(input.state.lastIntentAngle)
+    ? wrapAngle(input.state.lastIntentAngle as number)
+    : null;
+  const lowSpeedThreshold = Math.max(1, input.moveSpeed) * INTENT_BOOST_LOW_SPEED_THRESHOLD_RATIO;
+  const freshMoveStart = input.hasMovement && previousIntentAngle === null && input.speed <= lowSpeedThreshold;
+  const directionChange =
+    input.hasMovement &&
+    previousIntentAngle !== null &&
+    Math.abs(shortestAngleDelta(previousIntentAngle, input.rawDesiredHeading)) >= INTENT_BOOST_DIRECTION_CHANGE_THRESHOLD;
+  const nextTimer = freshMoveStart || directionChange ? INTENT_BOOST_DURATION : decayedTimer;
+  input.state.intentBoostTimer = nextTimer;
+  input.state.lastIntentAngle = input.hasMovement ? wrapAngle(input.rawDesiredHeading) : null;
+
+  if (!input.hasMovement || nextTimer <= 0) {
+    return {
+      accelerationMultiplier: 1,
+      steeringMultiplier: 1
+    };
+  }
+
+  const lowSpeedFactor = 1 - clamp(input.speed / Math.max(1, input.moveSpeed), 0, 1);
+  const windowFactor = clamp(nextTimer / INTENT_BOOST_DURATION, 0, 1);
+  const boostFactor = lowSpeedFactor * windowFactor;
+
+  return {
+    accelerationMultiplier: 1 + INTENT_BOOST_ACCEL_STRENGTH * boostFactor,
+    steeringMultiplier: 1 + INTENT_BOOST_STEERING_STRENGTH * boostFactor
+  };
+}
+
+function computeAccelerationBurstMultiplier(
+  speed: number,
+  moveSpeed: number,
+  hasMovement: boolean,
+  stopActive: boolean
+) {
+  if (!hasMovement || stopActive) return 1;
+  const thresholdSpeed = Math.max(1, moveSpeed) * LOW_SPEED_ACCEL_BURST_THRESHOLD_RATIO;
+  const burstRead = clamp(1 - speed / thresholdSpeed, 0, 1);
+  return lerp(1, LOW_SPEED_ACCEL_BURST_MULTIPLIER, burstRead);
+}
+
+function computeLowSpeedTurnMultiplier(speed: number, moveSpeed: number) {
+  const speedRatio = clamp(speed / Math.max(1, moveSpeed), 0, 1);
+  return lerp(LOW_SPEED_REORIENTATION_MULTIPLIER, 1, speedRatio);
+}
+
+function computeLateralCorrectionBoost(
+  currentTravelHeading: number,
+  desiredTravelHeading: number,
+  speed: number,
+  moveSpeed: number
+) {
+  const mismatch = Math.abs(shortestAngleDelta(currentTravelHeading, desiredTravelHeading));
+  const mismatchRatio = clamp(mismatch / (Math.PI * 0.5), 0, 1);
+  const speedRatio = clamp(speed / Math.max(1, moveSpeed), 0, 1);
+  return lerp(1, LATERAL_CORRECTION_BOOST, mismatchRatio * lerp(1, 0.6, speedRatio));
 }
 
 function resolveDriveHeading(input: {

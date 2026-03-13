@@ -1,3 +1,4 @@
+import type { StickState } from '@flathockey/shared';
 import { lerp, lerpAngle } from '../util/math';
 
 type Timed<T> = { t: number; value: T };
@@ -83,12 +84,18 @@ export type LerpPlayer = {
   y: number;
   rot: number;
   aimRot?: number;
+  stickState?: StickState;
+  stickTimer?: number;
+  shotCharge?: number;
 };
 export const lerpPlayer = (a: LerpPlayer, b: LerpPlayer, t: number): LerpPlayer => ({
   x: lerp(a.x, b.x, t),
   y: lerp(a.y, b.y, t),
   rot: lerpAngle(a.rot, b.rot, t),
-  aimRot: lerpAngle(a.aimRot ?? a.rot, b.aimRot ?? b.rot, t)
+  aimRot: lerpAngle(a.aimRot ?? a.rot, b.aimRot ?? b.rot, t),
+  stickState: t < 0.5 ? a.stickState : b.stickState,
+  stickTimer: lerp(a.stickTimer ?? 0, b.stickTimer ?? 0, t),
+  shotCharge: lerp(a.shotCharge ?? 0, b.shotCharge ?? 0, t)
 });
 
 export type LerpPuck = { x: number; y: number };

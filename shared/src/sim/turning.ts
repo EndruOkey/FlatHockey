@@ -67,6 +67,7 @@ export function advanceSteeringTarget(input: {
   dt: number;
   inputHold: number;
   smallCorrection: number;
+  responseMultiplier?: number;
 }) {
   const speedRatio = clamp(input.speed / Math.max(1, input.maxSpeed), 0, 1);
   let slewRate = lerp(9.2, 6.2, speedRatio);
@@ -75,7 +76,7 @@ export function advanceSteeringTarget(input: {
   const mismatchRatio = clamp(Math.abs(delta) / (Math.PI * 0.42), 0, 1);
   const subtleBoost = input.smallCorrection * lerp(0.16, 0.05, speedRatio);
   const holdBoost = input.inputHold * mismatchRatio * 0.08;
-  slewRate *= lerp(1, 1.18, mismatchRatio) * (1 + subtleBoost + holdBoost);
+  slewRate *= lerp(1, 1.18, mismatchRatio) * (1 + subtleBoost + holdBoost) * Math.max(0.1, input.responseMultiplier ?? 1);
   const maxStep = Math.max(0, slewRate * Math.max(0, input.dt));
   return wrapAngle(input.steeringHeading + clamp(delta, -maxStep, maxStep));
 }

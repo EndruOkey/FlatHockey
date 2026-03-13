@@ -1,7 +1,6 @@
 import { getTuning } from '../tuning/gameplayConfig';
 import { puckStickTuningStore } from '../tuning/puckStickTuningStore';
-import { BUILD_TIME, BUILD_VERSION } from '../../config/version';
-import { PlayerView } from '../entities/playerView';
+import { computeSemiPhysicalStickPose } from '@flathockey/shared';
 
 export function updateCrosshairAndCursor(scene: any) {
   const tuning = getTuning();
@@ -26,67 +25,75 @@ export function updateCrosshairAndCursor(scene: any) {
   scene.crosshairGraphics.fillCircle(x, y, 1.5);
 }
 
-function stickTargetScreen(view: PlayerView) {
-  return view.getStickBladeWorld() ?? { x: view.x, y: view.y };
+function playerCarryTargetWorld(scene: any, playerId: string | null) {
+  if (!playerId) return null;
+  const state = scene.playerRenderWorldStates?.get(playerId);
+  if (!state) return null;
+  const tuning = getTuning();
+  const pose = computeSemiPhysicalStickPose({
+    playerX: state.x,
+    playerY: state.y,
+    bodyAngle: state.rot,
+    aimAngle: state.aimRot ?? state.rot,
+    playerRadius: Math.max(12, tuning.playerRadius ?? 18),
+    state: state.stickState,
+    shotCharge: state.shotCharge ?? 0,
+    stateTimerSec: state.stickTimer ?? 0
+  });
+  return {
+    x: pose.bladeCenterX,
+    y: pose.bladeCenterY
+  };
 }
 
 export function updateAndDrawPuck(scene: any, dtSec: number, remoteTargetServerTime: number) {
   const tuning = puckStickTuningStore.get();
-  const puckRadius = tuning.puckRadius;
-  const holdSpringK = tuning.holdSpringK;
-  const holdDampingC = tuning.holdDampingC;
-  const holdMaxError = tuning.holdMaxError;
+  const puckRadius = tuning.puckRadius * Math.max(1, scene.cameraWorldScale ?? 1);
+  const puckWorld = scene.samplePuckWorld(remoteTargetServerTime);
+  const visualOwnerId = typeof scene.getVisualPuckOwnerId === 'function' ? scene.getVisualPuckOwnerId() : scene.puckSnapshot.ownerId;
+  const visualHeld = scene.puckSnapshot.state === 'HELD' && !!visualOwnerId;
 
-  if (scene.puckSnapshot.state === 'FREE') {
-    const sample = scene.puckFreeBuffer.sample(remoteTargetServerTime, (a: any, b: any, t: number) => ({
-      x: a.x + (b.x - a.x) * t,
-      y: a.y + (b.y - a.y) * t,
-      vx: a.vx + (b.vx - a.vx) * t,
-      vy: a.vy + (b.vy - a.vy) * t
-    })) ?? scene.puckFreeBuffer.latest()?.value ?? scene.puckSnapshot;
-    const s = scene.worldToScreen(sample.x, sample.y);
-    scene.puckRender.x = s.x;
-    scene.puckRender.y = s.y;
-    scene.puckRender.vx = sample.vx;
-    scene.puckRender.vy = sample.vy;
+  if (!visualHeld) {
+    scene.puckRender.x = puckWorld.x;
+    scene.puckRender.y = puckWorld.y;
+    scene.puckRender.vx = puckWorld.vx;
+    scene.puckRender.vy = puckWorld.vy;
     scene.puckRender.state = 'FREE';
     scene.puckRender.ownerId = null;
+    if (scene.puckSnapshot.state === 'HELD' && scene.puckSnapshot.ownerId === scene.clientId) {
+      if (scene.clientId) {
+        const target = playerCarryTargetWorld(scene, scene.clientId);
+        if (target) {
+          scene.puckRender.x = target.x;
+          scene.puckRender.y = target.y;
+          scene.puckRender.vx = (scene.predicted?.vx ?? puckWorld.vx) * 0.35;
+          scene.puckRender.vy = (scene.predicted?.vy ?? puckWorld.vy) * 0.35;
+        }
+      }
+    }
   } else {
     scene.puckRender.state = 'HELD';
-    scene.puckRender.ownerId = scene.puckSnapshot.ownerId;
-    const owner = scene.puckRender.ownerId ? scene.players.get(scene.puckRender.ownerId) : null;
-    const serverScreen = scene.worldToScreen(scene.puckSnapshot.x, scene.puckSnapshot.y);
-    if (owner) {
-      const target = stickTargetScreen(owner);
-      const dx = target.x - scene.puckRender.x;
-      const dy = target.y - scene.puckRender.y;
-      scene.puckRender.vx += (dx * holdSpringK - scene.puckRender.vx * holdDampingC) * dtSec;
-      scene.puckRender.vy += (dy * holdSpringK - scene.puckRender.vy * holdDampingC) * dtSec;
-      scene.puckRender.x += scene.puckRender.vx * dtSec;
-      scene.puckRender.y += scene.puckRender.vy * dtSec;
-      const corrDx = serverScreen.x - scene.puckRender.x;
-      const corrDy = serverScreen.y - scene.puckRender.y;
-      const corrDist = Math.hypot(corrDx, corrDy);
-      if (corrDist > holdMaxError * 1.4) {
-        scene.puckRender.x = serverScreen.x;
-        scene.puckRender.y = serverScreen.y;
-        scene.puckRender.vx = scene.puckSnapshot.vx;
-        scene.puckRender.vy = scene.puckSnapshot.vy;
-      } else {
-        scene.puckRender.x += corrDx * 0.12;
-        scene.puckRender.y += corrDy * 0.12;
-      }
+    scene.puckRender.ownerId = visualOwnerId;
+    const target = playerCarryTargetWorld(scene, visualOwnerId);
+    if (target) {
+      scene.puckRender.x = target.x;
+      scene.puckRender.y = target.y;
+      scene.puckRender.vx = scene.puckSnapshot.vx;
+      scene.puckRender.vy = scene.puckSnapshot.vy;
     } else {
-      scene.puckRender.x = serverScreen.x;
-      scene.puckRender.y = serverScreen.y;
+      scene.puckRender.x = puckWorld.x;
+      scene.puckRender.y = puckWorld.y;
+      scene.puckRender.vx = puckWorld.vx;
+      scene.puckRender.vy = puckWorld.vy;
     }
   }
 
+  const puckScreen = scene.worldToScreen(scene.puckRender.x, scene.puckRender.y);
   scene.puckGraphics.clear();
   scene.puckGraphics.fillStyle(0x111111, 1);
-  scene.puckGraphics.fillCircle(scene.puckRender.x, scene.puckRender.y, puckRadius);
+  scene.puckGraphics.fillCircle(puckScreen.x, puckScreen.y, puckRadius);
   scene.puckGraphics.lineStyle(1, 0xffffff, 0.25);
-  scene.puckGraphics.strokeCircle(scene.puckRender.x, scene.puckRender.y, puckRadius);
+  scene.puckGraphics.strokeCircle(puckScreen.x, puckScreen.y, puckRadius);
 }
 
 export function updateOverlay(_scene: any) {
@@ -98,15 +105,7 @@ export function updateHud(scene: any, dtSec: number) {
   scene.hudAcc += dtSec;
   if (scene.hudAcc < 0.25) return;
   scene.hudAcc = 0;
-  const next = [
-    `Room: ${scene.roomId ?? '-'}`,
-    `Client: ${scene.clientId ?? '-'}`,
-    `Build: ${BUILD_VERSION || 'dev-local'}`,
-    `BuildTime: ${BUILD_TIME || '-'}`,
-    `Seq/Ack: ${scene.seq}/${scene.ackSeq}`,
-    `Pending: ${scene.pendingInputs.length}`,
-    'Mouse aim | E shoot | Space stop'
-  ].join('\n');
+  const next = '';
   if (next !== scene.lastHudText) {
     scene.lastHudText = next;
     scene.hud.setText(next);

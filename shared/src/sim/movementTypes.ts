@@ -18,6 +18,8 @@ export type PlayerMovementState = {
   travelHeading: number;
   steeringHeading?: number;
   inputHeading?: number;
+  intentBoostTimer: number;
+  lastIntentAngle: number | null;
   aimAngle: number;
   desiredHeading: number;
   locomotionState: LocomotionState;

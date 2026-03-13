@@ -146,6 +146,9 @@ export class WsClient {
       typeof msg.moveX === 'number' ||
       typeof msg.moveY === 'number' ||
       typeof msg.shoot === 'number' ||
+      typeof msg.pass === 'number' ||
+      typeof msg.drop === 'number' ||
+      typeof msg.poke === 'number' ||
       typeof msg.stop === 'number' ||
       typeof msg.aimAngle === 'number';
 
@@ -158,6 +161,9 @@ export class WsClient {
       moveY: typeof msg.moveY === 'number' ? msg.moveY : undefined,
       aimAngle: typeof msg.aimAngle === 'number' ? msg.aimAngle : undefined,
       shoot: !!msg.shoot,
+      pass: !!msg.pass,
+      drop: !!msg.drop,
+      poke: !!msg.poke,
       stop: !!msg.stop
     };
   }

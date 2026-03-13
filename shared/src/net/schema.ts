@@ -10,6 +10,9 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       if (typeof data.clientId !== 'string') return null;
       if (typeof data.seq !== 'number') return null;
       const shoot = (data as any).shoot ? 1 : 0;
+      const pass = (data as any).pass ? 1 : 0;
+      const drop = (data as any).drop ? 1 : 0;
+      const poke = (data as any).poke ? 1 : 0;
       const stop = (data as any).stop ? 1 : 0;
       const moveX = sanitizeMovementAxis((data as any).moveX);
       const moveY = sanitizeMovementAxis((data as any).moveY);
@@ -22,6 +25,9 @@ export function parseClientMessage(raw: string): ClientMessage | null {
         moveX,
         moveY,
         shoot,
+        pass,
+        drop,
+        poke,
         aimAngle,
         stop
       };
