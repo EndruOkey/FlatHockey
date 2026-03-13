@@ -38,6 +38,18 @@ if [ -z "$EXPECTED_PROTO" ]; then
   exit 1
 fi
 
+if [ "$RUNTIME_ENV" = "dev" ]; then
+  CLIENT_BASE_PATH="${CLIENT_BASE_PATH:-/dev/}"
+  CLIENT_WS_PROD="${CLIENT_WS_PROD:-wss://flathockey.fun/ws2}"
+  CLIENT_WS_DEV="${CLIENT_WS_DEV:-wss://flathockey.fun/dev/ws2}"
+  CLIENT_DEV_BUILD="${CLIENT_DEV_BUILD:-true}"
+else
+  CLIENT_BASE_PATH="${CLIENT_BASE_PATH:-/}"
+  CLIENT_WS_PROD="${CLIENT_WS_PROD:-wss://flathockey.fun/ws2}"
+  CLIENT_WS_DEV="${CLIENT_WS_DEV:-}"
+  CLIENT_DEV_BUILD="${CLIENT_DEV_BUILD:-false}"
+fi
+
 restart_service() {
   if command -v sudo >/dev/null 2>&1; then
     sudo -n systemctl set-environment BUILD_VERSION="$EXPECTED_COMMIT" RUNTIME_ENV="$RUNTIME_ENV" PORT="$SERVICE_PORT" || true
@@ -112,6 +124,33 @@ verify_runtime_contract() {
   fi
 }
 
+build_client_bundle() {
+  echo "Building client bundle for runtime=$RUNTIME_ENV base=$CLIENT_BASE_PATH"
+  VITE_BUILD_VERSION="$EXPECTED_COMMIT" \
+  VITE_APP_BASE="$CLIENT_BASE_PATH" \
+  VITE_WS_PROD="$CLIENT_WS_PROD" \
+  VITE_WS_DEV="$CLIENT_WS_DEV" \
+  VITE_DEV_BUILD="$CLIENT_DEV_BUILD" \
+    "$PNPM_BIN" --filter @flathockey/client build
+
+  if [ ! -s client/dist/index.html ]; then
+    echo "client/dist/index.html missing or empty"
+    exit 1
+  fi
+  if [ "$RUNTIME_ENV" = "dev" ] && ! grep -q "/dev/assets/" client/dist/index.html; then
+    echo "dev client index is missing /dev/assets/ base path"
+    exit 1
+  fi
+  if ! grep -q "FH_CLIENT_STARTUP" client/dist/assets/*.js; then
+    echo "client bundle is missing startup marker"
+    exit 1
+  fi
+  if ! grep -q "NET_BOOTSTRAP" client/dist/assets/*.js; then
+    echo "client bundle is missing network bootstrap marker"
+    exit 1
+  fi
+}
+
 if [ ! -d node_modules ] || [ ! -x node_modules/.bin/tsc ]; then
   echo "Dependencies missing -> installing deps"
   "$PNPM_BIN" $INSTALL_ARGS
@@ -122,6 +161,8 @@ else
   echo "Lockfile unchanged -> skipping pnpm install"
 fi
 
+"$PNPM_BIN" --filter @flathockey/shared build
+build_client_bundle
 "$PNPM_BIN" --filter @flathockey/server build
 
 if ! restart_service; then

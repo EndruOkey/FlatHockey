@@ -8,6 +8,15 @@ type Handlers = {
   status?: (state: 'connecting' | 'connected' | 'disconnected') => void;
 };
 
+type WireSummary = {
+  ts: string;
+  type: string;
+  seq?: number;
+  tick?: number;
+  serverTick?: number;
+  detail?: string;
+};
+
 /**
  * WS2 minimal client:
  * - on open: send hello, then join
@@ -29,6 +38,8 @@ export class WsClient {
   private didHandshake = false;
 
   private rttMs = -1;
+  private lastSentSummary: WireSummary | null = null;
+  private lastReceivedSummary: WireSummary | null = null;
 
   connect(url: string) {
     this.connectUrl = url;
@@ -87,12 +98,21 @@ export class WsClient {
 
     this.handlers.status?.('connecting');
 
+    console.info('[WS_CLIENT] CREATE', {
+      ts: new Date().toISOString(),
+      url: this.connectUrl
+    });
+
     const ws = new WebSocket(this.connectUrl);
     this.ws = ws;
 
     ws.addEventListener('open', () => {
       if (this.ws !== ws) return;
 
+      console.info('[WS_CLIENT] OPEN', {
+        ts: new Date().toISOString(),
+        url: this.connectUrl
+      });
       this.reconnectAttempt = 0;
       this.sendHelloJoin();
       this.startPing();
@@ -101,9 +121,18 @@ export class WsClient {
       this.handlers.open?.();
     });
 
-    ws.addEventListener('close', () => {
+    ws.addEventListener('close', (ev) => {
       if (this.ws !== ws) return;
 
+      console.warn('[WS_CLIENT] CLOSE', {
+        ts: new Date().toISOString(),
+        url: this.connectUrl,
+        code: ev.code,
+        reason: ev.reason,
+        wasClean: ev.wasClean,
+        lastSent: this.lastSentSummary,
+        lastReceived: this.lastReceivedSummary
+      });
       this.ws = null;
       this.stopPing();
       this.handlers.status?.('disconnected');
@@ -111,13 +140,22 @@ export class WsClient {
       this.scheduleReconnect();
     });
 
-    ws.addEventListener('error', () => {
+    ws.addEventListener('error', (ev) => {
+      console.error('[WS_CLIENT] ERROR', {
+        ts: new Date().toISOString(),
+        url: this.connectUrl,
+        readyState: ws.readyState,
+        eventType: ev.type,
+        lastSent: this.lastSentSummary,
+        lastReceived: this.lastReceivedSummary
+      });
       // close handles reconnect/state
     });
 
     ws.addEventListener('message', (ev) => {
       try {
         const msg = JSON.parse(String(ev.data));
+        this.lastReceivedSummary = summarizeWireMessage(msg);
 
         if (msg && msg.type === 'pong') {
           if (typeof msg.t === 'number') {
@@ -127,7 +165,16 @@ export class WsClient {
         }
 
         this.handlers.message?.(msg);
-      } catch {}
+      } catch (error) {
+        console.error('[WS_CLIENT] MESSAGE_PARSE_ERROR', {
+          ts: new Date().toISOString(),
+          url: this.connectUrl,
+          error: error instanceof Error ? error.message : String(error),
+          raw: String(ev.data).slice(0, 240),
+          lastSent: this.lastSentSummary,
+          lastReceived: this.lastReceivedSummary
+        });
+      }
     });
   }
 
@@ -135,8 +182,17 @@ export class WsClient {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     try {
       const wireMsg = this.toV2WireMessage(msg);
+      this.lastSentSummary = summarizeWireMessage(wireMsg);
       this.ws.send(JSON.stringify(wireMsg));
-    } catch {}
+    } catch (error) {
+      console.error('[WS_CLIENT] SEND_ERROR', {
+        ts: new Date().toISOString(),
+        url: this.connectUrl,
+        error: error instanceof Error ? error.message : String(error),
+        attempted: summarizeWireMessage(msg),
+        lastReceived: this.lastReceivedSummary
+      });
+    }
   }
 
   private toV2WireMessage(msg: any): any {
@@ -221,4 +277,54 @@ export class WsClient {
   onStatus(cb: Handlers['status']) {
     this.handlers.status = cb;
   }
+}
+
+function summarizeWireMessage(msg: any): WireSummary {
+  const ts = new Date().toISOString();
+  const type = typeof msg?.type === 'string' ? msg.type : 'unknown';
+
+  if (type === 'input') {
+    const parts = [
+      typeof msg.seq === 'number' ? `seq=${msg.seq}` : null,
+      typeof msg.moveX === 'number' || typeof msg.moveY === 'number' ? `move=(${msg.moveX ?? 0},${msg.moveY ?? 0})` : null,
+      msg.pass ? 'pass' : null,
+      msg.drop ? 'drop' : null,
+      msg.poke ? 'poke' : null,
+      msg.shoot ? 'shoot' : null,
+      msg.stop ? 'stop' : null
+    ].filter(Boolean);
+    return {
+      ts,
+      type,
+      seq: typeof msg.seq === 'number' ? msg.seq : undefined,
+      detail: parts.join(' ')
+    };
+  }
+
+  if (type === 'snapshot') {
+    return {
+      ts,
+      type,
+      tick: typeof msg.tick === 'number' ? msg.tick : undefined,
+      serverTick: typeof msg.serverTick === 'number' ? msg.serverTick : undefined,
+      detail: `players=${Array.isArray(msg.players) ? msg.players.length : 0} puck=${msg.puck?.state ?? 'none'}`
+    };
+  }
+
+  if (type === 'welcome' || type === 'net:welcome' || type === 'join:ok' || type === 'error') {
+    return {
+      ts,
+      type,
+      detail:
+        typeof msg.code === 'string'
+          ? `${msg.code}:${msg.message ?? ''}`
+          : typeof msg.room === 'string'
+            ? `room=${msg.room}`
+            : typeof msg.roomId === 'string'
+              ? `room=${msg.roomId}`
+              : undefined
+    };
+  }
+
+  return { ts, type };
 }

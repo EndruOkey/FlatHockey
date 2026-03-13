@@ -26,6 +26,21 @@
 - `/ws2`, `/ws2/`, `/ws2/*` -> `reverse_proxy 127.0.0.1:7777`
 - Static web root -> `/var/www/flathockey`
 
+## Caddy routing (dev)
+
+- Canonical dev page: `https://flathockey.fun/dev`
+- Dev backend listener: `:7778`
+- Required static proxy paths:
+  - `/dev`
+  - `/dev/`
+  - `/dev/assets/*`
+- Required runtime endpoints:
+  - `/dev/health`
+  - `/dev/ws`
+  - `/dev/ws2`
+
+Recommended config snippet: [deploy/Caddyfile.dev.example](/c:/Games/flathockey-move-rework/deploy/Caddyfile.dev.example)
+
 ## Sanity checks (server)
 
 ```bash
@@ -49,4 +64,3 @@ Expected:
 
 Use `systemd` as the single source of truth for backend process management on prod.
 Do not run backend with PM2 in parallel.
-

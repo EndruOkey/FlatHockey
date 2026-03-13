@@ -1,0 +1,36 @@
+flathockey.fun {
+  encode zstd gzip
+
+  @dev_root path /dev
+  @dev_index path /dev/
+  @dev_assets path /dev/assets/*
+  @dev_health path /dev/health
+  @dev_ws path /dev/ws /dev/ws/ /dev/ws/*
+  @dev_ws2 path /dev/ws2 /dev/ws2/ /dev/ws2/*
+
+  handle @dev_root {
+    reverse_proxy 127.0.0.1:7778
+  }
+
+  handle @dev_index {
+    reverse_proxy 127.0.0.1:7778
+  }
+
+  handle @dev_assets {
+    reverse_proxy 127.0.0.1:7778
+  }
+
+  handle @dev_health {
+    reverse_proxy 127.0.0.1:7778
+  }
+
+  handle @dev_ws {
+    rewrite * /ws2
+    reverse_proxy 127.0.0.1:7778
+  }
+
+  handle @dev_ws2 {
+    rewrite * /ws2
+    reverse_proxy 127.0.0.1:7778
+  }
+}

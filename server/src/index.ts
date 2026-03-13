@@ -1,5 +1,6 @@
 import express from 'express';
 import { createServer } from 'http';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { RoomManager } from './game/roomManager';
@@ -39,9 +40,12 @@ const SNAPSHOT_STEP_MS = 1000 / Math.max(1, SNAPSHOT_RATE);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const clientDist = path.resolve(__dirname, '../../client/dist');
+const clientIndexHtml = path.join(clientDist, 'index.html');
+const clientBundleStatus = resolveClientBundleStatus(clientDist);
 app.use(express.static(clientDist));
+app.use('/dev', express.static(clientDist));
 
-app.get('/health', (_req, res) => {
+function sendHealth(_req: express.Request, res: express.Response) {
   res.json({
     ok: true,
     uptime: process.uptime(),
@@ -55,11 +59,21 @@ app.get('/health', (_req, res) => {
       pid: SERVER_PID,
       cwd: SERVER_CWD,
       appDir: SERVER_APP_DIR,
+      clientBundle: clientBundleStatus,
       tickRate: TICK_RATE,
       snapshotRate: SNAPSHOT_RATE
     },
     v2: ws2.getStats()
   });
+}
+
+app.get('/health', sendHealth);
+app.get('/dev/health', sendHealth);
+app.get('/dev', (_req, res) => {
+  res.sendFile(clientIndexHtml);
+});
+app.get('/dev/', (_req, res) => {
+  res.sendFile(clientIndexHtml);
 });
 
 const loop = new FixedLoop(
@@ -104,6 +118,10 @@ httpServer.listen(PORT, () => {
   console.log(
     `[RUNTIME] pid=${SERVER_PID} build=${SERVER_BUILD} protocol=${NET_PROTOCOL_VERSION} runtime=${RUNTIME_ENV} port=${PORT} cwd=${SERVER_CWD} appDir=${SERVER_APP_DIR}`
   );
+  console.log(
+    `[CLIENT_DIST] exists=${clientBundleStatus.indexHtmlExists ? 1 : 0} size=${clientBundleStatus.indexHtmlBytes} ` +
+      `startup=${clientBundleStatus.hasStartupMarker ? 1 : 0} bootstrap=${clientBundleStatus.hasBootstrapMarker ? 1 : 0}`
+  );
   console.log(`[HTTP] listening on :${PORT}`);
   console.log(`[WS2] endpoint ws://localhost:${PORT}/ws2`);
 });
@@ -115,4 +133,37 @@ function resolveRuntimeEnvironment(port: number, explicitValue: string | undefin
   if (port === 7778) return 'dev';
   if (port === 8080) return 'local';
   return 'unknown';
+}
+
+function resolveClientBundleStatus(distDir: string) {
+  const indexPath = path.join(distDir, 'index.html');
+  const assetsDir = path.join(distDir, 'assets');
+  const status = {
+    indexHtmlExists: false,
+    indexHtmlBytes: 0,
+    hasStartupMarker: false,
+    hasBootstrapMarker: false,
+    mainAsset: null as string | null
+  };
+
+  try {
+    const indexStat = fs.statSync(indexPath);
+    if (!indexStat.isFile()) return status;
+    status.indexHtmlExists = true;
+    status.indexHtmlBytes = indexStat.size;
+
+    if (!fs.existsSync(assetsDir)) return status;
+    const assetNames = fs.readdirSync(assetsDir).filter((name) => name.endsWith('.js')).sort();
+    if (assetNames.length === 0) return status;
+
+    const mainAsset = assetNames[assetNames.length - 1];
+    status.mainAsset = mainAsset;
+    const assetSource = fs.readFileSync(path.join(assetsDir, mainAsset), 'utf8');
+    status.hasStartupMarker = assetSource.includes('FH_CLIENT_STARTUP');
+    status.hasBootstrapMarker = assetSource.includes('NET_BOOTSTRAP');
+  } catch {
+    return status;
+  }
+
+  return status;
 }

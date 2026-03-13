@@ -4,10 +4,10 @@ import { WsClient } from '../net/wsClient';
 import { Interpolator, lerpPlayer, type LerpPlayer } from '../net/interpolation';
 import { type PredictedPlayerState, setAimInputRateLimited } from '../net/prediction';
 import { getServerHandshakeMismatch } from '../net/serverCompatibility';
+import { resolveExpectedRuntime, resolveWsUrl } from '../net/wsUrl';
 import { getTuning } from '../tuning/gameplayConfig';
 import { PlayerView } from '../entities/playerView';
 import { PLAYER_RIG } from '../entities/playerBodyRig';
-import { ENV } from '../../config/env';
 import { BUILD_TIME, BUILD_VERSION } from '../../config/version';
 import { buildClientInput, handleServerMessage } from './PondSceneNetOps';
 import {
@@ -34,28 +34,6 @@ import {
 } from '../camera/hybridCamera';
 
 const REMOTE_INTERP_DELAY_DEFAULT_MS = 120;
-
-export function resolveWsUrl(): string {
-  const host = window.location.hostname;
-  const requireDevWsUrl = () => {
-    if (ENV.WS_DEV) return ENV.WS_DEV;
-    throw new Error('VITE_WS_DEV is not configured');
-  };
-
-  if (host === 'localhost' || host === '127.0.0.1') {
-    return ENV.WS_LOCAL;
-  }
-
-  if (ENV.DEV_BUILD) {
-    return requireDevWsUrl();
-  }
-
-  if (host.includes('flathockey-dev')) {
-    return requireDevWsUrl();
-  }
-
-  return ENV.WS_PROD;
-}
 
 export class PondScene extends Phaser.Scene {
   private ws = new WsClient();
@@ -181,7 +159,15 @@ export class PondScene extends Phaser.Scene {
     let buildStampWsUrl = 'unresolved';
     try {
       const wsUrl = resolveWsUrl();
+      const expectedRuntime = resolveExpectedRuntime(wsUrl);
       buildStampWsUrl = wsUrl;
+      console.info('[NET_BOOTSTRAP] RESOLVED', {
+        ts: new Date().toISOString(),
+        pageUrl: window.location.href,
+        pathname: window.location.pathname,
+        wsUrl,
+        expectedRuntime
+      });
       this.connect(wsUrl);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -230,7 +216,12 @@ export class PondScene extends Phaser.Scene {
 
   private connect(wsUrl: string) {
     this.protocolMismatchReason = null;
-    this.expectedRuntime = this.resolveExpectedRuntime(wsUrl);
+    this.expectedRuntime = resolveExpectedRuntime(wsUrl);
+    console.info('[NET_BOOTSTRAP] CONNECT_START', {
+      ts: new Date().toISOString(),
+      wsUrl,
+      expectedRuntime: this.expectedRuntime
+    });
 
     this.ws.onStatus((state: 'connecting' | 'connected' | 'disconnected') => {
       if (this.protocolMismatchReason) return;
@@ -432,6 +423,10 @@ export class PondScene extends Phaser.Scene {
   }
 
   failProtocolMismatch(reason: string) {
+    console.error('[NET] PROTOCOL_MISMATCH', {
+      ts: new Date().toISOString(),
+      reason
+    });
     this.protocolMismatchReason = reason;
     this.wsConnected = false;
     this.resetPendingInputState(true);
@@ -831,15 +826,5 @@ export class PondScene extends Phaser.Scene {
 
   update(_time: number, _deltaMs: number) {
     runPondSceneUpdate(this);
-  }
-
-  private resolveExpectedRuntime(wsUrl: string): RuntimeEnvironment {
-    if (wsUrl.startsWith('ws://localhost') || wsUrl.startsWith('ws://127.0.0.1')) {
-      return 'local';
-    }
-    if (ENV.DEV_BUILD || window.location.hostname.includes('flathockey-dev')) {
-      return 'dev';
-    }
-    return 'prod';
   }
 }
