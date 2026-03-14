@@ -32,9 +32,8 @@ export type SemiPhysicalStickPose = {
 };
 
 export const SEMI_PHYSICAL_STICK_CONFIG = {
-  shaftAnchorForwardFactor: 0.42,
-  shaftAnchorForwardOffset: 2.5,
-  shaftAnchorAimBias: 0.28,
+  shaftAnchorForwardFactor: 0.4,
+  maxStickRelativeAngleRad: Math.PI * 0.48,
   gripReachFactor: 0.14,
   gripForwardOffset: 4.2,
   shaftLength: 14,
@@ -81,7 +80,8 @@ export function computeSemiPhysicalStickPose(input: {
   const stateTimerSec = Math.max(0, finiteOr(input.stateTimerSec, 0));
   const angularVelocity = Math.abs(finiteOr(input.angularVelocity, 0));
   const bodyForward = unitFromAngle(bodyAngle);
-  const bladeForward = unitFromAngle(aimAngle);
+  const stickAngle = bodyAngle + clampAngleDelta(aimAngle - bodyAngle, SEMI_PHYSICAL_STICK_CONFIG.maxStickRelativeAngleRad);
+  const bladeForward = unitFromAngle(stickAngle);
   let shaftLength = SEMI_PHYSICAL_STICK_CONFIG.shaftLength;
   let bladeLength = SEMI_PHYSICAL_STICK_CONFIG.bladeLength;
   let bladeCenterOffset = SEMI_PHYSICAL_STICK_CONFIG.bladeCenterOffset;
@@ -126,15 +126,9 @@ export function computeSemiPhysicalStickPose(input: {
 
   controlStability = clamp(controlStability, 0.58, 1);
 
-  const shaftAnchorDir = unitFromVector(
-    bodyForward.x + bladeForward.x * SEMI_PHYSICAL_STICK_CONFIG.shaftAnchorAimBias,
-    bodyForward.y + bladeForward.y * SEMI_PHYSICAL_STICK_CONFIG.shaftAnchorAimBias
-  );
-  const shaftAnchorForward =
-    playerRadius * SEMI_PHYSICAL_STICK_CONFIG.shaftAnchorForwardFactor +
-    SEMI_PHYSICAL_STICK_CONFIG.shaftAnchorForwardOffset;
-  const shaftAnchorX = input.playerX + shaftAnchorDir.x * shaftAnchorForward;
-  const shaftAnchorY = input.playerY + shaftAnchorDir.y * shaftAnchorForward;
+  const shaftAnchorForward = playerRadius * SEMI_PHYSICAL_STICK_CONFIG.shaftAnchorForwardFactor;
+  const shaftAnchorX = input.playerX + bodyForward.x * shaftAnchorForward;
+  const shaftAnchorY = input.playerY + bodyForward.y * shaftAnchorForward;
   const gripForward =
     playerRadius * SEMI_PHYSICAL_STICK_CONFIG.gripReachFactor + SEMI_PHYSICAL_STICK_CONFIG.gripForwardOffset;
   const gripX = shaftAnchorX + bladeForward.x * gripForward;
@@ -199,13 +193,13 @@ function unitFromAngle(angle: number) {
   };
 }
 
-function unitFromVector(x: number, y: number) {
-  const length = Math.hypot(x, y);
-  if (length <= 0.0001) {
-    return { x: 1, y: 0 };
-  }
-  return {
-    x: x / length,
-    y: y / length
-  };
+function clampAngleDelta(delta: number, maxAbs: number) {
+  return clamp(wrapAngle(delta), -maxAbs, maxAbs);
+}
+
+function wrapAngle(angle: number) {
+  let next = angle;
+  while (next <= -Math.PI) next += Math.PI * 2;
+  while (next > Math.PI) next -= Math.PI * 2;
+  return next;
 }
