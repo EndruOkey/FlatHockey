@@ -12,6 +12,8 @@ const COLORS = {
   shoulders: 0xd8e5f3,
   shouldersShade: 0xb9cadb,
   gloves: 0x133342,
+  gloveCuff: 0x35586c,
+  gloveHighlight: 0x295167,
   helmet: 0xf4d24b,
   helmetTrim: 0x19242d,
   visor: 0xa8bacb,
@@ -24,6 +26,7 @@ export type PlayerBodyRenderLayers = {
   lowerBody: Phaser.GameObjects.Graphics;
   torso: Phaser.GameObjects.Graphics;
   shoulders: Phaser.GameObjects.Graphics;
+  hands: Phaser.GameObjects.Graphics;
   head: Phaser.GameObjects.Graphics;
   nameTag: Phaser.GameObjects.Text;
 };
@@ -39,6 +42,7 @@ export function clearPlayerBodyLayers(layers: PlayerBodyRenderLayers) {
   layers.lowerBody.clear();
   layers.torso.clear();
   layers.shoulders.clear();
+  layers.hands.clear();
   layers.head.clear();
 }
 
@@ -53,6 +57,7 @@ export function renderPlayerBody(
   renderLowerBody(layers.lowerBody, rig);
   renderTorso(layers.torso, rig);
   renderShoulders(layers.shoulders, rig);
+  renderHands(layers.hands, rig);
   renderHead(layers.head, rig);
   renderNameTag(layers.nameTag, rig, displayName);
 }
@@ -136,8 +141,11 @@ function renderShoulders(graphics: Phaser.GameObjects.Graphics, rig: PlayerBodyR
     COLORS.shouldersShade,
     0.62
   );
-  drawGlove(graphics, rig.leftHandSocket);
-  drawGlove(graphics, rig.rightHandSocket);
+}
+
+function renderHands(graphics: Phaser.GameObjects.Graphics, rig: PlayerBodyRig) {
+  drawGlove(graphics, rig, rig.leftHandSocket, -1);
+  drawGlove(graphics, rig, rig.rightHandSocket, 1);
 }
 
 function renderHead(graphics: Phaser.GameObjects.Graphics, rig: PlayerBodyRig) {
@@ -169,11 +177,55 @@ function renderNameTag(label: Phaser.GameObjects.Text, rig: PlayerBodyRig, displ
   label.setVisible(displayName.length > 0);
 }
 
-function drawGlove(graphics: Phaser.GameObjects.Graphics, anchor: { x: number; y: number }) {
-  graphics.fillStyle(COLORS.outline, 0.98);
-  graphics.fillCircle(anchor.x, anchor.y, 3.4);
-  graphics.fillStyle(COLORS.gloves, 1);
-  graphics.fillCircle(anchor.x, anchor.y, 2.5);
+function drawGlove(
+  graphics: Phaser.GameObjects.Graphics,
+  rig: PlayerBodyRig,
+  anchor: { x: number; y: number },
+  sideSign: number
+) {
+  const gloveWidth = Math.max(8, rig.ringRadius * 0.34);
+  const gloveHeight = Math.max(6, rig.ringRadius * 0.26);
+  const cuffCenter = offset(offset(anchor, rig.forward, -gloveHeight * 0.08), rig.right, sideSign * gloveWidth * 0.08);
+  const palmCenter = offset(offset(anchor, rig.forward, gloveHeight * 0.06), rig.right, sideSign * gloveWidth * 0.04);
+
+  drawOrientedEllipse(
+    graphics,
+    cuffCenter,
+    rig.right,
+    rig.forward,
+    gloveWidth + 2.6,
+    gloveHeight + 2.6,
+    COLORS.outline,
+    0.96
+  );
+  drawOrientedEllipse(graphics, cuffCenter, rig.right, rig.forward, gloveWidth, gloveHeight, COLORS.gloves, 1);
+  drawOrientedEllipse(
+    graphics,
+    palmCenter,
+    rig.right,
+    rig.forward,
+    gloveWidth * 0.58,
+    gloveHeight * 0.56,
+    COLORS.gloveHighlight,
+    0.94
+  );
+  drawOrientedEllipse(
+    graphics,
+    offset(cuffCenter, rig.forward, -gloveHeight * 0.26),
+    rig.right,
+    rig.forward,
+    gloveWidth * 0.58,
+    gloveHeight * 0.42,
+    COLORS.gloveCuff,
+    0.96
+  );
+  graphics.lineStyle(Math.max(1, rig.ringRadius * 0.06), 0xf3f9ff, 0.32);
+  graphics.lineBetween(
+    anchor.x - rig.right.x * gloveWidth * 0.26,
+    anchor.y - rig.right.y * gloveWidth * 0.26,
+    anchor.x + rig.right.x * gloveWidth * 0.26,
+    anchor.y + rig.right.y * gloveWidth * 0.26
+  );
 }
 
 function drawOrientedEllipse(

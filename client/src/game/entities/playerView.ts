@@ -40,9 +40,11 @@ export class PlayerView {
   private shadow: Phaser.GameObjects.Graphics;
   private hitboxRing: Phaser.GameObjects.Graphics;
   private lowerBody: Phaser.GameObjects.Graphics;
+  private stickUnder: Phaser.GameObjects.Graphics;
   private torso: Phaser.GameObjects.Graphics;
   private shoulders: Phaser.GameObjects.Graphics;
-  private stick: Phaser.GameObjects.Graphics;
+  private stickOver: Phaser.GameObjects.Graphics;
+  private hands: Phaser.GameObjects.Graphics;
   private head: Phaser.GameObjects.Graphics;
   private nameTag: Phaser.GameObjects.Text;
   private debugGfx: Phaser.GameObjects.Graphics;
@@ -78,9 +80,11 @@ export class PlayerView {
     this.shadow = scene.add.graphics();
     this.hitboxRing = scene.add.graphics();
     this.lowerBody = scene.add.graphics();
+    this.stickUnder = scene.add.graphics();
     this.torso = scene.add.graphics();
     this.shoulders = scene.add.graphics();
-    this.stick = scene.add.graphics();
+    this.stickOver = scene.add.graphics();
+    this.hands = scene.add.graphics();
     this.head = scene.add.graphics();
     this.nameTag = scene.add
       .text(0, 0, this.displayName, {
@@ -99,6 +103,7 @@ export class PlayerView {
       lowerBody: this.lowerBody,
       torso: this.torso,
       shoulders: this.shoulders,
+      hands: this.hands,
       head: this.head,
       nameTag: this.nameTag
     };
@@ -106,9 +111,11 @@ export class PlayerView {
       this.shadow,
       this.hitboxRing,
       this.lowerBody,
+      this.stickUnder,
       this.torso,
       this.shoulders,
-      this.stick,
+      this.stickOver,
+      this.hands,
       this.head,
       this.nameTag,
       this.debugGfx
@@ -251,9 +258,10 @@ export class PlayerView {
       hasPuck: this.hasPuck
     };
     renderPlayerBody(this.bodyLayers, this.bodyRig, this.displayName, renderOptions);
-    this.stick.clear();
+    this.stickUnder.clear();
+    this.stickOver.clear();
     if (this.stickPose) {
-      renderStick(this.stick, this.stickPose, this.bodyRig, this.worldX, this.worldY, this.renderScale, {
+      renderStick({ back: this.stickUnder, front: this.stickOver }, this.stickPose, this.bodyRig, this.worldX, this.worldY, this.renderScale, {
         hasPuck: this.hasPuck
       });
     }

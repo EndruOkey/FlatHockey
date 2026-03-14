@@ -3,9 +3,15 @@ import type { SemiPhysicalStickPose } from '@flathockey/shared';
 import type { PlayerBodyRig } from '../entities/playerBodyRig';
 
 const SHAFT_COLOR = 0x2d333b;
+const SHAFT_WRAP_COLOR = 0xcfd9e2;
 const BLADE_COLOR = 0xe9ecef;
-const SHAFT_THICKNESS = 4;
-const BLADE_THICKNESS = 5;
+const SHAFT_THICKNESS = 5;
+const BLADE_THICKNESS = 6;
+
+export type StickRenderLayers = {
+  back: Phaser.GameObjects.Graphics;
+  front: Phaser.GameObjects.Graphics;
+};
 
 function lerpPoint(a: { x: number; y: number }, b: { x: number; y: number }, t: number) {
   return {
@@ -25,8 +31,15 @@ function normalize(dx: number, dy: number) {
   };
 }
 
+function offset(point: { x: number; y: number }, axis: { x: number; y: number }, amount: number) {
+  return {
+    x: point.x + axis.x * amount,
+    y: point.y + axis.y * amount
+  };
+}
+
 export function renderStick(
-  graphics: Phaser.GameObjects.Graphics,
+  layers: StickRenderLayers,
   pose: SemiPhysicalStickPose,
   rig: PlayerBodyRig,
   playerWorldX: number,
@@ -36,12 +49,10 @@ export function renderStick(
     hasPuck?: boolean;
   } = {}
 ) {
-  // rig anchors are container-local screen pixels (relative to player screen center)
-  // pose coords are world units — convert to container-local via (world - playerWorld) * renderScale
-  const leftHandX = rig.leftHandSocket.x;
-  const leftHandY = rig.leftHandSocket.y;
-  const rightHandX = rig.rightHandSocket.x;
-  const rightHandY = rig.rightHandSocket.y;
+  const back = layers.back;
+  const front = layers.front;
+
+  // Rig anchors are container-local pixels. Pose points are world units.
   const rawGrip = {
     x: (pose.gripX - playerWorldX) * renderScale,
     y: (pose.gripY - playerWorldY) * renderScale
@@ -52,44 +63,67 @@ export function renderStick(
   const bladeCenterY = (pose.bladeCenterY - playerWorldY) * renderScale;
   const bladeTipX = (pose.bladeTipX - playerWorldX) * renderScale;
   const bladeTipY = (pose.bladeTipY - playerWorldY) * renderScale;
-  const gripHand = rig.gripHand === 'left' ? { x: leftHandX, y: leftHandY } : { x: rightHandX, y: rightHandY };
-  const guideHand = rig.guideHand === 'left' ? { x: leftHandX, y: leftHandY } : { x: rightHandX, y: rightHandY };
-  const gripBlend = lerpPoint(gripHand, rawGrip, 0.3);
-  const shaftDir = normalize(bladeBaseX - gripBlend.x, bladeBaseY - gripBlend.y);
-  const gripLead = Math.min(rig.ringRadius * 0.12, Math.hypot(bladeBaseX - gripBlend.x, bladeBaseY - gripBlend.y) * 0.1);
-  const gripX = gripBlend.x + shaftDir.x * gripLead;
-  const gripY = gripBlend.y + shaftDir.y * gripLead;
-  const guideGrip = lerpPoint({ x: gripX, y: gripY }, { x: bladeBaseX, y: bladeBaseY }, 0.34);
+  const gripHand = rig.gripHand === 'left' ? rig.leftHandSocket : rig.rightHandSocket;
+  const guideHand = rig.guideHand === 'left' ? rig.leftHandSocket : rig.rightHandSocket;
+  const gripSideSign = rig.gripHand === 'left' ? -1 : 1;
+  const bodyFrontAnchor = offset(
+    offset(rig.chestAnchor, rig.forward, rig.torsoHeight * 0.22),
+    rig.right,
+    gripSideSign * rig.ringRadius * 0.1
+  );
+  const gripPocket = lerpPoint(bodyFrontAnchor, rawGrip, 0.66);
+  const shaftDir = normalize(bladeBaseX - gripPocket.x, bladeBaseY - gripPocket.y);
+  const shaftReach = Math.hypot(bladeBaseX - gripPocket.x, bladeBaseY - gripPocket.y);
+  const gripLead = Math.min(rig.ringRadius * 0.18, shaftReach * 0.16);
+  const gripX = gripPocket.x + shaftDir.x * gripLead;
+  const gripY = gripPocket.y + shaftDir.y * gripLead;
+  const guideGrip = lerpPoint({ x: gripX, y: gripY }, { x: bladeBaseX, y: bladeBaseY }, 0.42);
+  const buttEnd = offset(bodyFrontAnchor, shaftDir, -rig.ringRadius * 0.2);
+  const gripWrapA = lerpPoint({ x: gripX, y: gripY }, { x: bladeBaseX, y: bladeBaseY }, 0.12);
+  const gripWrapB = lerpPoint({ x: gripX, y: gripY }, { x: bladeBaseX, y: bladeBaseY }, 0.25);
+  const guideWrap = lerpPoint({ x: gripX, y: gripY }, { x: bladeBaseX, y: bladeBaseY }, 0.4);
 
-  graphics.lineStyle(SHAFT_THICKNESS + 1.5, 0x11161c, 0.16);
-  graphics.lineBetween(gripHand.x, gripHand.y, gripX, gripY);
-  graphics.lineBetween(guideHand.x, guideHand.y, guideGrip.x, guideGrip.y);
-  graphics.lineStyle(SHAFT_THICKNESS - 1, SHAFT_COLOR, 0.96);
-  graphics.lineBetween(gripHand.x, gripHand.y, gripX, gripY);
-  graphics.lineBetween(guideHand.x, guideHand.y, guideGrip.x, guideGrip.y);
+  back.lineStyle(SHAFT_THICKNESS + 3, 0x091118, 0.16);
+  back.lineBetween(buttEnd.x, buttEnd.y, gripX, gripY);
+  back.lineStyle(SHAFT_THICKNESS + 1, SHAFT_COLOR, 0.7);
+  back.lineBetween(bodyFrontAnchor.x, bodyFrontAnchor.y, gripX, gripY);
+  back.fillStyle(0x0b151d, 0.2);
+  back.fillCircle(bodyFrontAnchor.x, bodyFrontAnchor.y, SHAFT_THICKNESS * 1.1);
 
-  graphics.lineStyle(SHAFT_THICKNESS + 2, 0x11161c, 0.18);
-  graphics.lineBetween(gripX, gripY, bladeBaseX, bladeBaseY);
-  graphics.lineStyle(SHAFT_THICKNESS, SHAFT_COLOR, 1);
-  graphics.lineBetween(gripX, gripY, bladeBaseX, bladeBaseY);
-  graphics.fillStyle(SHAFT_COLOR, 1);
-  graphics.fillCircle(gripX, gripY, SHAFT_THICKNESS * 0.56);
-  graphics.fillCircle(guideGrip.x, guideGrip.y, SHAFT_THICKNESS * 0.46);
-  graphics.fillCircle(bladeBaseX, bladeBaseY, SHAFT_THICKNESS * 0.5);
+  front.lineStyle(SHAFT_THICKNESS + 1.8, 0x11161c, 0.18);
+  front.lineBetween(gripHand.x, gripHand.y, gripX, gripY);
+  front.lineBetween(guideHand.x, guideHand.y, guideGrip.x, guideGrip.y);
+  front.lineStyle(SHAFT_THICKNESS - 0.6, SHAFT_COLOR, 0.98);
+  front.lineBetween(gripHand.x, gripHand.y, gripX, gripY);
+  front.lineBetween(guideHand.x, guideHand.y, guideGrip.x, guideGrip.y);
 
-  graphics.lineStyle(BLADE_THICKNESS + 2, 0x11161c, 0.16);
-  graphics.lineBetween(bladeBaseX, bladeBaseY, bladeTipX, bladeTipY);
-  graphics.lineStyle(BLADE_THICKNESS, BLADE_COLOR, 1);
-  graphics.lineBetween(bladeBaseX, bladeBaseY, bladeTipX, bladeTipY);
-  graphics.fillStyle(BLADE_COLOR, 1);
-  graphics.fillCircle(bladeBaseX, bladeBaseY, BLADE_THICKNESS * 0.5);
-  graphics.fillCircle(bladeCenterX, bladeCenterY, BLADE_THICKNESS * 0.42);
-  graphics.fillCircle(bladeTipX, bladeTipY, BLADE_THICKNESS * 0.48);
+  front.lineStyle(SHAFT_THICKNESS + 2.4, 0x11161c, 0.22);
+  front.lineBetween(gripX, gripY, bladeBaseX, bladeBaseY);
+  front.lineStyle(SHAFT_THICKNESS, SHAFT_COLOR, 1);
+  front.lineBetween(gripX, gripY, bladeBaseX, bladeBaseY);
+  front.fillStyle(SHAFT_COLOR, 1);
+  front.fillCircle(gripX, gripY, SHAFT_THICKNESS * 0.72);
+  front.fillCircle(guideGrip.x, guideGrip.y, SHAFT_THICKNESS * 0.58);
+  front.fillCircle(bladeBaseX, bladeBaseY, SHAFT_THICKNESS * 0.58);
+
+  front.lineStyle(SHAFT_THICKNESS * 0.62, SHAFT_WRAP_COLOR, 0.92);
+  front.lineBetween(gripWrapA.x, gripWrapA.y, gripWrapB.x, gripWrapB.y);
+  front.lineStyle(SHAFT_THICKNESS * 0.48, SHAFT_WRAP_COLOR, 0.72);
+  front.lineBetween(guideGrip.x, guideGrip.y, guideWrap.x, guideWrap.y);
+
+  front.lineStyle(BLADE_THICKNESS + 2, 0x11161c, 0.18);
+  front.lineBetween(bladeBaseX, bladeBaseY, bladeTipX, bladeTipY);
+  front.lineStyle(BLADE_THICKNESS, BLADE_COLOR, 1);
+  front.lineBetween(bladeBaseX, bladeBaseY, bladeTipX, bladeTipY);
+  front.fillStyle(BLADE_COLOR, 1);
+  front.fillCircle(bladeBaseX, bladeBaseY, BLADE_THICKNESS * 0.56);
+  front.fillCircle(bladeCenterX, bladeCenterY, BLADE_THICKNESS * 0.48);
+  front.fillCircle(bladeTipX, bladeTipY, BLADE_THICKNESS * 0.54);
 
   if (options.hasPuck) {
-    graphics.fillStyle(0xf4fbff, 0.18);
-    graphics.fillCircle(bladeCenterX, bladeCenterY, BLADE_THICKNESS * 1.05);
-    graphics.lineStyle(1.2, 0xffffff, 0.32);
-    graphics.strokeCircle(bladeCenterX, bladeCenterY, BLADE_THICKNESS * 0.82);
+    front.fillStyle(0xf4fbff, 0.18);
+    front.fillCircle(bladeCenterX, bladeCenterY, BLADE_THICKNESS * 1.05);
+    front.lineStyle(1.2, 0xffffff, 0.32);
+    front.strokeCircle(bladeCenterX, bladeCenterY, BLADE_THICKNESS * 0.82);
   }
 }

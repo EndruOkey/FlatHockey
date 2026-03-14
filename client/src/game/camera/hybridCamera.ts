@@ -60,17 +60,17 @@ export const HYBRID_CAMERA_CONFIG = {
     angularVelocityForMax: 6.4
   },
   responsiveFraming: {
-    minPlayerScreenHeightRatio: 0.06,
-    maxPlayerScreenHeightRatio: 0.08,
+    minPlayerScreenHeightRatio: 0.048,
+    maxPlayerScreenHeightRatio: 0.062,
     standardAspect: 16 / 9,
     ultraWideAspect: 3.2,
-    minScale: 1,
-    maxScale: 3.1,
-    screenBiasYMin: 0.06,
-    screenBiasYMax: 0.1,
-    referenceVisibleWorldHeight: 420,
-    maxVisibleWidthMarginStandard: 1.14,
-    maxVisibleWidthMarginWide: 1.02
+    minScale: 0.9,
+    maxScale: 2.75,
+    screenBiasYMin: 0.07,
+    screenBiasYMax: 0.115,
+    referenceVisibleWorldHeight: 480,
+    maxVisibleWidthMarginStandard: 1.22,
+    maxVisibleWidthMarginWide: 1.1
   }
 } as const;
 
