@@ -76,6 +76,7 @@ export function runPondSceneUpdate(scene: any) {
       scene.recordInputSample(input, simStepTime);
       applyPredictedInput(scene.predicted, input, CLIENT_FIXED_DT);
       scene.localBuffer.push({
+        handedness: scene.predicted.handedness,
         x: scene.predicted.x,
         y: scene.predicted.y,
         rot: scene.predicted.angle,
@@ -103,6 +104,7 @@ export function runPondSceneUpdate(scene: any) {
       state = scene.localBuffer.latest()?.value ?? null;
       if (!state && scene.predicted) {
         state = {
+          handedness: scene.predicted.handedness,
           x: scene.predicted.x,
           y: scene.predicted.y,
           rot: scene.predicted.angle,
@@ -121,6 +123,7 @@ export function runPondSceneUpdate(scene: any) {
           // Keep visuals locked to predicted physics position. Only orientation is smoothed.
           scene.localRenderState.x = state.x;
           scene.localRenderState.y = state.y;
+          scene.localRenderState.handedness = state.handedness;
           scene.localRenderState.rot = scene.lerpAngle(scene.localRenderState.rot, state.rot, alpha);
           // Keep local stick aim locked to current mouse-driven intent instead of visual body smoothing.
           scene.localRenderState.aimRot = state.aimRot ?? state.rot;
@@ -136,6 +139,7 @@ export function runPondSceneUpdate(scene: any) {
     }
     if (!state) continue;
     scene.playerRenderWorldStates.set(id, {
+      handedness: state.handedness ?? 'right',
       x: state.x,
       y: state.y,
       rot: state.rot,
@@ -144,6 +148,7 @@ export function runPondSceneUpdate(scene: any) {
       stickTimer: state.stickTimer,
       shotCharge: state.shotCharge
     });
+    view.setHandedness(state.handedness ?? 'right');
     view.setRenderScale(scene.cameraWorldScale);
     const s = scene.worldToScreen(state.x, state.y);
     view.setState(

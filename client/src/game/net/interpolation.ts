@@ -80,6 +80,7 @@ export class Interpolator<T> {
 }
 
 export type LerpPlayer = {
+  handedness: 'left' | 'right';
   x: number;
   y: number;
   rot: number;
@@ -89,6 +90,7 @@ export type LerpPlayer = {
   shotCharge?: number;
 };
 export const lerpPlayer = (a: LerpPlayer, b: LerpPlayer, t: number): LerpPlayer => ({
+  handedness: t < 0.5 ? a.handedness : b.handedness,
   x: lerp(a.x, b.x, t),
   y: lerp(a.y, b.y, t),
   rot: lerpAngle(a.rot, b.rot, t),

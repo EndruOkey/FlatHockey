@@ -101,7 +101,7 @@ export function derivePlayerBodyRig(input: {
   };
   const ringCenter = point(0, 0);
   const bodyCenter = bodyAnchor(ringCenter, PLAYER_RIG.BODY_CENTER, scaleFactor, forward, right);
-  const gripHand: HandSocketSide = input.handedness === 'left' ? 'left' : 'right';
+  const gripHand: HandSocketSide = input.handedness === 'right' ? 'left' : 'right';
   const guideHand: HandSocketSide = gripHand === 'left' ? 'right' : 'left';
   const torsoBaseAnchor = bodyAnchor(bodyCenter, PLAYER_RIG.TORSO_BASE, scaleFactor, forward, right);
   const chestAnchor = bodyAnchor(bodyCenter, PLAYER_RIG.CHEST, scaleFactor, forward, right);

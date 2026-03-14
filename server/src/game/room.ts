@@ -40,6 +40,7 @@ export class Room {
     this.players.set(clientId, {
       id: clientId,
       name,
+      handedness: 'right',
       x: -220 + offset,
       y: -120 + offset * 0.35,
       vx: 0,
@@ -176,6 +177,7 @@ export class Room {
         },
         players: [...this.players.values()].map((p) => ({
           id: p.id,
+          handedness: p.handedness,
           x: p.x,
           y: p.y,
           vx: p.vx,

@@ -34,6 +34,22 @@ type PlayerViewOptions = {
   displayName?: string;
 };
 
+type GripPresentationState = 'neutral' | 'carry' | 'poke' | 'pass' | 'shoot';
+
+type GripLayout = {
+  state: GripPresentationState;
+  leftHand: { x: number; y: number };
+  rightHand: { x: number; y: number };
+};
+
+const GRIP_LAYOUT_PROFILES: Record<GripPresentationState, { top: number; bottom: number; minGap: number }> = {
+  neutral: { top: 0.12, bottom: 0.3, minGap: 0.12 },
+  carry: { top: 0.15, bottom: 0.45, minGap: 0.16 },
+  poke: { top: 0.1, bottom: 0.28, minGap: 0.1 },
+  pass: { top: 0.18, bottom: 0.5, minGap: 0.16 },
+  shoot: { top: 0.22, bottom: 0.56, minGap: 0.18 }
+};
+
 export class PlayerView {
   private root: Phaser.GameObjects.Container;
   private shadow: Phaser.GameObjects.Graphics;
@@ -69,7 +85,7 @@ export class PlayerView {
   aimRot = 0;
 
   constructor(scene: Phaser.Scene, options: PlayerViewOptions = {}) {
-    this.handedness = options.handedness ?? 'left';
+    this.handedness = options.handedness ?? 'right';
     this.displayName = options.displayName ?? '';
     this.cosmeticSlots = createPlayerCosmeticSlots();
 
@@ -159,6 +175,7 @@ export class PlayerView {
     if (this.handedness === handedness) return;
     this.handedness = handedness;
     this.bodyRig = null;
+    this.stickPose = null;
   }
 
   getHandedness() {
@@ -237,8 +254,9 @@ export class PlayerView {
 
   draw(_dtSec = 1 / 60) {
     this.root.setPosition(this.x, this.y);
-    this.bodyRig = this.createBodyRig(this.rot);
-    this.stickPose = this.createStickPose(this.bodyRig, this.rot);
+    const baseRig = this.createBodyRig(this.rot);
+    this.stickPose = this.createStickPose(baseRig, this.rot);
+    this.bodyRig = this.createPresentationRig(baseRig, this.stickPose);
     clearPlayerBodyLayers(this.bodyLayers);
     const renderOptions: PlayerBodyRenderOptions = {
       isLocalPlayer: this.isLocalPlayer,
@@ -267,15 +285,20 @@ export class PlayerView {
 
   private resolveBodyRig() {
     if (!this.bodyRig) {
-      this.bodyRig = this.createBodyRig(this.rot);
+      const baseRig = this.createBodyRig(this.rot);
+      this.stickPose = this.stickPose ?? this.createStickPose(baseRig, this.rot);
+      this.bodyRig = this.createPresentationRig(baseRig, this.stickPose);
     }
     return this.bodyRig;
   }
 
   private resolveStickPose() {
     if (!this.stickPose) {
-      const bodyRig = this.resolveBodyRig();
-      this.stickPose = this.createStickPose(bodyRig, this.rot);
+      const baseRig = this.bodyRig ?? this.createBodyRig(this.rot);
+      this.stickPose = this.createStickPose(baseRig, this.rot);
+      if (!this.bodyRig) {
+        this.bodyRig = this.createPresentationRig(baseRig, this.stickPose);
+      }
     }
     return this.stickPose;
   }
@@ -305,10 +328,91 @@ export class PlayerView {
       bodyAngle: facingAngle,
       aimAngle: this.aimRot,
       playerRadius: worldRadius,
+      handedness: this.handedness,
       state: resolvedState,
       shotCharge: this.shotCharge,
       stateTimerSec: this.stickTimer
     });
+  }
+
+  private createPresentationRig(baseRig: PlayerBodyRig, pose: SemiPhysicalStickPose | null) {
+    if (!pose) return baseRig;
+    const gripLayout = this.createGripLayout(baseRig, pose);
+    return {
+      ...baseRig,
+      leftHandSocket: gripLayout.leftHand,
+      rightHandSocket: gripLayout.rightHand
+    };
+  }
+
+  private createGripLayout(baseRig: PlayerBodyRig, pose: SemiPhysicalStickPose): GripLayout {
+    const gripState = this.resolveGripPresentationState();
+    const profile = GRIP_LAYOUT_PROFILES[gripState];
+    const shaftAnchor = this.toLocalStickPoint(pose.shaftAnchorX, pose.shaftAnchorY);
+    const bladeBase = this.toLocalStickPoint(pose.bladeBaseX, pose.bladeBaseY);
+    const shaftDx = bladeBase.x - shaftAnchor.x;
+    const shaftDy = bladeBase.y - shaftAnchor.y;
+    const shaftLength = Math.hypot(shaftDx, shaftDy);
+
+    if (shaftLength <= 0.0001) {
+      return {
+        state: gripState,
+        leftHand: baseRig.leftHandSocket,
+        rightHand: baseRig.rightHandSocket
+      };
+    }
+
+    const shaftDir = {
+      x: shaftDx / shaftLength,
+      y: shaftDy / shaftLength
+    };
+    const topDistance = clamp(shaftLength * profile.top, shaftLength * 0.06, shaftLength * 0.72);
+    const minGap = shaftLength * profile.minGap;
+    const bottomDistance = clamp(
+      Math.max(shaftLength * profile.bottom, topDistance + minGap),
+      topDistance + minGap,
+      shaftLength * 0.9
+    );
+    const topHand = {
+      x: shaftAnchor.x + shaftDir.x * topDistance,
+      y: shaftAnchor.y + shaftDir.y * topDistance
+    };
+    const bottomHand = {
+      x: shaftAnchor.x + shaftDir.x * bottomDistance,
+      y: shaftAnchor.y + shaftDir.y * bottomDistance
+    };
+
+    return this.handedness === 'right'
+      ? {
+          state: gripState,
+          leftHand: topHand,
+          rightHand: bottomHand
+        }
+      : {
+          state: gripState,
+          leftHand: bottomHand,
+          rightHand: topHand
+        };
+  }
+
+  private resolveGripPresentationState(): GripPresentationState {
+    if (this.stickState === 'charge' || this.stickState === 'release') {
+      return 'shoot';
+    }
+    if (this.stickState === 'pass') {
+      return 'pass';
+    }
+    if (this.stickState === 'poke') {
+      return 'poke';
+    }
+    return this.hasPuck ? 'carry' : 'neutral';
+  }
+
+  private toLocalStickPoint(worldX: number, worldY: number) {
+    return {
+      x: (worldX - this.worldX) * this.renderScale,
+      y: (worldY - this.worldY) * this.renderScale
+    };
   }
 
   private renderDebug(rig: PlayerBodyRig) {
@@ -511,4 +615,8 @@ export class PlayerView {
       y: anchor.y + axis.y * amount
     };
   }
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
 }

@@ -58,6 +58,9 @@ export function getSnapshotPlayerStateMismatch(player: unknown) {
   if (typeof candidate.id !== 'string' || candidate.id.length === 0) {
     return 'snapshot player is missing id';
   }
+  if (candidate.handedness !== 'left' && candidate.handedness !== 'right') {
+    return `snapshot player ${candidate.id} is missing handedness`;
+  }
   if (
     !isFiniteNumber(candidate.x) ||
     !isFiniteNumber(candidate.y) ||

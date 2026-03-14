@@ -19,6 +19,7 @@ export type BufferedInput = {
 export type PlayerState = {
   id: string;
   name: string;
+  handedness: 'left' | 'right';
   x: number;
   y: number;
   vx: number;

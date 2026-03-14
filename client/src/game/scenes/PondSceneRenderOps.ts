@@ -41,6 +41,7 @@ function playerCarryTargetWorld(scene: any, playerId: string | null) {
     bodyAngle: state.rot,
     aimAngle: state.aimRot ?? state.rot,
     playerRadius: Math.max(12, tuning.playerRadius ?? 18),
+    handedness: state.handedness ?? 'right',
     state: state.stickState,
     shotCharge: state.shotCharge ?? 0,
     stateTimerSec: state.stickTimer ?? 0

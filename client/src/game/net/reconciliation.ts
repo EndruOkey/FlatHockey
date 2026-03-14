@@ -14,6 +14,7 @@ export function reconcilePrediction(
 
   predicted.x = authoritative.x;
   predicted.y = authoritative.y;
+  predicted.handedness = authoritative.handedness;
   predicted.vx = authoritative.vx;
   predicted.vy = authoritative.vy;
   predicted.angle = authoritative.angle;

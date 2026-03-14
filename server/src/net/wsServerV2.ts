@@ -108,7 +108,7 @@ const DEFAULT_CONFIG: V2Config = {
   protocolVersion: NET_PROTOCOL_VERSION,
   runtimeEnv: sanitizeRuntimeEnvironment(process.env.RUNTIME_ENV),
   serverBuild: process.env.BUILD_VERSION ?? process.env.GITHUB_SHA ?? 'unknown',
-  features: ['player-state-v4', 'locomotion-v3', 'puck-state-v1']
+  features: ['player-state-v5', 'locomotion-v3', 'puck-state-v1']
 };
 
 let nextClientId = 1;

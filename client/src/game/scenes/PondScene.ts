@@ -390,9 +390,13 @@ export class PondScene extends Phaser.Scene {
     }
   }
 
-  private ensurePlayerView(id: string) {
-    if (this.players.has(id)) return this.players.get(id)!;
-    const view = new PlayerView(this);
+  private ensurePlayerView(id: string, handedness: 'left' | 'right' = 'right') {
+    if (this.players.has(id)) {
+      const existing = this.players.get(id)!;
+      existing.setHandedness(handedness);
+      return existing;
+    }
+    const view = new PlayerView(this, { handedness });
     view.setDebugDrawEnabled(this.playerRigDebugEnabled);
     this.players.set(id, view);
     this.remoteInterpolators.set(id, new Interpolator<LerpPlayer>(120));
@@ -846,12 +850,26 @@ export class PondScene extends Phaser.Scene {
     const dx = mouseWorld.x - this.predicted.x;
     const dy = mouseWorld.y - this.predicted.y;
     const dist = Math.hypot(dx, dy);
-    if (dist <= deadzone) {
+    const previousAim = Number.isFinite(this.predicted.aimAngle) ? this.predicted.aimAngle : undefined;
+    if (dist <= 0.0001) {
       setAimInputRateLimited(false);
-      return Number.isFinite(this.predicted.aimAngle) ? this.predicted.aimAngle : undefined;
+      return previousAim;
     }
 
-    const rawTarget = Math.atan2(mouseWorld.y - this.predicted.y, mouseWorld.x - this.predicted.x);
+    const rawTarget = Math.atan2(dy, dx);
+    if (deadzone > 0 && previousAim !== undefined) {
+      const holdRadius = deadzone * 0.2;
+      if (dist <= holdRadius) {
+        setAimInputRateLimited(false);
+        return previousAim;
+      }
+      if (dist < deadzone) {
+        const t = (dist - holdRadius) / Math.max(0.001, deadzone - holdRadius);
+        const eased = t * t * (3 - 2 * t);
+        setAimInputRateLimited(false);
+        return this.lerpAngle(previousAim, rawTarget, eased);
+      }
+    }
     setAimInputRateLimited(false);
     return rawTarget;
   }

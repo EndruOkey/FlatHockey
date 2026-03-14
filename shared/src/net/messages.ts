@@ -18,6 +18,7 @@ export type InputMsg = {
 
 export type PlayerStateMsg = {
   id: string;
+  handedness: 'left' | 'right';
   x: number;
   y: number;
   vx: number;

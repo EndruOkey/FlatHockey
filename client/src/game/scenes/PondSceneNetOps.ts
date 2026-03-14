@@ -100,7 +100,7 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
       return;
     }
 
-    scene.ensurePlayerView(p.id);
+    scene.ensurePlayerView(p.id, p.handedness);
     if (scene.clientId && p.id === scene.clientId) {
       scene.ackSeq = snapshot.ack[scene.clientId] ?? 0;
       if (!scene.predicted) {
@@ -115,6 +115,7 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
         scene.localBuffer.clear();
         scene.localBuffer.push(
           {
+            handedness: p.handedness,
             x: p.x,
             y: p.y,
             rot: p.angle,
@@ -129,6 +130,7 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
         reconcilePrediction(scene.predicted, p, scene.ackSeq, scene.pendingInputs);
         scene.localBuffer.push(
           {
+            handedness: scene.predicted.handedness,
             x: scene.predicted.x,
             y: scene.predicted.y,
             rot: scene.predicted.angle ?? 0,
@@ -148,6 +150,7 @@ export function applySnapshot(scene: any, snapshot: SnapshotMsg) {
       scene.remoteLastSnapshotTick.set(p.id, snapshot.serverTick);
       scene.remoteInterpolators.get(p.id)?.push(
         {
+          handedness: p.handedness,
           x: p.x,
           y: p.y,
           rot: p.angle,

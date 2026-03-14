@@ -33,6 +33,7 @@ export type SemiPhysicalStickPose = {
 
 export const SEMI_PHYSICAL_STICK_CONFIG = {
   shaftAnchorForwardFactor: 0.44,
+  shaftAnchorSideFactor: 0.18,
   maxStickRelativeAngleRad: Math.PI * 0.5,
   gripReachFactor: 0.16,
   gripForwardOffset: 4.8,
@@ -67,6 +68,7 @@ export function computeSemiPhysicalStickPose(input: {
   bodyAngle: number;
   aimAngle: number;
   playerRadius: number;
+  handedness?: 'left' | 'right';
   state?: StickState;
   shotCharge?: number;
   stateTimerSec?: number;
@@ -80,6 +82,11 @@ export function computeSemiPhysicalStickPose(input: {
   const stateTimerSec = Math.max(0, finiteOr(input.stateTimerSec, 0));
   const angularVelocity = Math.abs(finiteOr(input.angularVelocity, 0));
   const bodyForward = unitFromAngle(bodyAngle);
+  const bodyRight = {
+    x: -bodyForward.y,
+    y: bodyForward.x
+  };
+  const handednessSideSign = input.handedness === 'left' ? -1 : 1;
   // Reflect back-facing aim into a continuous front arc so the stick never snaps
   // between side limits when the pointer crosses behind the player.
   const stickAngle =
@@ -130,8 +137,9 @@ export function computeSemiPhysicalStickPose(input: {
   controlStability = clamp(controlStability, 0.58, 1);
 
   const shaftAnchorForward = playerRadius * SEMI_PHYSICAL_STICK_CONFIG.shaftAnchorForwardFactor;
-  const shaftAnchorX = input.playerX + bodyForward.x * shaftAnchorForward;
-  const shaftAnchorY = input.playerY + bodyForward.y * shaftAnchorForward;
+  const shaftAnchorSide = playerRadius * SEMI_PHYSICAL_STICK_CONFIG.shaftAnchorSideFactor * handednessSideSign;
+  const shaftAnchorX = input.playerX + bodyForward.x * shaftAnchorForward + bodyRight.x * shaftAnchorSide;
+  const shaftAnchorY = input.playerY + bodyForward.y * shaftAnchorForward + bodyRight.y * shaftAnchorSide;
   const gripForward =
     playerRadius * SEMI_PHYSICAL_STICK_CONFIG.gripReachFactor + SEMI_PHYSICAL_STICK_CONFIG.gripForwardOffset;
   const gripX = shaftAnchorX + bladeForward.x * gripForward;

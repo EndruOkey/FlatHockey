@@ -26,6 +26,7 @@ function stickPose(room: any, player: any, overrideState?: any) {
     bodyAngle: player.angle,
     aimAngle: player.aimAngle,
     playerRadius,
+    handedness: player.handedness,
     state: overrideState ?? player.stickState,
     shotCharge: player.shotCharge,
     stateTimerSec: player.stickTimer,
