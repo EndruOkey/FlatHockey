@@ -32,10 +32,10 @@ export type SemiPhysicalStickPose = {
 };
 
 export const SEMI_PHYSICAL_STICK_CONFIG = {
-  shaftAnchorForwardFactor: 0.4,
-  maxStickRelativeAngleRad: Math.PI * 0.48,
-  gripReachFactor: 0.14,
-  gripForwardOffset: 4.2,
+  shaftAnchorForwardFactor: 0.44,
+  maxStickRelativeAngleRad: Math.PI * 0.5,
+  gripReachFactor: 0.16,
+  gripForwardOffset: 4.8,
   shaftLength: 14,
   bladeLength: 12,
   bladeCenterOffset: 6,
@@ -80,7 +80,10 @@ export function computeSemiPhysicalStickPose(input: {
   const stateTimerSec = Math.max(0, finiteOr(input.stateTimerSec, 0));
   const angularVelocity = Math.abs(finiteOr(input.angularVelocity, 0));
   const bodyForward = unitFromAngle(bodyAngle);
-  const stickAngle = bodyAngle + clampAngleDelta(aimAngle - bodyAngle, SEMI_PHYSICAL_STICK_CONFIG.maxStickRelativeAngleRad);
+  // Reflect back-facing aim into a continuous front arc so the stick never snaps
+  // between side limits when the pointer crosses behind the player.
+  const stickAngle =
+    bodyAngle + projectAngleToFrontArc(aimAngle - bodyAngle, SEMI_PHYSICAL_STICK_CONFIG.maxStickRelativeAngleRad);
   const bladeForward = unitFromAngle(stickAngle);
   let shaftLength = SEMI_PHYSICAL_STICK_CONFIG.shaftLength;
   let bladeLength = SEMI_PHYSICAL_STICK_CONFIG.bladeLength;
@@ -193,8 +196,12 @@ function unitFromAngle(angle: number) {
   };
 }
 
-function clampAngleDelta(delta: number, maxAbs: number) {
-  return clamp(wrapAngle(delta), -maxAbs, maxAbs);
+function projectAngleToFrontArc(relativeAngle: number, maxAbs: number) {
+  const wrapped = wrapAngle(relativeAngle);
+  const reflectedFrontArc = Math.atan2(Math.sin(wrapped), Math.abs(Math.cos(wrapped)));
+  const normalizedFrontArc = clamp(reflectedFrontArc / (Math.PI * 0.5), -1, 1);
+  const resolvedMax = clamp(maxAbs, 0, Math.PI * 0.5);
+  return normalizedFrontArc * resolvedMax;
 }
 
 function wrapAngle(angle: number) {

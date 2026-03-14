@@ -70,9 +70,9 @@ export function renderStick(
   const gripHand = rig.gripHand === 'left' ? rig.leftHandSocket : rig.rightHandSocket;
   const guideHand = rig.guideHand === 'left' ? rig.leftHandSocket : rig.rightHandSocket;
   const underBodyDir = normalize(rawGrip.x - shaftAnchor.x, rawGrip.y - shaftAnchor.y);
-  const gripBridge = lerpPoint(shaftAnchor, rawGrip, 0.82);
+  const gripBridge = lerpPoint(shaftAnchor, rawGrip, 0.86);
   const guideGrip = lerpPoint(rawGrip, { x: bladeBaseX, y: bladeBaseY }, 0.34);
-  const buttEnd = offset(shaftAnchor, underBodyDir, -rig.ringRadius * 0.18);
+  const buttEnd = offset(shaftAnchor, underBodyDir, -rig.ringRadius * 0.1);
   const gripWrapA = lerpPoint(rawGrip, { x: bladeBaseX, y: bladeBaseY }, 0.1);
   const gripWrapB = lerpPoint(rawGrip, { x: bladeBaseX, y: bladeBaseY }, 0.24);
   const guideWrap = lerpPoint(rawGrip, { x: bladeBaseX, y: bladeBaseY }, 0.38);
