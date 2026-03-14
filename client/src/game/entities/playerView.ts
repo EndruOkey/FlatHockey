@@ -16,7 +16,6 @@ import {
   type PlayerBodyRenderOptions
 } from '../render/playerBodyRenderer';
 import { renderStick } from '../render/stickRenderer';
-import { lerpAngle, wrapToPi } from '../util/math';
 
 const DEBUG_COLORS = {
   ring: 0xff6bd6,
@@ -50,8 +49,6 @@ export class PlayerView {
   private debugGfx: Phaser.GameObjects.Graphics;
   private bodyLayers: PlayerBodyRenderLayers;
   private debugDrawEnabled = false;
-  private displayRot = 0;
-  private hasDisplayRot = false;
   private bodyRig: PlayerBodyRig | null = null;
   private stickPose: SemiPhysicalStickPose | null = null;
   private handedness: Handedness;
@@ -202,8 +199,8 @@ export class PlayerView {
     const rig = this.resolveBodyRig();
     const socket = side === 'left' ? rig.leftHandSocket : rig.rightHandSocket;
     return {
-      x: this.x + socket.x,
-      y: this.y + socket.y
+      x: this.worldX + socket.x / Math.max(0.001, this.renderScale),
+      y: this.worldY + socket.y / Math.max(0.001, this.renderScale)
     };
   }
 
@@ -233,25 +230,15 @@ export class PlayerView {
     const pose = this.resolveStickPose();
     if (!pose) return this.getCarryAnchorWorld();
     return {
-      x: pose.gripX,
-      y: pose.gripY
+      x: pose.shaftAnchorX,
+      y: pose.shaftAnchorY
     };
   }
 
-  draw(dtSec = 1 / 60) {
+  draw(_dtSec = 1 / 60) {
     this.root.setPosition(this.x, this.y);
-    if (!this.hasDisplayRot) {
-      this.displayRot = this.rot;
-      this.hasDisplayRot = true;
-    } else {
-      const angularDelta = Math.abs(wrapToPi(this.rot - this.displayRot));
-      const tauSec = angularDelta > 0.5 ? 0.014 : 0.028;
-      const alpha = 1 - Math.exp(-Math.max(0, dtSec) / Math.max(0.001, tauSec));
-      this.displayRot = lerpAngle(this.displayRot, this.rot, alpha);
-    }
-
-    this.bodyRig = this.createBodyRig(this.hasDisplayRot ? this.displayRot : this.rot);
-    this.stickPose = this.createStickPose(this.bodyRig, this.hasDisplayRot ? this.displayRot : this.rot);
+    this.bodyRig = this.createBodyRig(this.rot);
+    this.stickPose = this.createStickPose(this.bodyRig, this.rot);
     clearPlayerBodyLayers(this.bodyLayers);
     const renderOptions: PlayerBodyRenderOptions = {
       isLocalPlayer: this.isLocalPlayer,
@@ -280,8 +267,7 @@ export class PlayerView {
 
   private resolveBodyRig() {
     if (!this.bodyRig) {
-      const facingAngle = this.hasDisplayRot ? this.displayRot : this.rot;
-      this.bodyRig = this.createBodyRig(facingAngle);
+      this.bodyRig = this.createBodyRig(this.rot);
     }
     return this.bodyRig;
   }
@@ -289,8 +275,7 @@ export class PlayerView {
   private resolveStickPose() {
     if (!this.stickPose) {
       const bodyRig = this.resolveBodyRig();
-      const facingAngle = this.hasDisplayRot ? this.displayRot : this.rot;
-      this.stickPose = this.createStickPose(bodyRig, facingAngle);
+      this.stickPose = this.createStickPose(bodyRig, this.rot);
     }
     return this.stickPose;
   }

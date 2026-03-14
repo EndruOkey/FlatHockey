@@ -53,6 +53,10 @@ export function renderStick(
   const front = layers.front;
 
   // Rig anchors are container-local pixels. Pose points are world units.
+  const shaftAnchor = {
+    x: (pose.shaftAnchorX - playerWorldX) * renderScale,
+    y: (pose.shaftAnchorY - playerWorldY) * renderScale
+  };
   const rawGrip = {
     x: (pose.gripX - playerWorldX) * renderScale,
     y: (pose.gripY - playerWorldY) * renderScale
@@ -65,44 +69,34 @@ export function renderStick(
   const bladeTipY = (pose.bladeTipY - playerWorldY) * renderScale;
   const gripHand = rig.gripHand === 'left' ? rig.leftHandSocket : rig.rightHandSocket;
   const guideHand = rig.guideHand === 'left' ? rig.leftHandSocket : rig.rightHandSocket;
-  const gripSideSign = rig.gripHand === 'left' ? -1 : 1;
-  const bodyFrontAnchor = offset(
-    offset(rig.chestAnchor, rig.forward, rig.torsoHeight * 0.22),
-    rig.right,
-    gripSideSign * rig.ringRadius * 0.1
-  );
-  const gripPocket = lerpPoint(bodyFrontAnchor, rawGrip, 0.66);
-  const shaftDir = normalize(bladeBaseX - gripPocket.x, bladeBaseY - gripPocket.y);
-  const shaftReach = Math.hypot(bladeBaseX - gripPocket.x, bladeBaseY - gripPocket.y);
-  const gripLead = Math.min(rig.ringRadius * 0.18, shaftReach * 0.16);
-  const gripX = gripPocket.x + shaftDir.x * gripLead;
-  const gripY = gripPocket.y + shaftDir.y * gripLead;
-  const guideGrip = lerpPoint({ x: gripX, y: gripY }, { x: bladeBaseX, y: bladeBaseY }, 0.42);
-  const buttEnd = offset(bodyFrontAnchor, shaftDir, -rig.ringRadius * 0.2);
-  const gripWrapA = lerpPoint({ x: gripX, y: gripY }, { x: bladeBaseX, y: bladeBaseY }, 0.12);
-  const gripWrapB = lerpPoint({ x: gripX, y: gripY }, { x: bladeBaseX, y: bladeBaseY }, 0.25);
-  const guideWrap = lerpPoint({ x: gripX, y: gripY }, { x: bladeBaseX, y: bladeBaseY }, 0.4);
+  const underBodyDir = normalize(rawGrip.x - shaftAnchor.x, rawGrip.y - shaftAnchor.y);
+  const gripBridge = lerpPoint(shaftAnchor, rawGrip, 0.82);
+  const guideGrip = lerpPoint(rawGrip, { x: bladeBaseX, y: bladeBaseY }, 0.34);
+  const buttEnd = offset(shaftAnchor, underBodyDir, -rig.ringRadius * 0.18);
+  const gripWrapA = lerpPoint(rawGrip, { x: bladeBaseX, y: bladeBaseY }, 0.1);
+  const gripWrapB = lerpPoint(rawGrip, { x: bladeBaseX, y: bladeBaseY }, 0.24);
+  const guideWrap = lerpPoint(rawGrip, { x: bladeBaseX, y: bladeBaseY }, 0.38);
 
   back.lineStyle(SHAFT_THICKNESS + 3, 0x091118, 0.16);
-  back.lineBetween(buttEnd.x, buttEnd.y, gripX, gripY);
+  back.lineBetween(buttEnd.x, buttEnd.y, rawGrip.x, rawGrip.y);
   back.lineStyle(SHAFT_THICKNESS + 1, SHAFT_COLOR, 0.7);
-  back.lineBetween(bodyFrontAnchor.x, bodyFrontAnchor.y, gripX, gripY);
+  back.lineBetween(shaftAnchor.x, shaftAnchor.y, rawGrip.x, rawGrip.y);
   back.fillStyle(0x0b151d, 0.2);
-  back.fillCircle(bodyFrontAnchor.x, bodyFrontAnchor.y, SHAFT_THICKNESS * 1.1);
+  back.fillCircle(shaftAnchor.x, shaftAnchor.y, SHAFT_THICKNESS * 1.05);
 
   front.lineStyle(SHAFT_THICKNESS + 1.8, 0x11161c, 0.18);
-  front.lineBetween(gripHand.x, gripHand.y, gripX, gripY);
+  front.lineBetween(gripHand.x, gripHand.y, gripBridge.x, gripBridge.y);
   front.lineBetween(guideHand.x, guideHand.y, guideGrip.x, guideGrip.y);
   front.lineStyle(SHAFT_THICKNESS - 0.6, SHAFT_COLOR, 0.98);
-  front.lineBetween(gripHand.x, gripHand.y, gripX, gripY);
+  front.lineBetween(gripHand.x, gripHand.y, gripBridge.x, gripBridge.y);
   front.lineBetween(guideHand.x, guideHand.y, guideGrip.x, guideGrip.y);
 
   front.lineStyle(SHAFT_THICKNESS + 2.4, 0x11161c, 0.22);
-  front.lineBetween(gripX, gripY, bladeBaseX, bladeBaseY);
+  front.lineBetween(rawGrip.x, rawGrip.y, bladeBaseX, bladeBaseY);
   front.lineStyle(SHAFT_THICKNESS, SHAFT_COLOR, 1);
-  front.lineBetween(gripX, gripY, bladeBaseX, bladeBaseY);
+  front.lineBetween(rawGrip.x, rawGrip.y, bladeBaseX, bladeBaseY);
   front.fillStyle(SHAFT_COLOR, 1);
-  front.fillCircle(gripX, gripY, SHAFT_THICKNESS * 0.72);
+  front.fillCircle(rawGrip.x, rawGrip.y, SHAFT_THICKNESS * 0.72);
   front.fillCircle(guideGrip.x, guideGrip.y, SHAFT_THICKNESS * 0.58);
   front.fillCircle(bladeBaseX, bladeBaseY, SHAFT_THICKNESS * 0.58);
 

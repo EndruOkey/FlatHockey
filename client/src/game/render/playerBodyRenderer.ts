@@ -119,25 +119,35 @@ function renderTorso(graphics: Phaser.GameObjects.Graphics, rig: PlayerBodyRig) 
 }
 
 function renderShoulders(graphics: Phaser.GameObjects.Graphics, rig: PlayerBodyRig) {
-  const shoulderCenter = midpoint(rig.leftShoulderAnchor, rig.rightShoulderAnchor);
+  const shoulderCenter = offset(midpoint(rig.leftShoulderAnchor, rig.rightShoulderAnchor), rig.forward, -rig.shoulderHeight * 0.06);
   drawOrientedEllipse(
     graphics,
     shoulderCenter,
     rig.right,
     rig.forward,
-    rig.shoulderWidth + 2.2,
-    rig.shoulderHeight + 2.2,
+    rig.shoulderWidth + 2,
+    rig.shoulderHeight + 2,
     COLORS.outline,
-    0.96
+    0.94
   );
   drawOrientedEllipse(graphics, shoulderCenter, rig.right, rig.forward, rig.shoulderWidth, rig.shoulderHeight, COLORS.shoulders, 1);
   drawOrientedEllipse(
     graphics,
-    offset(shoulderCenter, rig.forward, -rig.shoulderHeight * 0.04),
+    offset(shoulderCenter, rig.forward, rig.shoulderHeight * 0.16),
     rig.right,
     rig.forward,
-    rig.shoulderWidth * 0.74,
-    rig.shoulderHeight * 0.48,
+    rig.torsoWidth * 0.9,
+    rig.shoulderHeight * 0.72,
+    COLORS.shoulders,
+    0.6
+  );
+  drawOrientedEllipse(
+    graphics,
+    offset(shoulderCenter, rig.forward, -rig.shoulderHeight * 0.02),
+    rig.right,
+    rig.forward,
+    rig.shoulderWidth * 0.68,
+    rig.shoulderHeight * 0.5,
     COLORS.shouldersShade,
     0.62
   );
@@ -183,8 +193,8 @@ function drawGlove(
   anchor: { x: number; y: number },
   sideSign: number
 ) {
-  const gloveWidth = Math.max(8, rig.ringRadius * 0.34);
-  const gloveHeight = Math.max(6, rig.ringRadius * 0.26);
+  const gloveWidth = Math.max(7.6, rig.ringRadius * 0.31);
+  const gloveHeight = Math.max(6, rig.ringRadius * 0.24);
   const cuffCenter = offset(offset(anchor, rig.forward, -gloveHeight * 0.08), rig.right, sideSign * gloveWidth * 0.08);
   const palmCenter = offset(offset(anchor, rig.forward, gloveHeight * 0.06), rig.right, sideSign * gloveWidth * 0.04);
 
