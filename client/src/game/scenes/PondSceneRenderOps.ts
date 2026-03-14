@@ -27,6 +27,11 @@ export function updateCrosshairAndCursor(scene: any) {
 
 function playerCarryTargetWorld(scene: any, playerId: string | null) {
   if (!playerId) return null;
+  // Primary: use the view's already-computed world-space stick pose (set during draw()).
+  // This guarantees the puck world position matches the visual blade center exactly at any camera scale.
+  const view = scene.players?.get(playerId);
+  if (view) return view.getCarryAnchorWorld();
+  // Fallback: view not yet created — compute from world state directly.
   const state = scene.playerRenderWorldStates?.get(playerId);
   if (!state) return null;
   const tuning = getTuning();

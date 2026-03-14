@@ -149,6 +149,8 @@ export function runPondSceneUpdate(scene: any) {
     view.setState(
       s.x,
       s.y,
+      state.x,
+      state.y,
       state.rot,
       state.aimRot ?? state.rot
     );

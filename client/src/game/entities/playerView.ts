@@ -64,6 +64,8 @@ export class PlayerView {
 
   x = 0;
   y = 0;
+  worldX = 0;
+  worldY = 0;
   rot = 0;
   aimRot = 0;
 
@@ -113,9 +115,11 @@ export class PlayerView {
     ]);
   }
 
-  setState(x: number, y: number, rot: number, aimRot?: number) {
+  setState(x: number, y: number, worldX: number, worldY: number, rot: number, aimRot?: number) {
     this.x = x;
     this.y = y;
+    this.worldX = worldX;
+    this.worldY = worldY;
     this.rot = rot;
     this.aimRot = typeof aimRot === 'number' ? aimRot : rot;
     this.bodyRig = null;
@@ -174,15 +178,16 @@ export class PlayerView {
   getCarryAnchorWorld() {
     const pose = this.resolveStickPose();
     if (pose) {
+      // pose is computed in world space — bladeCenterX/Y are world coords
       return {
         x: pose.bladeCenterX,
         y: pose.bladeCenterY
       };
     }
-    const rig = this.resolveBodyRig();
+    // fallback: player world center (bodyCenter offset is zero in body space)
     return {
-      x: this.x + rig.bodyCenter.x,
-      y: this.y + rig.bodyCenter.y
+      x: this.worldX,
+      y: this.worldY
     };
   }
 
@@ -248,7 +253,7 @@ export class PlayerView {
     renderPlayerBody(this.bodyLayers, this.bodyRig, this.displayName, renderOptions);
     this.stick.clear();
     if (this.stickPose) {
-      renderStick(this.stick, this.stickPose, this.bodyRig, this.x, this.y, {
+      renderStick(this.stick, this.stickPose, this.bodyRig, this.worldX, this.worldY, this.renderScale, {
         hasPuck: this.hasPuck
       });
     }
@@ -298,12 +303,15 @@ export class PlayerView {
         ? 'neutral'
         : this.stickState;
 
+    // Compute pose in world space so all distances are world units.
+    // renderStick converts to container-local via (worldPoint - worldPlayer) * renderScale.
+    const worldRadius = bodyRig.ringRadius / Math.max(0.001, this.renderScale);
     return computeSemiPhysicalStickPose({
-      playerX: this.x,
-      playerY: this.y,
+      playerX: this.worldX,
+      playerY: this.worldY,
       bodyAngle: facingAngle,
       aimAngle: this.aimRot,
-      playerRadius: bodyRig.ringRadius,
+      playerRadius: worldRadius,
       state: resolvedState,
       shotCharge: this.shotCharge,
       stateTimerSec: this.stickTimer

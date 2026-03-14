@@ -29,26 +29,29 @@ export function renderStick(
   graphics: Phaser.GameObjects.Graphics,
   pose: SemiPhysicalStickPose,
   rig: PlayerBodyRig,
-  playerX: number,
-  playerY: number,
+  playerWorldX: number,
+  playerWorldY: number,
+  renderScale: number,
   options: {
     hasPuck?: boolean;
   } = {}
 ) {
+  // rig anchors are container-local screen pixels (relative to player screen center)
+  // pose coords are world units — convert to container-local via (world - playerWorld) * renderScale
   const leftHandX = rig.leftHandSocket.x;
   const leftHandY = rig.leftHandSocket.y;
   const rightHandX = rig.rightHandSocket.x;
   const rightHandY = rig.rightHandSocket.y;
   const rawGrip = {
-    x: pose.gripX - playerX,
-    y: pose.gripY - playerY
+    x: (pose.gripX - playerWorldX) * renderScale,
+    y: (pose.gripY - playerWorldY) * renderScale
   };
-  const bladeBaseX = pose.bladeBaseX - playerX;
-  const bladeBaseY = pose.bladeBaseY - playerY;
-  const bladeCenterX = pose.bladeCenterX - playerX;
-  const bladeCenterY = pose.bladeCenterY - playerY;
-  const bladeTipX = pose.bladeTipX - playerX;
-  const bladeTipY = pose.bladeTipY - playerY;
+  const bladeBaseX = (pose.bladeBaseX - playerWorldX) * renderScale;
+  const bladeBaseY = (pose.bladeBaseY - playerWorldY) * renderScale;
+  const bladeCenterX = (pose.bladeCenterX - playerWorldX) * renderScale;
+  const bladeCenterY = (pose.bladeCenterY - playerWorldY) * renderScale;
+  const bladeTipX = (pose.bladeTipX - playerWorldX) * renderScale;
+  const bladeTipY = (pose.bladeTipY - playerWorldY) * renderScale;
   const gripHand = rig.gripHand === 'left' ? { x: leftHandX, y: leftHandY } : { x: rightHandX, y: rightHandY };
   const guideHand = rig.guideHand === 'left' ? { x: leftHandX, y: leftHandY } : { x: rightHandX, y: rightHandY };
   const gripBlend = lerpPoint(gripHand, rawGrip, 0.3);
