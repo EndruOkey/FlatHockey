@@ -112,8 +112,8 @@ function renderRink(ctx, cam) {
   ctx.restore();
 
   // Goals (nets — outside clip so they protrude)
-  drawGoal(ctx, cam, RINK.goalLineLeft,  RINK.goalY, RINK.goalH, 1,  '#3a9fff');
-  drawGoal(ctx, cam, RINK.goalLineRight, RINK.goalY, RINK.goalH, -1, '#ff4455');
+  drawGoal(ctx, cam, RINK.goalLineLeft,  RINK.goalY, RINK.goalH, -1, '#3a9fff');
+  drawGoal(ctx, cam, RINK.goalLineRight, RINK.goalY, RINK.goalH,  1, '#ff4455');
 }
 
 function drawCrease(ctx, cam, glx, cy, dir) {
@@ -278,6 +278,69 @@ function renderPuck(ctx, puck, cam) {
   ctx.strokeStyle = '#555';
   ctx.lineWidth = 1 * s;
   ctx.stroke();
+}
+
+export function renderGoalie(ctx, goalie, cam) {
+  const s = cam.scale;
+  const { ox, oy } = cam;
+  const sx = ox + goalie.x * s;
+  const sy = oy + goalie.y * s;
+  const r = goalie.radius * s;
+
+  // Shadow
+  ctx.beginPath();
+  ctx.ellipse(sx + 2, sy + 3, r * 1.1, r * 0.65, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fill();
+
+  // Butterfly pads (horizontal bar)
+  ctx.beginPath();
+  ctx.rect(sx - r * 1.5, sy - r * 0.4, r * 3, r * 0.8);
+  ctx.fillStyle = '#d4a820';
+  ctx.fill();
+
+  // Body
+  ctx.beginPath();
+  ctx.arc(sx, sy, r, 0, Math.PI * 2);
+  ctx.fillStyle = '#e8c030';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+  ctx.lineWidth = 2 * s;
+  ctx.stroke();
+
+  // G label
+  ctx.font = `bold ${Math.round(r * 0.9)}px monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#5a3a00';
+  ctx.fillText('G', sx, sy + 1);
+  ctx.textBaseline = 'alphabetic';
+}
+
+export function renderPasser(ctx, passer, ready, cam) {
+  const s = cam.scale;
+  const { ox, oy } = cam;
+  const sx = ox + passer.x * s;
+  const sy = oy + passer.y * s;
+  const r = 18 * s;
+
+  ctx.beginPath();
+  ctx.arc(sx, sy, r, 0, Math.PI * 2);
+  ctx.fillStyle = ready ? 'rgba(60,210,110,0.22)' : 'rgba(100,100,100,0.12)';
+  ctx.fill();
+
+  ctx.setLineDash([3 * s, 3 * s]);
+  ctx.strokeStyle = ready ? '#3dd870' : '#444';
+  ctx.lineWidth = 1.5 * s;
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.font = `bold ${Math.round(r * 0.72)}px monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = ready ? '#3dd870' : '#444';
+  ctx.fillText('E', sx, sy + 1);
+  ctx.textBaseline = 'alphabetic';
 }
 
 function renderHUD(ctx, score, width) {

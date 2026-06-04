@@ -46,6 +46,7 @@ export class Net {
   }
 
   async _initPeer() {
+    this.pendingCandidates = [];
     this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
 
     this.pc.onicecandidate = ({ candidate }) => {

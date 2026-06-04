@@ -1,5 +1,6 @@
 import { Net } from './net.js';
-import { Game, SoloGame } from './game.js';
+import { Game, SandboxGame } from './game.js';
+import { Tweaker } from './tweaker.js';
 
 const canvas  = document.getElementById('canvas');
 const lobby   = document.getElementById('lobby');
@@ -7,6 +8,11 @@ const roomInput = document.getElementById('room-input');
 const joinBtn = document.getElementById('join-btn');
 const soloBtn = document.getElementById('solo-btn');
 const status  = document.getElementById('status');
+const LAST_ROOM_KEY = 'hockey_last_room';
+const saved = localStorage.getItem(LAST_ROOM_KEY);
+if (saved) roomInput.value = saved;
+
+new Tweaker();
 
 function resizeCanvas() {
   canvas.width  = window.innerWidth;
@@ -17,7 +23,7 @@ window.addEventListener('resize', resizeCanvas);
 
 function startGame(game) {
   lobby.style.display = 'none';
-  canvas.style.cursor = 'none';
+  canvas.style.cursor = 'crosshair';
   game.start();
 }
 
@@ -25,6 +31,8 @@ function setStatus(msg, color = '#888') {
   status.textContent = msg;
   status.style.color = color;
 }
+
+const signalingNet = new Net();
 
 joinBtn.addEventListener('click', async () => {
   let roomId = roomInput.value.trim().toUpperCase();
@@ -35,8 +43,9 @@ joinBtn.addEventListener('click', async () => {
 
   setStatus('Connecting to signaling server...');
   joinBtn.disabled = true;
+  localStorage.setItem(LAST_ROOM_KEY, roomId);
 
-  const net = new Net();
+  const net = signalingNet;
 
   try {
     const { isHost, waiting } = await net.join(roomId);
@@ -66,7 +75,7 @@ joinBtn.addEventListener('click', async () => {
 });
 
 soloBtn.addEventListener('click', () => {
-  startGame(new SoloGame(canvas));
+  startGame(new SandboxGame(canvas));
 });
 
 roomInput.addEventListener('keydown', e => {

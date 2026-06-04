@@ -1,223 +1,439 @@
-import { PLAYER, RINK } from './constants.js';
-import { makePlayer, makePuck, tickPlayer, tickPuck, shoot, pass, lerpAngle } from './physics.js';
-import { computeCamera, renderFrame, toScreen, fromScreen } from './render.js';
+import { RINK, PLAYER, PUCK } from './constants.js';
 import { Input } from './input.js';
+import { Engine, fromScreen } from './engine.js';
+import { World } from './world.js';
+import { Player, RemotePlayer } from './entities/Player.js';
+import { Puck } from './entities/Puck.js';
+import { Goalie } from './entities/Goalie.js';
+import { Passer } from './entities/Passer.js';
+import { Rink } from './entities/Rink.js';
 
-const CHARGE_RATE = 1.1;
-const SEND_HZ = 60;
+const CHARGE_RATE = 1.8; // rychlejší nabíjení — uvolní místo pro kličky
+const SEND_HZ     = 60;
+
+// Myš míří jen hokejku/střelu (turret). Tělo/facing řídí A/D bruslení (_move → bodyAngle).
+function _updateAim(player, rawAim, dt) {
+  player.aimAngle = rawAim;
+}
+
+// Predikce nahrávky do jízdy — míří na HOKEJKU (čepel) příjemce, ne na tělo.
+function _leadAim(from, target, speed) {
+  // Cíl = čepel příjemce (hráč). U netrénažéru (passer bez hokejky) = jeho pozice.
+  let tx = target.x, ty = target.y;
+  if (target.isPlayer) {
+    const a = target.aimAngle ?? 0;
+    tx += Math.cos(a) * PLAYER.stickLen;
+    ty += Math.sin(a) * PLAYER.stickLen;
+  }
+  const dist = Math.hypot(tx - from.x, ty - from.y) || 1;
+  const t    = dist / speed;              // doba letu
+  const px   = tx + (target.vx || 0) * t; // predikce do jízdy příjemce
+  const py   = ty + (target.vy || 0) * t;
+  return Math.atan2(py - from.y, px - from.x);
+}
 
 export class Game {
   constructor(canvas, net, isHost) {
-    this.canvas = canvas;
-    this.net = net;
-    this.isHost = isHost;
-    this.input = new Input(canvas);
-    this.score = { home: 0, away: 0 };
+    this.canvas    = canvas;
+    this.net       = net;
+    this.isHost    = isHost;
+    this.score     = { home: 0, away: 0 };
     this.goalFlash = 0;
-    this.goalText = '';
+    this.goalText  = '';
 
-    const localTeam  = isHost ? 'home' : 'away';
-    const remoteTeam = isHost ? 'away' : 'home';
+    this.input  = new Input(canvas);
+    this.local  = new Player('local',  isHost ? 'home' : 'away', this.input);
+    this.remote = new RemotePlayer('remote', isHost ? 'away' : 'home');
+    this.puck   = new Puck();
+    this.goalie = new Goalie();
 
-    this.local  = makePlayer('local',  localTeam);
-    this.remote = makePlayer('remote', remoteTeam);
-    this.puck   = makePuck();
+    this.world = new World([new Rink(), this.local, this.remote, this.goalie, this.puck]);
+    this.world.authoritative = isHost;
+    this.world.onGoal        = result => this._handleGoal(result);
 
-    this.remoteTarget = { x: this.remote.x, y: this.remote.y };
-
-    if (net) {
-      net.onMessage = msg => this._onMessage(msg);
-    }
-
-    this._lastTime = null;
-    this._sendAccum = 0;
+    this.engine = new Engine(canvas);
+    this._sendAccum    = 0;
     this._sendInterval = 1 / SEND_HZ;
+    this._chargeDecaying   = false;
+    this._chargeBlocked    = false;
+    this._chargeCancelled  = false;
+    this._oneTimer         = false;
+
+    if (net) net.onMessage = msg => this._onMessage(msg);
   }
 
   start() {
-    requestAnimationFrame(t => this._loop(t));
+    this.engine.onTick = (dt, cam) => this._tick(dt, cam);
+    this.engine.onDraw = (ctx)     => this._drawOverlay(ctx);
+    this.engine.run(this.world);
   }
 
-  _loop(t) {
-    if (this._lastTime === null) this._lastTime = t;
-    const dt = Math.min((t - this._lastTime) / 1000, 0.05);
-    this._lastTime = t;
+  _tick(dt, cam) {
+    const mouse = fromScreen(this.input.mouseX, this.input.mouseY, cam);
+    this.local.aimDist = Math.hypot(mouse.x - this.local.x, mouse.y - this.local.y); // dosah hole dle kurzoru
+    _updateAim(this.local, Math.atan2(mouse.y - this.local.y, mouse.x - this.local.x), dt);
+    const forehandNow = !this.input.shift;
 
-    this._update(dt);
-    this._draw();
-    requestAnimationFrame(ts => this._loop(ts));
-  }
+    if (this.input.lmbJustPressed) { this._chargeCancelled = false; this._oneTimer = !this.local.hasPuck; }
+    if (!this.input.lmb) this._chargeBlocked = false;
 
-  _update(dt) {
-    const cam = computeCamera(this.canvas);
-    const world = fromScreen(this.input.mouseX, this.input.mouseY, cam);
-    this.local.aimAngle = Math.atan2(world.y - this.local.y, world.x - this.local.x);
-
-    // Charge
-    if (this.input.lmb && this.local.hasPuck) {
-      this.local.charge = Math.min(1, this.local.charge + CHARGE_RATE * dt);
+    if (this.input.lmb && !this._chargeBlocked) {
+      // Charge builds whether or not we hold the puck → enables one-timers
+      if (!this._chargeDecaying) {
+        // one-timer drží charge pod overcharge i po sebrání puku (manuální výstřel)
+        const cap = (this.local.hasPuck && !this._oneTimer) ? 1 : 0.95;
+        this.local.charge = Math.min(cap, this.local.charge + CHARGE_RATE * dt);
+        if (this.local.charge >= 1 && this.local.hasPuck && !this._oneTimer) { this._chargeDecaying = true; this.local.overcharged = true; }
+      } else if (this.local.hasPuck) {
+        this.local.charge = Math.max(0, this.local.charge - CHARGE_RATE * 1.8 * dt);
+        if (this.local.charge <= 0) {
+          // Overcharged — auto-fire weak shot
+          if (this.isHost) { this.local.shoot(this.puck, 0.12, forehandNow); }
+          else { this.net?.send({ t: 'shoot', charge: 0.12, fh: forehandNow ? 1 : 0 }); this.local.hasPuck = false; }
+          this.local.charge = 0; this._chargeDecaying = false; this.local.overcharged = false;
+        }
+      } else {
+        this._chargeDecaying = false; this.local.overcharged = false;
+      }
     }
 
-    // Shoot on LMB release
-    if (this.input.lmbJustReleased) {
-      if (this.local.hasPuck) {
+    // rmbJustPressed can cause a spurious lmbJustReleased in some browsers — suppress shoot in that case
+    const rmbCancelledCharge = this.input.rmbJustPressed && this.local.hasPuck && this.local.charge > 0;
+
+    if (this.input.lmbJustReleased && !rmbCancelledCharge) {
+      if (this.local.hasPuck && !this._chargeCancelled) {
         if (this.isHost) {
-          shoot(this.local, this.puck, this.local.charge);
+          this.local.shoot(this.puck, this.local.charge, forehandNow);
         } else {
-          this.net?.send({ t: 'shoot', charge: this.local.charge });
+          this.net?.send({ t: 'shoot', charge: this.local.charge, fh: forehandNow ? 1 : 0 });
           this.local.hasPuck = false;
         }
       }
-      this.local.charge = 0;
+      this.local.charge = 0; this._chargeDecaying = false; this.local.overcharged = false;
+      this._chargeCancelled = false; this._oneTimer = false;
     }
 
-    // Pass / crosscheck on RMB
-    if (this.input.rmbJustPressed) {
-      if (this.local.hasPuck) {
-        if (this.isHost) {
-          pass(this.local, this.puck);
-        } else {
-          this.net?.send({ t: 'pass' });
-          this.local.hasPuck = false;
-        }
+    if (this.input.rmbJustPressed && this.local.hasPuck) {
+      // Charge cancel only when charge is meaningful (> 0.08) — prevents "need 2 clicks" bug
+      if (this.local.charge > 0.08) {
+        this.local.charge = 0; this._chargeDecaying = false; this.local.overcharged = false;
+        this._chargeBlocked = true;
+        this._chargeCancelled = true;
+      } else {
+        // Nahrávka predikovaná do jízdy spoluhráče (lead), hůl se neotáčí
+        this.local.charge = 0;
+        const lead = this.remote ? _leadAim(this.local, this.remote, PUCK.passSpeed) : null;
+        if (this.isHost) { this.local.pass(this.puck, lead, forehandNow); }
+        else { this.net?.send({ t: 'pass', aim: lead, fh: forehandNow ? 1 : 0 }); this.local.hasPuck = false; this.local._passCooldown = 0.15; }
       }
+    }
+
+    // MMB — žádost o nahrávku (vizuální signál + odeslání)
+    if (this.input.mmbJustPressed && !this.local.hasPuck) {
+      this.local.passReq = 0.9;
+      this.net?.send({ t: 'passreq' });
     }
 
     this.input.flush();
 
-    tickPlayer(this.local, this.input, dt);
-
-    // Smooth remote player position
-    this.remote.x = lerp(this.remote.x, this.remoteTarget.x, Math.min(1, 18 * dt));
-    this.remote.y = lerp(this.remote.y, this.remoteTarget.y, Math.min(1, 18 * dt));
-    this.remote.bodyAngle = lerpAngle(this.remote.bodyAngle, this.remoteTargetAngle ?? this.remote.bodyAngle, Math.min(1, 14 * dt));
-    this.remote.aimAngle  = lerpAngle(this.remote.aimAngle,  this.remoteAimAngle   ?? this.remote.aimAngle,  Math.min(1, 14 * dt));
-
-    if (this.isHost) {
-      const result = tickPuck(this.puck, [this.local, this.remote], dt);
-      if (result) this._handleGoal(result);
-    }
-
     if (this.goalFlash > 0) this.goalFlash -= dt;
 
-    // Network send
     this._sendAccum += dt;
     if (this._sendAccum >= this._sendInterval && this.net?.connected) {
       this._sendAccum = 0;
       const msg = {
         t: 'state',
-        x: this.local.x, y: this.local.y,
+        x: this.local.x,  y: this.local.y,
         vx: this.local.vx, vy: this.local.vy,
-        ba: this.local.bodyAngle,
-        aa: this.local.aimAngle,
+        ba: this.local.bodyAngle, aa: this.local.aimAngle,
         hp: this.local.hasPuck ? 1 : 0,
         ch: this.local.charge,
+        fh: this.local.forehand  ? 1 : 0,
+        cc: this.local.crossCheck ? 1 : 0,
+        pr: this.local.passReq > 0 ? 1 : 0,
       };
       if (this.isHost) {
-        msg.px = this.puck.x;
-        msg.py = this.puck.y;
-        msg.pvx = this.puck.vx;
-        msg.pvy = this.puck.vy;
+        msg.px = this.puck.x;  msg.py  = this.puck.y;
+        msg.pvx = this.puck.vx; msg.pvy = this.puck.vy;
         msg.sc = this.score;
       }
       this.net.send(msg);
     }
   }
 
-  _draw() {
-    const cam = computeCamera(this.canvas);
-    const ctx = this.canvas.getContext('2d');
-    renderFrame(ctx, { players: [this.local, this.remote], puck: this.puck }, cam, this.score);
+  _drawOverlay(ctx) {
+    _renderHUD(ctx, this.score);
 
     if (this.goalFlash > 0) {
-      const alpha = Math.min(1, this.goalFlash) * 0.5;
+      const alpha = Math.min(1, this.goalFlash);
       ctx.fillStyle = `rgba(255, 220, 60, ${alpha * 0.15})`;
-      ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
+      ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
       ctx.font = 'bold 64px monospace';
       ctx.textAlign = 'center';
-      ctx.fillStyle = `rgba(255, 220, 60, ${Math.min(1, this.goalFlash)})`;
-      ctx.fillText(this.goalText, this.canvas.width / 2, this.canvas.height / 2);
+      ctx.fillStyle = `rgba(255, 220, 60, ${alpha})`;
+      ctx.fillText(this.goalText, ctx.canvas.width / 2, ctx.canvas.height / 2);
     }
   }
 
   _onMessage(msg) {
     if (msg.t === 'state') {
-      this.remoteTarget.x = msg.x;
-      this.remoteTarget.y = msg.y;
-      this.remote.vx = msg.vx;
-      this.remote.vy = msg.vy;
-      this.remoteTargetAngle = msg.ba;
-      this.remoteAimAngle = msg.aa;
-      this.remote.hasPuck = !!msg.hp;
-      this.remote.charge = msg.ch ?? 0;
-
+      this.remote.applyState(msg);
       if (!this.isHost && msg.px !== undefined) {
-        this.puck.x = msg.px;
-        this.puck.y = msg.py;
-        this.puck.vx = msg.pvx;
-        this.puck.vy = msg.pvy;
+        this.puck.x = msg.px; this.puck.y  = msg.py;
+        this.puck.vx = msg.pvx; this.puck.vy = msg.pvy;
       }
-      if (!this.isHost && msg.sc) {
-        this.score = msg.sc;
-      }
+      if (!this.isHost && msg.sc) this.score = msg.sc;
     }
-
-    if (msg.t === 'shoot' && this.isHost) {
-      shoot(this.remote, this.puck, msg.charge);
-    }
-
-    if (msg.t === 'pass' && this.isHost) {
-      pass(this.remote, this.puck);
-    }
-
-    if (msg.t === 'goal') {
-      this._flashGoal(msg.text);
-    }
+    if (msg.t === 'shoot'   && this.isHost) this.remote.shoot(this.puck, msg.charge, msg.fh !== 0);
+    if (msg.t === 'pass'    && this.isHost) this.remote.pass(this.puck, msg.aim, msg.fh !== 0);
+    if (msg.t === 'goal')   this._flashGoal(msg.text);
+    if (msg.t === 'passreq') this.remote.passReq = 0.9;
   }
 
   _handleGoal(result) {
-    let text = '';
-    if (result === 'goal-away') {
-      this.score.away++;
-      text = 'GOAL! 🔴';
-    } else {
-      this.score.home++;
-      text = 'GOAL! 🔵';
-    }
+    const text = result === 'goal-away' ? 'GOAL! 🔴' : 'GOAL! 🔵';
+    if (result === 'goal-away') this.score.away++;
+    else this.score.home++;
     this._flashGoal(text);
     this.net?.send({ t: 'goal', text });
-
-    // Reset players
     setTimeout(() => {
-      this.local.x  = this.isHost ? 400 : 1400;
+      // Buly na středu — oba hráči kousek od puku, závod o získání
+      this.local.x  = this.isHost ? RINK.centerX - 70 : RINK.centerX + 70;
       this.local.y  = RINK.h / 2;
       this.local.vx = this.local.vy = 0;
       this.local.hasPuck = false;
-      this.remoteTarget.x = this.isHost ? 1400 : 400;
-      this.remoteTarget.y = RINK.h / 2;
+      this.remote._tx = this.isHost ? RINK.centerX + 70 : RINK.centerX - 70;
+      this.remote._ty = RINK.h / 2;
+      this.puck.reset(); // puk na středu, živý → kdo dřív
+      this.world._goalLock = false;
     }, 1200);
   }
 
   _flashGoal(text) {
     this.goalFlash = 2.5;
-    this.goalText = text;
+    this.goalText  = text;
   }
 }
 
-export class SoloGame extends Game {
+export class SandboxGame {
   constructor(canvas) {
-    super(canvas, null, true);
-    // Give control of both players for testing
-    this.soloMode = true;
+    this.canvas    = canvas;
+    this.score     = { home: 0, away: 0 };
+    this.goalFlash = 0;
+    this.goalText  = '';
+
+    this.input  = new Input(canvas);
+    this.local  = new Player('local', 'home', this.input);
+    this.puck   = new Puck();
+    this.goalie = new Goalie();
+    this.passer = new Passer();
+
+    this.world = new World([new Rink(), this.local, this.goalie, this.passer, this.puck]);
+    this.world.onGoal                 = result => this._handleGoal(result);
+    this.world.onResolveInteractions  = world  => this._resolveInteractions(world);
+
+    this.engine = new Engine(canvas);
+    this._rWas            = false;
+    this._eWas            = false;
+    this._tabWas          = false;
+    this._cam             = null;
+    this._chargeDecaying  = false;
+    this._chargeBlocked   = false;
+    this._chargeCancelled = false;
+    this._oneTimer        = false;
+    this._goalLock        = false;
   }
 
-  _update(dt) {
-    super._update(dt);
-    // Mirror puck state to "remote" for rendering
-    this.remoteTarget.x = RINK.w - this.local.x;
-    this.remoteTarget.y = this.local.y;
+  start() {
+    this.engine.onTick = (dt, cam) => this._tick(dt, cam);
+    this.engine.onDraw = (ctx)     => this._drawOverlay(ctx);
+    this.engine.run(this.world);
+  }
+
+  _tick(dt, cam) {
+    const mouse = fromScreen(this.input.mouseX, this.input.mouseY, cam);
+    this.local.aimDist = Math.hypot(mouse.x - this.local.x, mouse.y - this.local.y); // dosah hole dle kurzoru
+    _updateAim(this.local, Math.atan2(mouse.y - this.local.y, mouse.x - this.local.x), dt);
+    const forehandNow = !this.input.shift;
+
+    if (this.input.lmbJustPressed) { this._chargeCancelled = false; this._oneTimer = !this.local.hasPuck; }
+    if (!this.input.lmb) this._chargeBlocked = false;
+
+    if (this.input.lmb && !this._chargeBlocked) {
+      // Charge builds bez puku → one-timery
+      if (!this._chargeDecaying) {
+        const cap = (this.local.hasPuck && !this._oneTimer) ? 1 : 0.95;
+        this.local.charge = Math.min(cap, this.local.charge + CHARGE_RATE * dt);
+        if (this.local.charge >= 1 && this.local.hasPuck && !this._oneTimer) { this._chargeDecaying = true; this.local.overcharged = true; }
+      } else if (this.local.hasPuck) {
+        this.local.charge = Math.max(0, this.local.charge - CHARGE_RATE * 1.8 * dt);
+        if (this.local.charge <= 0) {
+          this.local.shoot(this.puck, 0.12, forehandNow);
+          this.local.charge = 0; this._chargeDecaying = false; this.local.overcharged = false;
+        }
+      } else {
+        this._chargeDecaying = false; this.local.overcharged = false;
+      }
+    }
+    const rmbCancelledCharge = this.input.rmbJustPressed && this.local.hasPuck && this.local.charge > 0;
+    if (this.input.lmbJustReleased && !rmbCancelledCharge) {
+      if (this.local.hasPuck && !this._chargeCancelled) this.local.shoot(this.puck, this.local.charge, forehandNow);
+      this.local.charge = 0; this._chargeDecaying = false; this.local.overcharged = false;
+      this._chargeCancelled = false; this._oneTimer = false;
+    }
+    if (this.input.rmbJustPressed && this.local.hasPuck) {
+      if (this.local.charge > 0.08) {
+        this.local.charge = 0; this._chargeDecaying = false; this.local.overcharged = false;
+        this._chargeBlocked = true;
+        this._chargeCancelled = true;
+      } else {
+        // Nahrávka predikovaná k passeru (lead), hůl se neotáčí
+        this.local.charge = 0;
+        const lead = _leadAim(this.local, this.passer, PUCK.passSpeed);
+        this.local.pass(this.puck, lead, forehandNow);
+      }
+    }
+
+    const rDown = !!this.input.keys['KeyR'];
+    if (rDown && !this._rWas) this._reset();
+    this._rWas = rDown;
+
+    // E / MMB — žádost o nahrávku od passeru
+    const eDown = !!this.input.keys['KeyE'];
+    const reqPass = (eDown && !this._eWas) || this.input.mmbJustPressed;
+    if (reqPass) {
+      this.local.passReq = 0.9; // vizuální signál
+      if (this.passer.hasPuck) {
+        this.passer.forceReturn();       // passer má puk → vrátit
+      } else if (!this.local.hasPuck) {
+        // passer nemá puk → odeslat z jeho pozice na HOKEJKU hráče (predikce do jízdy)
+        const ang = _leadAim(this.passer, this.local, PUCK.passSpeed + 40);
+        this.puck.x  = this.passer.x;
+        this.puck.y  = this.passer.y;
+        this.puck.vx = Math.cos(ang) * (PUCK.passSpeed + 40);
+        this.puck.vy = Math.sin(ang) * (PUCK.passSpeed + 40);
+        this.puck.z  = this.puck.vz = 0;
+        this.passer._receiveCooldown = 0.55;
+      }
+    }
+    this._eWas = eDown;
+
+    // Tab held — drag passer to mouse position
+    const tabDown = !!this.input.keys['Tab'];
+    if (tabDown) {
+      const mw = fromScreen(this.input.mouseX, this.input.mouseY, cam);
+      this.passer.dragTo(mw.x, mw.y);
+    }
+    this.passer.isDragging = tabDown;
+    this._tabWas = tabDown;
+
+    this.input.flush();
+
+    if (this.goalFlash > 0) this.goalFlash -= dt;
+  }
+
+  _resolveInteractions(world) {
+    const { puck, players } = world;
+    if (!puck) return;
+
+    // Během oslavy gólu necháme puk dojet do sítě, žádné interakce ani re-detekce
+    if (this._goalLock) return;
+
+    // Passer holding puck — keep it frozen at passer, fire return when ready
+    if (this.passer.hasPuck) {
+      puck.x = this.passer.x;  puck.y  = this.passer.y;
+      puck.vx = 0;             puck.vy  = 0;
+      puck.z  = 0;             puck.vz  = 0;
+      if (this.passer._wantsToReturn) {
+        this.passer._wantsToReturn    = false;
+        this.passer.hasPuck           = false;
+        this.passer._receiveCooldown  = 0.55; // prevent immediate re-catch
+        // rozehrávka na HOKEJKU hráče (predikce do jízdy), ne na tělo
+        const ang = _leadAim(this.passer, this.local, PUCK.passSpeed + 40);
+        puck.vx = Math.cos(ang) * (PUCK.passSpeed + 40);
+        puck.vy = Math.sin(ang) * (PUCK.passSpeed + 40);
+      }
+      return;
+    }
+
+    const anyoneHasPuck = players.some(p => p.hasPuck);
+
+    for (const p of world.players) this.goalie.blockPlayer(p);
+    for (const p of players) this.goalie.pokeCheck(p, puck);
+
+    for (let i = 0; i < players.length; i++)
+      for (let j = 0; j < players.length; j++)
+        if (i !== j) players[i].tryCrossCheck(players[j]);
+
+    if (!anyoneHasPuck) {
+      const saved = this.goalie.blockPuck(puck);
+      if (saved) puck.x = Math.min(puck.x, RINK.goalLineRight - 1);
+      // Tečování letícího puku hokejkou (dorážky/teče)
+      for (const p of players) if (p.tryDeflect(puck)) break;
+      // Goalie covers a slow loose puck in the crease (no need to skate into it)
+      this.goalie.controlLoosePuck(puck);
+
+      if (!this.goalie.isHolding) {
+        let pickedUp = false;
+        for (const p of players) {
+          if (p.tryPickup(puck)) { pickedUp = true; break; }
+        }
+        // Passer intercepts loose puck near its position
+        if (!pickedUp) this.passer.tryReceive(puck);
+      }
+    }
+
+    // Gól vyhodnocuje fyzika puku (puck.goalScored); puk zůstává v síti, reset po oslavě.
+    // _goalLock brání opakovanému počítání, dokud puk leží v bráně (91:0 bug).
+    if (puck.goalScored) {
+      this._goalLock = true;
+      world.onGoal?.(puck.goalScored);
+    }
+  }
+
+  _drawOverlay(ctx) {
+    _renderHUD(ctx, this.score);
+
+    if (this.goalFlash > 0) {
+      const alpha = Math.min(1, this.goalFlash);
+      ctx.fillStyle = `rgba(255, 220, 60, ${alpha * 0.08})`;
+      ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+      ctx.font = 'bold 64px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = `rgba(255, 220, 60, ${alpha})`;
+      ctx.fillText(this.goalText, ctx.canvas.width / 2, ctx.canvas.height / 2);
+    }
+  }
+
+  _handleGoal(result) {
+    if (result === 'goal-home') {
+      this.score.home++;
+      this.goalText  = 'GOAL!';
+      this.goalFlash = 2.5;
+    }
+    setTimeout(() => this._reset(), result === 'goal-home' ? 1200 : 400);
+  }
+
+  _reset() {
+    this.local.x  = 200;
+    this.local.y  = RINK.h / 2;
+    this.local.vx = this.local.vy = 0;
+    this.local.hasPuck = false;
+    this.puck.reset();
+    this._goalLock = false;
   }
 }
 
-function lerp(a, b, t) { return a + (b - a) * t; }
+function _renderHUD(ctx, score) {
+  const width = ctx.canvas.width;
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(width / 2 - 90, 12, 180, 42);
+  ctx.font = 'bold 26px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = PLAYER.colors.home;
+  ctx.fillText(score.home, width / 2 - 36, 44);
+  ctx.fillStyle = '#888';
+  ctx.fillText('–', width / 2, 44);
+  ctx.fillStyle = PLAYER.colors.away;
+  ctx.fillText(score.away, width / 2 + 36, 44);
+}

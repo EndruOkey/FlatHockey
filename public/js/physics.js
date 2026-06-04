@@ -54,26 +54,14 @@ export function tickPuck(puck, players, dt) {
   if (puck.y < PUCK.radius) { puck.y = PUCK.radius; puck.vy = Math.abs(puck.vy) * PUCK.bounce; }
   if (puck.y > RINK.h - PUCK.radius) { puck.y = RINK.h - PUCK.radius; puck.vy = -Math.abs(puck.vy) * PUCK.bounce; }
 
-  // Left/right walls — goal opening lets puck through
+  // Goal scoring — puck crosses goal line while in goal opening
   const inGoal = puck.y > RINK.goalY && puck.y < RINK.goalY + RINK.goalH;
+  if (inGoal && puck.x < RINK.goalLineLeft)  { resetPuck(puck); return 'goal-away'; }
+  if (inGoal && puck.x > RINK.goalLineRight) { resetPuck(puck); return 'goal-home'; }
 
-  if (puck.x < PUCK.radius) {
-    if (inGoal) {
-      if (puck.x < -60) { resetPuck(puck); return 'goal-away'; }
-    } else {
-      puck.x = PUCK.radius;
-      puck.vx = Math.abs(puck.vx) * PUCK.bounce;
-    }
-  }
-
-  if (puck.x > RINK.w - PUCK.radius) {
-    if (inGoal) {
-      if (puck.x > RINK.w + 60) { resetPuck(puck); return 'goal-home'; }
-    } else {
-      puck.x = RINK.w - PUCK.radius;
-      puck.vx = -Math.abs(puck.vx) * PUCK.bounce;
-    }
-  }
+  // Board bouncing
+  if (puck.x < PUCK.radius) { puck.x = PUCK.radius; puck.vx = Math.abs(puck.vx) * PUCK.bounce; }
+  if (puck.x > RINK.w - PUCK.radius) { puck.x = RINK.w - PUCK.radius; puck.vx = -Math.abs(puck.vx) * PUCK.bounce; }
 
   // Pickup check for all players
   for (const p of players) {
@@ -123,6 +111,41 @@ function tryPickup(player, puck) {
   if (relSpd > PLAYER.pickupMaxRelSpeed) return false;
 
   player.hasPuck = true;
+  return true;
+}
+
+export function makeGoalie() {
+  return {
+    x: RINK.goalLineRight,
+    y: RINK.goalY + RINK.goalH / 2,
+    radius: 26,
+    speed: 230,
+  };
+}
+
+export function tickGoalie(goalie, puck, dt) {
+  const minY = RINK.goalY + goalie.radius;
+  const maxY = RINK.goalY + RINK.goalH - goalie.radius;
+  const target = clamp(puck.y, minY, maxY);
+  const diff = target - goalie.y;
+  goalie.y += Math.sign(diff) * Math.min(Math.abs(diff), goalie.speed * dt);
+}
+
+export function puckHitsGoalie(puck, goalie) {
+  const dx = puck.x - goalie.x;
+  const dy = puck.y - goalie.y;
+  const dist = Math.hypot(dx, dy);
+  const minDist = PUCK.radius + goalie.radius;
+  if (dist >= minDist || dist === 0) return false;
+  const nx = dx / dist;
+  const ny = dy / dist;
+  puck.x = goalie.x + nx * (minDist + 1);
+  puck.y = goalie.y + ny * (minDist + 1);
+  const dot = puck.vx * nx + puck.vy * ny;
+  if (dot < 0) {
+    puck.vx = (puck.vx - 2 * dot * nx) * PUCK.bounce;
+    puck.vy = (puck.vy - 2 * dot * ny) * PUCK.bounce;
+  }
   return true;
 }
 
