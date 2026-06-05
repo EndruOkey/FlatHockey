@@ -24,6 +24,7 @@ export class Passer extends PlayerBase {
   dragTo(x, y) {
     this.x = Math.max(ICE_PAD, Math.min(RINK.w - ICE_PAD, x));
     this.y = Math.max(ICE_PAD, Math.min(RINK.h - ICE_PAD, y));
+    this.vx = this.vy = 0;
     this.hasPuck          = false;
     this._returnTimer     = 0;
     this._shouldReturn    = false;
@@ -52,6 +53,16 @@ export class Passer extends PlayerBase {
     if (this._receiveCooldown > 0) this._receiveCooldown -= dt;
     if (this._shootCooldown   > 0) this._shootCooldown   -= dt;
     if (this.passReq          > 0) this.passReq = Math.max(0, this.passReq - dt);
+
+    // Knockback drift — když ho netáhneš Tabem, odsune ho náraz hráče a dojede s třením
+    if (!this.isDragging && (this.vx || this.vy)) {
+      this.x += this.vx * dt; this.y += this.vy * dt;
+      const f = Math.max(0, 1 - 5 * dt);
+      this.vx *= f; this.vy *= f;
+      if (Math.hypot(this.vx, this.vy) < 2) this.vx = this.vy = 0;
+      this.x = Math.max(ICE_PAD, Math.min(RINK.w - ICE_PAD, this.x));
+      this.y = Math.max(ICE_PAD, Math.min(RINK.h - ICE_PAD, this.y));
+    }
 
     // Aim toward local player when holding, otherwise track puck
     if (world) {

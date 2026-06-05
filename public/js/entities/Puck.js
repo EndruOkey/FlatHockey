@@ -72,35 +72,28 @@ export class Puck {
         this.ownerId  = null;
         return;
       }
-      // Puk drží na holi podle CARRY-úhlu (klička) a DOSAHU dle kurzoru (přitažení k tělu).
-      // Vzdálenost kurzoru = jak daleko je puk → tight handling u těla vs. natažení.
-      const carry  = owner.carryAngle ?? owner.aimAngle;
-      const charge = owner.charge ?? 0;
-      const reach  = owner._dispReach ?? PLAYER.stickLen; // vyhlazený dosah (řídí kurzor)
-      let refAngle = carry;
-      let wTipX = owner.x + Math.cos(carry) * reach;
-      let wTipY = owner.y + Math.sin(carry) * reach;
-      let bladeMid = 6;        // polovina délky čepele
-      let sideMul  = 1;        // násobič bočního offsetu (1 = na čepeli)
-      if (charge > 0.05) {
-        const windAngle = carry - charge * 0.52;
-        const windLen   = reach * (1 - charge * 0.45);
-        refAngle  = windAngle;
-        wTipX = owner.x + Math.cos(windAngle) * windLen;
-        wTipY = owner.y + Math.sin(windAngle) * windLen;
-        bladeMid = 6 * (1 - charge * 0.4);            // puk blíž k patě čepele
-        sideMul  = 1 - charge * 0.55;                 // puk snug na blade, méně ujíždí
-      }
-      // Anchor point na středu čepele, perpendikularně od dříku (shaft-perpendicular)
-      const BLADE_ANGLE = Math.PI / 6.5;
-      const bladeDir    = refAngle + BLADE_ANGLE;
-      const bMidX       = wTipX + Math.cos(bladeDir) * bladeMid;
-      const bMidY       = wTipY + Math.sin(bladeDir) * bladeMid;
-      const bladeSide   = owner.forehand !== false ? 1 : -1;
-      const perpX       = -Math.sin(refAngle); // kolmo na dřík
-      const perpY       =  Math.cos(refAngle);
-      this.x = bMidX + perpX * PUCK.radius * bladeSide * sideMul;
-      this.y = bMidY + perpY * PUCK.radius * bladeSide * sideMul;
+      // Puk sedí PŘESNĚ na vykreslené lopatě — stejná geometrie jako _renderPlayer:
+      // úhel = _stickDisp (vyhlazený, už obsahuje windup), délka dříku zkrácená nabitím.
+      const stickAng   = owner._stickDisp ?? owner.carryAngle ?? owner.aimAngle;
+      const dispCharge = owner._dispCharge ?? 0;
+      const reach      = (owner._dispReach ?? PLAYER.stickLen) * (1 - dispCharge * 0.30);
+      const grip       = owner.gripPoint ? owner.gripPoint : { x: owner.x, y: owner.y };
+      // pata čepele = konec dříku (shodné s render tipX/tipY)
+      const heelX = grip.x + Math.cos(stickAng) * reach;
+      const heelY = grip.y + Math.sin(stickAng) * reach;
+      // čepel míří od paty pod úhlem dle ruky (shodné s render bladeAngle=12 px, ~28°)
+      const bladeAngle = (owner.handed ?? 1) * Math.PI / 6.5;
+      const bladeDir   = stickAng + bladeAngle;
+      const along      = (0.5 - dispCharge * 0.18) * 12; // bod na čepeli; při nabití blíž patě
+      const bx = heelX + Math.cos(bladeDir) * along;
+      const by = heelY + Math.sin(bladeDir) * along;
+      // puk leží na HRACÍ PLOŠE lopaty → odsazen kolmo na ČEPEL (ne na dřík)
+      const bladeSide = owner.forehand !== false ? 1 : -1;
+      const perpX     = -Math.sin(bladeDir);
+      const perpY     =  Math.cos(bladeDir);
+      const snug      = 1 - dispCharge * 0.5; // při nabití puk přitažen těsně k čepeli
+      this.x = bx + perpX * PUCK.radius * bladeSide * snug;
+      this.y = by + perpY * PUCK.radius * bladeSide * snug;
       this.vx      = owner.vx;
       this.vy      = owner.vy;
       this.z       = 0;

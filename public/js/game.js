@@ -1,4 +1,5 @@
 import { RINK, PLAYER, PUCK } from './constants.js';
+import { lerpAngle, clamp } from './utils.js';
 import { Input } from './input.js';
 import { Engine, fromScreen } from './engine.js';
 import { World } from './world.js';
@@ -12,8 +13,12 @@ const CHARGE_RATE = 1.8; // rychlejší nabíjení — uvolní místo pro kličk
 const SEND_HZ     = 60;
 
 // Myš míří jen hokejku/střelu (turret). Tělo/facing řídí A/D bruslení (_move → bodyAngle).
+// Rychlost natáčení škáluje s VZDÁLENOSTÍ kurzoru: daleko = svižné, blízko = pomalé.
+// Tím se hokejka neroztočí, když hráč projede blízko/přes pozici kurzoru (helikoptéra).
 function _updateAim(player, rawAim, dt) {
-  player.aimAngle = rawAim;
+  const d = player.aimDist ?? 100;
+  const rate = clamp(d / 35, 0.12, 1) * 28;
+  player.aimAngle = lerpAngle(player.aimAngle, rawAim, Math.min(1, rate * dt));
 }
 
 // Predikce nahrávky do jízdy — míří na HOKEJKU (čepel) příjemce, ne na tělo.
@@ -70,14 +75,21 @@ export class Game {
 
   _tick(dt, cam) {
     const mouse = fromScreen(this.input.mouseX, this.input.mouseY, cam);
-    this.local.aimDist = Math.hypot(mouse.x - this.local.x, mouse.y - this.local.y); // dosah hole dle kurzoru
-    _updateAim(this.local, Math.atan2(mouse.y - this.local.y, mouse.x - this.local.x), dt);
+    const adx = mouse.x - this.local.x, ady = mouse.y - this.local.y;
+    this.local.aimDist = Math.hypot(adx, ady); // dosah hole dle kurzoru
+    _updateAim(this.local, Math.atan2(ady, adx), dt); // rychlost natáčení škáluje dle vzdálenosti (viz _updateAim)
     const forehandNow = !this.input.shift;
 
     if (this.input.lmbJustPressed) { this._chargeCancelled = false; this._oneTimer = !this.local.hasPuck; }
     if (!this.input.lmb) this._chargeBlocked = false;
 
-    if (this.input.lmb && !this._chargeBlocked) {
+    // Crosscheck (RMB bez puku) ruší jakékoli rozdělané nabití
+    if (this.input.rmb && !this.local.hasPuck && this.local.charge > 0) {
+      this.local.charge = 0; this._chargeDecaying = false; this.local.overcharged = false; this._oneTimer = false;
+    }
+
+    // Při crosschecku (RMB bez puku) nelze nabíjet
+    if (this.input.lmb && !this._chargeBlocked && !(this.input.rmb && !this.local.hasPuck)) {
       // Charge builds whether or not we hold the puck → enables one-timers
       if (!this._chargeDecaying) {
         // one-timer drží charge pod overcharge i po sebrání puku (manuální výstřel)
@@ -122,7 +134,7 @@ export class Game {
       } else {
         // Nahrávka predikovaná do jízdy spoluhráče (lead), hůl se neotáčí
         this.local.charge = 0;
-        const lead = this.remote ? _leadAim(this.local, this.remote, PUCK.passSpeed) : null;
+        const lead = this.remote ? _leadAim(this.local.stickTip, this.remote, PUCK.passSpeed) : null;
         if (this.isHost) { this.local.pass(this.puck, lead, forehandNow); }
         else { this.net?.send({ t: 'pass', aim: lead, fh: forehandNow ? 1 : 0 }); this.local.hasPuck = false; this.local._passCooldown = 0.15; }
       }
@@ -151,6 +163,8 @@ export class Game {
         fh: this.local.forehand  ? 1 : 0,
         cc: this.local.crossCheck ? 1 : 0,
         pr: this.local.passReq > 0 ? 1 : 0,
+        hd: this.local.handed,
+        nm: this.local.name || '',
       };
       if (this.isHost) {
         msg.px = this.puck.x;  msg.py  = this.puck.y;
@@ -252,14 +266,21 @@ export class SandboxGame {
 
   _tick(dt, cam) {
     const mouse = fromScreen(this.input.mouseX, this.input.mouseY, cam);
-    this.local.aimDist = Math.hypot(mouse.x - this.local.x, mouse.y - this.local.y); // dosah hole dle kurzoru
-    _updateAim(this.local, Math.atan2(mouse.y - this.local.y, mouse.x - this.local.x), dt);
+    const adx = mouse.x - this.local.x, ady = mouse.y - this.local.y;
+    this.local.aimDist = Math.hypot(adx, ady); // dosah hole dle kurzoru
+    _updateAim(this.local, Math.atan2(ady, adx), dt); // rychlost natáčení škáluje dle vzdálenosti (viz _updateAim)
     const forehandNow = !this.input.shift;
 
     if (this.input.lmbJustPressed) { this._chargeCancelled = false; this._oneTimer = !this.local.hasPuck; }
     if (!this.input.lmb) this._chargeBlocked = false;
 
-    if (this.input.lmb && !this._chargeBlocked) {
+    // Crosscheck (RMB bez puku) ruší jakékoli rozdělané nabití
+    if (this.input.rmb && !this.local.hasPuck && this.local.charge > 0) {
+      this.local.charge = 0; this._chargeDecaying = false; this.local.overcharged = false; this._oneTimer = false;
+    }
+
+    // Při crosschecku (RMB bez puku) nelze nabíjet
+    if (this.input.lmb && !this._chargeBlocked && !(this.input.rmb && !this.local.hasPuck)) {
       // Charge builds bez puku → one-timery
       if (!this._chargeDecaying) {
         const cap = (this.local.hasPuck && !this._oneTimer) ? 1 : 0.95;
@@ -289,7 +310,7 @@ export class SandboxGame {
       } else {
         // Nahrávka predikovaná k passeru (lead), hůl se neotáčí
         this.local.charge = 0;
-        const lead = _leadAim(this.local, this.passer, PUCK.passSpeed);
+        const lead = _leadAim(this.local.stickTip, this.passer, PUCK.passSpeed);
         this.local.pass(this.puck, lead, forehandNow);
       }
     }
@@ -360,6 +381,29 @@ export class SandboxGame {
 
     for (const p of world.players) this.goalie.blockPlayer(p);
     for (const p of players) this.goalie.pokeCheck(p, puck);
+
+    // Hráč narazí do passera (Tab) — solidní spoluhráč/překážka (passer zůstává)
+    for (const p of players) {
+      const dx = p.x - this.passer.x, dy = p.y - this.passer.y;
+      const dist = Math.hypot(dx, dy);
+      const minD = (p.radius ?? 7) + (this.passer.radius ?? 7);
+      if (dist > 0 && dist < minD) {
+        const nx = dx / dist, ny = dy / dist, pen = minD - dist;
+        const KB = 85;
+        const both = !this.passer.isDragging; // při tažení Tabem passer drží kurzor
+        if (both) {
+          // symetrické rozdělení — odrazí se oba
+          p.x += nx * pen * 0.5; p.y += ny * pen * 0.5;
+          this.passer.x -= nx * pen * 0.5; this.passer.y -= ny * pen * 0.5;
+          this.passer.vx -= nx * KB; this.passer.vy -= ny * KB;
+        } else {
+          p.x += nx * pen; p.y += ny * pen;
+        }
+        const dot = p.vx * nx + p.vy * ny;
+        if (dot < 0) { p.vx -= dot * nx; p.vy -= dot * ny; }
+        p.vx += nx * KB; p.vy += ny * KB; p._knockT = 0.2; // lehký knockback (bumpnutí)
+      }
+    }
 
     for (let i = 0; i < players.length; i++)
       for (let j = 0; j < players.length; j++)

@@ -1,33 +1,32 @@
 import { RINK, PUCK } from '../constants.js';
 import { clamp } from '../utils.js';
 
-// ── Save profil ─────────────────────────────────────────────────────────
-// Branka 72px vysoká. Gólman kryje centrální pásmo, ale má zranitelnosti:
-// horní růžky (vysoká přesná střela), pětku (nízká rána středem když je rozjetý),
-// a vyrážečka pouští dorážky. Z postavení neprostřelíš, z pohybu/výškou ano.
-const COVER_H  = 17;   // vertikální poloviční dosah krytí
+// ── Save profil (naškálováno na reálnou branku 6 ft = 32px) ───────────────
+// Gólman kryje centrální pásmo, ale má zranitelnosti: horní růžky, pětku, vyrážečka
+// pouští dorážky. Z postavení neprostřelíš, z pohybu/výškou ano.
+const COVER_H  = 14;   // vertikální poloviční dosah krytí (±14 ze 44px ústí → uličky u tyček)
 const COVER_X  = 9;    // poloviční tloušťka (X)
-const FIVEHOLE = 7.5;  // poloviční šířka pětky (nízký střed) — dosažitelná, ale chce rozhýbat gólmana
-const TOP_EDGE = 4;    // jak blízko hraně krytí je "růžek"
-const MAX_OUT  = 26;   // max výjezd z brankové čáry
-const SPEED    = 168;  // boční rychlost (živé přesuny)
-const TRACK    = 0.72; // under-commit → vzdálený roh otevřený
-const PADLEN   = 11;   // délka betonů dopředu (vizuál)
+const FIVEHOLE = 5;    // poloviční šířka pětky (nízký střed)
+const TOP_EDGE = 3;    // jak blízko hraně krytí je "růžek"
+const MAX_OUT  = 30;   // max výjezd z brankové čáry (~6 ft, challenge k vršku brankoviště)
+const SPEED    = 170;  // boční rychlost (živé přesuny) — z ní plyne otevřený vzdálený roh
+const PADLEN   = 9;    // délka betonů dopředu (vizuál)
 
 export class Goalie {
   constructor() {
     this.isGoalie   = true;
     this.x          = RINK.goalLineRight;
     this.y          = RINK.goalY + RINK.goalH / 2;
-    this.radius     = 12;
+    this.radius     = 8;
     this._percX     = RINK.goalLineRight - 1;
     this._percY     = RINK.goalY + RINK.goalH / 2;
     this._vy        = 0;     // boční rychlost (pro pětku/živost)
+    this._gvx       = 0;     // vyhlazená rychlost přesunu (plynulý pohyb)
+    this._gvy       = 0;
     this._tilt      = 0;     // natočení čelem k puku (vizuál)
     this._screen    = 0;     // clona: hráč v zákrytu zhoršuje reakci/dosah
     this._lastPuckY = this.y;// pro čtení pohybu puku (anticipace/bite na kličku)
     this._puckVy    = 0;
-    this._idle      = Math.random() * 10;
     this._holdTimer = 0;
     this._heldPuck  = null;
     this._pokeCooldown = 0;
@@ -44,7 +43,6 @@ export class Goalie {
 
     if (this._pokeCooldown > 0) this._pokeCooldown -= dt;
     if (this._saveFlash   > 0) this._saveFlash = Math.max(0, this._saveFlash - dt);
-    this._idle += dt;
 
     if (this._holdTimer > 0) {
       this._holdTimer -= dt;
@@ -79,7 +77,7 @@ export class Goalie {
     this._screen += (screen - this._screen) * Math.min(1, 6 * dt);
 
     // Reakce je při cloně pomalejší (gólman puk hůř vidí)
-    const lag = 7 * (1 - this._screen * 0.5);
+    const lag = 8.5 * (1 - this._screen * 0.5);
     this._percX += (Math.min(puck.x, netX - 1) - this._percX) * Math.min(1, lag * dt);
     this._percY += (puck.y - this._percY) * Math.min(1, lag * dt);
 
@@ -90,32 +88,40 @@ export class Goalie {
     this._puckVy += (rawVy - this._puckVy) * Math.min(1, 9 * dt);
     const bite = clamp(this._puckVy, -240, 240) * 0.085;
 
-    const distToPuck = Math.hypot(this._percX - netX, this._percY - netY);
+    // ── Hra na úhel: stoj na spojnici puk → střed branky v dané hloubce ──
+    const px = this._percX, py = this._percY;
+    const dxN = Math.max(1, netX - px);                 // vodorovná vzdálenost puku od branky
+    const dyN = py - netY;                              // boční odchylka puku
+    const distToPuck = Math.hypot(dxN, dyN);
+    const angleAbs   = Math.atan2(Math.abs(dyN), dxN);  // 0 = frontální, velký = ostrý úhel
 
-    // Boční: stínuj za pukem (under-commit) + bite; drž v brance
-    const margin = COVER_H * 0.45;
-    let targetY = clamp(netY + (this._percY - netY) * TRACK + bite,
-                        RINK.goalY + margin, RINK.goalY + RINK.goalH - margin);
-
-    // Hloubka: vyjeď cutnout úhel na střední vzdálenost; u blízkého puku se stáhni
-    // (aby tě klička/přihrávka přes brankoviště dostala) — to dělá pohyb "živým"
+    // Hloubka (challenge vs. retreat): vyjeď proti frontální střele z dálky/slotu,
+    // stáhni se na čáru v těsném i na ostrém úhlu → tím pohyb "žije".
     let depth;
-    if (distToPuck > 150)      depth = MAX_OUT * 0.85 + Math.sin(this._idle * 1.4) * 2.0; // daleko: výjezd + idle bob
-    else if (distToPuck > 75)  depth = MAX_OUT;                                            // střed: plný výjezd
-    else                       depth = clamp(distToPuck * 0.14, 5, MAX_OUT * 0.6);          // blízko: stáhnout se
-
-    // Idle posun do stran když je puk daleko → působí živě
-    if (distToPuck > 165) targetY += Math.sin(this._idle * 1.05) * 3.2;
-
+    if (distToPuck > 150)      depth = MAX_OUT * 0.9;                       // daleko: výjezd
+    else if (distToPuck > 70)  depth = MAX_OUT;                             // slot: plný challenge
+    else                       depth = clamp(distToPuck * 0.30, 6, MAX_OUT * 0.65); // in-tight: stáhnout se
+    depth *= 1 - Math.min(1, angleAbs / (Math.PI * 0.5)) * 0.6;            // ostrý úhel → blíž čáře/tyči
     const targetX = netX - depth;
 
-    const dx = targetX - this.x, dy = targetY - this.y;
-    const d  = Math.hypot(dx, dy);
-    if (d > 0.4) {
-      const step = Math.min(d, SPEED * dt);
-      this.x += (dx / d) * step;
-      this.y += (dy / d) * step;
-    }
+    // Pravý úhlový bod: průsečík spojnice puk→střed branky s hloubkovou rovinou x=targetX.
+    // Vzdálený roh se otevírá přirozeně podle toho, jak rychle gólman (SPEED) přesun stíhá.
+    const s = (targetX - px) / dxN;
+    const margin = COVER_H * 0.45;
+    let targetY = clamp(py + s * (netY - py) + bite,
+                        RINK.goalY + margin, RINK.goalY + RINK.goalH - margin);
+
+    // Plynulý přesun: požadovaná rychlost = tah k cíli (easing → brzdí u cíle),
+    // omezená max. rychlostí a vyhlazená (setrvačnost) → přirozený shuffle, ne robotické cukání.
+    let desVx = (targetX - this.x) * 11;
+    let desVy = (targetY - this.y) * 11;
+    const dspd = Math.hypot(desVx, desVy);
+    if (dspd > SPEED) { const f = SPEED / dspd; desVx *= f; desVy *= f; }
+    const acc = Math.min(1, 10 * dt);
+    this._gvx += (desVx - this._gvx) * acc;
+    this._gvy += (desVy - this._gvy) * acc;
+    this.x += this._gvx * dt;
+    this.y += this._gvy * dt;
     this._vy = (this.y - prevY) / Math.max(dt, 1e-3); // boční rychlost pro pětku
 
     // Natočení čelem k puku (square-up) — mírný tilt od přímého "doleva"

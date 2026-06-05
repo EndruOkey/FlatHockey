@@ -61,6 +61,14 @@
     #join-btn { background: linear-gradient(135deg, #2266cc, #1144aa); }
     #solo-btn  { background: #181c26; border: 1px solid #2a2d3a; }
 
+    #hand-toggle { display: flex; gap: 8px; margin-bottom: 14px; }
+    .hand-btn {
+      flex: 1; padding: 11px; margin: 0;
+      background: #141720; border: 1px solid #2a2d3a; border-radius: 8px;
+      color: #777; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.06em;
+    }
+    .hand-btn.active { background: #1b2740; border-color: #3a9fff; color: #fff; }
+
     #status { color: #666; font-size: 0.82rem; min-height: 18px; margin-top: 10px; }
 
     #hint {
@@ -79,6 +87,12 @@
       <h1>HOCKEY</h1>
       <p class="sub">peer-to-peer · no lag · no server</p>
 
+      <input id="name-input" type="text" placeholder="YOUR NAME" maxlength="12" autocomplete="off" spellcheck="false" />
+      <div id="hand-toggle">
+        <button class="hand-btn" data-hand="-1">LEVÁK</button>
+        <button class="hand-btn active" data-hand="1">PRAVÁK</button>
+      </div>
+
       <input id="room-input" type="text" placeholder="ROOM CODE" maxlength="8" autocomplete="off" spellcheck="false" />
       <button id="join-btn">JOIN / CREATE ROOM</button>
       <button id="solo-btn">SOLO MODE</button>
@@ -87,7 +101,7 @@
     </div>
   </div>
 
-  <div id="hint">WASD move &nbsp;·&nbsp; Mouse aim &nbsp;·&nbsp; LMB shoot (hold = charge) &nbsp;·&nbsp; RMB pass &nbsp;·&nbsp; E passer &nbsp;·&nbsp; R reset</div>
+  <div id="hint">WASD jezdi (A/D zatáčí) &nbsp;·&nbsp; Shift ostrý cut &nbsp;·&nbsp; Myš miř &nbsp;·&nbsp; LMB střela (drž = nabití) &nbsp;·&nbsp; RMB přihrávka &nbsp;·&nbsp; Space brzda</div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script type="module" src="/js/main.js"></script>
