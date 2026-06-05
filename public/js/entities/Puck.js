@@ -57,8 +57,20 @@ export class Puck {
 
   get isAirborne() { return this.z > 1.5; }
 
+  // Klient (non-host): puk neřídí fyzika, ale stav od hosta. Dead-reckoning podle
+  // rychlosti + plynulá korekce k poslednímu cíli → žádné teleportování/sekání.
+  _interpolateNet(dt) {
+    if (this._netX === undefined) return;
+    this.prevX = this.x; this.prevY = this.y;
+    this.x += this.vx * dt; this.y += this.vy * dt;
+    this._netX += this.vx * dt; this._netY += this.vy * dt;
+    const k = Math.min(1, 12 * dt);
+    this.x += (this._netX - this.x) * k;
+    this.y += (this._netY - this.y) * k;
+  }
+
   update(dt, world) {
-    if (!world.authoritative) return;
+    if (!world.authoritative) { this._interpolateNet(dt); return; }
 
     this.prevX = this.x;
     this.prevY = this.y;

@@ -50,9 +50,10 @@ export class Game {
     this.local  = new Player('local',  isHost ? 'home' : 'away', this.input);
     this.remote = new RemotePlayer('remote', isHost ? 'away' : 'home');
     this.puck   = new Puck();
-    this.goalie = new Goalie();
+    this.goalieR = new Goalie('right'); // pravá branka → brání away (červený)
+    this.goalieL = new Goalie('left');  // levá branka → brání home (modrý)
 
-    this.world = new World([new Rink(), this.local, this.remote, this.goalie, this.puck]);
+    this.world = new World([new Rink(), this.local, this.remote, this.goalieL, this.goalieR, this.puck]);
     this.world.authoritative = isHost;
     this.world.onGoal        = result => this._handleGoal(result);
 
@@ -63,6 +64,8 @@ export class Game {
     this._chargeBlocked    = false;
     this._chargeCancelled  = false;
     this._oneTimer         = false;
+    this._seq              = 0;   // pořadové číslo odchozích state paketů
+    this._lastSeq          = 0;   // poslední přijaté → zahazuje přeházené/staré (anti-stutter)
 
     if (net) net.onMessage = msg => this._onMessage(msg);
   }
@@ -155,6 +158,7 @@ export class Game {
       this._sendAccum = 0;
       const msg = {
         t: 'state',
+        seq: ++this._seq,
         x: this.local.x,  y: this.local.y,
         vx: this.local.vx, vy: this.local.vy,
         ba: this.local.bodyAngle, aa: this.local.aimAngle,
@@ -191,12 +195,19 @@ export class Game {
 
   _onMessage(msg) {
     if (msg.t === 'state') {
+      // Zahoď přeházený/starý paket (datachannel je unordered) → konec gumování
+      if (msg.seq !== undefined) {
+        if (msg.seq <= this._lastSeq) return;
+        this._lastSeq = msg.seq;
+      }
       this.remote.applyState(msg);
       if (!this.isHost && msg.px !== undefined) {
-        this.puck.x = msg.px; this.puck.y  = msg.py;
-        this.puck.vx = msg.pvx; this.puck.vy = msg.pvy;
+        // Puk se neteleportuje — host pošle cíl, klient k němu plynule interpoluje (Puck.update)
+        this.puck._netX = msg.px;  this.puck._netY = msg.py;
+        this.puck.vx    = msg.pvx; this.puck.vy    = msg.pvy;
       }
       if (!this.isHost && msg.sc) this.score = msg.sc;
+      return;
     }
     if (msg.t === 'shoot'   && this.isHost) this.remote.shoot(this.puck, msg.charge, msg.fh !== 0);
     if (msg.t === 'pass'    && this.isHost) this.remote.pass(this.puck, msg.aim, msg.fh !== 0);

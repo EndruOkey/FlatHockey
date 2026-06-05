@@ -13,12 +13,17 @@ const SPEED    = 170;  // boční rychlost (živé přesuny) — z ní plyne ote
 const PADLEN   = 9;    // délka betonů dopředu (vizuál)
 
 export class Goalie {
-  constructor() {
+  constructor(side = 'right') {
     this.isGoalie   = true;
-    this.x          = RINK.goalLineRight;
+    // Pravá branka = goal-home → brání away (červený); levá = goal-away → brání home (modrý)
+    this.side       = side;
+    this.netX       = side === 'right' ? RINK.goalLineRight : RINK.goalLineLeft;
+    this.inX        = side === 'right' ? -1 : 1;   // směr do hřiště (kam gólman kouká/vyjíždí)
+    this.team       = side === 'right' ? 'away' : 'home';
+    this.x          = this.netX;
     this.y          = RINK.goalY + RINK.goalH / 2;
     this.radius     = 8;
-    this._percX     = RINK.goalLineRight - 1;
+    this._percX     = this.netX + this.inX;
     this._percY     = RINK.goalY + RINK.goalH / 2;
     this._vy        = 0;     // boční rychlost (pro pětku/živost)
     this._gvx       = 0;     // vyhlazená rychlost přesunu (plynulý pohyb)
@@ -47,7 +52,7 @@ export class Goalie {
     if (this._holdTimer > 0) {
       this._holdTimer -= dt;
       if (this._heldPuck) {
-        this._heldPuck.x  = this.x - 6;
+        this._heldPuck.x  = this.x + this.inX * 6;
         this._heldPuck.y  = this.y - COVER_H * 0.45;
         this._heldPuck.vx = 0; this._heldPuck.vy = 0;
         this._heldPuck.z  = 0; this._heldPuck.vz = 0;
@@ -57,7 +62,7 @@ export class Goalie {
       return;
     }
 
-    const netX = RINK.goalLineRight;
+    const netX = this.netX;
     const netY = RINK.goalY + RINK.goalH / 2;
     const prevY = this.y;
 
@@ -78,7 +83,8 @@ export class Goalie {
 
     // Reakce je při cloně pomalejší (gólman puk hůř vidí)
     const lag = 8.5 * (1 - this._screen * 0.5);
-    this._percX += (Math.min(puck.x, netX - 1) - this._percX) * Math.min(1, lag * dt);
+    const pxClamp = this.side === 'right' ? Math.min(puck.x, netX - 1) : Math.max(puck.x, netX + 1);
+    this._percX += (pxClamp - this._percX) * Math.min(1, lag * dt);
     this._percY += (puck.y - this._percY) * Math.min(1, lag * dt);
 
     // Anticipace (bite): čte pohyb puku a kousek ho předbíhá → klička jedním směrem
@@ -90,7 +96,7 @@ export class Goalie {
 
     // ── Hra na úhel: stoj na spojnici puk → střed branky v dané hloubce ──
     const px = this._percX, py = this._percY;
-    const dxN = Math.max(1, netX - px);                 // vodorovná vzdálenost puku od branky
+    const dxN = Math.max(1, (netX - px) * -this.inX);   // vodorovná vzdálenost puku PŘED brankou
     const dyN = py - netY;                              // boční odchylka puku
     const distToPuck = Math.hypot(dxN, dyN);
     const angleAbs   = Math.atan2(Math.abs(dyN), dxN);  // 0 = frontální, velký = ostrý úhel
@@ -102,11 +108,12 @@ export class Goalie {
     else if (distToPuck > 70)  depth = MAX_OUT;                             // slot: plný challenge
     else                       depth = clamp(distToPuck * 0.30, 6, MAX_OUT * 0.65); // in-tight: stáhnout se
     depth *= 1 - Math.min(1, angleAbs / (Math.PI * 0.5)) * 0.6;            // ostrý úhel → blíž čáře/tyči
-    const targetX = netX - depth;
+    const targetX = netX + this.inX * depth;
 
     // Pravý úhlový bod: průsečík spojnice puk→střed branky s hloubkovou rovinou x=targetX.
     // Vzdálený roh se otevírá přirozeně podle toho, jak rychle gólman (SPEED) přesun stíhá.
-    const s = (targetX - px) / dxN;
+    const denom = Math.abs(netX - px) < 1 ? -this.inX : (netX - px);
+    const s = (targetX - px) / denom;
     const margin = COVER_H * 0.45;
     let targetY = clamp(py + s * (netY - py) + bite,
                         RINK.goalY + margin, RINK.goalY + RINK.goalH - margin);
@@ -124,11 +131,8 @@ export class Goalie {
     this.y += this._gvy * dt;
     this._vy = (this.y - prevY) / Math.max(dt, 1e-3); // boční rychlost pro pětku
 
-    // Natočení čelem k puku (square-up) — mírný tilt od přímého "doleva"
-    let tilt = Math.atan2(this._percY - this.y, this._percX - this.x) - Math.PI;
-    while (tilt >  Math.PI) tilt -= Math.PI * 2;
-    while (tilt < -Math.PI) tilt += Math.PI * 2;
-    tilt = clamp(tilt, -0.42, 0.42);
+    // Natočení čelem k puku (square-up) — náklon dle výškové odchylky puku (symetrické, nezávislé na straně)
+    let tilt = clamp(-Math.atan2(this._percY - this.y, Math.abs(this._percX - this.x) + 4), -0.42, 0.42);
     this._tilt += (tilt - this._tilt) * Math.min(1, 8 * dt);
   }
 
@@ -179,9 +183,9 @@ export class Goalie {
     // Vyražení — dorážka ven do slotu, k bližšímu rohu (přirozený odraz, ne zpět na hůl)
     const inSpeed = Math.hypot(puck.vx, puck.vy);
     const reb  = Math.max(70, inSpeed * PUCK.bounce);
-    const side = relY >= 0 ? 1 : -1;            // k bližšímu mantinelu
-    const ang  = Math.atan2(side * 0.55, -1);   // hlavně do hřiště (−x) + úhel k rohu
-    puck.x  = this.x - (COVER_X + PUCK.radius + 1);
+    const vside = relY >= 0 ? 1 : -1;               // k bližšímu mantinelu
+    const ang  = Math.atan2(vside * 0.55, this.inX); // hlavně do hřiště + úhel k rohu
+    puck.x  = this.x + this.inX * (COVER_X + PUCK.radius + 1);
     puck.y  = this.y + relY * 0.5;
     puck.vx = Math.cos(ang) * reb;
     puck.vy = Math.sin(ang) * reb;
@@ -221,7 +225,7 @@ export class Goalie {
     const dist = Math.hypot(dx, dy);
     const pokeDist = this.radius + 20;
     if (dist > pokeDist) return;
-    if (player.x > this.x + 4) return;     // jen zepředu
+    if (this.inX * (player.x - this.x) < -4) return;   // jen zepředu (ne zezadu od branky)
     player.hasPuck = false;
     this._pokeCooldown = 0.7;
     const grabDist = this.radius + (player.radius ?? 11) + 2;
@@ -251,8 +255,8 @@ export class Goalie {
     }
     const attackerLow = nearest ? nearest.y > midY : this.y < midY;
     const targetY = attackerLow ? RINK.goalY - 12 : RINK.goalY + RINK.goalH + 12;
-    const angle = Math.atan2(targetY - this.y, -120);
-    p.x = this.x - 16; p.y = this.y; p.z = 0; p.vz = 0;
+    const angle = Math.atan2(targetY - this.y, this.inX * 120);
+    p.x = this.x + this.inX * 16; p.y = this.y; p.z = 0; p.vz = 0;
     p.vx = Math.cos(angle) * 165; p.vy = Math.sin(angle) * 165;
   }
 
@@ -270,6 +274,7 @@ export class Goalie {
 
     ctx.save();
     ctx.translate(sx, sy);
+    if (this.side === 'left') ctx.scale(-1, 1); // levý gólman = zrcadlo (čelem doprava)
     ctx.rotate(this._tilt); // natočení čelem k puku
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
 
@@ -279,8 +284,8 @@ export class Goalie {
     ctx.fillStyle = 'rgba(0,0,0,0.18)';
     ctx.fill();
 
-    // Tělo / dres — štíhlé, za betony (jen náznak hmoty, ať to není tlusté)
-    ctx.fillStyle = '#c0392b';
+    // Tělo / dres — barva dle týmu (home modrý / away červený)
+    ctx.fillStyle = this.team === 'home' ? '#2f6db0' : '#c0392b';
     _roundRect(ctx, -2 * s, -ch * 0.7, cx + 4 * s, ch * 1.4, 5 * s);
     ctx.fill();
     ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1.4 * s; ctx.stroke();
