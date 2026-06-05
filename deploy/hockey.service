@@ -1,0 +1,18 @@
+[Unit]
+Description=FlatHockey P2P signaling + static server
+After=network.target
+
+[Service]
+Type=simple
+# Uprav User a WorkingDirectory podle toho, kam jsi repo naklonoval
+User=ubuntu
+WorkingDirectory=/home/ubuntu/FlatHockey
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=3
+Environment=NODE_ENV=production
+# Port: 3000 pro běh za reverzní proxy (Caddy/nginx), nebo 80 pro přímé vystavení
+Environment=PORT=3000
+
+[Install]
+WantedBy=multi-user.target

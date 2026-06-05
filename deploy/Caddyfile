@@ -1,0 +1,12 @@
+# Caddy = automatické HTTPS (Let's Encrypt) + reverzní proxy na Node app.
+# Nahraď "hokej.tvoje-domena.cz" svojí doménou mířící na IP serveru.
+# Spuštění: sudo caddy run --config Caddyfile   (nebo přes systemd službu caddy)
+
+hokej.tvoje-domena.cz {
+    reverse_proxy localhost:3000
+}
+
+# Nemáš doménu? Funguje i nip.io (DNS, co vrací zadanou IP). Příklad pro IP 1.2.3.4:
+# hokej.1.2.3.4.nip.io {
+#     reverse_proxy localhost:3000
+# }
