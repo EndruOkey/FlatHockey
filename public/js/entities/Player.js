@@ -474,21 +474,23 @@ function _renderPlayer(ctx, p, cam) {
   const gxw = grip.x, gyw = grip.y;
   const gx  = ox + gxw * s, gy = oy + gyw * s;
 
-  // Display tip — clipped against walls AND rounded corners
-  let wt = windLen;
+  // Display tip — clip dříku I ČEPELE proti všemu: klipuju délku dřík+čepel a pak
+  // čepel odečtu zpět → ani zahnutá čepel nepřesahuje mantinel/roh/branku/hráče.
+  const BLADE = 12; // world délka čepele
+  let wt = windLen + BLADE;
   if (windCos < 0 && gxw + windCos * wt < 0)            wt = Math.min(wt, -gxw / windCos);
   if (windCos > 0 && gxw + windCos * wt > RINK.w)        wt = Math.min(wt, (RINK.w - gxw) / windCos);
   if (windSin < 0 && gyw + windSin * wt < 0)            wt = Math.min(wt, -gyw / windSin);
   if (windSin > 0 && gyw + windSin * wt > RINK.h)        wt = Math.min(wt, (RINK.h - gyw) / windSin);
   wt = _clipCorners(gxw, gyw, windCos, windSin, wt);
-  // Branky (rám sítě) — hokejka neprojde do/skrz branku
+  // Branky (rám sítě)
   wt = _clipRayAABB(gxw, gyw, windCos, windSin, wt,
     RINK.goalLineLeft - RINK.goalDepth, RINK.goalLineLeft, RINK.goalY, RINK.goalY + RINK.goalH);
   wt = _clipRayAABB(gxw, gyw, windCos, windSin, wt,
     RINK.goalLineRight, RINK.goalLineRight + RINK.goalDepth, RINK.goalY, RINK.goalY + RINK.goalH);
-  // Pevné objekty (ostatní hráči, gólmani) — hokejka se zastaví o jejich tělo
+  // Pevné objekty (ostatní hráči, gólmani)
   if (p._solids) for (const so of p._solids) wt = _clipRayCircle(gxw, gyw, windCos, windSin, wt, so.x, so.y, so.r);
-  wt = Math.max(0, wt);
+  wt = Math.max(0, wt - BLADE);   // stáhni zpět o čepel → čepel skončí přesně u překážky
 
   const tipX = ox + (gxw + windCos * wt) * s;
   const tipY = oy + (gyw + windSin * wt) * s;
@@ -672,24 +674,27 @@ function _shade(hex, amt) {
   return `rgb(${r},${g},${b})`;
 }
 
-// Clip ray against rounded rink corners — returns shortened tMax
+// Clip ray against rounded rink corners (analyticky, stabilně) — vrátí zkrácené tMax.
+// V rohovém kvadrantu je hrací plocha UVNITŘ oblouku; hůl ořízneme tam, kde paprsek
+// z (uvnitř) vyjede ven přes oblouk.
 function _clipCorners(px, py, cos, sin, tMax) {
-  const cR = RINK.cornerR;
+  const Rc = RINK.cornerR - PUCK.radius;
   const centers = [
-    [cR, cR], [RINK.w - cR, cR],
-    [cR, RINK.h - cR], [RINK.w - cR, RINK.h - cR],
+    [RINK.cornerR, RINK.cornerR], [RINK.w - RINK.cornerR, RINK.cornerR],
+    [RINK.cornerR, RINK.h - RINK.cornerR], [RINK.w - RINK.cornerR, RINK.h - RINK.cornerR],
   ];
   for (const [cx, cy] of centers) {
-    // Only shrink if the tip ends up in this corner's quadrant
-    let t = tMax;
-    for (let i = 0; i < 8 && t > 0; i++) {
-      const tx = px + cos * t, ty = py + sin * t;
-      const inQuad = (cx < RINK.w / 2 ? tx < cx : tx > cx) &&
-                     (cy < RINK.h / 2 ? ty < cy : ty > cy);
-      if (!inQuad || Math.hypot(tx - cx, ty - cy) <= cR - PUCK.radius) break;
-      t *= 0.78;
-    }
-    tMax = Math.min(tMax, t);
+    const ox = px - cx, oy = py - cy;
+    const b = ox * cos + oy * sin;
+    const c = ox * ox + oy * oy - Rc * Rc;
+    const disc = b * b - c;
+    if (disc <= 0) continue;
+    const tExit = -b + Math.sqrt(disc);          // kde paprsek opustí oblouk
+    if (tExit <= 0 || tExit >= tMax) continue;
+    const ex = px + cos * tExit, ey = py + sin * tExit;
+    const inQuad = (cx < RINK.w / 2 ? ex <= cx : ex >= cx) &&
+                   (cy < RINK.h / 2 ? ey <= cy : ey >= cy);
+    if (inQuad) tMax = tExit;                     // ořízni přesně na oblouk
   }
   return tMax;
 }
