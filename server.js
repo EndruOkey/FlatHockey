@@ -25,14 +25,15 @@ app.use(express.static(path.join(__dirname, 'public'), {
 // ── Authoritativní simulace ──────────────────────────────────────────────
 const CHARGE_RATE = 1.8;
 const TICK_HZ = 60;
-const SNAP_HZ = 30;            // snapshot každý druhý tick
+const SNAP_HZ = 60;            // snapshot každý tick (ostřejší soupeř)
 const DT = 1 / TICK_HZ;
+const MAX_PLAYERS = 6;         // až 3v3
 
 const rooms = new Map();  // roomId -> match
 
 function makeInput() {
   return {
-    dx: 0, dy: 0, shift: false, lmb: false, rmb: false, mmb: false,
+    dx: 0, dy: 0, lmb: false, rmb: false, mmb: false,
     aim: 0, aimDist: 100, keys: { Space: false },
     lmbJustPressed: false, lmbJustReleased: false, rmbJustPressed: false, mmbJustPressed: false,
     _p: { lmb: false, rmb: false, mmb: false }, // předchozí stav pro hrany
@@ -42,7 +43,7 @@ function makeInput() {
 // Aplikuj přijatý stav vstupu na input objekt + spočítej hrany
 function applyClientInput(inp, msg) {
   inp.dx = msg.dx | 0; inp.dy = msg.dy | 0;
-  inp.shift = !!msg.shift; inp.keys.Space = !!msg.space;
+  inp.keys.Space = !!msg.space;
   inp.lmb = !!msg.lmb; inp.rmb = !!msg.rmb; inp.mmb = !!msg.mmb;
   if (typeof msg.aim === 'number') inp.aim = msg.aim;
   if (typeof msg.aimDist === 'number') inp.aimDist = msg.aimDist;
@@ -70,10 +71,10 @@ function leadAim(from, target, speed) {
   return Math.atan2((ty + (target.vy || 0) * t) - from.y, (tx + (target.vx || 0) * t) - from.x);
 }
 
-function nearestOther(p, match) {
+function nearestTeammate(p, match) {
   let best = null, bd = Infinity;
   for (const o of match.players.values()) {
-    if (o === p) continue;
+    if (o === p || o.team !== p.team) continue;
     const d = Math.hypot(o.x - p.x, o.y - p.y);
     if (d < bd) { bd = d; best = o; }
   }
@@ -111,7 +112,7 @@ function playerActions(p, inp, dt, match) {
 
   if (inp.rmbJustPressed && p.hasPuck) {
     if (p.charge > 0.08) { p.charge = 0; p._chargeDecaying = false; p.overcharged = false; p._chargeBlocked = true; p._chargeCancelled = true; }
-    else { p.charge = 0; const tgt = nearestOther(p, match); const lead = tgt ? leadAim(p.stickTip, tgt, PUCK.passSpeed) : null; p.pass(match.puck, lead); }
+    else { p.charge = 0; const tgt = nearestTeammate(p, match); const lead = tgt ? leadAim(p.stickTip, tgt, PUCK.passSpeed) : null; p.pass(match.puck, lead); }
   }
 
   if (inp.mmbJustPressed && !p.hasPuck) p.passReq = 0.9;
@@ -122,14 +123,22 @@ function rebuildEntities(match) {
 }
 
 function faceoff(match) {
-  for (const p of match.players.values()) {
-    p.x = p.team === 'home' ? RINK.centerX - 70 : RINK.centerX + 70;
-    p.y = RINK.h / 2; // 1v1 na střed; pro víc hráčů rozprostřeme později
-    p.vx = p.vy = 0; p.hasPuck = false; p.charge = 0;
-    p._chargeDecaying = false; p._oneTimer = false;
-    const fa = Math.atan2(RINK.h / 2 - p.y, RINK.centerX - p.x);
-    p.bodyAngle = p.skateAngle = p.aimAngle = p.carryAngle = fa;
-  }
+  // Rozmísti každý tým do svislé řady na své půlce, čelem ke středu (N hráčů)
+  const home = [], away = [];
+  for (const p of match.players.values()) (p.team === 'home' ? home : away).push(p);
+  const place = (arr, x) => {
+    const n = arr.length;
+    arr.forEach((p, i) => {
+      p.x = x;
+      p.y = clamp(RINK.h / 2 + (i - (n - 1) / 2) * 64, 28, RINK.h - 28);
+      p.vx = p.vy = 0; p.hasPuck = false; p.charge = 0;
+      p._chargeDecaying = false; p._oneTimer = false;
+      const fa = Math.atan2(RINK.h / 2 - p.y, RINK.centerX - p.x);
+      p.bodyAngle = p.skateAngle = p.aimAngle = p.carryAngle = fa;
+    });
+  };
+  place(home, RINK.centerX - 70);
+  place(away, RINK.centerX + 70);
   match.puck.reset();
   match.world._goalLock = false;
 }
@@ -211,10 +220,13 @@ io.on('connection', (socket) => {
   socket.on('join', ({ room, name, hand }) => {
     let roomId = (room || '').toUpperCase();
     let match = rooms.get(roomId);
-    if (match && match.players.size >= 2) { socket.emit('room-full'); return; }
+    if (match && match.players.size >= MAX_PLAYERS) { socket.emit('room-full'); return; }
     if (!match) { match = createMatch(roomId); rooms.set(roomId, match); }
 
-    const team = match.players.size === 0 ? 'home' : 'away';
+    // Vyvážené týmy — nový hráč jde do menšího týmu
+    let h = 0, a = 0;
+    for (const pl of match.players.values()) (pl.team === 'home' ? h++ : a++);
+    const team = h <= a ? 'home' : 'away';
     const p = new Player(socket.id, team, makeInput());
     p.name = (name || '').slice(0, 12);
     p.handed = (hand === -1 || hand === 1) ? hand : (team === 'away' ? -1 : 1);

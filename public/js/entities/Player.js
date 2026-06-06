@@ -21,10 +21,6 @@ export class PlayerBase {
     this.charge          = 0;
     this.overcharged     = false;
     this.isPlayer        = true;
-    this._hockeyStop     = false;
-    this._stopTimer      = 0;
-    this._stopAngle      = 0;
-    this._spaceWas       = false;
     this.crossCheck      = false;  // visible to world for collision
     this._crossCheckCool = 0;
     this._backhand       = false;  // auto fore/backhand (vůči směru jízdy, s hysterezí)
@@ -277,18 +273,16 @@ export class PlayerBase {
   }
 
   _move(input, dt) {
-    // Hockey stop — hard brake, body swings perpendicular
-    if (this._hockeyStop) {
-      this._stopTimer -= dt;
-      if (this._stopTimer <= 0) this._hockeyStop = false;
-
+    // Space = čistá tvrdá brzda (drž) — bez otáčení, puk si necháš. Tělo míří kam koukáš.
+    if (input.keys && input.keys['Space']) {
       const spd = Math.hypot(this.vx, this.vy);
       if (spd > 0) {
-        const newSpd = Math.max(0, spd - 420 * dt);
+        const newSpd = Math.max(0, spd - 620 * dt);
         this.vx = newSpd > 0 ? this.vx / spd * newSpd : 0;
         this.vy = newSpd > 0 ? this.vy / spd * newSpd : 0;
       }
-      this.bodyAngle = lerpAngle(this.bodyAngle, this._stopAngle, Math.min(1, 14 * dt));
+      this.skateAngle = lerpAngle(this.skateAngle, this.aimAngle, Math.min(1, 8 * dt));
+      this.bodyAngle = this.skateAngle;
       this.x = clamp(this.x + this.vx * dt, PLAYER.radius, RINK.w - PLAYER.radius);
       this.y = clamp(this.y + this.vy * dt, PLAYER.radius, RINK.h - PLAYER.radius);
       _resolveGoalCage(this, PLAYER.radius);
@@ -328,7 +322,7 @@ export class PlayerBase {
       // glide — led nese, plynulé doklouzání (po nárazu slabší tření, ať knockback dojede)
       const sp = Math.hypot(this.vx, this.vy);
       if (sp > 0) {
-        const dec = (knocked ? 0.3 : (sp < 70 ? 1.4 : 1)) * PLAYER.decel * dt;
+        const dec = (knocked ? 0.3 : (sp < 70 ? 2.4 : 1.7)) * PLAYER.decel * dt;
         const ns = Math.max(0, sp - dec);
         this.vx = this.vx / sp * ns; this.vy = this.vy / sp * ns;
       }
@@ -376,72 +370,10 @@ export class Player extends PlayerBase {
     // Hůl relativně k tělu (kužel) + forehand dle handedness
     this._updateStick(dt);
     if (this.passReq > 0) this.passReq = Math.max(0, this.passReq - dt);
-    this.crossCheck = !!this.input.rmb && !this.hasPuck && !this._hockeyStop && this._passCooldown <= 0;
+    this.crossCheck = !!this.input.rmb && !this.hasPuck && this._passCooldown <= 0;
     if (this._crossCheckCool > 0) this._crossCheckCool -= dt;
 
-    const spaceDown = !!this.input.keys['Space'];
-    if (spaceDown && !this._spaceWas && !this._hockeyStop) {
-      const spd = Math.hypot(this.vx, this.vy);
-      if (spd > 55) {
-        this._hockeyStop = true;
-        this._stopTimer  = 0.30;
-        // Body turns perpendicular to velocity — toward whichever side the aim points
-        const velAngle = Math.atan2(this.vy, this.vx);
-        const perpA = velAngle + Math.PI / 2;
-        const perpB = velAngle - Math.PI / 2;
-        this._stopAngle = Math.abs(angleDiff(this.aimAngle, perpA)) < Math.abs(angleDiff(this.aimAngle, perpB))
-          ? perpA : perpB;
-        // Drop puck — can't hold it during a stop
-        this.hasPuck = false;
-        this.charge  = 0;
-        this.overcharged = false;
-      }
-    }
-    this._spaceWas = spaceDown;
     this._move(this.input, dt);
-    this._updateStickDisplay(dt);
-  }
-}
-
-export class RemotePlayer extends PlayerBase {
-  constructor(id, team) {
-    super(id, team);
-    this.isRemote = true;   // jeho puk pozici diktuje jeho klient (carrier-authoritative)
-    this._tx = this.x;
-    this._ty = this.y;
-    this._tBodyAngle = 0;
-    this._tAimAngle  = 0;
-  }
-
-  applyState(msg) {
-    this._tx         = msg.x;
-    this._ty         = msg.y;
-    this.vx          = msg.vx;
-    this.vy          = msg.vy;
-    this._tBodyAngle = msg.ba;
-    this._tAimAngle  = msg.aa;
-    // POZOR: hasPuck NEnastavovat zde — host je autoritativní pro vlastnictví puku.
-    // Na hostovi by guestovo hp přepsalo hostovo rozhodnutí o sebrání (zpětná smyčka
-    // → puk by se nikdy nesebral). Řeší se v Game._onMessage jen na klientovi.
-    this.charge      = msg.ch ?? 0;
-    this.forehand    = msg.fh !== 0;
-    this.crossCheck  = !!msg.cc;
-    if (msg.hd !== undefined) this.handed = msg.hd;
-    if (msg.nm !== undefined) this.name   = msg.nm;
-  }
-
-  update(dt) {
-    this.x         = this.x + (this._tx - this.x) * Math.min(1, 18 * dt);
-    this.y         = this.y + (this._ty - this.y) * Math.min(1, 18 * dt);
-    this.bodyAngle = lerpAngle(this.bodyAngle, this._tBodyAngle, Math.min(1, 14 * dt));
-    this.aimAngle  = lerpAngle(this.aimAngle,  this._tAimAngle,  Math.min(1, 14 * dt));
-    this._updateStick(dt); // hůl relativně k tělu (kužel) i pro remote
-    // Cooldowny musí běžet i pro remote — jinak po střele/nahrávce zůstane
-    // _shootCooldown nastálo a guest už NIKDY nesebere puk ani nepřijme přihrávku.
-    if (this._shootCooldown  > 0) this._shootCooldown  -= dt;
-    if (this._passCooldown   > 0) this._passCooldown   -= dt;
-    if (this._deflectCool    > 0) this._deflectCool    -= dt;
-    if (this._crossCheckCool > 0) this._crossCheckCool -= dt;
     this._updateStickDisplay(dt);
   }
 }
@@ -466,21 +398,6 @@ function _renderPlayer(ctx, p, cam) {
       ctx.beginPath();
       ctx.arc(bx, by, r * (0.55 - i * 0.12), 0, Math.PI * 2);
       ctx.fillStyle = `rgba(255,255,255,${0.12 * tt * (1 - i * 0.25)})`;
-      ctx.fill();
-    }
-  }
-
-  // Hockey-stop spray — odlétávající led
-  if (p._hockeyStop) {
-    const perp = vdir + Math.PI / 2;
-    for (let i = 0; i < 7; i++) {
-      const side   = i % 2 === 0 ? 1 : -1;
-      const spread = Math.random() * r * 2.0;
-      const fx = sx - Math.cos(vdir) * r * 0.4 + Math.cos(perp) * side * spread;
-      const fy = sy - Math.sin(vdir) * r * 0.4 + Math.sin(perp) * side * spread;
-      ctx.beginPath();
-      ctx.arc(fx, fy, (1.0 + Math.random() * 1.6) * s, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(255,255,255,${0.35 + Math.random() * 0.35})`;
       ctx.fill();
     }
   }

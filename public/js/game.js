@@ -90,7 +90,7 @@ export class NetGame {
     }
     this.net.input({
       dx: this.input.dx, dy: this.input.dy,
-      shift: this.input.shift, space: !!this.input.keys['Space'],
+      space: !!this.input.keys['Space'],
       lmb: this.input.lmb, rmb: this.input.rmb, mmb: this.input.mmb,
       aim, aimDist,
     });
