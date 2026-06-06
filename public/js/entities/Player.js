@@ -167,11 +167,12 @@ export class PlayerBase {
   _updateStick(dt) {
     // Hůl je RELATIVNÍ k tělu (rotuje s tělem). Offset = myš, omezený kuželem → nejde
     // dokola (žádná helikoptéra). Za zády drží stranu; natočením těla (A/D) ji srovnáš.
-    const cone = Math.PI * 0.85; // dosah hole na každou stranu od těla (~153°)
+    const cone = Math.PI * 0.55; // realistický dosah hole na každou stranu (~99°): k bokům,
+                                 // sotva za rameno — ne za záda. Dozadu mířit = otočit tělo.
     const cursorRel = angleDiff(this.aimAngle, this.bodyAngle);
     const targetRel = Math.abs(cursorRel) <= cone
       ? cursorRel                                    // myš v dosahu → sleduj
-      : (this._stickRel >= 0 ? cone : -cone);        // za zády → drž stranu (otoč tělo)
+      : (cursorRel >= 0 ? cone : -cone);             // mimo dosah → drž nejbližší kraj (ne za záda)
 
     const spd  = Math.hypot(this.vx, this.vy);
     const rate = (14 - Math.min(1, spd / 180) * 7) * dt;
@@ -341,9 +342,11 @@ export class PlayerBase {
       }
     }
 
-    // Tělo kouká kam bruslíš (plynule); hokejku míří myš zvlášť (turret)
+    // Tělo: za jízdy kouká kam bruslíš; když skoro stojím, pivotuje ke kurzoru
+    // (ať můžu mířit i dozadu otočením, ne ohnutím hole za záda).
     const sp2 = Math.hypot(this.vx, this.vy);
     if (sp2 > 22) this.skateAngle = lerpAngle(this.skateAngle, Math.atan2(this.vy, this.vx), Math.min(1, 12 * dt));
+    else          this.skateAngle = lerpAngle(this.skateAngle, this.aimAngle, Math.min(1, 7 * dt));
     this.bodyAngle = this.skateAngle;
 
     // Náklon do oblouku (vizuál)

@@ -48,7 +48,8 @@ export class NetGame {
     this.engine  = new Engine(canvas);
 
     this.rink    = new Rink();
-    this.players = new Map();              // id -> { ent, tx, ty, tba, taa, tca, tsd }
+    this.players = new Map();              // id -> { ent, isMe, tx,ty,tba,taa,tca,tsd, sx,sy }
+    this.localEnt = null;                  // můj hráč (client-side prediction)
     this.puck    = new Puck(); this.puck._tx = this.puck.x; this.puck._ty = this.puck.y;
     this.goalieL = new Goalie('left');
     this.goalieR = new Goalie('right');
@@ -75,13 +76,17 @@ export class NetGame {
   }
 
   _tick(dt, cam) {
-    // Spočítej aim z MÉ vykreslené pozice na kurzor a pošli vstup serveru
-    const me = this.players.get(this.myId);
+    const me = this.localEnt;
     let aim = 0, aimDist = 100;
     if (me) {
       const mouse = fromScreen(this.input.mouseX, this.input.mouseY, cam);
-      aim = Math.atan2(mouse.y - me.ent.y, mouse.x - me.ent.x);
-      aimDist = Math.hypot(mouse.x - me.ent.x, mouse.y - me.ent.y);
+      aim = Math.atan2(mouse.y - me.y, mouse.x - me.x);
+      aimDist = Math.hypot(mouse.x - me.x, mouse.y - me.y);
+      // CLIENT-SIDE PREDICTION — vlastní hráč se hýbe OKAMŽITĚ (bez čekání na server);
+      // server zůstává autoritativní, _interp pak jemně koriguje drift.
+      me.aimDist = aimDist;
+      _updateAim(me, aim, dt);
+      me.update(dt);
     }
     this.net.input({
       dx: this.input.dx, dy: this.input.dy,
@@ -98,20 +103,30 @@ export class NetGame {
     const seen = new Set();
     for (const ps of s.players) {
       seen.add(ps.id);
+      const isMe = ps.id === this.myId;
       let e = this.players.get(ps.id);
       if (!e) {
-        const ent = new Player(ps.id, ps.team, null);
+        const ent = new Player(ps.id, ps.team, isMe ? this.input : null);
         ent.x = ps.x; ent.y = ps.y; ent.bodyAngle = ps.ba; ent.aimAngle = ps.aa; ent.carryAngle = ps.ca; ent._stickDisp = ps.sd;
-        e = { ent, tx: ps.x, ty: ps.y, tba: ps.ba, taa: ps.aa, tca: ps.ca, tsd: ps.sd };
+        e = { ent, isMe, tx: ps.x, ty: ps.y, tba: ps.ba, taa: ps.aa, tca: ps.ca, tsd: ps.sd, sx: ps.x, sy: ps.y };
         this.players.set(ps.id, e);
+        if (isMe) this.localEnt = ent;
       }
-      e.tx = ps.x; e.ty = ps.y; e.tba = ps.ba; e.taa = ps.aa; e.tca = ps.ca; e.tsd = ps.sd;
       const ent = e.ent;
-      ent.team = ps.team; ent._dispReach = ps.dr; ent._dispCharge = ps.dc;
-      ent.forehand = !!ps.fh; ent.hasPuck = !!ps.hp; ent.charge = ps.ch;
-      ent.handed = ps.hd; ent.crossCheck = !!ps.cc; ent.name = ps.nm; ent._lean = ps.ln;
+      // autoritativní diskrétní stav (pro všechny)
+      ent.team = ps.team; ent.forehand = !!ps.fh; ent.hasPuck = !!ps.hp; ent.charge = ps.ch;
+      ent.handed = ps.hd; ent.name = ps.nm;
+      if (isMe) {
+        e.sx = ps.x; e.sy = ps.y;  // jen reconcile cíl; pozici/úhly/stick predikuju lokálně
+      } else {
+        e.tx = ps.x; e.ty = ps.y; e.tba = ps.ba; e.taa = ps.aa; e.tca = ps.ca; e.tsd = ps.sd;
+        ent._dispReach = ps.dr; ent._dispCharge = ps.dc; ent.crossCheck = !!ps.cc; ent._lean = ps.ln;
+      }
     }
-    for (const id of [...this.players.keys()]) if (!seen.has(id)) this.players.delete(id);
+    for (const id of [...this.players.keys()]) if (!seen.has(id)) {
+      if (this.players.get(id).ent === this.localEnt) this.localEnt = null;
+      this.players.delete(id);
+    }
 
     this.puck._tx = s.puck.x; this.puck._ty = s.puck.y; this.puck.z = s.puck.z;
     this._applyGoalie(this.goalieL, s.gl);
@@ -128,8 +143,16 @@ export class NetGame {
   _interp(dt) {
     const k  = Math.min(1, 22 * dt);
     const ka = Math.min(1, 18 * dt);
+    const rk = Math.min(1, 10 * dt); // reconcile vlastního hráče — jemná korekce driftu
     for (const e of this.players.values()) {
-      const ent = e.ent, px = ent.x, py = ent.y;
+      const ent = e.ent;
+      if (e.isMe) {
+        // predikce proběhla v _tick; jen jemně dotáhni k serveru (drift z kolizí/nárazů)
+        ent.x += (e.sx - ent.x) * rk;
+        ent.y += (e.sy - ent.y) * rk;
+        continue;
+      }
+      const px = ent.x, py = ent.y;
       ent.x += (e.tx - ent.x) * k; ent.y += (e.ty - ent.y) * k;
       ent.vx = (ent.x - px) / Math.max(dt, 1e-3); ent.vy = (ent.y - py) / Math.max(dt, 1e-3);
       ent.bodyAngle  = lerpAngle(ent.bodyAngle,  e.tba, ka);
@@ -137,8 +160,14 @@ export class NetGame {
       ent.carryAngle = lerpAngle(ent.carryAngle, e.tca, k);
       ent._stickDisp = lerpAngle(ent._stickDisp ?? e.tsd, e.tsd, k);
     }
-    this.puck.x += (this.puck._tx - this.puck.x) * k;
-    this.puck.y += (this.puck._ty - this.puck.y) * k;
+    // Puk: když ho držím lokálně, cradle k MÉ predikované holi (ostré vedení bez lagu),
+    // jinak plynule k pozici od serveru.
+    if (this.localEnt && this.localEnt.hasPuck) {
+      this.puck._cradleTo(this.localEnt);
+    } else {
+      this.puck.x += (this.puck._tx - this.puck.x) * k;
+      this.puck.y += (this.puck._ty - this.puck.y) * k;
+    }
     for (const g of [this.goalieL, this.goalieR]) {
       g.x += ((g._tx ?? g.x) - g.x) * k; g.y += ((g._ty ?? g.y) - g.y) * k;
       g._tilt = lerpAngle(g._tilt, g._ttilt ?? 0, ka);
