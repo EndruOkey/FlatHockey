@@ -9,7 +9,7 @@ import { Goalie } from './entities/Goalie.js';
 import { Passer } from './entities/Passer.js';
 import { Rink } from './entities/Rink.js';
 
-const CHARGE_RATE = 1.8; // rychlejší nabíjení — uvolní místo pro kličky
+const CHARGE_RATE = 1.4; // pomalejší nápřah → slap shot je cítit (jen sandbox; online řídí server)
 
 // Myš míří jen hokejku/střelu (turret). Rychlost natáčení škáluje s VZDÁLENOSTÍ kurzoru.
 function _updateAim(player, rawAim, dt) {

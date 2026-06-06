@@ -136,19 +136,22 @@ export class PlayerBase {
     puck.y = tip.y;
     puck.z = 0;
 
-    const dir = this.carryAngle; // střela jde tam, kam reálně míří hůl (kužel těla)
+    const c = clamp(charge, 0, 1);
     if (this.forehand !== false) {
-      // Forehand: full speed, flat release, small lift only near max charge
-      const spd = PUCK.minShotSpeed + (PUCK.maxShotSpeed - PUCK.minShotSpeed) * charge;
+      // WRIST (tap) → SLAP (nabito): i rychlá rána má pořádnou rychlost; nabití přidá tvrdost
+      // a zvedne puk (top shelf). Slap je o chlup nepřesnější (riziko/odměna).
+      const spd    = PUCK.minShotSpeed + (PUCK.maxShotSpeed - PUCK.minShotSpeed) * Math.pow(c, 0.85);
+      const spread = (Math.random() - 0.5) * c * 0.10;        // ±~3° při plném slapu
+      const dir    = this.carryAngle + spread;
       puck.vx = Math.cos(dir) * spd;
       puck.vy = Math.sin(dir) * spd;
-      puck.vz = Math.max(0, (charge - 0.45) / 0.35) * PUCK.maxShotVz * 0.62;
+      puck.vz = Math.pow(c, 1.4) * PUCK.maxShotVz;            // víc nabito → víc zvedne
     } else {
-      // Backhand = rychlé zakončení (snap): slušná rychlost i bez nabití, nižší strop.
-      const spd = PUCK.maxShotSpeed * (0.58 + 0.18 * charge); // ~296→388 px/s
-      puck.vx = Math.cos(dir) * spd;
-      puck.vy = Math.sin(dir) * spd;
-      puck.vz = (0.2 + charge * 0.5) * PUCK.maxShotVz * 0.5;
+      // Backhand — svižný, přesný snap, ale slabší a nižší strop
+      const spd = 230 + 150 * c;
+      puck.vx = Math.cos(this.carryAngle) * spd;
+      puck.vy = Math.sin(this.carryAngle) * spd;
+      puck.vz = (0.15 + c * 0.4) * PUCK.maxShotVz * 0.5;
     }
   }
 
@@ -281,11 +284,11 @@ export class PlayerBase {
         this.vx = newSpd > 0 ? this.vx / spd * newSpd : 0;
         this.vy = newSpd > 0 ? this.vy / spd * newSpd : 0;
       }
-      this.skateAngle = lerpAngle(this.skateAngle, this.aimAngle, Math.min(1, 8 * dt));
-      this.bodyAngle = this.skateAngle;
+      this.bodyAngle = this.skateAngle; // při brzdě tělo nepivotuje (žádné protáčení)
       this.x = clamp(this.x + this.vx * dt, PLAYER.radius, RINK.w - PLAYER.radius);
       this.y = clamp(this.y + this.vy * dt, PLAYER.radius, RINK.h - PLAYER.radius);
       _resolveGoalCage(this, PLAYER.radius);
+      _resolveRinkCorners(this, PLAYER.radius);
       return;
     }
 
@@ -328,12 +331,10 @@ export class PlayerBase {
       }
     }
 
-    // Tělo kouká do směru VSTUPU (stabilní — nešumí jako směr rychlosti, takže se
-    // postava neprotáčí při změně/průchodu nulou). Když nejedu, pomalu pivotuju ke
-    // kurzoru (ať můžu mířit i dozadu otočením, ne ohnutím hole za záda).
+    // Tělo se otáčí JEN podle WASD (kam jedeš), NIKDY podle myši → žádné samovolné
+    // protáčení. Myš ovládá pouze hokejku (turret). lerpAngle jde nejkratší cestou.
     const sp2 = Math.hypot(this.vx, this.vy);
-    if (hasInput)         this.skateAngle = lerpAngle(this.skateAngle, Math.atan2(iy, ix), Math.min(1, 10 * dt));
-    else if (sp2 < 14)    this.skateAngle = lerpAngle(this.skateAngle, this.aimAngle, Math.min(1, 6 * dt));
+    if (hasInput) this.skateAngle = lerpAngle(this.skateAngle, Math.atan2(iy, ix), Math.min(1, 9 * dt));
     this.bodyAngle = this.skateAngle;
 
     // Náklon do oblouku (vizuál)
@@ -351,6 +352,7 @@ export class PlayerBase {
     if (this.y < PLAYER.radius)               { this.y = PLAYER.radius;         if (this.vy < 0) this.vy = 0; }
     else if (this.y > RINK.h - PLAYER.radius) { this.y = RINK.h - PLAYER.radius; if (this.vy > 0) this.vy = 0; }
     _resolveGoalCage(this, PLAYER.radius);
+    _resolveRinkCorners(this, PLAYER.radius);
   }
 
   draw(ctx, cam) {
@@ -688,6 +690,27 @@ function _clipCorners(px, py, cos, sin, tMax) {
 }
 
 // Push player circle out of goal cage rectangles (solid net)
+// Zaoblené rohy arény — hráč nesmí projet rohem ven z hrací plochy (slide podél oblouku)
+function _resolveRinkCorners(p, r) {
+  const cR = RINK.cornerR;
+  const corners = [
+    [cR, cR], [RINK.w - cR, cR],
+    [cR, RINK.h - cR], [RINK.w - cR, RINK.h - cR],
+  ];
+  for (const [cx, cy] of corners) {
+    const inQuad = (cx < RINK.w / 2 ? p.x < cx : p.x > cx) &&
+                   (cy < RINK.h / 2 ? p.y < cy : p.y > cy);
+    if (!inQuad) continue;
+    const dx = p.x - cx, dy = p.y - cy, dist = Math.hypot(dx, dy);
+    if (dist === 0 || dist <= cR - r) continue;
+    const nx = dx / dist, ny = dy / dist;       // ven od středu rohu
+    p.x = cx + nx * (cR - r);
+    p.y = cy + ny * (cR - r);
+    const dot = p.vx * nx + p.vy * ny;
+    if (dot > 0) { p.vx -= dot * nx; p.vy -= dot * ny; } // wall-slide podél mantinelu
+  }
+}
+
 function _resolveGoalCage(p, r) {
   const d   = RINK.goalDepth;
   const gy1 = RINK.goalY;

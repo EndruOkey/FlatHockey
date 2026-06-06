@@ -27,8 +27,8 @@ export const PUCK = {
   radius: 3,        // reálně 3″ — zvětšeno kvůli viditelnosti/hratelnosti
   decel: 54,
   bounce: 0.62,
-  maxShotSpeed: 510,
-  minShotSpeed: 108,
+  maxShotSpeed: 540,   // slap shot (plné nabití)
+  minShotSpeed: 300,   // wrist shot (rychlý tap) — i bez nabití pořádná rána
   passSpeed: 288,
   maxPassSpeed: 324,
   maxShotVz: 150,   // max vertical speed on full-charge shot

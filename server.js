@@ -23,7 +23,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
 }));
 
 // ── Authoritativní simulace ──────────────────────────────────────────────
-const CHARGE_RATE = 1.8;
+const CHARGE_RATE = 1.4;       // pomalejší nápřah → slap shot je cítit jako wind-up
 const TICK_HZ = 60;
 const SNAP_HZ = 60;            // snapshot každý tick (ostřejší soupeř)
 const DT = 1 / TICK_HZ;
