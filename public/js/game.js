@@ -207,6 +207,11 @@ export class Game {
         this._lastSeq = msg.seq;
       }
       this.remote.applyState(msg);
+      // Vlastnictví puku je host-authoritative:
+      //  • klient věří hostovu hp (drží-li puk hostův hráč = můj remote)
+      //  • host guestovo hp IGNORUJE (vlastnictví remote řídí jeho simulace) — jinak
+      //    by guestovo opožděné hp=0 hned přepsalo sebrání → puk by se „nebral".
+      if (!this.isHost) this.remote.hasPuck = !!msg.hp;
       if (!this.isHost && msg.px !== undefined) {
         // Puk se neteleportuje — host pošle cíl, klient k němu plynule interpoluje (Puck.update)
         this.puck._netX = msg.px;  this.puck._netY = msg.py;

@@ -423,7 +423,9 @@ export class RemotePlayer extends PlayerBase {
     this.vy          = msg.vy;
     this._tBodyAngle = msg.ba;
     this._tAimAngle  = msg.aa;
-    this.hasPuck     = !!msg.hp;
+    // POZOR: hasPuck NEnastavovat zde — host je autoritativní pro vlastnictví puku.
+    // Na hostovi by guestovo hp přepsalo hostovo rozhodnutí o sebrání (zpětná smyčka
+    // → puk by se nikdy nesebral). Řeší se v Game._onMessage jen na klientovi.
     this.charge      = msg.ch ?? 0;
     this.forehand    = msg.fh !== 0;
     this.crossCheck  = !!msg.cc;
