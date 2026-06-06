@@ -439,7 +439,12 @@ export class RemotePlayer extends PlayerBase {
     this.bodyAngle = lerpAngle(this.bodyAngle, this._tBodyAngle, Math.min(1, 14 * dt));
     this.aimAngle  = lerpAngle(this.aimAngle,  this._tAimAngle,  Math.min(1, 14 * dt));
     this._updateStick(dt); // hůl relativně k tělu (kužel) i pro remote
-    if (this._deflectCool > 0) this._deflectCool -= dt;
+    // Cooldowny musí běžet i pro remote — jinak po střele/nahrávce zůstane
+    // _shootCooldown nastálo a guest už NIKDY nesebere puk ani nepřijme přihrávku.
+    if (this._shootCooldown  > 0) this._shootCooldown  -= dt;
+    if (this._passCooldown   > 0) this._passCooldown   -= dt;
+    if (this._deflectCool    > 0) this._deflectCool    -= dt;
+    if (this._crossCheckCool > 0) this._crossCheckCool -= dt;
     this._updateStickDisplay(dt);
   }
 }
