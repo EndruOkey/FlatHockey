@@ -420,6 +420,7 @@ export class Player extends PlayerBase {
 export class RemotePlayer extends PlayerBase {
   constructor(id, team) {
     super(id, team);
+    this.isRemote = true;   // jeho puk pozici diktuje jeho klient (carrier-authoritative)
     this._tx = this.x;
     this._ty = this.y;
     this._tBodyAngle = 0;

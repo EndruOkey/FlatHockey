@@ -193,6 +193,9 @@ export class Game {
         msg.sc = this.score;
         // vlastník puku: 1 = host (local), 2 = klient (remote), 0 = volný
         msg.po = this.local.hasPuck ? 1 : (this.remote.hasPuck ? 2 : 0);
+      } else if (this.local.hasPuck) {
+        // Guest drží puk → posílá jeho pozici (carrier-authoritative)
+        msg.ppx = this.puck.x; msg.ppy = this.puck.y;
       }
       this.net.send(msg);
     }
@@ -221,7 +224,7 @@ export class Game {
       ctx.font = '13px monospace'; ctx.textAlign = 'left';
       ctx.fillStyle = '#33ff66';
       ctx.fillText(
-        `${this.isHost ? 'HOST' : 'GUEST'} v10  lp:${this.local.hasPuck ? 1 : 0} rp:${this.remote?.hasPuck ? 1 : 0} ` +
+        `${this.isHost ? 'HOST' : 'GUEST'} v11  lp:${this.local.hasPuck ? 1 : 0} rp:${this.remote?.hasPuck ? 1 : 0} ` +
         `po:${this._dbgPo ?? '-'} canPickup:${cp} dist:${d} z:${Math.round(this.puck.z)} shootCD:${this.local._shootCooldown.toFixed(2)}`,
         12, ctx.canvas.height - 14);
     } catch (e) {
@@ -232,25 +235,24 @@ export class Game {
 
   _onMessage(msg) {
     if (msg.t === 'state') {
-      // Zahoď přeházený/starý paket (datachannel je unordered) → konec gumování
-      if (msg.seq !== undefined) {
-        if (msg.seq <= this._lastSeq) return;
-        this._lastSeq = msg.seq;
-      }
       this.remote.applyState(msg);
-      // Vlastnictví puku je host-authoritative:
-      //  • klient věří hostovu hp (drží-li puk hostův hráč = můj remote)
-      //  • host guestovo hp IGNORUJE (vlastnictví remote řídí jeho simulace) — jinak
-      //    by guestovo opožděné hp=0 hned přepsalo sebrání → puk by se „nebral".
-      if (!this.isHost) this.remote.hasPuck = !!msg.hp;
-      if (!this.isHost && msg.px !== undefined) {
-        // Puk se neteleportuje — host pošle cíl, klient k němu plynule interpoluje (Puck.update)
-        this.puck._netX = msg.px;  this.puck._netY = msg.py;
-        this.puck.vx    = msg.pvx; this.puck.vy    = msg.pvy;
+      if (this.isHost) {
+        // Guest drží puk → jeho klient diktuje pozici (carrier-authoritative).
+        // Host ji jen přijme; Puck.update ji u remote-ownera nepřepisuje.
+        if (this.remote.hasPuck && msg.ppx !== undefined) {
+          this.puck.x = msg.ppx; this.puck.y = msg.ppy;
+          this.puck.vx = msg.vx; this.puck.vy = msg.vy;
+        }
+      } else {
+        // Klient: vlastnictví i pozici volného puku diktuje host
+        this.remote.hasPuck = !!msg.hp;
+        if (msg.px !== undefined) {
+          this.puck._netX = msg.px;  this.puck._netY = msg.py;
+          this.puck.vx    = msg.pvx; this.puck.vy    = msg.pvy;
+        }
+        if (msg.po !== undefined) { this.local.hasPuck = (msg.po === 2); this._dbgPo = msg.po; }
+        if (msg.sc) this.score = msg.sc;
       }
-      // Vlastnictví puku je host-authoritative: po===2 → můj (klientův) hráč drží puk
-      if (!this.isHost && msg.po !== undefined) { this.local.hasPuck = (msg.po === 2); this._dbgPo = msg.po; }
-      if (!this.isHost && msg.sc) this.score = msg.sc;
       return;
     }
     if (msg.t === 'shoot'   && this.isHost) this.remote.shoot(this.puck, msg.charge, msg.fh !== 0);
@@ -260,8 +262,9 @@ export class Game {
       // volný a klient je u puku (sanity proti teleportu).
       const free = !this.local.hasPuck && !this.remote.hasPuck &&
                    !this.goalieL.isHolding && !this.goalieR.isHolding && !this.world._goalLock;
-      const near = Math.hypot(this.puck.x - this.remote.x, this.puck.y - this.remote.y) < 80;
-      if (free && near && this.puck.z < 6) { this.remote._grabPuck(); this._dbgPo = 9; }
+      // Guest si kontakt čepele ověřil lokálně (canPickup) → host důvěřuje, jen hlídá,
+      // že je puk volný. Žádný near-check (lagující remote ho zbytečně zamítal).
+      if (free && this.puck.z < 6) { this.remote._grabPuck(); this._dbgPo = 9; }
     }
     if (msg.t === 'goal')   this._flashGoal(msg.text);
     if (msg.t === 'passreq') this.remote.passReq = 0.9;

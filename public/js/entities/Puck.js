@@ -103,13 +103,20 @@ export class Puck {
 
     const owner = world.players.find(p => p.hasPuck);
     if (owner) {
+      // Guest drží puk → jeho pozici diktuje guestův klient (přišla v jeho stavu jako
+      // ppx/ppy a je už nastavená). Host ji NEpřepisuje cradlem → nulový lag/desync.
+      if (owner.isRemote) {
+        this.z = 0; this.vz = 0;
+        this.ownerId = owner.id;
+        return;
+      }
       const tip = owner.stickTip;
       if (_insideCage(tip.x, tip.y)) {
         owner.hasPuck = false;
         this.ownerId  = null;
         return;
       }
-      // Puk přesně na lopatě (sdílená geometrie s klientem i _renderPlayer)
+      // Host drží puk → cradle na lopatu (sdílená geometrie s klientem i _renderPlayer)
       this._cradleTo(owner);
       this.ownerId = owner.id;
       return;
