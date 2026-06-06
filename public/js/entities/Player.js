@@ -481,6 +481,13 @@ function _renderPlayer(ctx, p, cam) {
   if (windSin < 0 && gyw + windSin * wt < 0)            wt = Math.min(wt, -gyw / windSin);
   if (windSin > 0 && gyw + windSin * wt > RINK.h)        wt = Math.min(wt, (RINK.h - gyw) / windSin);
   wt = _clipCorners(gxw, gyw, windCos, windSin, wt);
+  // Branky (rám sítě) — hokejka neprojde do/skrz branku
+  wt = _clipRayAABB(gxw, gyw, windCos, windSin, wt,
+    RINK.goalLineLeft - RINK.goalDepth, RINK.goalLineLeft, RINK.goalY, RINK.goalY + RINK.goalH);
+  wt = _clipRayAABB(gxw, gyw, windCos, windSin, wt,
+    RINK.goalLineRight, RINK.goalLineRight + RINK.goalDepth, RINK.goalY, RINK.goalY + RINK.goalH);
+  // Pevné objekty (ostatní hráči, gólmani) — hokejka se zastaví o jejich tělo
+  if (p._solids) for (const so of p._solids) wt = _clipRayCircle(gxw, gyw, windCos, windSin, wt, so.x, so.y, so.r);
   wt = Math.max(0, wt);
 
   const tipX = ox + (gxw + windCos * wt) * s;
@@ -617,6 +624,17 @@ function _renderPlayer(ctx, p, cam) {
     ctx.fillText(p.name, sx, sy - r - 7 * s);
     ctx.textAlign = 'left';
   }
+}
+
+// Zkrať paprsek hole tak, aby nevjel do kruhu (hráč/gólman) — vrátí nové tMax
+function _clipRayCircle(px, py, cos, sin, tMax, cx, cy, rr) {
+  const ox = px - cx, oy = py - cy;
+  const b = ox * cos + oy * sin;          // D je jednotkový → kvadratika t²+2bt+c=0
+  const c = ox * ox + oy * oy - rr * rr;
+  const disc = b * b - c;
+  if (disc < 0) return tMax;              // míjí kruh
+  const t = -b - Math.sqrt(disc);         // bližší průsečík
+  return (t > 0 && t < tMax) ? t : tMax;
 }
 
 // Shorten stick ray to not enter an AABB — returns new tMax

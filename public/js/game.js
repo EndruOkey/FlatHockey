@@ -181,7 +181,15 @@ export class NetGame {
     this.rink.draw(ctx, cam);
     this.goalieL.draw(ctx, cam);
     this.goalieR.draw(ctx, cam);
-    for (const e of this.players.values()) e.ent.draw(ctx, cam);
+    // Pevné objekty pro clip hokejky (hokejka neprojde hráči/gólmany)
+    const solids = [];
+    for (const e of this.players.values()) solids.push({ ent: e.ent, x: e.ent.x, y: e.ent.y, r: e.ent.radius });
+    solids.push({ ent: this.goalieL, x: this.goalieL.x, y: this.goalieL.y, r: this.goalieL.radius });
+    solids.push({ ent: this.goalieR, x: this.goalieR.x, y: this.goalieR.y, r: this.goalieR.radius });
+    for (const e of this.players.values()) {
+      e.ent._solids = solids.filter(so => so.ent !== e.ent);
+      e.ent.draw(ctx, cam);
+    }
     this.puck.draw(ctx, cam);
   }
 
@@ -318,6 +326,12 @@ export class SandboxGame {
     this._tabWas = tabDown;
 
     this.input.flush();
+
+    // Pevné objekty pro clip hokejky (hokejka neprojde gólmanem/passerem)
+    this.local._solids = [
+      { x: this.goalie.x, y: this.goalie.y, r: this.goalie.radius },
+      { x: this.passer.x, y: this.passer.y, r: this.passer.radius ?? 7 },
+    ];
 
     if (this.goalFlash > 0) this.goalFlash -= dt;
   }
