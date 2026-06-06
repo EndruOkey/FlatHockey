@@ -51,8 +51,12 @@ export class PlayerBase {
     const tc = this.charge ?? 0;
     const cRate = tc > this._dispCharge ? 18 : 9;
     this._dispCharge += (tc - this._dispCharge) * Math.min(1, cRate * dt);
-    // Pevná délka hole (custom dosah dle kurzoru odebrán)
-    this._dispReach = PLAYER.stickLen;
+    // Vrstva C — STICKHANDLE: vzdálenost kurzoru řídí vysunutí hole/puku. Kurzor blízko =
+    // puk schovaný u těla (chráníš, hbitější), daleko = natažená hůl (dosah, příprava střely).
+    const reachMin = PLAYER.stickLen * 0.62, reachMax = PLAYER.stickLen * 1.28;
+    const ad = this.aimDist ?? 60;
+    const tReach = reachMin + (reachMax - reachMin) * clamp((ad - 22) / 95, 0, 1);
+    this._dispReach += (tReach - this._dispReach) * Math.min(1, 14 * dt);
     // Základ hole je vždy carry-úhel (spojitý i po ztrátě puku) → žádný skok/záškub
     const target = this.crossCheck ? this.bodyAngle : (this.carryAngle - this._dispCharge * 0.52);
     this._stickDisp = lerpAngle(this._stickDisp, target, Math.min(1, 26 * dt));
@@ -79,7 +83,7 @@ export class PlayerBase {
     const dir = this.carryAngle ?? this.aimAngle;
     const cos = Math.cos(dir);
     const sin = Math.sin(dir);
-    let t = PLAYER.stickLen;
+    let t = this._dispReach ?? PLAYER.stickLen;  // dosah dle vysunutí (vrstva C)
     const m = PUCK.radius;
 
     // Clip against rink walls
@@ -297,69 +301,56 @@ export class PlayerBase {
 
     const charging      = !!(input.lmb && this.hasPuck);
     const crossChecking = this.crossCheck;
-    const throttle = -input.dy;  // W/S = plyn:   W=+1 dopředu (ke kurzoru), S=-1 couvání
-    const spd = Math.hypot(this.vx, this.vy);
+
+    // TWIN-STICK: WASD bruslí ve SMĚRECH (world-space), myš míří hokejkou NEZÁVISLE
+    // (turret) → skateuješ jedním směrem, střílíš/kličkuješ jiným. Pohyb má moment
+    // (zrychlení + glide), tělo kouká kam bruslíš.
+    let ix = input.dx, iy = input.dy;          // A/D = ±x, W/S = ±y
+    const il = Math.hypot(ix, iy);
+    if (il > 1) { ix /= il; iy /= il; }         // diagonála není rychlejší
+    const hasInput = il > 0.01;
 
     let topSpeed = PLAYER.speed * (crossChecking ? 1.15 : 1);
     if (charging) topSpeed *= clamp(1 - (this.charge || 0) * 0.85, 0.12, 1);
+    const sharp = !!input.shift && !charging;
+    if (sharp && hasInput) topSpeed *= 1.12;    // crossover burst — krátké zrychlení
 
-    const turnMult = crossChecking ? 0.62 : 1;
-    const speedT   = Math.min(1, spd / Math.max(1, topSpeed));
+    if (this._knockT > 0) this._knockT = Math.max(0, this._knockT - dt);
+    const knocked = this._knockT > 0;            // po nárazu hráč skoro neřídí (náraz dojede)
 
-    // MOUSE-STEER: tělo/heading se stáčí KE KURZORU (aimAngle) skating obloukem —
-    // rychle = širší oblouk (dynamický poloměr). W jede ke kurzoru, S couvá (čelem ke
-    // kurzoru = backskating). Žádné A/D otáčení; směr i míření řídí myš.
-    const steerRate = PLAYER.turnRate * (1.8 - 1.15 * speedT * speedT) * turnMult * (charging ? 0.3 : 1);
-    const headDiff = angleDiff(this.aimAngle, this.skateAngle);
-    const step = clamp(headDiff, -steerRate * dt, steerRate * dt);
-    this.skateAngle += step;
-    this.bodyAngle = this.skateAngle;
-    const turning = Math.min(1, Math.abs(headDiff) / 0.6); // jak ostře se stáčíme ke kurzoru
-
-    // Shift = ostrý cut: při zatáčení ke kurzoru zaryješ hrany → těsnější/svižnější oblouk.
-    const sharp = !!input.shift;
-    const wantBurst = sharp && !charging && turning > 0.25;
-    this._shiftBurst = clamp(this._shiftBurst + (wantBurst ? 1 : -1) * dt / 0.10, 0, 1); // snappy náběh ~0.1 s
-    const burstT = this._shiftBurst;
-
-    // ON-RAILS po hraně: rychlost je VŽDY podél skateAngle. Boční složka jen z nárazů.
-    {
-      const hx = Math.cos(this.skateAngle), hy = Math.sin(this.skateAngle);
-      let sp  = this.vx * hx + this.vy * hy;                // rychlost po hraně (+ dopředu, − vzad)
-      let pvx = this.vx - sp * hx, pvy = this.vy - sp * hy; // boční složka (jen z bodyčeku/nárazu)
-
-      if (throttle > 0) {
-        // W: zrychluj dopředu; zatáčení skoro nebere rychlost (led tě nese obloukem)
-        const targetSpd = topSpeed * (1 - 0.06 * turning * speedT);
-        sp = sp < targetSpd ? Math.min(targetSpd, sp + PLAYER.accel * (1.5 - 0.4 * speedT) * dt)
-                            : Math.max(targetSpd, sp - PLAYER.decel * 1.6 * dt);
-      } else if (throttle < 0) {
-        // S: brzda → plynule do couvání (pomalejší vzad)
-        sp = Math.max(-topSpeed * 0.5, sp - PLAYER.decel * 2.4 * dt);
-      } else {
-        // glide k nule
-        const gdec = charging ? PLAYER.decel * (1.6 + (this.charge || 0) * 2.8)
-                              : (Math.abs(sp) < 70 ? PLAYER.decel * 1.8 : PLAYER.decel);
-        sp = sp > 0 ? Math.max(0, sp - gdec * dt) : Math.min(0, sp + gdec * dt);
+    if (hasInput && !knocked) {
+      // zrychluj k cílové rychlosti ve směru WASD; změna směru = přibrzdit staré +
+      // nabrat nové → přirozený carve/moment (ne okamžitý obrat).
+      const tvx = ix * topSpeed, tvy = iy * topSpeed;
+      let dvx = tvx - this.vx, dvy = tvy - this.vy;
+      const dl = Math.hypot(dvx, dvy);
+      if (dl > 0) {
+        let a = PLAYER.accel * (crossChecking ? 1.1 : 1) * (charging ? 0.5 : 1);
+        if (sharp) a *= 1.9;                     // Shift = ostřejší řez/crossover
+        const dv = Math.min(dl, a * dt);
+        this.vx += dvx / dl * dv;
+        this.vy += dvy / dl * dv;
       }
-
-      // Edge dig (Shift v zatáčce): zaryješ hrany → přibrzdíš → oblouk se zúží (níž = menší
-      // poloměr). Rotace zůstává normální → žádné přetočení. Floor 40 → carve, ne piruet.
-      if (burstT > 0.1 && turning > 0 && Math.abs(sp) > 40) {
-        const bite = PLAYER.decel * 1.4 * turning * burstT * dt;
-        sp = sp > 0 ? Math.max(40, sp - bite) : Math.min(-40, sp + bite);
+    } else {
+      // glide — led nese, plynulé doklouzání (po nárazu slabší tření, ať knockback dojede)
+      const sp = Math.hypot(this.vx, this.vy);
+      if (sp > 0) {
+        const dec = (knocked ? 0.3 : (sp < 70 ? 1.4 : 1)) * PLAYER.decel * dt;
+        const ns = Math.max(0, sp - dec);
+        this.vx = this.vx / sp * ns; this.vy = this.vy / sp * ns;
       }
-
-      // Boční složka (skluz) — při burstu slabší útlum; po nárazu (_knockT) ještě slabší,
-      // aby byl knockback znatelný a dojel, ne aby se hned utlumil.
-      if (this._knockT > 0) this._knockT = Math.max(0, this._knockT - dt);
-      const pdRate = this._knockT > 0 ? 1.3 : (burstT > 0.1 ? 3 : 6);
-      const pd = Math.max(0, 1 - pdRate * dt);
-      pvx *= pd; pvy *= pd;
-      this.vx = hx * sp + pvx;
-      this.vy = hy * sp + pvy;
-      this._lean += (clamp(Math.sign(step) * turning * Math.min(1, Math.abs(sp) / 130), -1, 1) - this._lean) * Math.min(1, 8 * dt);
     }
+
+    // Tělo kouká kam bruslíš (plynule); hokejku míří myš zvlášť (turret)
+    const sp2 = Math.hypot(this.vx, this.vy);
+    if (sp2 > 22) this.skateAngle = lerpAngle(this.skateAngle, Math.atan2(this.vy, this.vx), Math.min(1, 12 * dt));
+    this.bodyAngle = this.skateAngle;
+
+    // Náklon do oblouku (vizuál)
+    const leanTarget = hasInput
+      ? clamp(angleDiff(Math.atan2(iy, ix), this.skateAngle) * 1.3, -1, 1) * Math.min(1, sp2 / 130)
+      : 0;
+    this._lean += (leanTarget - this._lean) * Math.min(1, 8 * dt);
 
     // Pohyb + WALL-SLIDE: u mantinelu zruš složku rychlosti DO zdi → sklouzneš podél,
     // nezasekneš se a netočíš se o band (heading se příští frame srovná podél zdi).
