@@ -313,8 +313,6 @@ export class PlayerBase {
 
     let topSpeed = PLAYER.speed * (crossChecking ? 1.15 : 1);
     if (charging) topSpeed *= clamp(1 - (this.charge || 0) * 0.85, 0.12, 1);
-    const sharp = !!input.shift && !charging;
-    if (sharp && hasInput) topSpeed *= 1.12;    // crossover burst — krátké zrychlení
 
     if (this._knockT > 0) this._knockT = Math.max(0, this._knockT - dt);
     const knocked = this._knockT > 0;            // po nárazu hráč skoro neřídí (náraz dojede)
@@ -326,8 +324,7 @@ export class PlayerBase {
       let dvx = tvx - this.vx, dvy = tvy - this.vy;
       const dl = Math.hypot(dvx, dvy);
       if (dl > 0) {
-        let a = PLAYER.accel * (crossChecking ? 1.1 : 1) * (charging ? 0.5 : 1);
-        if (sharp) a *= 1.9;                     // Shift = ostřejší řez/crossover
+        const a = PLAYER.accel * (crossChecking ? 1.1 : 1) * (charging ? 0.5 : 1);
         const dv = Math.min(dl, a * dt);
         this.vx += dvx / dl * dv;
         this.vy += dvy / dl * dv;

@@ -84,7 +84,6 @@ function nearestOther(p, match) {
 function playerActions(p, inp, dt, match) {
   p.aimDist = inp.aimDist;
   _updateAim(p, inp.aim, dt);
-  const forehandNow = !inp.shift;
 
   if (inp.lmbJustPressed) { p._chargeCancelled = false; p._oneTimer = !p.hasPuck; }
   if (!inp.lmb) p._chargeBlocked = false;
@@ -100,19 +99,19 @@ function playerActions(p, inp, dt, match) {
       if (p.charge >= 1 && p.hasPuck && !p._oneTimer) { p._chargeDecaying = true; p.overcharged = true; }
     } else if (p.hasPuck) {
       p.charge = Math.max(0, p.charge - CHARGE_RATE * 1.8 * dt);
-      if (p.charge <= 0) { p.shoot(match.puck, 0.12, forehandNow); p.charge = 0; p._chargeDecaying = false; p.overcharged = false; }
+      if (p.charge <= 0) { p.shoot(match.puck, 0.12); p.charge = 0; p._chargeDecaying = false; p.overcharged = false; }
     } else { p._chargeDecaying = false; p.overcharged = false; }
   }
 
   const rmbCancelledCharge = inp.rmbJustPressed && p.hasPuck && p.charge > 0;
   if (inp.lmbJustReleased && !rmbCancelledCharge) {
-    if (p.hasPuck && !p._chargeCancelled) p.shoot(match.puck, p.charge, forehandNow);
+    if (p.hasPuck && !p._chargeCancelled) p.shoot(match.puck, p.charge);
     p.charge = 0; p._chargeDecaying = false; p.overcharged = false; p._chargeCancelled = false; p._oneTimer = false;
   }
 
   if (inp.rmbJustPressed && p.hasPuck) {
     if (p.charge > 0.08) { p.charge = 0; p._chargeDecaying = false; p.overcharged = false; p._chargeBlocked = true; p._chargeCancelled = true; }
-    else { p.charge = 0; const tgt = nearestOther(p, match); const lead = tgt ? leadAim(p.stickTip, tgt, PUCK.passSpeed) : null; p.pass(match.puck, lead, forehandNow); }
+    else { p.charge = 0; const tgt = nearestOther(p, match); const lead = tgt ? leadAim(p.stickTip, tgt, PUCK.passSpeed) : null; p.pass(match.puck, lead); }
   }
 
   if (inp.mmbJustPressed && !p.hasPuck) p.passReq = 0.9;

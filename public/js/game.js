@@ -242,7 +242,6 @@ export class SandboxGame {
     const adx = mouse.x - this.local.x, ady = mouse.y - this.local.y;
     this.local.aimDist = Math.hypot(adx, ady); // dosah hole dle kurzoru
     _updateAim(this.local, Math.atan2(ady, adx), dt);
-    const forehandNow = !this.input.shift;
 
     if (this.input.lmbJustPressed) { this._chargeCancelled = false; this._oneTimer = !this.local.hasPuck; }
     if (!this.input.lmb) this._chargeBlocked = false;
@@ -261,7 +260,7 @@ export class SandboxGame {
       } else if (this.local.hasPuck) {
         this.local.charge = Math.max(0, this.local.charge - CHARGE_RATE * 1.8 * dt);
         if (this.local.charge <= 0) {
-          this.local.shoot(this.puck, 0.12, forehandNow);
+          this.local.shoot(this.puck, 0.12);
           this.local.charge = 0; this._chargeDecaying = false; this.local.overcharged = false;
         }
       } else {
@@ -270,7 +269,7 @@ export class SandboxGame {
     }
     const rmbCancelledCharge = this.input.rmbJustPressed && this.local.hasPuck && this.local.charge > 0;
     if (this.input.lmbJustReleased && !rmbCancelledCharge) {
-      if (this.local.hasPuck && !this._chargeCancelled) this.local.shoot(this.puck, this.local.charge, forehandNow);
+      if (this.local.hasPuck && !this._chargeCancelled) this.local.shoot(this.puck, this.local.charge);
       this.local.charge = 0; this._chargeDecaying = false; this.local.overcharged = false;
       this._chargeCancelled = false; this._oneTimer = false;
     }
@@ -282,7 +281,7 @@ export class SandboxGame {
       } else {
         this.local.charge = 0;
         const lead = _leadAim(this.local.stickTip, this.passer, PUCK.passSpeed);
-        this.local.pass(this.puck, lead, forehandNow);
+        this.local.pass(this.puck, lead);
       }
     }
 
