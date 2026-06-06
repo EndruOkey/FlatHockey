@@ -73,7 +73,8 @@ export class Puck {
     const along      = (0.5 - dispCharge * 0.18) * 12;
     const bx = heelX + Math.cos(bladeDir) * along;
     const by = heelY + Math.sin(bladeDir) * along;
-    const bladeSide = owner.forehand !== false ? 1 : -1;
+    // Spojitá strana puku na čepeli → plynulé míchání forhend↔bekhend (dribling)
+    const bladeSide = owner._cradleSide ?? (owner.forehand !== false ? 1 : -1);
     const perpX     = -Math.sin(bladeDir);
     const perpY     =  Math.cos(bladeDir);
     const snug      = 1 - dispCharge * 0.5;

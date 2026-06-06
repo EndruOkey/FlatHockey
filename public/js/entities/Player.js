@@ -34,6 +34,7 @@ export class PlayerBase {
     this.passReq         = 0;     // pass-request visual timer
     this._stickDisp      = this.aimAngle; // vyhlazený úhel hole pro vykreslení (bez teleportů)
     this._dispCharge     = 0;             // vyhlazený charge pro wind-up vizuál
+    this._cradleSide     = 1;             // plynulá strana puku na čepeli (+forhend / −bekhend)
   }
 
   // Plynulý úhel hole — dojíždí k cíli, takže přepnutí crosscheck / zrušení charge
@@ -52,6 +53,10 @@ export class PlayerBase {
     // Základ hole je vždy carry-úhel (spojitý i po ztrátě puku) → žádný skok/záškub
     const target = this.crossCheck ? this.bodyAngle : (this.carryAngle - this._dispCharge * 0.52);
     this._stickDisp = lerpAngle(this._stickDisp, target, Math.min(1, 26 * dt));
+    // Plynulé MÍCHÁNÍ puku: strana puku na čepeli plynule přejíždí forhend↔bekhend
+    // (přes střed lopaty) místo skoku → vizuální dribling/kličkování.
+    const sideTarget = (this.forehand !== false) ? 1 : -1;
+    this._cradleSide += (sideTarget - this._cradleSide) * Math.min(1, 9 * dt);
   }
 
   // Úchop hole — ruce drží hůl VEDLE těla (na straně dle handedness, mírně vepřed),
