@@ -127,32 +127,23 @@ export class PlayerBase {
     return true;
   }
 
-  shoot(puck, charge, forehand = this.forehand) {
+  shoot(puck, charge) {
     this.hasPuck = false;
-    this.forehand = forehand !== false;
     this._shootCooldown = 0.18;
     const tip = this.stickTip;
     puck.x = tip.x;
     puck.y = tip.y;
     puck.z = 0;
 
+    // ŽABIČKA (lehký tap) → PRDEL (plné nabití): rychlost i zdvih plynule rostou s nabitím.
+    // Žabička = malá umístěná rána po ledě; slap = tvrdá rána, zvedne se a je lehce nepřesná.
     const c = clamp(charge, 0, 1);
-    if (this.forehand !== false) {
-      // WRIST (tap) → SLAP (nabito): i rychlá rána má pořádnou rychlost; nabití přidá tvrdost
-      // a zvedne puk (top shelf). Slap je o chlup nepřesnější (riziko/odměna).
-      const spd    = PUCK.minShotSpeed + (PUCK.maxShotSpeed - PUCK.minShotSpeed) * Math.pow(c, 0.85);
-      const spread = (Math.random() - 0.5) * c * 0.10;        // ±~3° při plném slapu
-      const dir    = this.carryAngle + spread;
-      puck.vx = Math.cos(dir) * spd;
-      puck.vy = Math.sin(dir) * spd;
-      puck.vz = Math.pow(c, 1.4) * PUCK.maxShotVz;            // víc nabito → víc zvedne
-    } else {
-      // Backhand — svižný, přesný snap, ale slabší a nižší strop
-      const spd = 230 + 150 * c;
-      puck.vx = Math.cos(this.carryAngle) * spd;
-      puck.vy = Math.sin(this.carryAngle) * spd;
-      puck.vz = (0.15 + c * 0.4) * PUCK.maxShotVz * 0.5;
-    }
+    const spd    = PUCK.minShotSpeed + (PUCK.maxShotSpeed - PUCK.minShotSpeed) * Math.pow(c, 0.85);
+    const spread = (Math.random() - 0.5) * c * 0.08;   // jen tvrdá rána je lehce nepřesná
+    const dir    = this.carryAngle + spread;
+    puck.vx = Math.cos(dir) * spd;
+    puck.vy = Math.sin(dir) * spd;
+    puck.vz = Math.pow(c, 1.6) * PUCK.maxShotVz;        // žabička po ledě, slap se zvedne
   }
 
   // Hůl relativně k TĚLU: úhel hole = bodyAngle + clamp(rel) v dosažitelném kuželu.
@@ -221,28 +212,19 @@ export class PlayerBase {
   }
 
   // aimOverride: volitelný směr nahrávky (predikce do jízdy); jinak míří kam ukazuje hůl
-  pass(puck, aimOverride, forehand = this.forehand) {
+  pass(puck, aimOverride) {
     this.hasPuck = false;
-    this.forehand = forehand !== false;
     this._passCooldown  = 0.15;
     this._shootCooldown = 0.18; // ať si hráč hned NEteční/nesebere vlastní přihrávku
     const tip = this.stickTip;
     puck.x = tip.x;
     puck.y = tip.y;
     puck.z = 0;
-
+    // Normální přihrávka — po ledě, plná rychlost (žádný backhand)
     const ang = (aimOverride !== undefined && aimOverride !== null) ? aimOverride : this.carryAngle;
-    if (this.forehand) {
-      // Forhend — po ledě, plná rychlost
-      puck.vx = Math.cos(ang) * PUCK.passSpeed;
-      puck.vy = Math.sin(ang) * PUCK.passSpeed;
-      puck.vz = 0;
-    } else {
-      // Bakhand žabička (Shift) — pomalejší, letí vzduchem
-      puck.vx = Math.cos(ang) * PUCK.passSpeed * 0.72;
-      puck.vy = Math.sin(ang) * PUCK.passSpeed * 0.72;
-      puck.vz = 115;
-    }
+    puck.vx = Math.cos(ang) * PUCK.passSpeed;
+    puck.vy = Math.sin(ang) * PUCK.passSpeed;
+    puck.vz = 0;
   }
 
   // Called each frame — check if this player's cross-check hits another

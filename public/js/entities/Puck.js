@@ -39,6 +39,7 @@ export class Puck {
     this.prevZ   = this.z;
     this.ownerId = null;
     this.goalScored = null;
+    this._inNet  = false;   // usazený v brance (po gólu) → tvrdě držen v boxu sítě
   }
 
   reset() {
@@ -53,6 +54,7 @@ export class Puck {
     this.prevZ   = this.z;
     this.ownerId = null;
     this.goalScored = null;
+    this._inNet  = false;   // usazený v brance (po gólu) → tvrdě držen v boxu sítě
   }
 
   get isAirborne() { return this.z > 1.5; }
@@ -269,8 +271,10 @@ const POST_R = 2.5; // tloušťka tyčky
 
 function _resolveGoals(puck) {
   const d = RINK.goalDepth;
-  return _resolveOneGoal(puck, RINK.goalLineRight, RINK.goalLineRight + d, +1, 'goal-home')
-      || _resolveOneGoal(puck, RINK.goalLineLeft,  RINK.goalLineLeft  - d, -1, 'goal-away');
+  const g = _resolveOneGoal(puck, RINK.goalLineRight, RINK.goalLineRight + d, +1, 'goal-home')
+         || _resolveOneGoal(puck, RINK.goalLineLeft,  RINK.goalLineLeft  - d, -1, 'goal-away');
+  _containInNet(puck);   // drž usazený puk v brance (po gólu)
+  return g;
 }
 
 // lineX = branková čára, backX = zadní stěna sítě, dir = směr do branky (+1 vpravo)
@@ -310,6 +314,9 @@ function _resolveOneGoal(puck, lineX, backX, dir, result) {
     if (yAt > gy1 + POST_R && yAt < gy2 - POST_R) {
       if (zAt <= cbar) {
         goal = true;
+        puck._inNet = true;                       // od teď puk tvrdě držíme v boxu sítě
+        puck._netLo = Math.min(lineX, backX);
+        puck._netHi = Math.max(lineX, backX);
       } else {
         // Trefil břevno — odraz zpět a dolů, není gól
         puck.x  = lineX - dir * (r + 0.5);
@@ -320,21 +327,21 @@ function _resolveOneGoal(puck, lineX, backX, dir, result) {
     }
   }
 
-  // (3) Síť — puk uvnitř branky se utlumí (mesh) a drží, nevyletí zpět ústím
-  const lo = Math.min(lineX, backX);
-  const hi = Math.max(lineX, backX);
-  if (puck.x > lo && puck.x < hi && puck.y > gy1 && puck.y < gy2) {
-    puck.vx *= 0.5; puck.vy *= 0.5; puck.vz = 0; puck.z = 0;
-    // zadní stěna
-    if (dir > 0) { if (puck.x + r > backX) { puck.x = backX - r; if (puck.vx > 0) puck.vx *= -0.2; } }
-    else         { if (puck.x - r < backX) { puck.x = backX + r; if (puck.vx < 0) puck.vx *= -0.2; } }
-    // boční tyče zevnitř
-    if (puck.y - r < gy1) { puck.y = gy1 + r; if (puck.vy < 0) puck.vy *= -0.2; }
-    if (puck.y + r > gy2) { puck.y = gy2 - r; if (puck.vy > 0) puck.vy *= -0.2; }
-    // jednosměrné ústí — puk neproklouzne zpět přes čáru ven
-    if (dir > 0) { if (puck.x < lineX + r) { puck.x = lineX + r; if (puck.vx < 0) puck.vx = 0; } }
-    else         { if (puck.x > lineX - r) { puck.x = lineX - r; if (puck.vx > 0) puck.vx = 0; } }
-  }
-
   return goal ? result : null;
+}
+
+// Puk usazený v brance — TVRDÝ box (žádné tunelování): vletí dovnitř, odrazí se od
+// zadní/boční stěny a mesh ho během ~1 s utlumí. Ústím ven nevyletí.
+function _containInNet(puck) {
+  if (!puck._inNet) return;
+  const r   = PUCK.radius;
+  const gy1 = RINK.goalY, gy2 = RINK.goalY + RINK.goalH;
+  const xLo = puck._netLo + r, xHi = puck._netHi - r;
+  const yLo = gy1 + r,         yHi = gy2 - r;
+  const MESH = 0.92, REST = 0.45;
+  puck.vx *= MESH; puck.vy *= MESH; puck.vz = 0; puck.z = 0;
+  if (puck.x < xLo) { puck.x = xLo; if (puck.vx < 0) puck.vx = -puck.vx * REST; }
+  if (puck.x > xHi) { puck.x = xHi; if (puck.vx > 0) puck.vx = -puck.vx * REST; }
+  if (puck.y < yLo) { puck.y = yLo; if (puck.vy < 0) puck.vy = -puck.vy * REST; }
+  if (puck.y > yHi) { puck.y = yHi; if (puck.vy > 0) puck.vy = -puck.vy * REST; }
 }
