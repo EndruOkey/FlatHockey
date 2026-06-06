@@ -158,8 +158,6 @@ export class NetGame {
 
   _overlay(ctx) {
     _renderHUD(ctx, this.score);
-    ctx.font = '12px monospace'; ctx.textAlign = 'left'; ctx.fillStyle = '#33ff66';
-    ctx.fillText(`server v13 · ${this.myTeam} · hráčů:${this.players.size}`, 12, ctx.canvas.height - 14);
     if (this.goalFlash > 0) {
       const alpha = Math.min(1, this.goalFlash);
       ctx.fillStyle = `rgba(255, 220, 60, ${alpha * 0.12})`;
