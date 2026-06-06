@@ -1,5 +1,5 @@
 import { Net } from './net.js';
-import { Game, SandboxGame } from './game.js';
+import { NetGame, SandboxGame } from './game.js';
 import { Tweaker } from './tweaker.js';
 
 const canvas  = document.getElementById('canvas');
@@ -20,7 +20,6 @@ const HAND_KEY = 'hockey_hand';
 const saved = localStorage.getItem(LAST_ROOM_KEY);
 if (saved) roomInput.value = saved;
 
-// Jméno + ruka z localStorage
 nameInput.value = localStorage.getItem(NAME_KEY) || '';
 let chosenHand = parseInt(localStorage.getItem(HAND_KEY) || '1', 10);
 function refreshHand() {
@@ -33,14 +32,14 @@ handBtns.forEach(b => b.addEventListener('click', () => {
   refreshHand();
 }));
 
-// Nastaví zvolené jméno/ruku na lokálního hráče
-function applyProfile(game) {
+function profileName() {
   const name = (nameInput.value || '').trim().slice(0, 12);
   localStorage.setItem(NAME_KEY, name);
-  if (game.local) {
-    game.local.name   = name;
-    game.local.handed = chosenHand;
-  }
+  return name;
+}
+// solo: nastav jméno/ruku přímo na lokálního hráče
+function applyProfile(game) {
+  if (game.local) { game.local.name = profileName(); game.local.handed = chosenHand; }
   return game;
 }
 
@@ -59,11 +58,13 @@ function startGame(game) {
   lobby.style.display = 'none';
   canvas.style.cursor = 'crosshair';
   currentNet = game.net ?? null;
-  if (currentNet) {
-    // Ve hře: odpojení soupeře otevře menu (ne jen lobby status, který je skrytý)
-    currentNet.onDisconnected = () => showPauseMenu('SOUPEŘ SE ODPOJIL', true);
-  }
+  if (currentNet) currentNet.onPeerLeft = () => showPauseMenu('SOUPEŘ SE ODPOJIL', true);
   game.start();
+}
+
+function setStatus(msg, color = '#888') {
+  status.textContent = msg;
+  status.style.color = color;
 }
 
 // ── Esc menu / odpojení ──────────────────────────────────────────────
@@ -75,73 +76,34 @@ function showPauseMenu(title = 'PAUZA', disconnected = false) {
 function hidePauseMenu() { pauseMenu.style.display = 'none'; }
 
 resumeBtn.addEventListener('click', hidePauseMenu);
-leaveBtn.addEventListener('click', () => {
-  currentNet?.leave();      // uvolní slot na serveru
-  location.reload();         // zpět do lobby
-});
-
+leaveBtn.addEventListener('click', () => { currentNet?.leave(); location.reload(); });
 window.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
-  if (lobby.style.display !== 'none') return; // jen ve hře, ne v lobby
-  if (pauseMenu.style.display === 'flex') hidePauseMenu();
-  else showPauseMenu('PAUZA', false);
+  if (lobby.style.display !== 'none') return;
+  if (pauseMenu.style.display === 'flex') hidePauseMenu(); else showPauseMenu('PAUZA', false);
 });
-
-// Zavření/refresh stránky → čisté odpojení, server uvolní místnost
 window.addEventListener('beforeunload', () => currentNet?.leave());
 window.addEventListener('pagehide',     () => currentNet?.leave());
 
-function setStatus(msg, color = '#888') {
-  status.textContent = msg;
-  status.style.color = color;
-}
-
-const signalingNet = new Net();
-
-joinBtn.addEventListener('click', async () => {
+// ── Online ────────────────────────────────────────────────────────────
+joinBtn.addEventListener('click', () => {
   let roomId = roomInput.value.trim().toUpperCase();
-  if (!roomId) {
-    roomId = Math.random().toString(36).slice(2, 7).toUpperCase();
-    roomInput.value = roomId;
-  }
-
-  setStatus('Connecting to signaling server...');
-  joinBtn.disabled = true;
+  if (!roomId) { roomId = Math.random().toString(36).slice(2, 7).toUpperCase(); roomInput.value = roomId; }
   localStorage.setItem(LAST_ROOM_KEY, roomId);
+  setStatus('Připojuji…', '#4488ff');
+  joinBtn.disabled = true;
 
-  const net = signalingNet;
-
-  try {
-    const { isHost, waiting } = await net.join(roomId);
-
-    if (isHost) {
-      setStatus(`Room ${roomId} created. Waiting for opponent...`, '#4488ff');
-      net.onConnected = () => {
-        setStatus('Connected! Starting...', '#44ff88');
-        setTimeout(() => startGame(applyProfile(new Game(canvas, net, true))), 500);
-      };
-    } else {
-      setStatus('Joined! Connecting P2P...', '#4488ff');
-      net.onConnected = () => {
-        setStatus('Connected! Starting...', '#44ff88');
-        setTimeout(() => startGame(applyProfile(new Game(canvas, net, false))), 500);
-      };
-    }
-
-    net.onDisconnected = () => {
-      setStatus('Opponent disconnected.', '#ff4455');
-      joinBtn.disabled = false;
-    };
-  } catch (e) {
-    setStatus(e.message, '#ff4455');
-    joinBtn.disabled = false;
-  }
+  const net = new Net();
+  net.onFull = () => { setStatus('Místnost je plná.', '#ff4455'); joinBtn.disabled = false; };
+  net.onJoined = ({ id, team }) => {
+    setStatus('Připojeno!', '#44ff88');
+    startGame(new NetGame(canvas, net, id, team));
+  };
+  net.join(roomId, profileName(), chosenHand);
 });
 
 soloBtn.addEventListener('click', () => {
   startGame(applyProfile(new SandboxGame(canvas)));
 });
 
-roomInput.addEventListener('keydown', e => {
-  if (e.key === 'Enter') joinBtn.click();
-});
+roomInput.addEventListener('keydown', e => { if (e.key === 'Enter') joinBtn.click(); });
