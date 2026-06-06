@@ -618,12 +618,16 @@ function _renderPlayer(ctx, p, cam) {
     ctx.stroke();
   }
 
-  // Jméno nad hráčem
+  // Jméno nad hráčem — v barvě týmu, s tmavým obrysem pro čitelnost
   if (p.name) {
-    ctx.font = `${Math.round(10 * s)}px 'Segoe UI', sans-serif`;
+    ctx.font = `bold ${Math.round(10 * s)}px 'Segoe UI', sans-serif`;
     ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(255,255,255,0.82)';
-    ctx.fillText(p.name, sx, sy - r - 7 * s);
+    const ny = sy - r - 7 * s;
+    ctx.lineWidth = 2.5 * s;
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+    ctx.strokeText(p.name, sx, ny);
+    ctx.fillStyle = color;
+    ctx.fillText(p.name, sx, ny);
     ctx.textAlign = 'left';
   }
 }

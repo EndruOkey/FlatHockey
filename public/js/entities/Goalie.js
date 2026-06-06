@@ -7,7 +7,7 @@ import { clamp } from '../utils.js';
 const COVER_H  = 14;   // vertikální poloviční dosah krytí (±14 ze 44px ústí → uličky u tyček)
 const COVER_X  = 9;    // poloviční tloušťka (X)
 const FIVEHOLE = 5;    // poloviční šířka pětky (nízký střed)
-const TOP_EDGE = 3;    // jak blízko hraně krytí je "růžek"
+const TOP_EDGE = 2;    // užší růžek u tyče → těžší trefit
 const MAX_OUT  = 30;   // max výjezd z brankové čáry (~6 ft, challenge k vršku brankoviště)
 const SPEED    = 170;  // boční rychlost (živé přesuny) — z ní plyne otevřený vzdálený roh
 const PADLEN   = 9;    // délka betonů dopředu (vizuál)
@@ -170,8 +170,10 @@ export class Goalie {
     const absY = Math.abs(relY);
 
     // ── Zranitelnosti (ne zadarmo) ──
-    // Horní růžek: vysoká přesná střela těsně nad lapačku/pod břevno
-    if (high && absY > COVER_H - TOP_EDGE) return false;
+    // Horní růžek: jen FAKT vysoká rána (těsně pod břevno) a přesně u tyče — ne ledajaká
+    // nadzvednutá střela. Musíš puk zvednout skoro k břevnu a trefit roh.
+    const cornerHigh = puck.z > (PUCK.gloveHeight + PUCK.crossbarHeight) * 0.5; // ~13.5 (z 21)
+    if (cornerHigh && absY > COVER_H - TOP_EDGE) return false;
     // Pětka: nízká rána středem, ale jen když je gólman rozjetý (musíš ho rozhýbat)
     if (!high && absY < FIVEHOLE && moving) return false;
 
