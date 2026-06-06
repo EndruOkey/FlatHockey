@@ -27,7 +27,7 @@ const CHARGE_RATE = 1.8;
 const TICK_HZ = 60;
 const SNAP_HZ = 60;            // snapshot každý tick (ostřejší soupeř)
 const DT = 1 / TICK_HZ;
-const MAX_PLAYERS = 6;         // až 3v3
+const MAX_PLAYERS = 10;        // až 5v5
 
 const rooms = new Map();  // roomId -> match
 

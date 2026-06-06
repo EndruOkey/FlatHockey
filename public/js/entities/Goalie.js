@@ -108,22 +108,29 @@ export class Goalie {
     else if (distToPuck > 70)  depth = MAX_OUT;                             // slot: plný challenge
     else                       depth = clamp(distToPuck * 0.30, 6, MAX_OUT * 0.65); // in-tight: stáhnout se
     depth *= 1 - Math.min(1, angleAbs / (Math.PI * 0.5)) * 0.6;            // ostrý úhel → blíž čáře/tyči
+
+    // HROZBA: jak moc je puk nebezpečný (blízko branky). Daleko (>360px) = klid → gólman
+    // nemíří furt na puk, drží pozici u čáry a hýbe se líně. Blízko = plně aktivní.
+    const threat = clamp((360 - distToPuck) / 260, 0, 1);
+    depth *= 0.28 + 0.72 * threat;                 // klid → mělko u čáry, hrozba → výjezd
     const targetX = netX + this.inX * depth;
 
     // Pravý úhlový bod: průsečík spojnice puk→střed branky s hloubkovou rovinou x=targetX.
-    // Vzdálený roh se otevírá přirozeně podle toho, jak rychle gólman (SPEED) přesun stíhá.
     const denom = Math.abs(netX - px) < 1 ? -this.inX : (netX - px);
     const s = (targetX - px) / denom;
     const margin = COVER_H * 0.45;
-    let targetY = clamp(py + s * (netY - py) + bite,
-                        RINK.goalY + margin, RINK.goalY + RINK.goalH - margin);
+    let targetY = py + s * (netY - py) + bite * threat;  // anticipace jen při hrozbě
+    // při klidu drž střed branky (nezrcadli vzdálený puk laterálně) → přirozený, ne hyperaktivní
+    targetY = netY + (targetY - netY) * (0.25 + 0.75 * threat);
+    targetY = clamp(targetY, RINK.goalY + margin, RINK.goalY + RINK.goalH - margin);
 
-    // Plynulý přesun: požadovaná rychlost = tah k cíli (easing → brzdí u cíle),
-    // omezená max. rychlostí a vyhlazená (setrvačnost) → přirozený shuffle, ne robotické cukání.
+    // Plynulý přesun: požadovaná rychlost = tah k cíli (easing → brzdí u cíle). Při klidu
+    // pomaleji (líné dorovnání), při hrozbě plná rychlost → působí přirozeně.
+    const effSpeed = SPEED * (0.38 + 0.62 * threat);
     let desVx = (targetX - this.x) * 11;
     let desVy = (targetY - this.y) * 11;
     const dspd = Math.hypot(desVx, desVy);
-    if (dspd > SPEED) { const f = SPEED / dspd; desVx *= f; desVy *= f; }
+    if (dspd > effSpeed) { const f = effSpeed / dspd; desVx *= f; desVy *= f; }
     const acc = Math.min(1, 10 * dt);
     this._gvx += (desVx - this._gvx) * acc;
     this._gvy += (desVy - this._gvy) * acc;

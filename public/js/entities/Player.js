@@ -322,17 +322,18 @@ export class PlayerBase {
       // glide — led nese, plynulé doklouzání (po nárazu slabší tření, ať knockback dojede)
       const sp = Math.hypot(this.vx, this.vy);
       if (sp > 0) {
-        const dec = (knocked ? 0.3 : (sp < 70 ? 2.4 : 1.7)) * PLAYER.decel * dt;
+        const dec = (knocked ? 0.3 : (sp < 60 ? 1.4 : 0.85)) * PLAYER.decel * dt;
         const ns = Math.max(0, sp - dec);
         this.vx = this.vx / sp * ns; this.vy = this.vy / sp * ns;
       }
     }
 
-    // Tělo: za jízdy kouká kam bruslíš; když skoro stojím, pivotuje ke kurzoru
-    // (ať můžu mířit i dozadu otočením, ne ohnutím hole za záda).
+    // Tělo kouká do směru VSTUPU (stabilní — nešumí jako směr rychlosti, takže se
+    // postava neprotáčí při změně/průchodu nulou). Když nejedu, pomalu pivotuju ke
+    // kurzoru (ať můžu mířit i dozadu otočením, ne ohnutím hole za záda).
     const sp2 = Math.hypot(this.vx, this.vy);
-    if (sp2 > 22) this.skateAngle = lerpAngle(this.skateAngle, Math.atan2(this.vy, this.vx), Math.min(1, 12 * dt));
-    else          this.skateAngle = lerpAngle(this.skateAngle, this.aimAngle, Math.min(1, 7 * dt));
+    if (hasInput)         this.skateAngle = lerpAngle(this.skateAngle, Math.atan2(iy, ix), Math.min(1, 10 * dt));
+    else if (sp2 < 14)    this.skateAngle = lerpAngle(this.skateAngle, this.aimAngle, Math.min(1, 6 * dt));
     this.bodyAngle = this.skateAngle;
 
     // Náklon do oblouku (vizuál)

@@ -174,6 +174,8 @@ export class Puck {
       }
     }
 
+    // Pevné stěny sítě (vršek/spodek/záda) — puk projde dovnitř JEN ústím zepředu
+    _resolveNetWalls(this);
     // Jednotná branková mechanika: tyčky+břevno → detekce → udržení v síti
     this.goalScored = _resolveGoals(this);
   }
@@ -226,6 +228,38 @@ function _insideCage(x, y) {
   const d = RINK.goalDepth;
   return (x > RINK.goalLineLeft - d && x < RINK.goalLineLeft) ||
          (x > RINK.goalLineRight  && x < RINK.goalLineRight + d);
+}
+
+// Pevné stěny sítě z VNĚJŠKU — vršek, spodek a zadní stěna jsou pevné; otevřené je
+// jen ústí (přední čára mezi tyčkami). Puk se tak nedostane do branky přes mřížku.
+function _resolveNetWalls(puck) {
+  const r   = PUCK.radius;
+  const gy1 = RINK.goalY, gy2 = RINK.goalY + RINK.goalH;
+  const d   = RINK.goalDepth;
+  const pxPrev = puck.prevX ?? puck.x, pyPrev = puck.prevY ?? puck.y;
+  const railTop = gy1 - r, railBot = gy2 + r;
+  const nets = [
+    { lineX: RINK.goalLineRight, backX: RINK.goalLineRight + d, dir: +1 },
+    { lineX: RINK.goalLineLeft,  backX: RINK.goalLineLeft  - d, dir: -1 },
+  ];
+  for (const { lineX, backX, dir } of nets) {
+    const lo = Math.min(lineX, backX), hi = Math.max(lineX, backX);
+    const inDepthX = puck.x > lo - r && puck.x < hi + r;   // v hloubkovém rozsahu branky
+    const inNetY   = puck.y > gy1 && puck.y < gy2;          // ve výškovém rozsahu branky
+    // Vrchní mantinel (swept, z vnějšku shora) — neprojde mřížkou shora
+    if (inDepthX && puck.vy > 0 && pyPrev <= railTop && puck.y > railTop) {
+      puck.y = railTop; puck.vy = -Math.abs(puck.vy) * PUCK.bounce;
+    }
+    // Spodní mantinel (swept, zdola)
+    if (inDepthX && puck.vy < 0 && pyPrev >= railBot && puck.y < railBot) {
+      puck.y = railBot; puck.vy = Math.abs(puck.vy) * PUCK.bounce;
+    }
+    // Zadní stěna (swept, z vnějšku) — puk zezadu se odrazí, neprojde zády
+    if (inNetY) {
+      if (dir > 0 && puck.vx < 0 && pxPrev >= hi + r && puck.x < hi + r) { puck.x = hi + r; puck.vx = Math.abs(puck.vx) * PUCK.bounce; }
+      if (dir < 0 && puck.vx > 0 && pxPrev <= lo - r && puck.x > lo - r) { puck.x = lo - r; puck.vx = -Math.abs(puck.vx) * PUCK.bounce; }
+    }
+  }
 }
 
 // ── Jednotná branková mechanika ──────────────────────────────────────────
