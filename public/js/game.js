@@ -162,9 +162,10 @@ export class Game {
     if (this._grabCool > 0) this._grabCool -= dt;
     if (!this.isHost && !this.local.hasPuck && this._grabCool <= 0 &&
         this.local.canPickup(this.puck)) {
+      // NEdržím optimisticky (jinak „ghost" puk a desync) — jen žádám, držet začnu
+      // až host potvrdí přes po=2. Opakuju rychle, dokud nepotvrdí.
       this.net?.send({ t: 'grab' });
-      this.local._grabPuck();
-      this._grabCool = 0.2;
+      this._grabCool = 0.08;
     }
 
     if (this.goalFlash > 0) this.goalFlash -= dt;
@@ -220,7 +221,7 @@ export class Game {
       ctx.font = '13px monospace'; ctx.textAlign = 'left';
       ctx.fillStyle = '#33ff66';
       ctx.fillText(
-        `${this.isHost ? 'HOST' : 'GUEST'} v9  lp:${this.local.hasPuck ? 1 : 0} rp:${this.remote?.hasPuck ? 1 : 0} ` +
+        `${this.isHost ? 'HOST' : 'GUEST'} v10  lp:${this.local.hasPuck ? 1 : 0} rp:${this.remote?.hasPuck ? 1 : 0} ` +
         `po:${this._dbgPo ?? '-'} canPickup:${cp} dist:${d} z:${Math.round(this.puck.z)} shootCD:${this.local._shootCooldown.toFixed(2)}`,
         12, ctx.canvas.height - 14);
     } catch (e) {
@@ -259,8 +260,8 @@ export class Game {
       // volný a klient je u puku (sanity proti teleportu).
       const free = !this.local.hasPuck && !this.remote.hasPuck &&
                    !this.goalieL.isHolding && !this.goalieR.isHolding && !this.world._goalLock;
-      const near = Math.hypot(this.puck.x - this.remote.x, this.puck.y - this.remote.y) < 40;
-      if (free && near && this.puck.z < 6) this.remote._grabPuck();
+      const near = Math.hypot(this.puck.x - this.remote.x, this.puck.y - this.remote.y) < 80;
+      if (free && near && this.puck.z < 6) { this.remote._grabPuck(); this._dbgPo = 9; }
     }
     if (msg.t === 'goal')   this._flashGoal(msg.text);
     if (msg.t === 'passreq') this.remote.passReq = 0.9;
