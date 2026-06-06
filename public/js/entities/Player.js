@@ -297,8 +297,7 @@ export class PlayerBase {
 
     const charging      = !!(input.lmb && this.hasPuck);
     const crossChecking = this.crossCheck;
-    const steer    = input.dx;   // A/D = řízení: D=+1 doprava, A=-1 doleva
-    const throttle = -input.dy;  // W/S = plyn:   W=+1 dopředu, S=-1 brzda
+    const throttle = -input.dy;  // W/S = plyn:   W=+1 dopředu (ke kurzoru), S=-1 couvání
     const spd = Math.hypot(this.vx, this.vy);
 
     let topSpeed = PLAYER.speed * (crossChecking ? 1.15 : 1);
@@ -307,27 +306,28 @@ export class PlayerBase {
     const turnMult = crossChecking ? 0.62 : 1;
     const speedT   = Math.min(1, spd / Math.max(1, topSpeed));
 
-    // Shift = ZRYCHLENÍ DO ZATÁČKY: dokud držíš Shift A ZATÁČÍŠ (A/D), zrychluješ do
-    // oblouku a oblouk je těsnější. Plynule náběhne/odezní. Na rovině Shift nedělá nic.
+    // MOUSE-STEER: tělo/heading se stáčí KE KURZORU (aimAngle) skating obloukem —
+    // rychle = širší oblouk (dynamický poloměr). W jede ke kurzoru, S couvá (čelem ke
+    // kurzoru = backskating). Žádné A/D otáčení; směr i míření řídí myš.
+    const steerRate = PLAYER.turnRate * (1.8 - 1.15 * speedT * speedT) * turnMult * (charging ? 0.3 : 1);
+    const headDiff = angleDiff(this.aimAngle, this.skateAngle);
+    const step = clamp(headDiff, -steerRate * dt, steerRate * dt);
+    this.skateAngle += step;
+    this.bodyAngle = this.skateAngle;
+    const turning = Math.min(1, Math.abs(headDiff) / 0.6); // jak ostře se stáčíme ke kurzoru
+
+    // Shift = ostrý cut: při zatáčení ke kurzoru zaryješ hrany → těsnější/svižnější oblouk.
     const sharp = !!input.shift;
-    const wantBurst = sharp && !charging && Math.abs(steer) > 0;
+    const wantBurst = sharp && !charging && turning > 0.25;
     this._shiftBurst = clamp(this._shiftBurst + (wantBurst ? 1 : -1) * dt / 0.10, 0, 1); // snappy náběh ~0.1 s
     const burstT = this._shiftBurst;
 
-    // A/D stáčí heading. Dynamický poloměr (kvadraticky). Shift NEzrychluje rotaci
-    // (žádné přetočení) — oblouk zúží jen přibrzděním (níž → menší poloměr).
-    const steerRate = PLAYER.turnRate * (1.8 - 1.15 * speedT * speedT) * turnMult * (charging ? 0.3 : 1);
-    this.skateAngle += steer * steerRate * dt;
-    this.bodyAngle = this.skateAngle; // tělo kouká kam bruslíš; hokejku míří myš zvlášť (turret)
-
-    // ON-RAILS po hraně: rychlost je VŽDY podél skateAngle (žádný boční drift z bruslení).
-    // Bez steeru = rovně; A/D = oblouk; boční složka jen z nárazů a rychle vyhasne.
+    // ON-RAILS po hraně: rychlost je VŽDY podél skateAngle. Boční složka jen z nárazů.
     {
       const hx = Math.cos(this.skateAngle), hy = Math.sin(this.skateAngle);
       let sp  = this.vx * hx + this.vy * hy;                // rychlost po hraně (+ dopředu, − vzad)
       let pvx = this.vx - sp * hx, pvy = this.vy - sp * hy; // boční složka (jen z bodyčeku/nárazu)
 
-      const turning = Math.min(1, Math.abs(steer));
       if (throttle > 0) {
         // W: zrychluj dopředu; zatáčení skoro nebere rychlost (led tě nese obloukem)
         const targetSpd = topSpeed * (1 - 0.06 * turning * speedT);
@@ -358,7 +358,7 @@ export class PlayerBase {
       pvx *= pd; pvy *= pd;
       this.vx = hx * sp + pvx;
       this.vy = hy * sp + pvy;
-      this._lean += (clamp(steer * Math.min(1, Math.abs(sp) / 130), -1, 1) - this._lean) * Math.min(1, 8 * dt);
+      this._lean += (clamp(Math.sign(step) * turning * Math.min(1, Math.abs(sp) / 130), -1, 1) - this._lean) * Math.min(1, 8 * dt);
     }
 
     // Pohyb + WALL-SLIDE: u mantinelu zruš složku rychlosti DO zdi → sklouzneš podél,
