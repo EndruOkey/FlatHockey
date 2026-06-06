@@ -53,6 +53,10 @@ export class Game {
     this.goalieR = new Goalie('right'); // pravá branka → brání away (červený)
     this.goalieL = new Goalie('left');  // levá branka → brání home (modrý)
 
+    // počáteční otočení čelem k puku (na střed) — hlavně away startuje opačně
+    const fa0 = Math.atan2(RINK.h / 2 - this.local.y, RINK.centerX - this.local.x);
+    this.local.bodyAngle = this.local.skateAngle = this.local.aimAngle = this.local.carryAngle = fa0;
+
     this.world = new World([new Rink(), this.local, this.remote, this.goalieL, this.goalieR, this.puck]);
     this.world.authoritative = isHost;
     this.world.onGoal        = result => this._handleGoal(result);
@@ -223,6 +227,9 @@ export class Game {
       this.local.vx = this.local.vy = 0;
       this.local.hasPuck = false; this.local.charge = 0;
       this._chargeDecaying = false; this._oneTimer = false;
+      // čelem k puku (na střed)
+      const fa = Math.atan2(RINK.h / 2 - this.local.y, RINK.centerX - this.local.x);
+      this.local.bodyAngle = this.local.skateAngle = this.local.aimAngle = this.local.carryAngle = fa;
     }
   }
 
@@ -238,6 +245,9 @@ export class Game {
       this.local.y  = RINK.h / 2;
       this.local.vx = this.local.vy = 0;
       this.local.hasPuck = false;
+      // čelem k puku (na střed)
+      const fa = Math.atan2(RINK.h / 2 - this.local.y, RINK.centerX - this.local.x);
+      this.local.bodyAngle = this.local.skateAngle = this.local.aimAngle = this.local.carryAngle = fa;
       this.remote._tx = this.isHost ? RINK.centerX + 70 : RINK.centerX - 70;
       this.remote._ty = RINK.h / 2;
       this.puck.reset(); // puk na středu, živý → kdo dřív

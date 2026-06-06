@@ -7,7 +7,10 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-app.use(express.static(path.join(__dirname, 'public')));
+// no-store → klienti vždy načtou aktuální verzi (žádná stará cache = rozjeté stavy)
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res) => res.setHeader('Cache-Control', 'no-store'),
+}));
 
 const rooms = new Map();
 
