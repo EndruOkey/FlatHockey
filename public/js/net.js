@@ -7,9 +7,11 @@ export class Net {
   constructor() {
     this.socket = window.io();
     this.pc = null;
-    this.dc = null;
+    this.dc = null;          // 'game' — nespolehlivý, rychlý stav (60×/s)
+    this.rc = null;          // 'events' — spolehlivý, ordered (střely/přihrávky/grab…)
     this.isHost = false;
     this.connected = false;
+    this._announced = false; // onConnected jen jednou
     this.pendingCandidates = [];
 
     this.onMessage = null;
@@ -40,18 +42,20 @@ export class Net {
   }
 
   send(data) {
-    if (this.dc?.readyState === 'open') {
-      this.dc.send(JSON.stringify(data));
-    }
+    // Vše kromě high-frequency 'state' jde spolehlivým kanálem (střely/přihrávky/grab…),
+    // aby se kritické akce neztrácely → puk šel spolehlivě odehrát.
+    const ch = (data.t === 'state') ? this.dc : this.rc;
+    if (ch?.readyState === 'open') ch.send(JSON.stringify(data));
   }
 
   // Čisté odpojení — zavře P2P i socket, server uvolní slot v místnosti
   leave() {
     this.connected = false;
     try { this.dc?.close(); } catch {}
+    try { this.rc?.close(); } catch {}
     try { this.pc?.close(); } catch {}
     try { this.socket?.disconnect(); } catch {}
-    this.dc = null; this.pc = null;
+    this.dc = null; this.rc = null; this.pc = null;
   }
 
   async _initPeer() {
@@ -63,10 +67,6 @@ export class Net {
     };
 
     this.pc.onconnectionstatechange = () => {
-      if (this.pc.connectionState === 'connected') {
-        this.connected = true;
-        this.onConnected?.();
-      }
       if (['disconnected', 'failed', 'closed'].includes(this.pc.connectionState)) {
         this.connected = false;
         this.onDisconnected?.();
@@ -74,20 +74,32 @@ export class Net {
     };
 
     if (this.isHost) {
-      this.dc = this.pc.createDataChannel('game', { ordered: false, maxRetransmits: 0 });
+      this.dc = this.pc.createDataChannel('game',   { ordered: false, maxRetransmits: 0 });
+      this.rc = this.pc.createDataChannel('events', { ordered: true });   // spolehlivý
       this._setupChannel(this.dc);
+      this._setupChannel(this.rc);
     } else {
       this.pc.ondatachannel = ({ channel }) => {
-        this.dc = channel;
+        if (channel.label === 'events') this.rc = channel; else this.dc = channel;
         this._setupChannel(channel);
       };
     }
   }
 
   _setupChannel(ch) {
-    ch.onopen = () => { this.connected = true; this.onConnected?.(); };
+    ch.onopen = () => this._maybeConnected();
     ch.onclose = () => { this.connected = false; this.onDisconnected?.(); };
     ch.onmessage = ({ data }) => { try { this.onMessage?.(JSON.parse(data)); } catch {} };
+  }
+
+  // onConnected až když jsou OBA kanály otevřené (a jen jednou)
+  _maybeConnected() {
+    if (this._announced) return;
+    if (this.dc?.readyState === 'open' && this.rc?.readyState === 'open') {
+      this._announced = true;
+      this.connected = true;
+      this.onConnected?.();
+    }
   }
 
   async _createOffer() {

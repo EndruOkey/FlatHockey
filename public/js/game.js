@@ -224,7 +224,7 @@ export class Game {
       ctx.font = '13px monospace'; ctx.textAlign = 'left';
       ctx.fillStyle = '#33ff66';
       ctx.fillText(
-        `${this.isHost ? 'HOST' : 'GUEST'} v11  lp:${this.local.hasPuck ? 1 : 0} rp:${this.remote?.hasPuck ? 1 : 0} ` +
+        `${this.isHost ? 'HOST' : 'GUEST'} v12  lp:${this.local.hasPuck ? 1 : 0} rp:${this.remote?.hasPuck ? 1 : 0} ` +
         `po:${this._dbgPo ?? '-'} canPickup:${cp} dist:${d} z:${Math.round(this.puck.z)} shootCD:${this.local._shootCooldown.toFixed(2)}`,
         12, ctx.canvas.height - 14);
     } catch (e) {
