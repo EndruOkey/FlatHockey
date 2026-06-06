@@ -174,6 +174,8 @@ export class Game {
         msg.px = this.puck.x;  msg.py  = this.puck.y;
         msg.pvx = this.puck.vx; msg.pvy = this.puck.vy;
         msg.sc = this.score;
+        // vlastník puku: 1 = host (local), 2 = klient (remote), 0 = volný
+        msg.po = this.local.hasPuck ? 1 : (this.remote.hasPuck ? 2 : 0);
       }
       this.net.send(msg);
     }
@@ -206,6 +208,8 @@ export class Game {
         this.puck._netX = msg.px;  this.puck._netY = msg.py;
         this.puck.vx    = msg.pvx; this.puck.vy    = msg.pvy;
       }
+      // Vlastnictví puku je host-authoritative: po===2 → můj (klientův) hráč drží puk
+      if (!this.isHost && msg.po !== undefined) this.local.hasPuck = (msg.po === 2);
       if (!this.isHost && msg.sc) this.score = msg.sc;
       return;
     }
@@ -213,6 +217,13 @@ export class Game {
     if (msg.t === 'pass'    && this.isHost) this.remote.pass(this.puck, msg.aim, msg.fh !== 0);
     if (msg.t === 'goal')   this._flashGoal(msg.text);
     if (msg.t === 'passreq') this.remote.passReq = 0.9;
+    if (msg.t === 'faceoff') {
+      // Buly: host řekl, kam si mám postavit hráče → snap (jinak pozice rozjeté)
+      this.local.x = msg.rx; this.local.y = msg.ry;
+      this.local.vx = this.local.vy = 0;
+      this.local.hasPuck = false; this.local.charge = 0;
+      this._chargeDecaying = false; this._oneTimer = false;
+    }
   }
 
   _handleGoal(result) {
@@ -231,6 +242,8 @@ export class Game {
       this.remote._ty = RINK.h / 2;
       this.puck.reset(); // puk na středu, živý → kdo dřív
       this.world._goalLock = false;
+      // Klient sám gól nereaguje (host-authoritative) → pošli mu jeho buly pozici
+      this.net?.send({ t: 'faceoff', rx: this.remote._tx, ry: this.remote._ty });
     }, 1200);
   }
 

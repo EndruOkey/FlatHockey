@@ -57,20 +57,45 @@ export class Puck {
 
   get isAirborne() { return this.z > 1.5; }
 
-  // Klient (non-host): puk neřídí fyzika, ale stav od hosta. Dead-reckoning podle
-  // rychlosti + plynulá korekce k poslednímu cíli → žádné teleportování/sekání.
-  _interpolateNet(dt) {
-    if (this._netX === undefined) return;
+  // Puk přesně na vykreslené lopatě majitele — sdíleno hostem i klientem,
+  // ať puk drží u hokejky stejně na obou obrazovkách (konzistence).
+  _cradleTo(owner) {
+    const stickAng   = owner._stickDisp ?? owner.carryAngle ?? owner.aimAngle;
+    const dispCharge = owner._dispCharge ?? 0;
+    const reach      = (owner._dispReach ?? PLAYER.stickLen) * (1 - dispCharge * 0.30);
+    const grip       = owner.gripPoint ? owner.gripPoint : { x: owner.x, y: owner.y };
+    const heelX = grip.x + Math.cos(stickAng) * reach;
+    const heelY = grip.y + Math.sin(stickAng) * reach;
+    const bladeAngle = (owner.handed ?? 1) * Math.PI / 6.5;
+    const bladeDir   = stickAng + bladeAngle;
+    const along      = (0.5 - dispCharge * 0.18) * 12;
+    const bx = heelX + Math.cos(bladeDir) * along;
+    const by = heelY + Math.sin(bladeDir) * along;
+    const bladeSide = owner.forehand !== false ? 1 : -1;
+    const perpX     = -Math.sin(bladeDir);
+    const perpY     =  Math.cos(bladeDir);
+    const snug      = 1 - dispCharge * 0.5;
+    this.x = bx + perpX * PUCK.radius * bladeSide * snug;
+    this.y = by + perpY * PUCK.radius * bladeSide * snug;
+    this.vx = owner.vx; this.vy = owner.vy;
+    this.z = 0; this.vz = 0;
+  }
+
+  // Klient (non-host): puk řídí stav od hosta. Drží-li puk hráč → cradle lokálně
+  // (žádný lag/rozjezd). Volný puk → plynulá konvergence k poslední pozici od hosta.
+  _interpolateNet(dt, world) {
     this.prevX = this.x; this.prevY = this.y;
-    this.x += this.vx * dt; this.y += this.vy * dt;
-    this._netX += this.vx * dt; this._netY += this.vy * dt;
-    const k = Math.min(1, 12 * dt);
+    const owner = world.players.find(p => p.hasPuck);
+    if (owner) { this._cradleTo(owner); this.ownerId = owner.id; return; }
+    this.ownerId = null;
+    if (this._netX === undefined) return;
+    const k = Math.min(1, 24 * dt);
     this.x += (this._netX - this.x) * k;
     this.y += (this._netY - this.y) * k;
   }
 
   update(dt, world) {
-    if (!world.authoritative) { this._interpolateNet(dt); return; }
+    if (!world.authoritative) { this._interpolateNet(dt, world); return; }
 
     this.prevX = this.x;
     this.prevY = this.y;
@@ -84,32 +109,8 @@ export class Puck {
         this.ownerId  = null;
         return;
       }
-      // Puk sedí PŘESNĚ na vykreslené lopatě — stejná geometrie jako _renderPlayer:
-      // úhel = _stickDisp (vyhlazený, už obsahuje windup), délka dříku zkrácená nabitím.
-      const stickAng   = owner._stickDisp ?? owner.carryAngle ?? owner.aimAngle;
-      const dispCharge = owner._dispCharge ?? 0;
-      const reach      = (owner._dispReach ?? PLAYER.stickLen) * (1 - dispCharge * 0.30);
-      const grip       = owner.gripPoint ? owner.gripPoint : { x: owner.x, y: owner.y };
-      // pata čepele = konec dříku (shodné s render tipX/tipY)
-      const heelX = grip.x + Math.cos(stickAng) * reach;
-      const heelY = grip.y + Math.sin(stickAng) * reach;
-      // čepel míří od paty pod úhlem dle ruky (shodné s render bladeAngle=12 px, ~28°)
-      const bladeAngle = (owner.handed ?? 1) * Math.PI / 6.5;
-      const bladeDir   = stickAng + bladeAngle;
-      const along      = (0.5 - dispCharge * 0.18) * 12; // bod na čepeli; při nabití blíž patě
-      const bx = heelX + Math.cos(bladeDir) * along;
-      const by = heelY + Math.sin(bladeDir) * along;
-      // puk leží na HRACÍ PLOŠE lopaty → odsazen kolmo na ČEPEL (ne na dřík)
-      const bladeSide = owner.forehand !== false ? 1 : -1;
-      const perpX     = -Math.sin(bladeDir);
-      const perpY     =  Math.cos(bladeDir);
-      const snug      = 1 - dispCharge * 0.5; // při nabití puk přitažen těsně k čepeli
-      this.x = bx + perpX * PUCK.radius * bladeSide * snug;
-      this.y = by + perpY * PUCK.radius * bladeSide * snug;
-      this.vx      = owner.vx;
-      this.vy      = owner.vy;
-      this.z       = 0;
-      this.vz      = 0;
+      // Puk přesně na lopatě (sdílená geometrie s klientem i _renderPlayer)
+      this._cradleTo(owner);
       this.ownerId = owner.id;
       return;
     }
