@@ -122,11 +122,9 @@ function rebuildEntities(match) {
 }
 
 function faceoff(match) {
-  let i = 0;
   for (const p of match.players.values()) {
     p.x = p.team === 'home' ? RINK.centerX - 70 : RINK.centerX + 70;
-    p.y = RINK.h / 2 + (i++ ? 40 : -40) * 0; // 1v1: na střed; víc hráčů rozprostřeme později
-    p.y = RINK.h / 2;
+    p.y = RINK.h / 2; // 1v1 na střed; pro víc hráčů rozprostřeme později
     p.vx = p.vy = 0; p.hasPuck = false; p.charge = 0;
     p._chargeDecaying = false; p._oneTimer = false;
     const fa = Math.atan2(RINK.h / 2 - p.y, RINK.centerX - p.x);

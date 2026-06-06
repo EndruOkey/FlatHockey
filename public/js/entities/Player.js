@@ -31,11 +31,7 @@ export class PlayerBase {
     this.carryAngle      = 0;      // úhel hole nesoucí puk (otáčí se omezeně → klička/anti-vrtulník)
     this.aimDist         = PLAYER.stickLen; // vzdálenost kurzoru od těla → dosah hole
     this._dispReach      = PLAYER.stickLen; // vyhlazený dosah pro vykreslení/cradle
-    this._carveLoad      = 0;      // nabraná energie v zatáčce → crossover výbuch
     this._lean           = 0;      // náklon do zatáčky (vizuál)
-    this._shiftWas       = false;  // náběhová hrana Shiftu
-    this._shiftBurst     = 0;      // časovač odrazu (Shift)
-    this._overTurnT      = 0;      // jak dlouho míříš mimo hůl (slip až po chvíli)
     this._deflectCool    = 0;      // cooldown tečování (deflection)
     this._shootCooldown  = 0;
     this._passCooldown   = 0;     // prevents crossCheck flicker after pass
@@ -127,7 +123,6 @@ export class PlayerBase {
     this.hasPuck    = true;
     this.forehand   = true;
     this.carryAngle = this.aimAngle; // puk navázán na aktuální směr hole
-    this._overTurnT = 0;
   }
 
   tryPickup(puck) {
