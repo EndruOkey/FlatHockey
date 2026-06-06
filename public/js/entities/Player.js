@@ -101,7 +101,8 @@ export class PlayerBase {
     return { x: gx + cos * t, y: gy + sin * t };
   }
 
-  tryPickup(puck) {
+  // Může tenhle hráč TEĎ sebrat puk? (geometrie + rychlost, bez mutace)
+  canPickup(puck) {
     if (puck.isAirborne) return false;
     if (this._shootCooldown > 0) return false;
     const tip = this.stickTip;
@@ -115,10 +116,19 @@ export class PlayerBase {
     // Při nabíjení (one-timer) přijmeš i rychlou nahrávku — usnadní načasování
     const maxRel = this.charge > 0 ? 9999 : PLAYER.pickupMaxRelSpeed;
     if (Math.hypot(puck.vx - this.vx, puck.vy - this.vy) > maxRel) return false;
+    return true;
+  }
+
+  _grabPuck() {
     this.hasPuck    = true;
     this.forehand   = true;
     this.carryAngle = this.aimAngle; // puk navázán na aktuální směr hole
     this._overTurnT = 0;
+  }
+
+  tryPickup(puck) {
+    if (!this.canPickup(puck)) return false;
+    this._grabPuck();
     return true;
   }
 

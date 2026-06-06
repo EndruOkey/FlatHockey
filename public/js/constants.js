@@ -19,7 +19,7 @@ export const PLAYER = {
   turnRate: 3.8,   // rotace — střed: ovladatelná, ne těžkopádná ani twitchy
   stickLen: 16,    // úměrně k tělu
   pickupTipRadius: 10,     // dosah čepele na puk (velkorysejší úchop)
-  pickupMaxRelSpeed: 252,
+  pickupMaxRelSpeed: 330,  // ať jde chytit i přihrávka (passSpeed 288)
   colors: { home: '#3a9fff', away: '#ff4455', passer: '#22cc88' },
 };
 

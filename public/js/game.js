@@ -70,6 +70,7 @@ export class Game {
     this._oneTimer         = false;
     this._seq              = 0;   // pořadové číslo odchozích state paketů
     this._lastSeq          = 0;   // poslední přijaté → zahazuje přeházené/staré (anti-stutter)
+    this._grabCool         = 0;   // throttle klientské predikce sebrání puku
 
     if (net) net.onMessage = msg => this._onMessage(msg);
   }
@@ -155,6 +156,17 @@ export class Game {
 
     this.input.flush();
 
+    // Klientská predikce sebrání: host vidí guesta opožděně a jeho čepel na puk
+    // netrefí. Vidím-li čepel na puku v reálném čase, požádám hosta a optimisticky
+    // puk držím (host potvrdí/zamítne přes `po`).
+    if (this._grabCool > 0) this._grabCool -= dt;
+    if (!this.isHost && !this.local.hasPuck && this._grabCool <= 0 &&
+        this.local.canPickup(this.puck)) {
+      this.net?.send({ t: 'grab' });
+      this.local._grabPuck();
+      this._grabCool = 0.2;
+    }
+
     if (this.goalFlash > 0) this.goalFlash -= dt;
 
     this._sendAccum += dt;
@@ -224,6 +236,14 @@ export class Game {
     }
     if (msg.t === 'shoot'   && this.isHost) this.remote.shoot(this.puck, msg.charge, msg.fh !== 0);
     if (msg.t === 'pass'    && this.isHost) this.remote.pass(this.puck, msg.aim, msg.fh !== 0);
+    if (msg.t === 'grab'    && this.isHost) {
+      // Klient hlásí sebrání (ověřil čepel v reálném čase). Host potvrdí, je-li puk
+      // volný a klient je u puku (sanity proti teleportu).
+      const free = !this.local.hasPuck && !this.remote.hasPuck &&
+                   !this.goalieL.isHolding && !this.goalieR.isHolding && !this.world._goalLock;
+      const near = Math.hypot(this.puck.x - this.remote.x, this.puck.y - this.remote.y) < 40;
+      if (free && near && this.puck.z < 6) this.remote._grabPuck();
+    }
     if (msg.t === 'goal')   this._flashGoal(msg.text);
     if (msg.t === 'passreq') this.remote.passReq = 0.9;
     if (msg.t === 'faceoff') {
