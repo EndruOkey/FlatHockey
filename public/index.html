@@ -77,6 +77,20 @@
       color: #333; font-size: 0.72rem;
       pointer-events: none; white-space: nowrap;
     }
+
+    #pause-menu {
+      position: fixed; inset: 0;
+      display: none; align-items: center; justify-content: center;
+      background: rgba(7,9,15,0.82);
+      z-index: 20;
+    }
+    #pause-menu .box { min-width: 280px; }
+    #pause-menu h2 {
+      font-size: 1.6rem; font-weight: 800; letter-spacing: 0.14em;
+      margin-bottom: 22px; color: #e6e8ee;
+    }
+    #resume-btn { background: linear-gradient(135deg, #2266cc, #1144aa); }
+    #leave-btn  { background: #3a1620; border: 1px solid #5a2230; color: #ff8a9a; }
   </style>
 </head>
 <body>
@@ -101,7 +115,15 @@
     </div>
   </div>
 
-  <div id="hint">WASD jezdi (A/D zatáčí) &nbsp;·&nbsp; Shift ostrý cut &nbsp;·&nbsp; Myš miř &nbsp;·&nbsp; LMB střela (drž = nabití) &nbsp;·&nbsp; RMB přihrávka &nbsp;·&nbsp; Space brzda</div>
+  <div id="hint">WASD jezdi (A/D zatáčí) &nbsp;·&nbsp; Shift ostrý cut &nbsp;·&nbsp; Myš miř &nbsp;·&nbsp; LMB střela (drž = nabití) &nbsp;·&nbsp; RMB přihrávka &nbsp;·&nbsp; Space brzda &nbsp;·&nbsp; Esc menu</div>
+
+  <div id="pause-menu">
+    <div class="box">
+      <h2 id="pause-title">PAUZA</h2>
+      <button id="resume-btn">POKRAČOVAT</button>
+      <button id="leave-btn">ODPOJIT — ZPĚT DO MENU</button>
+    </div>
+  </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script type="module" src="/js/main.js"></script>

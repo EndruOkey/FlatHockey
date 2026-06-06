@@ -45,6 +45,15 @@ export class Net {
     }
   }
 
+  // Čisté odpojení — zavře P2P i socket, server uvolní slot v místnosti
+  leave() {
+    this.connected = false;
+    try { this.dc?.close(); } catch {}
+    try { this.pc?.close(); } catch {}
+    try { this.socket?.disconnect(); } catch {}
+    this.dc = null; this.pc = null;
+  }
+
   async _initPeer() {
     this.pendingCandidates = [];
     this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });

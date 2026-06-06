@@ -10,6 +10,10 @@ const soloBtn = document.getElementById('solo-btn');
 const status  = document.getElementById('status');
 const nameInput = document.getElementById('name-input');
 const handBtns  = document.querySelectorAll('.hand-btn');
+const pauseMenu = document.getElementById('pause-menu');
+const pauseTitle = document.getElementById('pause-title');
+const resumeBtn = document.getElementById('resume-btn');
+const leaveBtn  = document.getElementById('leave-btn');
 const LAST_ROOM_KEY = 'hockey_last_room';
 const NAME_KEY = 'hockey_name';
 const HAND_KEY = 'hockey_hand';
@@ -49,11 +53,43 @@ function resizeCanvas() {
 resizeCanvas();
 window.addEventListener('resize', resizeCanvas);
 
+let currentNet = null;
+
 function startGame(game) {
   lobby.style.display = 'none';
   canvas.style.cursor = 'crosshair';
+  currentNet = game.net ?? null;
+  if (currentNet) {
+    // Ve hře: odpojení soupeře otevře menu (ne jen lobby status, který je skrytý)
+    currentNet.onDisconnected = () => showPauseMenu('SOUPEŘ SE ODPOJIL', true);
+  }
   game.start();
 }
+
+// ── Esc menu / odpojení ──────────────────────────────────────────────
+function showPauseMenu(title = 'PAUZA', disconnected = false) {
+  pauseTitle.textContent = title;
+  resumeBtn.style.display = disconnected ? 'none' : '';
+  pauseMenu.style.display = 'flex';
+}
+function hidePauseMenu() { pauseMenu.style.display = 'none'; }
+
+resumeBtn.addEventListener('click', hidePauseMenu);
+leaveBtn.addEventListener('click', () => {
+  currentNet?.leave();      // uvolní slot na serveru
+  location.reload();         // zpět do lobby
+});
+
+window.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (lobby.style.display !== 'none') return; // jen ve hře, ne v lobby
+  if (pauseMenu.style.display === 'flex') hidePauseMenu();
+  else showPauseMenu('PAUZA', false);
+});
+
+// Zavření/refresh stránky → čisté odpojení, server uvolní místnost
+window.addEventListener('beforeunload', () => currentNet?.leave());
+window.addEventListener('pagehide',     () => currentNet?.leave());
 
 function setStatus(msg, color = '#888') {
   status.textContent = msg;
