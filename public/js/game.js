@@ -209,6 +209,24 @@ export class Game {
       ctx.fillStyle = `rgba(255, 220, 60, ${alpha})`;
       ctx.fillText(this.goalText, ctx.canvas.width / 2, ctx.canvas.height / 2);
     }
+
+    // DEBUG (dočasné) — stav vlastnictví/pickupu na obou klientech
+    try {
+      const cp = this.local.canPickup(this.puck) ? 1 : 0;
+      const tip = this.local.stickTip;
+      const d = Math.round(Math.min(
+        Math.hypot(this.puck.x - tip.x, this.puck.y - tip.y),
+        Math.hypot(this.puck.x - this.local.x, this.puck.y - this.local.y)));
+      ctx.font = '13px monospace'; ctx.textAlign = 'left';
+      ctx.fillStyle = '#33ff66';
+      ctx.fillText(
+        `${this.isHost ? 'HOST' : 'GUEST'} v9  lp:${this.local.hasPuck ? 1 : 0} rp:${this.remote?.hasPuck ? 1 : 0} ` +
+        `po:${this._dbgPo ?? '-'} canPickup:${cp} dist:${d} z:${Math.round(this.puck.z)} shootCD:${this.local._shootCooldown.toFixed(2)}`,
+        12, ctx.canvas.height - 14);
+    } catch (e) {
+      ctx.fillStyle = '#ff5555'; ctx.font = '13px monospace'; ctx.textAlign = 'left';
+      ctx.fillText('DBG ERR: ' + e.message, 12, ctx.canvas.height - 14);
+    }
   }
 
   _onMessage(msg) {
@@ -230,7 +248,7 @@ export class Game {
         this.puck.vx    = msg.pvx; this.puck.vy    = msg.pvy;
       }
       // Vlastnictví puku je host-authoritative: po===2 → můj (klientův) hráč drží puk
-      if (!this.isHost && msg.po !== undefined) this.local.hasPuck = (msg.po === 2);
+      if (!this.isHost && msg.po !== undefined) { this.local.hasPuck = (msg.po === 2); this._dbgPo = msg.po; }
       if (!this.isHost && msg.sc) this.score = msg.sc;
       return;
     }
