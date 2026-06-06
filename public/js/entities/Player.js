@@ -618,13 +618,14 @@ function _renderPlayer(ctx, p, cam) {
     ctx.stroke();
   }
 
-  // Jméno nad hráčem — v barvě týmu, s tmavým obrysem pro čitelnost
+  // Jméno nad hráčem — v barvě týmu, jemný obrys pro čitelnost (tenké)
   if (p.name) {
-    ctx.font = `bold ${Math.round(10 * s)}px 'Segoe UI', sans-serif`;
+    ctx.font = `${Math.round(9.5 * s)}px 'Segoe UI', sans-serif`;
     ctx.textAlign = 'center';
+    ctx.lineJoin = 'round';
     const ny = sy - r - 7 * s;
-    ctx.lineWidth = 2.5 * s;
-    ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+    ctx.lineWidth = 1.4 * s;
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
     ctx.strokeText(p.name, sx, ny);
     ctx.fillStyle = color;
     ctx.fillText(p.name, sx, ny);
