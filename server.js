@@ -27,9 +27,7 @@ const CHARGE_RATE = 1.4;       // pomalejší nápřah → slap shot je cítit j
 const TICK_HZ = 60;
 const SNAP_HZ = 60;            // snapshot každý tick (ostřejší soupeř)
 const DT = 1 / TICK_HZ;
-const MAX_PLAYERS = 10;        // až 5v5
-
-const rooms = new Map();  // roomId -> match
+const MAX_PLAYERS = 10;        // strop hráčů v lobby (5v5)
 
 function makeInput() {
   return {
@@ -143,7 +141,7 @@ function faceoff(match) {
   match.world._goalLock = false;
 }
 
-function createMatch(roomId) {
+function createMatch(lobbyId) {
   const rink = new Rink();
   const puck = new Puck();
   const goalieL = new Goalie('left');
@@ -151,7 +149,7 @@ function createMatch(roomId) {
   const world = new World([rink, goalieL, goalieR, puck]);
   world.authoritative = true;
   const match = {
-    roomId, world, rink, puck, goalieL, goalieR,
+    room: 'lobby:' + lobbyId, world, rink, puck, goalieL, goalieR,
     players: new Map(),   // socketId -> Player
     inputs:  new Map(),   // socketId -> input obj
     score: { home: 0, away: 0 },
@@ -159,11 +157,31 @@ function createMatch(roomId) {
   };
   world.onGoal = (result) => {
     if (result === 'goal-away') match.score.away++; else match.score.home++;
-    io.to(roomId).emit('goal', { text: result === 'goal-away' ? 'GOAL! 🔴' : 'GOAL! 🔵' });
+    io.to(match.room).emit('goal', { text: result === 'goal-away' ? 'GOAL! 🔴' : 'GOAL! 🔵' });
     match._goalAt = Date.now();
   };
   match.loop = setInterval(() => stepMatch(match), 1000 / TICK_HZ);
   return match;
+}
+
+// Sestav zápas z členů lobby (týmy + dresy z nastavení, číslo z profilu)
+function startMatch(lobby) {
+  const match = createMatch(lobby.id);
+  for (const [sid, m] of lobby.members) {
+    const p = new Player(sid, m.team, makeInput());
+    p.name   = m.name;
+    p.handed = m.handed;
+    p.num    = m.number;
+    const ts = lobby.settings.teams[m.team] || {};
+    p.color  = ts.color || null;
+    p.jersey = ts.style || 'solid';
+    match.players.set(sid, p);
+    match.inputs.set(sid, p.input);
+  }
+  rebuildEntities(match);
+  faceoff(match);
+  lobby.match  = match;
+  lobby.state  = 'playing';
 }
 
 function stepMatch(match) {
@@ -202,7 +220,7 @@ function broadcast(match) {
   }
   const g = (gg) => ({ x: r1(gg.x), y: r1(gg.y), t: r3(gg._tilt), h: gg._holdTimer > 0 ? 1 : 0,
                        st: gg._saveType, sf: r2(gg._saveFlash), sm: r2(gg._saveFlashMax), sc: r2(gg._screen) });
-  io.to(match.roomId).emit('snap', {
+  io.to(match.room).emit('snap', {
     n: match.tick,
     players,
     puck: { x: r1(match.puck.x), y: r1(match.puck.y), z: r1(match.puck.z) },
@@ -216,51 +234,143 @@ const r1 = n => Math.round(n * 10) / 10;
 const r2 = n => Math.round((n || 0) * 100) / 100;
 const r3 = n => Math.round((n || 0) * 1000) / 1000;
 
-// ── Socket.io ────────────────────────────────────────────────────────────
+// ── Lobby systém ───────────────────────────────────────────────────────────
+const lobbies = new Map();  // id -> lobby
+
+function genId() {
+  let id; do { id = Math.random().toString(36).slice(2, 7).toUpperCase(); } while (lobbies.has(id));
+  return id;
+}
+function teamCfg(d, dn, dc) {
+  d = d || {};
+  return {
+    name:  String(d.name || dn).slice(0, 16),
+    color: /^#[0-9a-fA-F]{6}$/.test(d.color) ? d.color : dc,
+    style: ['solid', 'stripes', 'shoulder'].includes(d.style) ? d.style : 'solid',
+  };
+}
+function sanitizeSettings(s) {
+  s = s || {};
+  const t = s.teams || {};
+  return {
+    name:    String(s.name || 'Lobby').slice(0, 24),
+    teams:   { home: teamCfg(t.home, 'Domácí', '#3a9fff'), away: teamCfg(t.away, 'Hosté', '#ff4455') },
+    periods: [1, 3].includes(s.periods) ? s.periods : 3,
+    minutes: [5, 10, 15].includes(s.minutes) ? s.minutes : 10,
+    rules:   !!s.rules,
+    max:     [2, 4, 6, 8, 10].includes(s.max) ? s.max : 10,
+  };
+}
+function makeMember(profile, team) {
+  profile = profile || {};
+  return {
+    name:   String(profile.name || '').slice(0, 12),
+    handed: (profile.handed === -1 || profile.handed === 1) ? profile.handed : 1,
+    number: Number.isInteger(profile.number) ? Math.max(0, Math.min(99, profile.number)) : null,
+    team,
+  };
+}
+function balanceTeam(l) {
+  let h = 0, a = 0;
+  for (const m of l.members.values()) (m.team === 'home' ? h++ : a++);
+  return h <= a ? 'home' : 'away';
+}
+function lobbySummary(l) {
+  return { id: l.id, name: l.settings.name, count: l.members.size, max: l.settings.max, state: l.state,
+           home: l.settings.teams.home.name, away: l.settings.teams.away.name };
+}
+function lobbyState(l) {
+  return {
+    id: l.id, hostId: l.hostId, state: l.state, settings: l.settings,
+    players: [...l.members.entries()].map(([id, m]) => ({ id, name: m.name, team: m.team, number: m.number })),
+  };
+}
+function sendLobbyList(socket) {
+  const list = [...lobbies.values()].filter(l => l.state === 'waiting').map(lobbySummary);
+  (socket || io).emit('lobby:list', list);
+}
+const broadcastLobby = (l) => io.to('lobby:' + l.id).emit('lobby:state', lobbyState(l));
+
+function leaveCurrentLobby(socket) {
+  const id = socket.data.lobbyId;
+  if (!id) return;
+  socket.data.lobbyId = null;
+  socket.leave('lobby:' + id);
+  const l = lobbies.get(id);
+  if (!l) return;
+  l.members.delete(socket.id);
+  if (l.match) { l.match.players.delete(socket.id); l.match.inputs.delete(socket.id); rebuildEntities(l.match); }
+  socket.to('lobby:' + id).emit('peer-left');
+  if (l.members.size === 0) {
+    if (l.match) clearInterval(l.match.loop);
+    lobbies.delete(id);
+  } else {
+    if (l.hostId === socket.id) l.hostId = l.members.keys().next().value; // předej hostování
+    broadcastLobby(l);
+  }
+  sendLobbyList();
+}
+
 io.on('connection', (socket) => {
-  socket.on('join', ({ room, name, hand, color, num, style }) => {
-    let roomId = (room || '').toUpperCase();
-    let match = rooms.get(roomId);
-    if (match && match.players.size >= MAX_PLAYERS) { socket.emit('room-full'); return; }
-    if (!match) { match = createMatch(roomId); rooms.set(roomId, match); }
+  socket.on('lobby:list', () => sendLobbyList(socket));
 
-    // Vyvážené týmy — nový hráč jde do menšího týmu
-    let h = 0, a = 0;
-    for (const pl of match.players.values()) (pl.team === 'home' ? h++ : a++);
-    const team = h <= a ? 'home' : 'away';
-    const p = new Player(socket.id, team, makeInput());
-    p.name = (name || '').slice(0, 12);
-    p.handed = (hand === -1 || hand === 1) ? hand : (team === 'away' ? -1 : 1);
-    // Dres: vlastní barva / číslo / styl
-    p.color  = (typeof color === 'string' && /^#[0-9a-fA-F]{6}$/.test(color)) ? color : null;
-    p.num    = Number.isInteger(num) ? Math.max(0, Math.min(99, num)) : null;
-    p.jersey = ['solid', 'stripes', 'shoulder'].includes(style) ? style : 'solid';
-    match.players.set(socket.id, p);
-    match.inputs.set(socket.id, p.input);
-    rebuildEntities(match);
-    faceoff(match);
-
-    socket.join(roomId);
-    socket.data.roomId = roomId;
-    socket.emit('joined', { id: socket.id, team });
+  socket.on('lobby:create', ({ settings, profile }) => {
+    leaveCurrentLobby(socket);
+    const id = genId();
+    const l = { id, hostId: socket.id, state: 'waiting', settings: sanitizeSettings(settings), members: new Map(), match: null };
+    l.members.set(socket.id, makeMember(profile, 'home'));
+    lobbies.set(id, l);
+    socket.join('lobby:' + id);
+    socket.data.lobbyId = id;
+    socket.emit('lobby:joined', lobbyState(l));
+    sendLobbyList();
   });
 
+  socket.on('lobby:join', ({ id, profile }) => {
+    const l = lobbies.get(id);
+    if (!l || l.state !== 'waiting') { socket.emit('lobby:error', 'Lobby není dostupné.'); return; }
+    if (l.members.size >= l.settings.max) { socket.emit('lobby:error', 'Lobby je plné.'); return; }
+    leaveCurrentLobby(socket);
+    l.members.set(socket.id, makeMember(profile, balanceTeam(l)));
+    socket.join('lobby:' + id);
+    socket.data.lobbyId = id;
+    socket.emit('lobby:joined', lobbyState(l));
+    broadcastLobby(l);
+    sendLobbyList();
+  });
+
+  socket.on('lobby:team', ({ team }) => {
+    const l = lobbies.get(socket.data.lobbyId); if (!l || l.state !== 'waiting') return;
+    const m = l.members.get(socket.id); if (!m) return;
+    if (team === 'home' || team === 'away') { m.team = team; broadcastLobby(l); }
+  });
+
+  socket.on('lobby:settings', ({ settings }) => {
+    const l = lobbies.get(socket.data.lobbyId);
+    if (!l || l.hostId !== socket.id || l.state !== 'waiting') return;
+    l.settings = sanitizeSettings(settings);
+    broadcastLobby(l);
+    sendLobbyList();
+  });
+
+  socket.on('lobby:start', () => {
+    const l = lobbies.get(socket.data.lobbyId);
+    if (!l || l.hostId !== socket.id || l.state !== 'waiting' || l.members.size === 0) return;
+    startMatch(l);
+    io.to('lobby:' + l.id).emit('lobby:start', { settings: l.settings });
+    sendLobbyList();
+  });
+
+  socket.on('lobby:leave', () => leaveCurrentLobby(socket));
+
   socket.on('input', (msg) => {
-    const match = rooms.get(socket.data.roomId);
-    if (!match) return;
-    const inp = match.inputs.get(socket.id);
+    const l = lobbies.get(socket.data.lobbyId);
+    if (!l || !l.match) return;
+    const inp = l.match.inputs.get(socket.id);
     if (inp) applyClientInput(inp, msg);
   });
 
-  socket.on('disconnect', () => {
-    const match = rooms.get(socket.data.roomId);
-    if (!match) return;
-    match.players.delete(socket.id);
-    match.inputs.delete(socket.id);
-    rebuildEntities(match);
-    socket.to(match.roomId).emit('peer-left');
-    if (match.players.size === 0) { clearInterval(match.loop); rooms.delete(match.roomId); }
-  });
+  socket.on('disconnect', () => leaveCurrentLobby(socket));
 });
 
 const PORT = process.env.PORT || 3000;

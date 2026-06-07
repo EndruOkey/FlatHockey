@@ -1,28 +1,37 @@
-// Tenký klient k server-authoritative simulaci přes socket.io.
+// Tenký klient k server-authoritative simulaci + lobby systému (socket.io).
 export class Net {
   constructor() {
     this.socket = window.io();
-    this.id = null;
-    this.team = null;
+    this.id = this.socket.id || null;
 
-    this.onJoined   = null;
-    this.onSnap     = null;
-    this.onGoal     = null;
-    this.onPeerLeft = null;
-    this.onFull     = null;
+    this.onLobbyList   = null;
+    this.onLobbyJoined = null;
+    this.onLobbyState  = null;
+    this.onLobbyStart  = null;
+    this.onLobbyError  = null;
+    this.onSnap        = null;
+    this.onGoal        = null;
+    this.onPeerLeft    = null;
 
-    this.socket.on('joined', d => { this.id = d.id; this.team = d.team; this.onJoined?.(d); });
-    this.socket.on('snap',   d => this.onSnap?.(d));
-    this.socket.on('goal',   d => this.onGoal?.(d));
+    this.socket.on('connect', () => { this.id = this.socket.id; });
+    this.socket.on('lobby:list',   d => this.onLobbyList?.(d));
+    this.socket.on('lobby:joined', d => this.onLobbyJoined?.(d));
+    this.socket.on('lobby:state',  d => this.onLobbyState?.(d));
+    this.socket.on('lobby:start',  d => this.onLobbyStart?.(d));
+    this.socket.on('lobby:error',  d => this.onLobbyError?.(d));
+    this.socket.on('snap', d => this.onSnap?.(d));
+    this.socket.on('goal', d => this.onGoal?.(d));
     this.socket.on('peer-left', () => this.onPeerLeft?.());
-    this.socket.on('room-full', () => this.onFull?.());
   }
 
-  join(room, name, hand, color, num, style) {
-    this.socket.emit('join', { room, name, hand, color, num, style });
-  }
+  listLobbies()              { this.socket.emit('lobby:list'); }
+  createLobby(settings, profile) { this.socket.emit('lobby:create', { settings, profile }); }
+  joinLobby(id, profile)     { this.socket.emit('lobby:join', { id, profile }); }
+  setTeam(team)              { this.socket.emit('lobby:team', { team }); }
+  updateSettings(settings)   { this.socket.emit('lobby:settings', { settings }); }
+  startLobby()               { this.socket.emit('lobby:start'); }
+  leaveLobby()               { this.socket.emit('lobby:leave'); }
 
   input(msg) { this.socket.emit('input', msg); }
-
-  leave() { try { this.socket?.disconnect(); } catch {} }
+  leave()    { try { this.socket?.disconnect(); } catch {} }
 }

@@ -69,22 +69,41 @@
     }
     .hand-btn.active { background: #1b2740; border-color: #3a9fff; color: #fff; }
 
-    #jersey-row { display: flex; gap: 8px; margin-bottom: 10px; align-items: stretch; }
-    #color-input {
-      width: 46px; padding: 4px; margin: 0; flex: none;
-      background: #141720; border: 1px solid #2a2d3a; border-radius: 8px; cursor: pointer;
-    }
-    #num-input {
-      width: 56px; margin: 0; flex: none; padding: 11px 6px;
-      font-size: 1rem; letter-spacing: 0.1em;
-    }
-    #style-toggle { display: flex; gap: 6px; flex: 1; }
-    .style-btn {
-      flex: 1; padding: 11px 4px; margin: 0;
-      background: #141720; border: 1px solid #2a2d3a; border-radius: 8px;
-      color: #777; font-size: 0.66rem; font-weight: 700; letter-spacing: 0.04em;
-    }
-    .style-btn.active { background: #1b2740; border-color: #3a9fff; color: #fff; }
+    .prof-row { display: flex; gap: 8px; margin-bottom: 14px; }
+    .prof-row #hand-toggle { flex: 1; margin: 0; }
+    #num-input { width: 64px; margin: 0; padding: 11px 6px; font-size: 1rem; letter-spacing: 0.06em; }
+
+    .view { display: flex; flex-direction: column; }
+    .row2 { display: flex; gap: 8px; }
+    .row2 > button { flex: 1; }
+    #create-btn { background: linear-gradient(135deg, #2266cc, #1144aa); }
+    button.ghost { background: #181c26; border: 1px solid #2a2d3a; }
+    #refresh-btn { flex: none; width: 48px; }
+
+    #lobby-list { max-height: 230px; overflow-y: auto; margin: 10px 0; display: flex; flex-direction: column; gap: 6px; }
+    .lobby-item { display: flex; justify-content: space-between; align-items: center; gap: 8px;
+      padding: 10px 12px; background: #141720; border: 1px solid #2a2d3a; border-radius: 8px; cursor: pointer; }
+    .lobby-item:hover { border-color: #3a9fff; }
+    .lobby-item .li-name { font-weight: 700; font-size: 0.92rem; }
+    .lobby-item .li-sub { color: #667; font-size: 0.72rem; }
+    .lobby-item .li-cnt { color: #6ee0a0; font-size: 0.82rem; font-weight: 700; }
+    #lobby-list:empty::after { content: 'Žádná lobby — vytvoř první.'; color: #556; font-size: 0.8rem; text-align: center; padding: 18px 0; }
+
+    .team-row { display: flex; gap: 6px; margin-bottom: 8px; }
+    .team-row .tname { flex: 1; margin: 0; text-transform: none; letter-spacing: normal; text-align: left; font-size: 0.9rem; padding: 10px; }
+    .team-row input[type=color] { width: 42px; padding: 4px; margin: 0; background: #141720; border: 1px solid #2a2d3a; border-radius: 8px; }
+    .team-row select, .set-row select { background: #141720; color: #fff; border: 1px solid #2a2d3a; border-radius: 8px; padding: 7px; font-size: 0.85rem; }
+    .set-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; color: #9aa; font-size: 0.76rem; align-items: center; }
+    .set-row label { display: flex; flex-direction: column; gap: 3px; }
+    .set-row label.chk { flex-direction: row; align-items: center; gap: 5px; }
+
+    #wait-teams { display: flex; gap: 8px; margin-bottom: 4px; }
+    .wt-col { flex: 1; background: #141720; border: 1px solid #2a2d3a; border-radius: 8px; padding: 8px 10px; min-height: 70px; }
+    .wt-col h3 { font-size: 0.82rem; margin-bottom: 6px; }
+    .wt-col .wt-p { font-size: 0.82rem; color: #cdd; padding: 1px 0; }
+    .pick-btn { font-size: 0.7rem; padding: 9px 4px; background: #141720; border: 1px solid #2a2d3a; }
+    #start-btn { margin-top: 10px; background: linear-gradient(135deg, #19a86a, #0c7a4a); }
+    #start-btn:disabled { opacity: 0.4; cursor: default; }
 
     #status { color: #666; font-size: 0.82rem; min-height: 18px; margin-top: 10px; }
 
@@ -116,27 +135,65 @@
   <div id="lobby">
     <div class="box">
       <h1>HOCKEY</h1>
-      <p class="sub">online · server-authoritative</p>
+      <p class="sub">online · flathockey.fun</p>
 
-      <input id="name-input" type="text" placeholder="YOUR NAME" maxlength="12" autocomplete="off" spellcheck="false" />
-      <div id="hand-toggle">
-        <button class="hand-btn" data-hand="-1">LEVÁK</button>
-        <button class="hand-btn active" data-hand="1">PRAVÁK</button>
+      <!-- Profil hráče -->
+      <input id="name-input" type="text" placeholder="TVÉ JMÉNO" maxlength="12" autocomplete="off" spellcheck="false" />
+      <div class="prof-row">
+        <div id="hand-toggle">
+          <button class="hand-btn" data-hand="-1">LEVÁK</button>
+          <button class="hand-btn active" data-hand="1">PRAVÁK</button>
+        </div>
+        <input id="num-input" type="number" min="0" max="99" placeholder="č." title="Číslo dresu" />
       </div>
 
-      <div id="jersey-row">
-        <input id="color-input" type="color" value="#3a9fff" title="Barva dresu" />
-        <input id="num-input" type="number" min="0" max="99" placeholder="#" />
-        <div id="style-toggle">
-          <button class="style-btn active" data-style="solid">SOLID</button>
-          <button class="style-btn" data-style="stripes">PRUHY</button>
-          <button class="style-btn" data-style="shoulder">RAMENA</button>
+      <!-- Procházení lobby -->
+      <div id="browse-view" class="view">
+        <div class="row2">
+          <button id="create-btn">+ VYTVOŘIT LOBBY</button>
+          <button id="refresh-btn" class="ghost">⟳</button>
+        </div>
+        <div id="lobby-list"></div>
+        <button id="solo-btn" class="ghost">SOLO TRÉNINK</button>
+      </div>
+
+      <!-- Vytvoření lobby -->
+      <div id="create-view" class="view" style="display:none">
+        <input id="lobby-name" type="text" placeholder="NÁZEV LOBBY" maxlength="24" />
+        <div class="team-row">
+          <input id="hteam-name" class="tname" type="text" placeholder="Domácí" maxlength="16" />
+          <input id="hteam-color" type="color" value="#3a9fff" />
+          <select id="hteam-style"><option value="solid">solid</option><option value="stripes">pruhy</option><option value="shoulder">ramena</option></select>
+        </div>
+        <div class="team-row">
+          <input id="ateam-name" class="tname" type="text" placeholder="Hosté" maxlength="16" />
+          <input id="ateam-color" type="color" value="#ff4455" />
+          <select id="ateam-style"><option value="solid">solid</option><option value="stripes">pruhy</option><option value="shoulder">ramena</option></select>
+        </div>
+        <div class="set-row">
+          <label>Třetiny<select id="set-periods"><option>1</option><option selected>3</option></select></label>
+          <label>Minuty<select id="set-minutes"><option>5</option><option selected>10</option><option>15</option></select></label>
+          <label>Hráčů<select id="set-max"><option>2</option><option>4</option><option>6</option><option>8</option><option selected>10</option></select></label>
+          <label class="chk"><input id="set-rules" type="checkbox" />Pravidla</label>
+        </div>
+        <div class="row2">
+          <button id="create-go">VYTVOŘIT</button>
+          <button id="create-back" class="ghost">ZPĚT</button>
         </div>
       </div>
 
-      <input id="room-input" type="text" placeholder="ROOM CODE" maxlength="8" autocomplete="off" spellcheck="false" />
-      <button id="join-btn">JOIN / CREATE ROOM</button>
-      <button id="solo-btn">SOLO MODE</button>
+      <!-- Čekárna -->
+      <div id="wait-view" class="view" style="display:none">
+        <h2 id="wait-title">Lobby</h2>
+        <p id="wait-info" class="sub" style="margin-bottom:12px"></p>
+        <div id="wait-teams"></div>
+        <div id="team-pick" class="row2" style="margin-top:8px">
+          <button class="pick-btn" data-team="home">DO DOMÁCÍCH</button>
+          <button class="pick-btn" data-team="away">DO HOSTŮ</button>
+        </div>
+        <button id="start-btn">START</button>
+        <button id="wait-leave" class="ghost">ODEJÍT</button>
+      </div>
 
       <div id="status"></div>
     </div>
