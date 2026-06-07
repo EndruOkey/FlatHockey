@@ -57,8 +57,14 @@ export class NetGame {
     this.score   = { home: 0, away: 0 };
     this.goalFlash = 0; this.goalText = '';
 
+    this.call = null;   // odpískané pravidlo (offside/icing) — banner + zvýraznění čáry
+    this._cam = null;
     net.onSnap = s => this._onSnap(s);
     net.onGoal = g => { this.goalFlash = 2.5; this.goalText = g.text; };
+    net.onWhistle = d => {
+      const txt = d.rule === 'offside' ? 'OFFSIDE' : 'ZAKÁZANÉ UVOLNĚNÍ';
+      this.call = { text: txt, lineX: d.lineX, color: d.color, t: 1.5 };
+    };
 
     // Render-svět pro Engine: update = interpolace, draw = vykreslení
     this.renderWorld = {
@@ -77,6 +83,8 @@ export class NetGame {
   }
 
   _tick(dt, cam) {
+    this._cam = cam;
+    if (this.call && (this.call.t -= dt) <= 0) this.call = null;
     const me = this.localEnt;
     let aim = 0, aimDist = 100;
     if (me) {
@@ -228,6 +236,21 @@ export class NetGame {
       ctx.fillStyle = `rgba(255,220,60,${a * 0.12})`; ctx.fillRect(0, 0, W, H);
       ctx.font = 'bold 64px monospace'; ctx.textAlign = 'center'; ctx.fillStyle = `rgba(255,220,60,${a})`;
       ctx.fillText(this.goalText, cx, H / 2);
+    }
+
+    // Odpískané pravidlo — zvýraznění čáry na ledě + banner
+    if (this.call && this._cam) {
+      const a = Math.min(1, this.call.t);
+      const cam = this._cam;
+      const lx = cam.ox + this.call.lineX * cam.scale;
+      const y0 = cam.oy, y1 = cam.oy + RINK.h * cam.scale;
+      ctx.save();
+      ctx.strokeStyle = this.call.color; ctx.globalAlpha = 0.35 + 0.45 * a;
+      ctx.lineWidth = 7 * cam.scale; ctx.beginPath(); ctx.moveTo(lx, y0); ctx.lineTo(lx, y1); ctx.stroke();
+      ctx.restore();
+      ctx.fillStyle = `rgba(0,0,0,0.5)`; ctx.fillRect(cx - 160, H * 0.3 - 30, 320, 52);
+      ctx.font = 'bold 30px "Segoe UI", sans-serif'; ctx.textAlign = 'center';
+      ctx.fillStyle = this.call.color; ctx.fillText(this.call.text, cx, H * 0.3 + 7);
     }
 
     if (this.ended) {

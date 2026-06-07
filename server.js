@@ -120,25 +120,62 @@ function rebuildEntities(match) {
   match.world.entities = [match.rink, ...match.players.values(), match.goalieL, match.goalieR, match.puck];
 }
 
-function faceoff(match) {
-  // Rozmísti každý tým do svislé řady na své půlce, čelem ke středu (N hráčů)
+function faceoffAt(match, fx, fy) {
+  // Rozmísti týmy kolem buly bodu (home vlevo, away vpravo), čelem k bodu
   const home = [], away = [];
   for (const p of match.players.values()) (p.team === 'home' ? home : away).push(p);
   const place = (arr, x) => {
     const n = arr.length;
     arr.forEach((p, i) => {
-      p.x = x;
-      p.y = clamp(RINK.h / 2 + (i - (n - 1) / 2) * 64, 28, RINK.h - 28);
+      p.x = clamp(x, 20, RINK.w - 20);
+      p.y = clamp(fy + (i - (n - 1) / 2) * 54, 28, RINK.h - 28);
       p.vx = p.vy = 0; p.hasPuck = false; p.charge = 0;
       p._chargeDecaying = false; p._oneTimer = false;
-      const fa = Math.atan2(RINK.h / 2 - p.y, RINK.centerX - p.x);
+      const fa = Math.atan2(fy - p.y, fx - p.x);
       p.bodyAngle = p.skateAngle = p.aimAngle = p.carryAngle = fa;
     });
   };
-  place(home, RINK.centerX - 70);
-  place(away, RINK.centerX + 70);
+  place(home, fx - 60);
+  place(away, fx + 60);
   match.puck.reset();
+  match.puck.x = fx; match.puck.y = fy; match.puck.prevX = fx; match.puck.prevY = fy;
+  match.lastTouch = null; match.touchX = fx;
   match.world._goalLock = false;
+}
+function faceoff(match) { faceoffAt(match, RINK.centerX, RINK.h / 2); }
+
+// ── Pravidla: icing + offside ──────────────────────────────────────────
+function anyInZone(match, team, pred) {
+  for (const p of match.players.values()) if (p.team === team && pred(p)) return true;
+  return false;
+}
+function callStoppage(match, rule, lineX, fx, fy) {
+  match.stoppage = true;
+  match._whistleAt = Date.now();
+  match._faceoff = { x: fx, y: fy };
+  match.world._goalLock = true;              // zmraz interakce (jako u gólu)
+  match.puck.vx = match.puck.vy = 0;
+  io.to(match.room).emit('whistle', { rule, lineX, color: rule === 'offside' ? '#2a6bff' : '#ff3344' });
+}
+function checkRules(match) {
+  const pk = match.puck, px = pk.x, ppx = pk.prevX ?? pk.x, cx = RINK.centerX;
+  const gy1 = RINK.goalY, gy2 = RINK.goalY + RINK.goalH;
+  const inMouthY = pk.y > gy1 && pk.y < gy2;
+  const dotY = pk.y < RINK.h / 2 ? 114 : RINK.h - 114;
+
+  // OFFSIDE — útočník v útočném pásmu dřív než puk (home útočí vpravo, away vlevo)
+  if (match.lastTouch === 'home' && ppx < RINK.blueLineRight && px >= RINK.blueLineRight &&
+      anyInZone(match, 'home', p => p.x > RINK.blueLineRight + 8))
+    return callStoppage(match, 'offside', RINK.blueLineRight, RINK.blueLineRight - 30, dotY);
+  if (match.lastTouch === 'away' && ppx > RINK.blueLineLeft && px <= RINK.blueLineLeft &&
+      anyInZone(match, 'away', p => p.x < RINK.blueLineLeft - 8))
+    return callStoppage(match, 'offside', RINK.blueLineLeft, RINK.blueLineLeft + 30, dotY);
+
+  // ICING — vyhození zpoza půlky přes soupeřovu brankovou čáru (mimo branku), bez dotyku
+  if (match.lastTouch === 'home' && match.touchX < cx && ppx < RINK.goalLineRight && px >= RINK.goalLineRight && !inMouthY)
+    return callStoppage(match, 'icing', RINK.goalLineRight, 248, dotY);          // buly v obr. pásmu home (vlevo)
+  if (match.lastTouch === 'away' && match.touchX > cx && ppx > RINK.goalLineLeft && px <= RINK.goalLineLeft && !inMouthY)
+    return callStoppage(match, 'icing', RINK.goalLineLeft, RINK.w - 248, dotY);  // buly v obr. pásmu away (vpravo)
 }
 
 function createMatch(lobbyId) {
@@ -188,6 +225,13 @@ function startMatch(lobby) {
   match.period  = 1;
   match.clock   = match.minutes * 60;   // sekundy do konce třetiny
   match.ended   = false;
+  // Pravidla (icing/offside)
+  match.rules     = !!lobby.settings.rules;
+  match.lastTouch = null;               // tým, který se naposled dotkl puku
+  match.touchX    = RINK.centerX;       // x puku při posledním držení (origin pro icing)
+  match.stoppage  = false;              // přerušení (píšťalka) → buly
+  match._whistleAt = 0;
+  match._faceoff  = null;
   rebuildEntities(match);
   faceoff(match);
   lobby.match  = match;
@@ -201,6 +245,11 @@ function stepMatch(match) {
   if (match.world._goalLock && match._goalAt && Date.now() - match._goalAt >= 1200) {
     match._goalAt = 0;
     faceoff(match);
+  }
+  // Buly po přerušení (offside/icing) — píšťalka 1.3 s, pak vhazování na bodě
+  if (match.stoppage && Date.now() - match._whistleAt >= 1300) {
+    match.stoppage = false;
+    faceoffAt(match, match._faceoff.x, match._faceoff.y);
   }
 
   // Časomíra — běží, když se nehraje oslava gólu a zápas neskončil
@@ -229,6 +278,11 @@ function stepMatch(match) {
   }
 
   match.world.update(DT);
+
+  // Sleduj poslední dotek (tým + origin pro icing)
+  for (const p of match.players.values()) if (p.hasPuck) { match.lastTouch = p.team; match.touchX = match.puck.x; }
+  // Kontrola pravidel (jen když je zapnuto a hraje se)
+  if (match.rules && !match.stoppage && !match.world._goalLock && !match.ended) checkRules(match);
 
   if (match.tick % Math.round(TICK_HZ / SNAP_HZ) === 0) broadcast(match);
 }

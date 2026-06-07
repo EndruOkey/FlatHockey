@@ -11,6 +11,7 @@ export class Net {
     this.onLobbyError  = null;
     this.onSnap        = null;
     this.onGoal        = null;
+    this.onWhistle     = null;
     this.onPeerLeft    = null;
 
     this.socket.on('connect', () => { this.id = this.socket.id; });
@@ -21,6 +22,7 @@ export class Net {
     this.socket.on('lobby:error',  d => this.onLobbyError?.(d));
     this.socket.on('snap', d => this.onSnap?.(d));
     this.socket.on('goal', d => this.onGoal?.(d));
+    this.socket.on('whistle', d => this.onWhistle?.(d));
     this.socket.on('peer-left', () => this.onPeerLeft?.());
   }
 
