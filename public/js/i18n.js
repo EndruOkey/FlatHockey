@@ -6,6 +6,7 @@ const DICT = {
     solo: 'SOLO TRÉNINK',
     profile_btn: 'PROFIL & DRES',
     wip: 'Hra je ve vývoji · work in progress',
+    discord: 'Připoj se na Discord · nahlas bugy',
     // Profil
     profile_h: 'Profil & dres',
     name_ph: 'TVÉ JMÉNO',
@@ -75,6 +76,7 @@ const DICT = {
     solo: 'SOLO PRACTICE',
     profile_btn: 'PROFILE & KIT',
     wip: 'Game is work in progress',
+    discord: 'Join Discord · report bugs',
     profile_h: 'Profile & kit',
     name_ph: 'YOUR NAME',
     lefty: 'LEFTY',
