@@ -67,12 +67,14 @@ export class Rink {
       _drawFaceoffCircle(ctx, cam, cx, RINK.h - FO_Y);
     }
 
-    // Neutral zone face-off dots (no circles)
+    // Neutral zone face-off dots (4) — u modrých čar, v obou řadách (sedí na buly body)
     ctx.fillStyle = '#cc2233';
     for (const bx of [RINK.blueLineLeft + 30, RINK.blueLineRight - 30]) {
-      ctx.beginPath();
-      ctx.arc(ox + bx * s, oy + RINK.h / 2 * s, 5 * s, 0, Math.PI * 2);
-      ctx.fill();
+      for (const fy of [FO_Y, RINK.h - FO_Y]) {
+        ctx.beginPath();
+        ctx.arc(ox + bx * s, oy + fy * s, 5 * s, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
 
     // Goal lines (full board-to-board)

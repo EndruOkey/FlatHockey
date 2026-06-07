@@ -140,6 +140,7 @@ function faceoffAt(match, fx, fy) {
   match.puck.reset();
   match.puck.x = fx; match.puck.y = fy; match.puck.prevX = fx; match.puck.prevY = fy;
   match.lastTouch = null; match.touchX = fx;
+  match.icing = null;
   match.world._goalLock = false;
 }
 function faceoff(match) { faceoffAt(match, RINK.centerX, RINK.h / 2); }
@@ -171,11 +172,35 @@ function checkRules(match) {
       anyInZone(match, 'away', p => p.x < RINK.blueLineLeft - 8))
     return callStoppage(match, 'offside', RINK.blueLineLeft, RINK.blueLineLeft + 30, dotY);
 
-  // ICING — vyhození zpoza půlky přes soupeřovu brankovou čáru (mimo branku), bez dotyku
-  if (match.lastTouch === 'home' && match.touchX < cx && ppx < RINK.goalLineRight && px >= RINK.goalLineRight && !inMouthY)
-    return callStoppage(match, 'icing', RINK.goalLineRight, 248, dotY);          // buly v obr. pásmu home (vlevo)
-  if (match.lastTouch === 'away' && match.touchX > cx && ppx > RINK.goalLineLeft && px <= RINK.goalLineLeft && !inMouthY)
-    return callStoppage(match, 'icing', RINK.goalLineLeft, RINK.w - 248, dotY);  // buly v obr. pásmu away (vpravo)
+  // ICING — vyhození zpoza půlky přes soupeřovu brankovou čáru (mimo branku), bez dotyku.
+  // Píšťalka NEhned: puk necháme dojet (physics běží), zmrazíme jen interakce.
+  if (match.lastTouch === 'home' && match.touchX < cx && ppx < RINK.goalLineRight && px >= RINK.goalLineRight && !inMouthY) {
+    match.icing = { side: 'home', lineX: RINK.goalLineRight, fx: 248, fy: dotY, t: Date.now() };
+    match.world._goalLock = true; return;     // buly v obr. pásmu home (vlevo)
+  }
+  if (match.lastTouch === 'away' && match.touchX > cx && ppx > RINK.goalLineLeft && px <= RINK.goalLineLeft && !inMouthY) {
+    match.icing = { side: 'away', lineX: RINK.goalLineLeft, fx: RINK.w - 248, fy: dotY, t: Date.now() };
+    match.world._goalLock = true; return;     // buly v obr. pásmu away (vpravo)
+  }
+}
+
+// Předběžné varování (pulsující čára) — offside pozice / icing v běhu. Bitmask:
+// 1=offside pravá modrá, 2=offside levá modrá, 4=icing pravá brank. čára, 8=icing levá
+function pendingFlags(match) {
+  if (!match.rules || match.stoppage) return 0;
+  const cx = RINK.centerX, pk = match.puck;
+  let f = 0;
+  if (!match.world._goalLock) {
+    if (pk.x <= RINK.blueLineRight && anyInZone(match, 'home', p => p.x > RINK.blueLineRight + 4)) f |= 1;
+    if (pk.x >= RINK.blueLineLeft  && anyInZone(match, 'away', p => p.x < RINK.blueLineLeft - 4))  f |= 2;
+  }
+  if (match.icing) {
+    f |= (match.icing.side === 'home' ? 4 : 8);
+  } else if (!match.world._goalLock) {
+    if (match.lastTouch === 'home' && match.touchX < cx && pk.x > cx && pk.vx > 30 && pk.x < RINK.goalLineRight) f |= 4;
+    if (match.lastTouch === 'away' && match.touchX > cx && pk.x < cx && pk.vx < -30 && pk.x > RINK.goalLineLeft) f |= 8;
+  }
+  return f;
 }
 
 function createMatch(lobbyId) {
@@ -232,6 +257,7 @@ function startMatch(lobby) {
   match.stoppage  = false;              // přerušení (píšťalka) → buly
   match._whistleAt = 0;
   match._faceoff  = null;
+  match.icing     = null;               // icing v běhu (puk dojíždí před píšťalkou)
   rebuildEntities(match);
   faceoff(match);
   lobby.match  = match;
@@ -250,6 +276,14 @@ function stepMatch(match) {
   if (match.stoppage && Date.now() - match._whistleAt >= 1300) {
     match.stoppage = false;
     faceoffAt(match, match._faceoff.x, match._faceoff.y);
+  }
+  // Icing v běhu — puk necháme dojet; píšťalka až když zpomalí nebo po timeoutu
+  if (match.icing && !match.stoppage) {
+    const sp = Math.hypot(match.puck.vx, match.puck.vy);
+    if (sp < 45 || Date.now() - match.icing.t > 2600) {
+      const ic = match.icing; match.icing = null;
+      callStoppage(match, 'icing', ic.lineX, ic.fx, ic.fy);
+    }
   }
 
   // Časomíra — běží, když se nehraje oslava gólu a zápas neskončil
@@ -311,6 +345,7 @@ function broadcast(match) {
     score: match.score,
     lock: match.world._goalLock ? 1 : 0,
     clk: Math.max(0, Math.ceil(match.clock)), per: match.period, pers: match.periods, end: match.ended ? 1 : 0,
+    pnd: pendingFlags(match),
   });
 }
 

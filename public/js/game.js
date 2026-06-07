@@ -58,6 +58,7 @@ export class NetGame {
     this.goalFlash = 0; this.goalText = '';
 
     this.call = null;   // odpískané pravidlo (offside/icing) — banner + zvýraznění čáry
+    this.pnd = 0;       // předběžné varování (bitmask) — pulsující čára
     this._cam = null;
     net.onSnap = s => this._onSnap(s);
     net.onGoal = g => { this.goalFlash = 2.5; this.goalText = g.text; };
@@ -110,6 +111,7 @@ export class NetGame {
   _onSnap(s) {
     this.score = s.score;
     if (s.clk !== undefined) { this.clk = s.clk; this.per = s.per; this.pers = s.pers; this.ended = !!s.end; }
+    this.pnd = s.pnd || 0;
     const seen = new Set();
     for (const ps of s.players) {
       seen.add(ps.id);
@@ -236,6 +238,21 @@ export class NetGame {
       ctx.fillStyle = `rgba(255,220,60,${a * 0.12})`; ctx.fillRect(0, 0, W, H);
       ctx.font = 'bold 64px monospace'; ctx.textAlign = 'center'; ctx.fillStyle = `rgba(255,220,60,${a})`;
       ctx.fillText(this.goalText, cx, H / 2);
+    }
+
+    // Předběžné varování — pulsující čára (offside pozice / icing v běhu)
+    if (this.pnd && this._cam) {
+      const cam = this._cam, y0 = cam.oy, y1 = cam.oy + RINK.h * cam.scale;
+      const pulse = 0.22 + 0.32 * (0.5 + 0.5 * Math.sin(Date.now() / 140));
+      const line = (xw, col) => {
+        const lx = cam.ox + xw * cam.scale;
+        ctx.save(); ctx.globalAlpha = pulse; ctx.strokeStyle = col;
+        ctx.lineWidth = 6 * cam.scale; ctx.beginPath(); ctx.moveTo(lx, y0); ctx.lineTo(lx, y1); ctx.stroke(); ctx.restore();
+      };
+      if (this.pnd & 1) line(RINK.blueLineRight, '#2a6bff');
+      if (this.pnd & 2) line(RINK.blueLineLeft, '#2a6bff');
+      if (this.pnd & 4) line(RINK.goalLineRight, '#ff3344');
+      if (this.pnd & 8) line(RINK.goalLineLeft, '#ff3344');
     }
 
     // Odpískané pravidlo — zvýraznění čáry na ledě + banner
