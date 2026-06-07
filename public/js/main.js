@@ -1,5 +1,7 @@
 import { Net } from './net.js';
 import { NetGame, SandboxGame } from './game.js';
+import { Player } from './entities/Player.js';
+import { PLAYER, RINK } from './constants.js';
 
 const $ = id => document.getElementById(id);
 const canvas = $('canvas');
@@ -10,7 +12,7 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
 // Předdefinovaná paleta (podrobný picker přijde později)
 const PALETTE = ['#3a9fff','#1b4fd1','#ff4455','#b81d3a','#19c37d','#0c7a4a',
                  '#ffcf3a','#ff8a1e','#9b5cff','#ff5bd0','#f4f7fb','#1a1f29'];
-function makeSwatches(el, initial) {
+function makeSwatches(el, initial, onChange) {
   let value = PALETTE.includes(initial) ? initial : PALETTE[0];
   el.innerHTML = '';
   PALETTE.forEach(c => {
@@ -22,6 +24,7 @@ function makeSwatches(el, initial) {
       value = c;
       [...el.children].forEach(x => x.classList.remove('active'));
       b.classList.add('active');
+      onChange?.(value);
     });
     el.appendChild(b);
   });
@@ -39,12 +42,13 @@ numInput.value  = localStorage.getItem(NUM_KEY) || '';
 let chosenHand = parseInt(localStorage.getItem(HAND_KEY) || '1', 10);
 const refreshHand = () => handBtns.forEach(b => b.classList.toggle('active', parseInt(b.dataset.hand,10) === chosenHand));
 refreshHand();
-handBtns.forEach(b => b.addEventListener('click', () => { chosenHand = parseInt(b.dataset.hand,10); localStorage.setItem(HAND_KEY,String(chosenHand)); refreshHand(); }));
-numInput.addEventListener('change', () => localStorage.setItem(NUM_KEY, numInput.value));
+handBtns.forEach(b => b.addEventListener('click', () => { chosenHand = parseInt(b.dataset.hand,10); localStorage.setItem(HAND_KEY,String(chosenHand)); refreshHand(); drawPreview(); }));
+numInput.addEventListener('input', () => { localStorage.setItem(NUM_KEY, numInput.value); drawPreview(); });
+nameInput.addEventListener('input', drawPreview);
 
-const swHelmet = makeSwatches($('sw-helmet'), localStorage.getItem(GK.helmet) || '#f4f7fb');
-const swGloves = makeSwatches($('sw-gloves'), localStorage.getItem(GK.gloves) || '#1a1f29');
-const swTape   = makeSwatches($('sw-tape'),   localStorage.getItem(GK.tape)   || '#1a1f29');
+const swHelmet = makeSwatches($('sw-helmet'), localStorage.getItem(GK.helmet) || '#f4f7fb', drawPreview);
+const swGloves = makeSwatches($('sw-gloves'), localStorage.getItem(GK.gloves) || '#1a1f29', drawPreview);
+const swTape   = makeSwatches($('sw-tape'),   localStorage.getItem(GK.tape)   || '#1a1f29', drawPreview);
 
 function profile() {
   const name = (nameInput.value || '').trim().slice(0, 12);
@@ -58,6 +62,32 @@ function profile() {
     number: Number.isFinite(n) ? Math.max(0, Math.min(99, n)) : null,
     helmet: swHelmet.get(), gloves: swGloves.get(), tape: swTape.get(),
   };
+}
+
+// ── Živý náhled hráče (helma/rukavice/páska/číslo/ruka) ───────────────
+const prevCanvas = $('prof-preview');
+const prevCtx = prevCanvas.getContext('2d');
+const previewPlayer = new Player('preview', 'home', null);
+previewPlayer.x = RINK.w / 2; previewPlayer.y = RINK.h / 2;
+previewPlayer.bodyAngle = 0;                                 // čelem doprava
+previewPlayer.aimAngle = previewPlayer.carryAngle = previewPlayer._stickDisp = 0.7; // hůl dolů-doprava
+previewPlayer._dispReach = PLAYER.stickLen;
+previewPlayer._dispCharge = 0; previewPlayer.charge = 0; previewPlayer.passReq = 0; previewPlayer.crossCheck = false;
+previewPlayer.color = '#3a9fff';                             // neutrální dres (barva týmu se volí v lobby)
+
+function drawPreview() {
+  const c = prevCanvas, ctx = prevCtx;
+  if (!c || !ctx) return;
+  ctx.clearRect(0, 0, c.width, c.height);
+  const p = previewPlayer;
+  p.handed = chosenHand;
+  p.helmet = swHelmet.get(); p.gloves = swGloves.get(); p.tape = swTape.get();
+  const n = parseInt(numInput.value, 10);
+  p.num  = Number.isFinite(n) ? Math.max(0, Math.min(99, n)) : null;
+  p.name = (nameInput.value || '').trim();
+  const S = 4.2;
+  const cam = { scale: S, ox: c.width / 2 - p.x * S, oy: c.height * 0.44 - p.y * S };
+  p.draw(ctx, cam);
 }
 
 // ── Create form (týmy = dlaždice) ─────────────────────────────────────
@@ -105,7 +135,7 @@ let currentGame = null;
 const setStatus = (m, c = '#888') => { status.textContent = m; status.style.color = c; };
 
 // ── Hlavní menu ───────────────────────────────────────────────────────
-$('go-profile').onclick = () => showView('profile');
+$('go-profile').onclick = () => { showView('profile'); drawPreview(); };
 $('go-online').onclick  = () => { showView('browse'); net.listLobbies(); };
 $('go-solo').onclick     = () => {
   const g = new SandboxGame(canvas), pr = profile();
@@ -193,4 +223,5 @@ window.addEventListener('beforeunload', () => net.leaveLobby());
 
 // init
 showView('main');
+drawPreview();
 setInterval(() => { if (!inGame && $('v-browse').style.display !== 'none') net.listLobbies(); }, 4000);
