@@ -159,7 +159,7 @@ export function applyI18n() {
   document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
   document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
   document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
-  const lb = document.getElementById('lang-btn');
+  const lb = document.getElementById('lang-label') || document.getElementById('lang-btn');
   if (lb) lb.textContent = lang === 'cs' ? 'EN' : 'CZ';
 }
 
