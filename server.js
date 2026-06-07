@@ -15,12 +15,42 @@ import { lerpAngle, clamp } from './public/js/utils.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
+app.disable('x-powered-by');
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+  maxHttpBufferSize: 8 * 1024,   // vstupy jsou drobné → obří payloady rovnou zahodíme
+  pingTimeout: 20000,
+  connectTimeout: 10000,
+});
 
 app.use(express.static(path.join(__dirname, 'public'), {
-  setHeaders: (res) => res.setHeader('Cache-Control', 'no-store'),
+  setHeaders: (res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+  },
 }));
+
+// ── Limity proti zneužití (DoS / vyčerpání zdrojů) ──────────────────────
+const MAX_LOBBIES = 200;   // strop počtu lobby
+const MAX_MATCHES = 60;    // strop souběžných zápasů (každý = 60Hz smyčka)
+const MAX_CONN    = 400;   // strop souběžných spojení
+let   connCount   = 0;
+
+// Server nesmí spadnout kvůli jednomu vadnému paketu / výjimce
+process.on('uncaughtException',  (e) => console.error('uncaughtException:', e));
+process.on('unhandledRejection', (e) => console.error('unhandledRejection:', e));
+
+// Jednoduchý per-socket rate limit (min. rozestup mezi akcemi daného typu)
+function rateOk(socket, key, minMs) {
+  const now = Date.now();
+  const rl = socket.data._rl || (socket.data._rl = {});
+  if (now - (rl[key] || 0) < minMs) return false;
+  rl[key] = now;
+  return true;
+}
+const countMatches = () => [...lobbies.values()].filter(l => l.match).length;
 
 // ── Authoritativní simulace ──────────────────────────────────────────────
 const CHARGE_RATE = 1.4;       // pomalejší nápřah → slap shot je cítit jako wind-up
@@ -38,13 +68,17 @@ function makeInput() {
   };
 }
 
-// Aplikuj přijatý stav vstupu na input objekt + spočítej hrany
+// Aplikuj přijatý stav vstupu na input objekt + spočítej hrany.
+// Vše je tvrdě validované: směr jen -1/0/1, úhly/vzdálenosti musí být konečné číslo
+// (jinak by NaN/Infinity „otrávil" celou simulaci → NaN pozice pro všechny).
+const dir1 = v => (v > 0 ? 1 : v < 0 ? -1 : 0);
 function applyClientInput(inp, msg) {
-  inp.dx = msg.dx | 0; inp.dy = msg.dy | 0;
+  if (!msg || typeof msg !== 'object') return;
+  inp.dx = dir1(msg.dx); inp.dy = dir1(msg.dy);
   inp.keys.Space = !!msg.space;
   inp.lmb = !!msg.lmb; inp.rmb = !!msg.rmb; inp.mmb = !!msg.mmb;
-  if (typeof msg.aim === 'number') inp.aim = msg.aim;
-  if (typeof msg.aimDist === 'number') inp.aimDist = msg.aimDist;
+  if (Number.isFinite(msg.aim))     inp.aim     = msg.aim;
+  if (Number.isFinite(msg.aimDist)) inp.aimDist = clamp(msg.aimDist, 0, 4000);
 }
 
 function computeEdges(inp) {
@@ -225,7 +259,10 @@ function createMatch(lobbyId) {
     io.to(match.room).emit('goal', { text: result === 'goal-away' ? 'GOAL! 🔴' : 'GOAL! 🔵' });
     match._goalAt = Date.now();
   };
-  match.loop = setInterval(() => stepMatch(match), 1000 / TICK_HZ);
+  match.loop = setInterval(() => {
+    try { stepMatch(match); }
+    catch (e) { console.error('stepMatch error (lobby ' + lobbyId + '):', e); }
+  }, 1000 / TICK_HZ);
   return match;
 }
 
@@ -460,9 +497,14 @@ function leaveCurrentLobby(socket) {
 }
 
 io.on('connection', (socket) => {
-  socket.on('lobby:list', () => sendLobbyList(socket));
+  if (connCount >= MAX_CONN) { socket.disconnect(true); return; }
+  connCount++;
+
+  socket.on('lobby:list', () => { if (rateOk(socket, 'list', 500)) sendLobbyList(socket); });
 
   socket.on('lobby:create', ({ settings, profile }) => {
+    if (!rateOk(socket, 'create', 1000)) return;
+    if (lobbies.size >= MAX_LOBBIES) { socket.emit('lobby:error', 'Server je plný, zkus to za chvíli.'); return; }
     leaveCurrentLobby(socket);
     const id = genId();
     const l = { id, hostId: socket.id, state: 'waiting', settings: sanitizeSettings(settings), members: new Map(), match: null };
@@ -475,6 +517,8 @@ io.on('connection', (socket) => {
   });
 
   socket.on('lobby:join', ({ id, profile, password }) => {
+    if (!rateOk(socket, 'join', 500)) return;
+    if (typeof id !== 'string') return;
     const l = lobbies.get(id);
     if (!l || (l.state !== 'waiting' && l.state !== 'playing')) { socket.emit('lobby:error', 'Lobby není dostupné.'); return; }
     if (l.settings.password && l.settings.password !== String(password || '')) { socket.emit('lobby:error', 'Špatné heslo.'); return; }
@@ -507,6 +551,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('lobby:settings', ({ settings }) => {
+    if (!rateOk(socket, 'settings', 200)) return;
     const l = lobbies.get(socket.data.lobbyId);
     if (!l || l.hostId !== socket.id || l.state !== 'waiting') return;
     l.settings = sanitizeSettings(settings);
@@ -515,8 +560,10 @@ io.on('connection', (socket) => {
   });
 
   socket.on('lobby:start', () => {
+    if (!rateOk(socket, 'start', 1000)) return;
     const l = lobbies.get(socket.data.lobbyId);
     if (!l || l.hostId !== socket.id || l.state !== 'waiting' || l.members.size === 0) return;
+    if (countMatches() >= MAX_MATCHES) { socket.emit('lobby:error', 'Příliš mnoho zápasů, zkus to za chvíli.'); return; }
     startMatch(l);
     io.to('lobby:' + l.id).emit('lobby:start', { settings: l.settings });
     sendLobbyList();
@@ -525,13 +572,18 @@ io.on('connection', (socket) => {
   socket.on('lobby:leave', () => leaveCurrentLobby(socket));
 
   socket.on('input', (msg) => {
+    // Strop ~150 vstupů/s na socket (legitimní je ~60) → blokuje záplavu vstupů
+    const now = Date.now();
+    const rl = socket.data._inrl || (socket.data._inrl = { t: now, n: 0 });
+    if (now - rl.t > 1000) { rl.t = now; rl.n = 0; }
+    if (++rl.n > 150) return;
     const l = lobbies.get(socket.data.lobbyId);
     if (!l || !l.match) return;
     const inp = l.match.inputs.get(socket.id);
     if (inp) applyClientInput(inp, msg);
   });
 
-  socket.on('disconnect', () => leaveCurrentLobby(socket));
+  socket.on('disconnect', () => { connCount--; leaveCurrentLobby(socket); });
 });
 
 const PORT = process.env.PORT || 3000;
