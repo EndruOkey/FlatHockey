@@ -618,21 +618,51 @@ function _renderPlayer(ctx, p, cam) {
     ctx.textBaseline = 'alphabetic';
   }
 
-  // Rukavice — dvě ruce na holi v ose dříku: horní u konce (u těla), dolní níž;
-  // dřík mezi nimi prosvítá → vypadá to, že hokejku skutečně drží.
+  // ── Paže (rukávy) + rukavice na holi ─────────────────────────────────
+  // Od ramen jdou paže k oběma rukám na dříku → je vidět, že hráč hokejku drží.
   {
-    const gp = p.gripPoint;
-    const sdir = p._stickDisp ?? p.carryAngle ?? p.aimAngle;
-    const cos = Math.cos(sdir), sin = Math.sin(sdir);
-    const hw  = r * 0.6;                          // šířka rukavice (širší než dřík)
+    // Dvě ruce na holi (world souřadnice) — horní (u konce) a dolní
+    let topH, botH;
+    if (p.crossCheck) {
+      const baseDir  = p._stickDisp;
+      const stickDir = baseDir + Math.PI / 2;
+      const sc = Math.cos(stickDir), ss = Math.sin(stickDir);
+      const half = PLAYER.stickLen * 0.7;
+      const cxW = p.x + Math.cos(baseDir) * (PLAYER.radius + 2);
+      const cyW = p.y + Math.sin(baseDir) * (PLAYER.radius + 2);
+      topH = { x: cxW - sc * half * 0.55, y: cyW - ss * half * 0.55 };
+      botH = { x: cxW + sc * half * 0.30, y: cyW + ss * half * 0.30 };
+    } else {
+      const gp = p.gripPoint;
+      const sdir = p._stickDisp ?? p.carryAngle ?? p.aimAngle;
+      const c = Math.cos(sdir), sn = Math.sin(sdir);
+      topH = { x: gp.x + c * 0.6,  y: gp.y + sn * 0.6  };
+      botH = { x: gp.x + c * 5.4,  y: gp.y + sn * 5.4  };
+    }
+    // Ramena (vlevo/vpravo od osy těla, mírně vepředu)
+    const shF = PLAYER.radius * 0.15, shS = PLAYER.radius * 0.82;
+    const sh1 = { x: p.x + fcos * shF + pcos * shS, y: p.y + fsin * shF + psin * shS };
+    const sh2 = { x: p.x + fcos * shF - pcos * shS, y: p.y + fsin * shF - psin * shS };
+    const d2 = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
+    const [shTop, shBot] = d2(sh1, topH) <= d2(sh2, topH) ? [sh1, sh2] : [sh2, sh1];
+
+    // Paže — rukávy v barvě dresu (mírně tmavší)
     ctx.lineCap = 'round';
-    for (const [a, b] of [[-0.8, 2.2], [4.3, 7.0]]) {   // [horní ruka u konce], [dolní ruka]
-      const ax = ox + (gp.x + cos * a) * s, ay = oy + (gp.y + sin * a) * s;
-      const bx = ox + (gp.x + cos * b) * s, by = oy + (gp.y + sin * b) * s;
-      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by);   // obrys
-      ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = hw + 2 * s; ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by);   // rukavice
-      ctx.strokeStyle = p.gloves || '#242c38'; ctx.lineWidth = hw; ctx.stroke();
+    ctx.strokeStyle = _shade(color, -0.12);
+    ctx.lineWidth = r * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(ox + shTop.x * s, oy + shTop.y * s); ctx.lineTo(ox + topH.x * s, oy + topH.y * s);
+    ctx.moveTo(ox + shBot.x * s, oy + shBot.y * s); ctx.lineTo(ox + botH.x * s, oy + botH.y * s);
+    ctx.stroke();
+
+    // Rukavice — pěsti na konci paží, přímo na dříku
+    const hr = r * 0.34;
+    for (const h of [topH, botH]) {
+      const hx = ox + h.x * s, hy = oy + h.y * s;
+      ctx.beginPath(); ctx.arc(hx, hy, hr + 1.4 * s, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fill();
+      ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI * 2);
+      ctx.fillStyle = p.gloves || '#242c38'; ctx.fill();
     }
   }
 
