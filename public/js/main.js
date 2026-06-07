@@ -146,13 +146,15 @@ $('go-solo').onclick     = () => {
 };
 
 // ── Procházení ────────────────────────────────────────────────────────
-net.onLobbyList = (list) => {
+let lastLobbyList = [];
+function renderLobbyList(list) {
+  lastLobbyList = list || [];
   const el = $('lobby-list'); el.innerHTML = '';
-  if (!list || list.length === 0) {
+  if (!lastLobbyList.length) {
     el.innerHTML = `<div class="lobby-empty">${esc(t('lobby_empty'))}</div>`;
     return;
   }
-  for (const l of list) {
+  for (const l of lastLobbyList) {
     const div = document.createElement('div');
     div.className = 'lobby-item';
     const full = l.count >= l.max;
@@ -178,7 +180,8 @@ net.onLobbyList = (list) => {
     };
     el.appendChild(div);
   }
-};
+}
+net.onLobbyList = renderLobbyList;
 const fmtClock = s => { s = Math.max(0, s|0); return Math.floor(s/60) + ':' + String(s%60).padStart(2,'0'); };
 $('refresh-btn').onclick = () => net.listLobbies();
 $('create-btn').onclick  = () => showView('create');
@@ -227,8 +230,8 @@ window.addEventListener('beforeunload', () => net.leaveLobby());
 
 // ── Jazyk (CS/EN) ─────────────────────────────────────────────────────
 $('lang-btn').onclick = () => toggleLang();
-setOnChange(() => {                 // po přepnutí jazyka přerenderuj dynamické části
-  if ($('v-browse').style.display !== 'none') net.listLobbies();
+setOnChange(() => {                 // po přepnutí jazyka přerenderuj z cache (bez probliknutí)
+  if ($('v-browse').style.display !== 'none') renderLobbyList(lastLobbyList);
   if ($('v-wait').style.display !== 'none' && lastWaitState) renderWait(lastWaitState);
 });
 
