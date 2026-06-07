@@ -39,11 +39,12 @@ function _leadAim(from, target, speed) {
 // lokální fyzika → konec host/guest desyncu.
 // ════════════════════════════════════════════════════════════════════════
 export class NetGame {
-  constructor(canvas, net, myId, myTeam) {
+  constructor(canvas, net, myId, settings) {
     this.canvas  = canvas;
     this.net     = net;
     this.myId    = myId;
-    this.myTeam  = myTeam;
+    this.settings = settings || { teams: { home: { name: 'Domácí', color: '#3a9fff' }, away: { name: 'Hosté', color: '#ff4455' } } };
+    this.clk = 0; this.per = 1; this.pers = 1; this.ended = false;
     this.input   = new Input(canvas);
     this.engine  = new Engine(canvas);
 
@@ -100,6 +101,7 @@ export class NetGame {
 
   _onSnap(s) {
     this.score = s.score;
+    if (s.clk !== undefined) { this.clk = s.clk; this.per = s.per; this.pers = s.pers; this.ended = !!s.end; }
     const seen = new Set();
     for (const ps of s.players) {
       seen.add(ps.id);
@@ -197,17 +199,48 @@ export class NetGame {
   }
 
   _overlay(ctx) {
-    _renderHUD(ctx, this.score);
+    const W = ctx.canvas.width, H = ctx.canvas.height;
+    const t = this.settings.teams;
+    const cx = W / 2;
+    // scoreboard
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(cx - 150, 8, 300, 56);
+    const mm = Math.floor(this.clk / 60), ss = this.clk % 60;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.font = 'bold 24px monospace'; ctx.fillStyle = '#fff';
+    ctx.fillText(`${mm}:${String(ss).padStart(2, '0')}`, cx, 36);
+    ctx.font = '11px monospace'; ctx.fillStyle = '#8aa';
+    ctx.fillText(`${this.per}. třetina z ${this.pers}`, cx, 54);
+    // skóre + jména týmů
+    ctx.font = 'bold 26px monospace';
+    ctx.textAlign = 'right'; ctx.fillStyle = t.home.color; ctx.fillText(this.score.home, cx - 80, 44);
+    ctx.textAlign = 'left';  ctx.fillStyle = t.away.color; ctx.fillText(this.score.away, cx + 80, 44);
+    ctx.font = '12px "Segoe UI", sans-serif';
+    ctx.textAlign = 'right'; ctx.fillStyle = t.home.color; ctx.fillText(this._clip(t.home.name, 12), cx - 80, 24);
+    ctx.textAlign = 'left';  ctx.fillStyle = t.away.color; ctx.fillText(this._clip(t.away.name, 12), cx + 80, 24);
+
     if (this.goalFlash > 0) {
-      const alpha = Math.min(1, this.goalFlash);
-      ctx.fillStyle = `rgba(255, 220, 60, ${alpha * 0.12})`;
-      ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-      ctx.font = 'bold 64px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = `rgba(255, 220, 60, ${alpha})`;
-      ctx.fillText(this.goalText, ctx.canvas.width / 2, ctx.canvas.height / 2);
+      const a = Math.min(1, this.goalFlash);
+      ctx.fillStyle = `rgba(255,220,60,${a * 0.12})`; ctx.fillRect(0, 0, W, H);
+      ctx.font = 'bold 64px monospace'; ctx.textAlign = 'center'; ctx.fillStyle = `rgba(255,220,60,${a})`;
+      ctx.fillText(this.goalText, cx, H / 2);
+    }
+
+    if (this.ended) {
+      ctx.fillStyle = 'rgba(7,9,15,0.78)'; ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = 'center'; ctx.fillStyle = '#fff';
+      ctx.font = 'bold 52px "Segoe UI", sans-serif'; ctx.fillText('KONEC ZÁPASU', cx, H / 2 - 50);
+      ctx.font = 'bold 34px monospace';
+      ctx.fillText(`${this._clip(t.home.name, 12)}  ${this.score.home} : ${this.score.away}  ${this._clip(t.away.name, 12)}`, cx, H / 2 + 6);
+      const win = this.score.home > this.score.away ? t.home.name : this.score.away > this.score.home ? t.away.name : null;
+      ctx.font = '22px "Segoe UI", sans-serif'; ctx.fillStyle = '#cde';
+      ctx.fillText(win ? `Vítěz: ${this._clip(win, 14)}` : 'Remíza', cx, H / 2 + 48);
+      ctx.font = '15px "Segoe UI", sans-serif'; ctx.fillStyle = '#8aa';
+      ctx.fillText('Esc → zpět do menu', cx, H / 2 + 86);
     }
   }
+
+  _clip(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n) : s; }
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -392,7 +425,7 @@ export class SandboxGame {
         if (i !== j) players[i].tryCrossCheck(players[j]);
 
     if (!anyoneHasPuck) {
-      const saved = this.goalie.blockPuck(puck);
+      const saved = this.goalie.blockPuck(puck, world);
       if (saved) puck.x = Math.min(puck.x, RINK.goalLineRight - 1);
       for (const p of players) if (p.tryDeflect(puck)) break;
       this.goalie.controlLoosePuck(puck);

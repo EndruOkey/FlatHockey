@@ -291,6 +291,7 @@ export class PlayerBase {
     const hasInput = il > 0.01;
 
     let topSpeed = PLAYER.speed * (crossChecking ? 1.15 : 1);
+    if (this.hasPuck) topSpeed *= 0.92;   // s pukem o chlup pomalejší (kontrola puku)
     if (charging) topSpeed *= clamp(1 - (this.charge || 0) * 0.85, 0.12, 1);
 
     if (this._knockT > 0) this._knockT = Math.max(0, this._knockT - dt);
@@ -318,10 +319,12 @@ export class PlayerBase {
       }
     }
 
-    // Tělo se otáčí JEN podle WASD (kam jedeš), NIKDY podle myši → žádné samovolné
-    // protáčení. Myš ovládá pouze hokejku (turret). lerpAngle jde nejkratší cestou.
+    // Tělo: za jízdy kouká kam jedeš (WASD, stabilní). Když stojím, plynule se pivotuje
+    // KE KURZORU → hokejka se nezasekne na kraji kuželu (můžu mířit kamkoliv otočením).
+    // (Pivot jde přes aimAngle = myš + lerpAngle nejkratší cestou → žádné protáčení.)
     const sp2 = Math.hypot(this.vx, this.vy);
     if (hasInput) this.skateAngle = lerpAngle(this.skateAngle, Math.atan2(iy, ix), Math.min(1, 9 * dt));
+    else          this.skateAngle = lerpAngle(this.skateAngle, this.aimAngle, Math.min(1, 6 * dt));
     this.bodyAngle = this.skateAngle;
 
     // Náklon do oblouku (vizuál)

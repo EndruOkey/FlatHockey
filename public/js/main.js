@@ -1,6 +1,5 @@
 import { Net } from './net.js';
 import { NetGame, SandboxGame } from './game.js';
-import { Tweaker } from './tweaker.js';
 
 const $ = id => document.getElementById(id);
 const canvas = $('canvas');
@@ -92,7 +91,6 @@ function showView(name) {
 }
 document.querySelectorAll('.back').forEach(b => b.addEventListener('click', () => showView(b.dataset.to)));
 
-new Tweaker();
 function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
 resizeCanvas();
 window.addEventListener('resize', resizeCanvas);
@@ -153,7 +151,7 @@ $('start-btn').onclick   = () => net.startLobby();
 $('wait-leave').onclick  = () => { net.leaveLobby(); showView('browse'); net.listLobbies(); };
 
 // ── Start hry ─────────────────────────────────────────────────────────
-net.onLobbyStart = () => startGame(new NetGame(canvas, net, net.id));
+net.onLobbyStart = (data) => startGame(new NetGame(canvas, net, net.id, data && data.settings));
 function startGame(game) { inGame = true; lobby.style.display = 'none'; canvas.style.cursor = 'crosshair'; game.start(); }
 
 // ── Esc menu / odpojení ───────────────────────────────────────────────

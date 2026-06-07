@@ -49,7 +49,7 @@ export class World {
         players[i].collideWith(players[j]);
 
     if (!this.players.some(p => p.hasPuck)) {
-      for (const g of this.goalies) g.blockPuck(puck);
+      for (const g of this.goalies) g.blockPuck(puck, this);
       // Tečování letícího puku hokejkou hráče (dorážky/teče)
       for (const p of this.players) if (p.tryDeflect(puck)) break;
       // Goalie covers a slow loose puck sitting in the crease (no need to skate into it)

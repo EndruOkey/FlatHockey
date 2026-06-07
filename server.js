@@ -182,6 +182,12 @@ function startMatch(lobby) {
   // Gólmani v barvě svého týmu (levá branka = home, pravá = away)
   match.goalieL.color = lobby.settings.teams.home.color;
   match.goalieR.color = lobby.settings.teams.away.color;
+  // Časomíra
+  match.periods = lobby.settings.periods;
+  match.minutes = lobby.settings.minutes;
+  match.period  = 1;
+  match.clock   = match.minutes * 60;   // sekundy do konce třetiny
+  match.ended   = false;
   rebuildEntities(match);
   faceoff(match);
   lobby.match  = match;
@@ -195,6 +201,23 @@ function stepMatch(match) {
   if (match.world._goalLock && match._goalAt && Date.now() - match._goalAt >= 1200) {
     match._goalAt = 0;
     faceoff(match);
+  }
+
+  // Časomíra — běží, když se nehraje oslava gólu a zápas neskončil
+  if (!match.ended && !match.world._goalLock) {
+    match.clock -= DT;
+    if (match.clock <= 0) {
+      if (match.period < match.periods) {
+        match.period++;
+        match.clock = match.minutes * 60;
+        faceoff(match);
+        io.to(match.room).emit('period', { period: match.period });
+      } else {
+        match.clock = 0;
+        match.ended = true;
+        io.to(match.room).emit('gameover', { score: match.score });
+      }
+    }
   }
 
   // Akce hráčů z jejich vstupů (autoritativně)
@@ -233,6 +256,7 @@ function broadcast(match) {
     gl: g(match.goalieL), gr: g(match.goalieR),
     score: match.score,
     lock: match.world._goalLock ? 1 : 0,
+    clk: Math.max(0, Math.ceil(match.clock)), per: match.period, pers: match.periods, end: match.ended ? 1 : 0,
   });
 }
 

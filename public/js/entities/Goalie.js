@@ -144,7 +144,7 @@ export class Goalie {
   }
 
   // ── Zónový zákrok ─────────────────────────────────────────────────────
-  blockPuck(puck) {
+  blockPuck(puck, world) {
     if (this._holdTimer > 0) return true;
 
     const r = PUCK.radius;
@@ -189,16 +189,19 @@ export class Goalie {
       return true;
     }
 
-    // Vyražení — dorážka ven do slotu, k bližšímu rohu (přirozený odraz, ne zpět na hůl)
-    const inSpeed = Math.hypot(puck.vx, puck.vy);
-    const reb  = Math.max(70, inSpeed * PUCK.bounce);
-    const vside = relY >= 0 ? 1 : -1;               // k bližšímu mantinelu
-    const ang  = Math.atan2(vside * 0.55, this.inX); // hlavně do hřiště + úhel k rohu
-    puck.x  = this.x + this.inX * (COVER_X + PUCK.radius + 1);
-    puck.y  = this.y + relY * 0.5;
-    puck.vx = Math.cos(ang) * reb;
-    puck.vy = Math.sin(ang) * reb;
-    puck.vz = 0; puck.z = 0;
+    // Zákrok = KONTROLOVANÁ ROZEHRÁVKA na spoluhráče (přesná nahrávka), ne divoký odraz.
+    puck.x  = this.x + this.inX * (COVER_X + PUCK.radius + 2);
+    puck.y  = this.y + relY * 0.35;
+    puck.z = 0; puck.vz = 0;
+    const mate = world ? _nearestMate(world, this.team, this) : null;
+    if (mate) {
+      const ang = Math.atan2(mate.y - puck.y, mate.x - puck.x);
+      puck.vx = Math.cos(ang) * PUCK.passSpeed;   // přesná nahrávka stylem pasu
+      puck.vy = Math.sin(ang) * PUCK.passSpeed;
+    } else {
+      puck.vx = this.inX * 170;                    // bez spoluhráče → měkké vyhození do hřiště
+      puck.vy = (relY >= 0 ? 1 : -1) * 70;
+    }
     this._markSave(high ? 'blocker' : 'pads', 0.3);
     return true;
   }
@@ -368,6 +371,16 @@ export class Goalie {
       ctx.restore();
     }
   }
+}
+
+function _nearestMate(world, team, goalie) {
+  let best = null, bd = Infinity;
+  for (const p of world.players) {
+    if (p.team !== team) continue;
+    const d = Math.hypot(p.x - goalie.x, p.y - goalie.y);
+    if (d < bd) { bd = d; best = p; }
+  }
+  return best;
 }
 
 function _gdarken(hex, amt) {
