@@ -462,7 +462,7 @@ function _renderPlayer(ctx, p, cam) {
     ctx.beginPath();
     ctx.moveTo(bladeX, bladeY);
     ctx.quadraticCurveTo(bCtrlX, bCtrlY, bEndX, bEndY);
-    ctx.strokeStyle = '#111';
+    ctx.strokeStyle = p.tape || '#111';
     ctx.lineWidth   = 2.8 * s;
     ctx.stroke();
   }
@@ -549,16 +549,6 @@ function _renderPlayer(ctx, p, cam) {
   ctx.lineWidth   = 2.8 * s;
   ctx.lineCap     = 'round';
   ctx.stroke();
-
-  // Rukavice — chránič na rukou u úchopu hole
-  ctx.beginPath();
-  ctx.arc(gx, gy, 2.7 * s, 0, Math.PI * 2);
-  ctx.fillStyle = p.gloves || '#242c38';
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.45)';
-  ctx.lineWidth = 1 * s;
-  ctx.stroke();
-
   } // end !crossCheck stick
 
   // ── Hokejista (top-down) — orientovaný podle facingu (bodyAngle) ──
@@ -639,6 +629,23 @@ function _renderPlayer(ctx, p, cam) {
   ctx.strokeStyle = 'rgba(0,0,0,0.3)';
   ctx.lineWidth = 1 * s;
   ctx.stroke();
+
+  // Rukavice — dvě ruce u hole, navrch těla (viditelné i při crosschecku)
+  {
+    const gp = p.gripPoint;
+    const sdir = p._stickDisp ?? p.carryAngle ?? p.aimAngle;
+    for (const al of [0, 5.5]) {
+      const gxx = ox + (gp.x + Math.cos(sdir) * al) * s;
+      const gyy = oy + (gp.y + Math.sin(sdir) * al) * s;
+      ctx.beginPath();
+      ctx.arc(gxx, gyy, r * 0.42, 0, Math.PI * 2);
+      ctx.fillStyle = p.gloves || '#242c38';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+      ctx.lineWidth = 1 * s;
+      ctx.stroke();
+    }
+  }
 
   // Pass-request rings (žádost o nahrávku)
   if (p.passReq > 0) {

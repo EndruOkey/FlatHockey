@@ -28,7 +28,7 @@ export class Net {
 
   listLobbies()              { this.socket.emit('lobby:list'); }
   createLobby(settings, profile) { this.socket.emit('lobby:create', { settings, profile }); }
-  joinLobby(id, profile)     { this.socket.emit('lobby:join', { id, profile }); }
+  joinLobby(id, profile, password) { this.socket.emit('lobby:join', { id, profile, password }); }
   setTeam(team)              { this.socket.emit('lobby:team', { team }); }
   updateSettings(settings)   { this.socket.emit('lobby:settings', { settings }); }
   startLobby()               { this.socket.emit('lobby:start'); }

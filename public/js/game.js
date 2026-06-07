@@ -96,7 +96,7 @@ export class NetGame {
       // server zůstává autoritativní, _interp pak jemně koriguje drift.
       me.aimDist = aimDist;
       _updateAim(me, aim, dt);
-      me.update(dt);
+      if (!this.locked) me.update(dt);   // při buly setu / oslavě / píšťalce stojíme čelem k puku
     }
     this.net.input({
       dx: this.input.dx, dy: this.input.dy,
@@ -112,6 +112,7 @@ export class NetGame {
     this.score = s.score;
     if (s.clk !== undefined) { this.clk = s.clk; this.per = s.per; this.pers = s.pers; this.ended = !!s.end; }
     this.pnd = s.pnd || 0;
+    this.locked = !!s.lock;
     const seen = new Set();
     for (const ps of s.players) {
       seen.add(ps.id);

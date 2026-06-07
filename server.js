@@ -140,8 +140,11 @@ function faceoffAt(match, fx, fy) {
   match.puck.reset();
   match.puck.x = fx; match.puck.y = fy; match.puck.prevX = fx; match.puck.prevY = fy;
   match.lastTouch = null; match.touchX = fx;
-  match.icing = null;
-  match.world._goalLock = false;
+  match.icing = null; match._goalAt = 0; match.stoppage = false; match._whistleAt = 0;
+  // "Set" — lehká prodleva při vhazování: vše zmrazené, hráči čelem k puku, pak živé
+  match.setup = true;
+  match.faceoffUntil = Date.now() + 900;
+  match.world._goalLock = true;
 }
 function faceoff(match) { faceoffAt(match, RINK.centerX, RINK.h / 2); }
 
@@ -226,18 +229,24 @@ function createMatch(lobbyId) {
   return match;
 }
 
+// Vytvoř Player entitu z člena lobby (týmy + dresy z nastavení, doplňky z profilu)
+function buildPlayer(lobby, sid, m) {
+  const p = new Player(sid, m.team, makeInput());
+  p.name   = m.name;
+  p.handed = m.handed;
+  p.num    = m.number;
+  const ts = lobby.settings.teams[m.team] || {};
+  p.color  = ts.color || null;
+  p.jersey = ts.style || 'solid';
+  p.helmet = m.helmet; p.gloves = m.gloves; p.tape = m.tape;
+  return p;
+}
+
 // Sestav zápas z členů lobby (týmy + dresy z nastavení, číslo z profilu)
 function startMatch(lobby) {
   const match = createMatch(lobby.id);
   for (const [sid, m] of lobby.members) {
-    const p = new Player(sid, m.team, makeInput());
-    p.name   = m.name;
-    p.handed = m.handed;
-    p.num    = m.number;
-    const ts = lobby.settings.teams[m.team] || {};
-    p.color  = ts.color || null;
-    p.jersey = ts.style || 'solid';
-    p.helmet = m.helmet; p.gloves = m.gloves; p.tape = m.tape;
+    const p = buildPlayer(lobby, sid, m);
     match.players.set(sid, p);
     match.inputs.set(sid, p.input);
   }
@@ -258,6 +267,8 @@ function startMatch(lobby) {
   match._whistleAt = 0;
   match._faceoff  = null;
   match.icing     = null;               // icing v běhu (puk dojíždí před píšťalkou)
+  match.setup     = false;              // buly "set" (lehká prodleva, vše zmrazené)
+  match.faceoffUntil = 0;
   rebuildEntities(match);
   faceoff(match);
   lobby.match  = match;
@@ -276,6 +287,11 @@ function stepMatch(match) {
   if (match.stoppage && Date.now() - match._whistleAt >= 1300) {
     match.stoppage = false;
     faceoffAt(match, match._faceoff.x, match._faceoff.y);
+  }
+  // Buly "set" — lehká prodleva při vhazování (vše zmrazené, hráči čelem k puku), pak živé
+  if (match.setup) {
+    if (Date.now() >= match.faceoffUntil) { match.setup = false; match.world._goalLock = false; }
+    else { if (match.tick % Math.round(TICK_HZ / SNAP_HZ) === 0) broadcast(match); return; }
   }
   // Icing v běhu — puk necháme dojet; píšťalka až když zpomalí nebo po timeoutu
   if (match.icing && !match.stoppage) {
@@ -378,6 +394,7 @@ function sanitizeSettings(s) {
     minutes: [5, 10, 15].includes(s.minutes) ? s.minutes : 10,
     rules:   !!s.rules,
     max:     [2, 4, 6, 8, 10].includes(s.max) ? s.max : 10,
+    password: String(s.password || '').slice(0, 24),   // prázdné = bez hesla
   };
 }
 const hex = (c, d) => (typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c)) ? c : d;
@@ -399,8 +416,16 @@ function balanceTeam(l) {
   return h <= a ? 'home' : 'away';
 }
 function lobbySummary(l) {
-  return { id: l.id, name: l.settings.name, count: l.members.size, max: l.settings.max, state: l.state,
-           home: l.settings.teams.home.name, away: l.settings.teams.away.name };
+  const s = { id: l.id, name: l.settings.name, count: l.members.size, max: l.settings.max, state: l.state,
+              home: l.settings.teams.home.name, away: l.settings.teams.away.name,
+              hp: !!l.settings.password };
+  if (l.state === 'playing' && l.match) {                 // živý stav u rozehraných
+    s.score = l.match.score;
+    s.clk   = Math.max(0, Math.ceil(l.match.clock));
+    s.per   = l.match.period; s.pers = l.match.periods;
+    s.end   = l.match.ended ? 1 : 0;
+  }
+  return s;
 }
 function lobbyState(l) {
   return {
@@ -409,7 +434,7 @@ function lobbyState(l) {
   };
 }
 function sendLobbyList(socket) {
-  const list = [...lobbies.values()].filter(l => l.state === 'waiting').map(lobbySummary);
+  const list = [...lobbies.values()].filter(l => l.state === 'waiting' || l.state === 'playing').map(lobbySummary);
   (socket || io).emit('lobby:list', list);
 }
 const broadcastLobby = (l) => io.to('lobby:' + l.id).emit('lobby:state', lobbyState(l));
@@ -449,16 +474,29 @@ io.on('connection', (socket) => {
     sendLobbyList();
   });
 
-  socket.on('lobby:join', ({ id, profile }) => {
+  socket.on('lobby:join', ({ id, profile, password }) => {
     const l = lobbies.get(id);
-    if (!l || l.state !== 'waiting') { socket.emit('lobby:error', 'Lobby není dostupné.'); return; }
+    if (!l || (l.state !== 'waiting' && l.state !== 'playing')) { socket.emit('lobby:error', 'Lobby není dostupné.'); return; }
+    if (l.settings.password && l.settings.password !== String(password || '')) { socket.emit('lobby:error', 'Špatné heslo.'); return; }
     if (l.members.size >= l.settings.max) { socket.emit('lobby:error', 'Lobby je plné.'); return; }
     leaveCurrentLobby(socket);
-    l.members.set(socket.id, makeMember(profile, balanceTeam(l)));
+    const m = makeMember(profile, balanceTeam(l));
+    l.members.set(socket.id, m);
     socket.join('lobby:' + id);
     socket.data.lobbyId = id;
-    socket.emit('lobby:joined', lobbyState(l));
-    broadcastLobby(l);
+    if (l.state === 'playing' && l.match) {
+      // Připojení do běžícího zápasu — přidej hráče a hoď ho rovnou do hry
+      const p = buildPlayer(l, socket.id, m);
+      p.x = m.team === 'home' ? RINK.w * 0.3 : RINK.w * 0.7;
+      p.y = RINK.h / 2;
+      l.match.players.set(socket.id, p);
+      l.match.inputs.set(socket.id, p.input);
+      rebuildEntities(l.match);
+      socket.emit('lobby:start', { settings: l.settings });
+    } else {
+      socket.emit('lobby:joined', lobbyState(l));
+      broadcastLobby(l);
+    }
     sendLobbyList();
   });
 

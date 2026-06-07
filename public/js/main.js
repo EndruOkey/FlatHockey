@@ -81,6 +81,7 @@ function readSettings() {
     minutes: parseInt(setMinutes.value,10),
     max: chosenFmt * 2,
     rules: setRules.checked,
+    password: ($('lobby-pass').value || '').trim(),
   };
 }
 
@@ -89,7 +90,10 @@ const VIEWS = { main:'v-main', profile:'v-profile', browse:'v-browse', create:'v
 function showView(name) {
   for (const [k, id] of Object.entries(VIEWS)) $(id).style.display = (k === name) ? '' : 'none';
 }
-document.querySelectorAll('.back').forEach(b => b.addEventListener('click', () => showView(b.dataset.to)));
+document.querySelectorAll('.back').forEach(b => b.addEventListener('click', () => {
+  showView(b.dataset.to);
+  if (b.dataset.to === 'browse') net.listLobbies();   // čerstvý seznam při návratu
+}));
 
 function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
 resizeCanvas();
@@ -112,16 +116,38 @@ $('go-solo').onclick     = () => {
 // ── Procházení ────────────────────────────────────────────────────────
 net.onLobbyList = (list) => {
   const el = $('lobby-list'); el.innerHTML = '';
+  if (!list || list.length === 0) {
+    el.innerHTML = '<div class="lobby-empty">Žádná otevřená lobby — vytvoř první.</div>';
+    return;
+  }
   for (const l of list) {
     const div = document.createElement('div');
     div.className = 'lobby-item';
-    div.innerHTML = `<div><div class="li-name">${esc(l.name)}</div>` +
-      `<div class="li-sub">${esc(l.home)} vs ${esc(l.away)}</div></div>` +
-      `<div class="li-cnt">${l.count}/${l.max}</div>`;
-    div.onclick = () => net.joinLobby(l.id, profile());
+    const full = l.count >= l.max;
+    const lock = l.hp ? '🔒 ' : '';
+    let right;
+    if (l.state === 'playing') {
+      const t = l.end ? 'KONEC' : fmtClock(l.clk);
+      const sc = l.score ? `${l.score.home}:${l.score.away}` : '0:0';
+      right = `<div class="li-live"><div class="li-score">${sc}</div>` +
+              `<div class="li-time">${t} · ${l.per}/${l.pers}</div></div>`;
+    } else {
+      right = `<div class="li-cnt">${l.count}/${l.max}</div>`;
+    }
+    div.innerHTML = `<div><div class="li-name">${lock}${esc(l.name)}` +
+      (l.state === 'playing' ? ' <span class="li-tag">LIVE</span>' : '') + `</div>` +
+      `<div class="li-sub">${esc(l.home)} vs ${esc(l.away)} · ${l.count}/${l.max}</div></div>` + right;
+    if (full) div.classList.add('full');
+    div.onclick = () => {
+      if (full) { setStatus('Lobby je plné.', '#e66'); return; }
+      let pass;
+      if (l.hp) { pass = prompt('Heslo lobby:'); if (pass == null) return; }
+      net.joinLobby(l.id, profile(), pass);
+    };
     el.appendChild(div);
   }
 };
+const fmtClock = s => { s = Math.max(0, s|0); return Math.floor(s/60) + ':' + String(s%60).padStart(2,'0'); };
 $('refresh-btn').onclick = () => net.listLobbies();
 $('create-btn').onclick  = () => showView('create');
 $('create-go').onclick   = () => net.createLobby(readSettings(), profile());

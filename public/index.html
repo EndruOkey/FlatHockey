@@ -116,6 +116,13 @@
     .lobby-item .li-name { font-weight: 700; font-size: 0.92rem; }
     .lobby-item .li-sub { color: #667; font-size: 0.72rem; }
     .lobby-item .li-cnt { color: #6ee0a0; font-size: 0.82rem; font-weight: 700; }
+    .lobby-item .li-live { text-align: right; }
+    .lobby-item .li-score { color: #ffd95e; font-size: 0.95rem; font-weight: 800; }
+    .lobby-item .li-time { color: #8a93a6; font-size: 0.68rem; }
+    .lobby-item .li-tag { color: #ff5a5a; font-size: 0.6rem; font-weight: 800; border: 1px solid #ff5a5a; border-radius: 4px; padding: 1px 4px; vertical-align: middle; }
+    .lobby-item.full { opacity: 0.55; cursor: not-allowed; }
+    .lobby-item.full:hover { border-color: #2a2d3a; }
+    .lobby-empty { color: #556; font-size: 0.8rem; text-align: center; padding: 18px 0; }
     #lobby-list:empty::after { content: 'Žádná lobby — vytvoř první.'; color: #556; font-size: 0.8rem; text-align: center; padding: 18px 0; }
 
     .team-row { display: flex; gap: 6px; margin-bottom: 8px; }
@@ -213,6 +220,7 @@
       <div id="v-create" class="view" style="display:none">
         <h2>Nové lobby</h2>
         <input id="lobby-name" type="text" placeholder="NÁZEV LOBBY" maxlength="24" />
+        <input id="lobby-pass" type="text" placeholder="HESLO (nepovinné)" maxlength="24" />
 
         <div class="team-block">
           <div class="tb-head">
