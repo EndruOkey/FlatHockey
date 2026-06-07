@@ -618,31 +618,22 @@ function _renderPlayer(ctx, p, cam) {
     ctx.textBaseline = 'alphabetic';
   }
 
-  // Rukavice — jeden „úchopový" segment u hole (obě ruce v rukavicích), na těle, pod helmou
+  // Rukavice — dvě ruce na holi v ose dříku: horní u konce (u těla), dolní níž;
+  // dřík mezi nimi prosvítá → vypadá to, že hokejku skutečně drží.
   {
     const gp = p.gripPoint;
     const sdir = p._stickDisp ?? p.carryAngle ?? p.aimAngle;
-    const gx = ox + gp.x * s, gy = oy + gp.y * s;
-    const ex = ox + (gp.x + Math.cos(sdir) * 5.5) * s;
-    const ey = oy + (gp.y + Math.sin(sdir) * 5.5) * s;
+    const cos = Math.cos(sdir), sin = Math.sin(sdir);
+    const hw  = r * 0.6;                          // šířka rukavice (širší než dřík)
     ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(ex, ey);   // jemný obrys
-    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-    ctx.lineWidth = r * 0.72 + 2 * s;
-    ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(ex, ey);   // rukavice
-    ctx.strokeStyle = p.gloves || '#242c38';
-    ctx.lineWidth = r * 0.72;
-    ctx.stroke();
-    const mx = ox + (gp.x + Math.cos(sdir) * 2.75) * s;        // spára mezi rukama
-    const my = oy + (gp.y + Math.sin(sdir) * 2.75) * s;
-    const px = Math.cos(sdir + Math.PI / 2), py = Math.sin(sdir + Math.PI / 2);
-    ctx.beginPath();
-    ctx.moveTo(mx + px * r * 0.36, my + py * r * 0.36);
-    ctx.lineTo(mx - px * r * 0.36, my - py * r * 0.36);
-    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-    ctx.lineWidth = 1 * s;
-    ctx.stroke();
+    for (const [a, b] of [[-0.8, 2.2], [4.3, 7.0]]) {   // [horní ruka u konce], [dolní ruka]
+      const ax = ox + (gp.x + cos * a) * s, ay = oy + (gp.y + sin * a) * s;
+      const bx = ox + (gp.x + cos * b) * s, by = oy + (gp.y + sin * b) * s;
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by);   // obrys
+      ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = hw + 2 * s; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by);   // rukavice
+      ctx.strokeStyle = p.gloves || '#242c38'; ctx.lineWidth = hw; ctx.stroke();
+    }
   }
 
   // Helma (vepředu, ve směru facingu) — naznačí směr, navrch (hlava nad rukama)
