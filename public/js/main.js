@@ -70,7 +70,8 @@ const prevCtx = prevCanvas.getContext('2d');
 const previewPlayer = new Player('preview', 'home', null);
 previewPlayer.x = RINK.w / 2; previewPlayer.y = RINK.h / 2;
 previewPlayer.bodyAngle = -Math.PI / 2;                      // čelem vzhůru (číslo na zádech čitelné)
-previewPlayer.aimAngle = previewPlayer.carryAngle = previewPlayer._stickDisp = 0.6; // hůl dolů-doprava
+// hůl PŘED hráčem (ve směru, kam kouká), natočená do strany ruky — ne kolmo/dozadu
+previewPlayer.aimAngle = previewPlayer.carryAngle = previewPlayer._stickDisp = -Math.PI / 2 + 0.7;
 previewPlayer._dispReach = PLAYER.stickLen;
 previewPlayer._dispCharge = 0; previewPlayer.charge = 0; previewPlayer.passReq = 0; previewPlayer.crossCheck = false;
 previewPlayer.color = '#3a9fff';                             // neutrální dres (barva týmu se volí v lobby)
