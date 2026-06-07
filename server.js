@@ -504,7 +504,7 @@ io.on('connection', (socket) => {
 
   socket.on('lobby:create', ({ settings, profile }) => {
     if (!rateOk(socket, 'create', 1000)) return;
-    if (lobbies.size >= MAX_LOBBIES) { socket.emit('lobby:error', 'Server je plný, zkus to za chvíli.'); return; }
+    if (lobbies.size >= MAX_LOBBIES) { socket.emit('lobby:error', 'err_server_full'); return; }
     leaveCurrentLobby(socket);
     const id = genId();
     const l = { id, hostId: socket.id, state: 'waiting', settings: sanitizeSettings(settings), members: new Map(), match: null };
@@ -520,9 +520,9 @@ io.on('connection', (socket) => {
     if (!rateOk(socket, 'join', 500)) return;
     if (typeof id !== 'string') return;
     const l = lobbies.get(id);
-    if (!l || (l.state !== 'waiting' && l.state !== 'playing')) { socket.emit('lobby:error', 'Lobby není dostupné.'); return; }
-    if (l.settings.password && l.settings.password !== String(password || '')) { socket.emit('lobby:error', 'Špatné heslo.'); return; }
-    if (l.members.size >= l.settings.max) { socket.emit('lobby:error', 'Lobby je plné.'); return; }
+    if (!l || (l.state !== 'waiting' && l.state !== 'playing')) { socket.emit('lobby:error', 'err_unavailable'); return; }
+    if (l.settings.password && l.settings.password !== String(password || '')) { socket.emit('lobby:error', 'err_password'); return; }
+    if (l.members.size >= l.settings.max) { socket.emit('lobby:error', 'err_full'); return; }
     leaveCurrentLobby(socket);
     const m = makeMember(profile, balanceTeam(l));
     l.members.set(socket.id, m);
@@ -563,7 +563,7 @@ io.on('connection', (socket) => {
     if (!rateOk(socket, 'start', 1000)) return;
     const l = lobbies.get(socket.data.lobbyId);
     if (!l || l.hostId !== socket.id || l.state !== 'waiting' || l.members.size === 0) return;
-    if (countMatches() >= MAX_MATCHES) { socket.emit('lobby:error', 'Příliš mnoho zápasů, zkus to za chvíli.'); return; }
+    if (countMatches() >= MAX_MATCHES) { socket.emit('lobby:error', 'err_too_many'); return; }
     startMatch(l);
     io.to('lobby:' + l.id).emit('lobby:start', { settings: l.settings });
     sendLobbyList();

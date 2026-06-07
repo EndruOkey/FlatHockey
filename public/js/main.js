@@ -2,6 +2,7 @@ import { Net } from './net.js';
 import { NetGame, SandboxGame } from './game.js';
 import { Player } from './entities/Player.js';
 import { PLAYER, RINK } from './constants.js';
+import { t, applyI18n, toggleLang, setOnChange } from './i18n.js';
 
 const $ = id => document.getElementById(id);
 const canvas = $('canvas');
@@ -105,8 +106,8 @@ function readSettings() {
   return {
     name: (lobbyName.value || '').trim() || 'Lobby',
     teams: {
-      home: { name: (hName.value||'').trim() || 'Domácí', color: swHome.get(), style: hStyle.value },
-      away: { name: (aName.value||'').trim() || 'Hosté',  color: swAway.get(), style: aStyle.value },
+      home: { name: (hName.value||'').trim() || t('home_ph'), color: swHome.get(), style: hStyle.value },
+      away: { name: (aName.value||'').trim() || t('away_ph'), color: swAway.get(), style: aStyle.value },
     },
     periods: parseInt(setPeriods.value,10),
     minutes: parseInt(setMinutes.value,10),
@@ -148,7 +149,7 @@ $('go-solo').onclick     = () => {
 net.onLobbyList = (list) => {
   const el = $('lobby-list'); el.innerHTML = '';
   if (!list || list.length === 0) {
-    el.innerHTML = '<div class="lobby-empty">Žádná otevřená lobby — vytvoř první.</div>';
+    el.innerHTML = `<div class="lobby-empty">${esc(t('lobby_empty'))}</div>`;
     return;
   }
   for (const l of list) {
@@ -158,10 +159,10 @@ net.onLobbyList = (list) => {
     const lock = l.hp ? '🔒 ' : '';
     let right;
     if (l.state === 'playing') {
-      const t = l.end ? 'KONEC' : fmtClock(l.clk);
+      const tm = l.end ? t('live_end') : fmtClock(l.clk);
       const sc = l.score ? `${l.score.home}:${l.score.away}` : '0:0';
       right = `<div class="li-live"><div class="li-score">${sc}</div>` +
-              `<div class="li-time">${t} · ${l.per}/${l.pers}</div></div>`;
+              `<div class="li-time">${tm} · ${l.per}/${l.pers}</div></div>`;
     } else {
       right = `<div class="li-cnt">${l.count}/${l.max}</div>`;
     }
@@ -170,9 +171,9 @@ net.onLobbyList = (list) => {
       `<div class="li-sub">${esc(l.home)} vs ${esc(l.away)} · ${l.count}/${l.max}</div></div>` + right;
     if (full) div.classList.add('full');
     div.onclick = () => {
-      if (full) { setStatus('Lobby je plné.', '#e66'); return; }
+      if (full) { setStatus(t('err_full'), '#e66'); return; }
       let pass;
-      if (l.hp) { pass = prompt('Heslo lobby:'); if (pass == null) return; }
+      if (l.hp) { pass = prompt(t('prompt_password')); if (pass == null) return; }
       net.joinLobby(l.id, profile(), pass);
     };
     el.appendChild(div);
@@ -184,15 +185,17 @@ $('create-btn').onclick  = () => showView('create');
 $('create-go').onclick   = () => net.createLobby(readSettings(), profile());
 
 // ── Čekárna ───────────────────────────────────────────────────────────
-function teamCol(t, players) {
-  return `<div class="wt-col" style="border-color:${t.color}"><h3 style="color:${t.color}">${esc(t.name)}</h3>` +
-    players.map(p => `<div class="wt-p">${p.number != null ? '#'+p.number+' ' : ''}${esc(p.name || 'hráč')}</div>`).join('') + `</div>`;
+function teamCol(tc, players) {
+  return `<div class="wt-col" style="border-color:${tc.color}"><h3 style="color:${tc.color}">${esc(tc.name)}</h3>` +
+    players.map(p => `<div class="wt-p">${p.number != null ? '#'+p.number+' ' : ''}${esc(p.name || t('player'))}</div>`).join('') + `</div>`;
 }
+let lastWaitState = null;
 function renderWait(st) {
+  lastWaitState = st;
   showView('wait');
   $('wait-title').textContent = st.settings.name;
   const fmt = (st.settings.max/2) + 'v' + (st.settings.max/2);
-  $('wait-info').textContent = `${fmt} · ${st.settings.periods}× ${st.settings.minutes} min · ${st.settings.rules ? 'pravidla' : 'arkáda'}`;
+  $('wait-info').textContent = `${fmt} · ${st.settings.periods}× ${st.settings.minutes} min · ${st.settings.rules ? t('mode_rules') : t('mode_arcade')}`;
   $('wait-teams').innerHTML =
     teamCol(st.settings.teams.home, st.players.filter(p => p.team === 'home')) +
     teamCol(st.settings.teams.away, st.players.filter(p => p.team === 'away'));
@@ -203,7 +206,7 @@ function renderWait(st) {
 }
 net.onLobbyJoined = (st) => { setStatus(''); renderWait(st); };
 net.onLobbyState  = (st) => { if (!inGame) renderWait(st); };
-net.onLobbyError  = (msg) => setStatus(msg, '#ff4455');
+net.onLobbyError  = (code) => setStatus(t(code), '#ff4455');
 document.querySelectorAll('.pick-btn').forEach(b => b.addEventListener('click', () => net.setTeam(b.dataset.team)));
 $('start-btn').onclick   = () => net.startLobby();
 $('wait-leave').onclick  = () => { net.leaveLobby(); showView('browse'); net.listLobbies(); };
@@ -214,15 +217,23 @@ function startGame(game) { inGame = true; currentGame = game; lobby.style.displa
 
 // ── Esc menu / odpojení ───────────────────────────────────────────────
 const pauseMenu = $('pause-menu'), pauseTitle = $('pause-title'), resumeBtn = $('resume-btn'), leaveBtn = $('leave-btn');
-function showPause(title='PAUZA', disc=false) { currentGame?.input?.clear(); pauseTitle.textContent = title; resumeBtn.style.display = disc ? 'none' : ''; pauseMenu.style.display = 'flex'; }
+function showPause(title=t('pause'), disc=false) { currentGame?.input?.clear(); pauseTitle.textContent = title; resumeBtn.style.display = disc ? 'none' : ''; pauseMenu.style.display = 'flex'; }
 const hidePause = () => pauseMenu.style.display = 'none';
 resumeBtn.addEventListener('click', hidePause);
 leaveBtn.addEventListener('click', () => { net.leaveLobby(); location.reload(); });
-net.onPeerLeft = () => { if (inGame) showPause('SOUPEŘ SE ODPOJIL', true); };
+net.onPeerLeft = () => { if (inGame) showPause(t('opp_left'), true); };
 window.addEventListener('keydown', e => { if (e.key !== 'Escape' || !inGame) return; pauseMenu.style.display === 'flex' ? hidePause() : showPause(); });
 window.addEventListener('beforeunload', () => net.leaveLobby());
 
+// ── Jazyk (CS/EN) ─────────────────────────────────────────────────────
+$('lang-btn').onclick = () => toggleLang();
+setOnChange(() => {                 // po přepnutí jazyka přerenderuj dynamické části
+  if ($('v-browse').style.display !== 'none') net.listLobbies();
+  if ($('v-wait').style.display !== 'none' && lastWaitState) renderWait(lastWaitState);
+});
+
 // init
+applyI18n();
 showView('main');
 drawPreview();
 setInterval(() => { if (!inGame && $('v-browse').style.display !== 'none') net.listLobbies(); }, 4000);

@@ -1,5 +1,6 @@
 import { RINK, PLAYER, PUCK } from './constants.js';
 import { lerpAngle, clamp } from './utils.js';
+import { t } from './i18n.js';
 import { Input } from './input.js';
 import { Engine, fromScreen } from './engine.js';
 import { World } from './world.js';
@@ -43,7 +44,7 @@ export class NetGame {
     this.canvas  = canvas;
     this.net     = net;
     this.myId    = myId;
-    this.settings = settings || { teams: { home: { name: 'Domácí', color: '#3a9fff' }, away: { name: 'Hosté', color: '#ff4455' } } };
+    this.settings = settings || { teams: { home: { name: t('team_home_default'), color: '#3a9fff' }, away: { name: t('team_away_default'), color: '#ff4455' } } };
     this.clk = 0; this.per = 1; this.pers = 1; this.ended = false;
     this.input   = new Input(canvas);
     this.engine  = new Engine(canvas);
@@ -63,8 +64,7 @@ export class NetGame {
     net.onSnap = s => this._onSnap(s);
     net.onGoal = g => { this.goalFlash = 2.5; this.goalText = g.text; };
     net.onWhistle = d => {
-      const txt = d.rule === 'offside' ? 'OFFSIDE' : 'ZAKÁZANÉ UVOLNĚNÍ';
-      this.call = { text: txt, lineX: d.lineX, color: d.color, t: 1.5 };
+      this.call = { rule: d.rule, lineX: d.lineX, color: d.color, t: 1.5 };
     };
 
     // Render-svět pro Engine: update = interpolace, draw = vykreslení
@@ -215,7 +215,7 @@ export class NetGame {
 
   _overlay(ctx) {
     const W = ctx.canvas.width, H = ctx.canvas.height;
-    const t = this.settings.teams;
+    const tm = this.settings.teams;
     const cx = W / 2;
     // scoreboard
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
@@ -225,14 +225,14 @@ export class NetGame {
     ctx.font = 'bold 24px monospace'; ctx.fillStyle = '#fff';
     ctx.fillText(`${mm}:${String(ss).padStart(2, '0')}`, cx, 36);
     ctx.font = '11px monospace'; ctx.fillStyle = '#8aa';
-    ctx.fillText(`${this.per}. třetina z ${this.pers}`, cx, 54);
+    ctx.fillText(t('period_of', this.per, this.pers), cx, 54);
     // skóre + jména týmů
     ctx.font = 'bold 26px monospace';
-    ctx.textAlign = 'right'; ctx.fillStyle = t.home.color; ctx.fillText(this.score.home, cx - 80, 44);
-    ctx.textAlign = 'left';  ctx.fillStyle = t.away.color; ctx.fillText(this.score.away, cx + 80, 44);
+    ctx.textAlign = 'right'; ctx.fillStyle = tm.home.color; ctx.fillText(this.score.home, cx - 80, 44);
+    ctx.textAlign = 'left';  ctx.fillStyle = tm.away.color; ctx.fillText(this.score.away, cx + 80, 44);
     ctx.font = '12px "Segoe UI", sans-serif';
-    ctx.textAlign = 'right'; ctx.fillStyle = t.home.color; ctx.fillText(this._clip(t.home.name, 12), cx - 80, 24);
-    ctx.textAlign = 'left';  ctx.fillStyle = t.away.color; ctx.fillText(this._clip(t.away.name, 12), cx + 80, 24);
+    ctx.textAlign = 'right'; ctx.fillStyle = tm.home.color; ctx.fillText(this._clip(tm.home.name, 12), cx - 80, 24);
+    ctx.textAlign = 'left';  ctx.fillStyle = tm.away.color; ctx.fillText(this._clip(tm.away.name, 12), cx + 80, 24);
 
     if (this.goalFlash > 0) {
       const a = Math.min(1, this.goalFlash);
@@ -273,20 +273,20 @@ export class NetGame {
       ctx.restore();
       ctx.fillStyle = `rgba(0,0,0,0.5)`; ctx.fillRect(cx - 160, H * 0.3 - 30, 320, 52);
       ctx.font = 'bold 30px "Segoe UI", sans-serif'; ctx.textAlign = 'center';
-      ctx.fillStyle = this.call.color; ctx.fillText(this.call.text, cx, H * 0.3 + 7);
+      ctx.fillStyle = this.call.color; ctx.fillText(t(this.call.rule), cx, H * 0.3 + 7);
     }
 
     if (this.ended) {
       ctx.fillStyle = 'rgba(7,9,15,0.78)'; ctx.fillRect(0, 0, W, H);
       ctx.textAlign = 'center'; ctx.fillStyle = '#fff';
-      ctx.font = 'bold 52px "Segoe UI", sans-serif'; ctx.fillText('KONEC ZÁPASU', cx, H / 2 - 50);
+      ctx.font = 'bold 52px "Segoe UI", sans-serif'; ctx.fillText(t('end_game'), cx, H / 2 - 50);
       ctx.font = 'bold 34px monospace';
-      ctx.fillText(`${this._clip(t.home.name, 12)}  ${this.score.home} : ${this.score.away}  ${this._clip(t.away.name, 12)}`, cx, H / 2 + 6);
-      const win = this.score.home > this.score.away ? t.home.name : this.score.away > this.score.home ? t.away.name : null;
+      ctx.fillText(`${this._clip(tm.home.name, 12)}  ${this.score.home} : ${this.score.away}  ${this._clip(tm.away.name, 12)}`, cx, H / 2 + 6);
+      const win = this.score.home > this.score.away ? tm.home.name : this.score.away > this.score.home ? tm.away.name : null;
       ctx.font = '22px "Segoe UI", sans-serif'; ctx.fillStyle = '#cde';
-      ctx.fillText(win ? `Vítěz: ${this._clip(win, 14)}` : 'Remíza', cx, H / 2 + 48);
+      ctx.fillText(win ? `${t('winner')}: ${this._clip(win, 14)}` : t('draw'), cx, H / 2 + 48);
       ctx.font = '15px "Segoe UI", sans-serif'; ctx.fillStyle = '#8aa';
-      ctx.fillText('Esc → zpět do menu', cx, H / 2 + 86);
+      ctx.fillText(t('esc_back'), cx, H / 2 + 86);
     }
   }
 
