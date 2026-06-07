@@ -152,9 +152,13 @@ export class NetGame {
     for (const e of this.players.values()) {
       const ent = e.ent;
       if (e.isMe) {
-        // predikce proběhla v _tick; jen jemně dotáhni k serveru (drift z kolizí/nárazů)
+        // predikce proběhla v _tick; jemně dotáhni k serveru
         ent.x += (e.sx - ent.x) * rk;
         ent.y += (e.sy - ent.y) * rk;
+        // STROP odchylky: predikce nesmí utéct od serveru (klient nepredikuje srážky
+        // s gólmanem/soupeřem) → bez tohohle bys o ně „kroužil" na místě.
+        const dx = ent.x - e.sx, dy = ent.y - e.sy, d = Math.hypot(dx, dy), MAX = 16;
+        if (d > MAX) { ent.x = e.sx + dx / d * MAX; ent.y = e.sy + dy / d * MAX; }
         continue;
       }
       const px = ent.x, py = ent.y;

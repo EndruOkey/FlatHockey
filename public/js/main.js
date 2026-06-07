@@ -97,6 +97,7 @@ window.addEventListener('resize', resizeCanvas);
 
 const net = new Net();
 let inGame = false;
+let currentGame = null;
 const setStatus = (m, c = '#888') => { status.textContent = m; status.style.color = c; };
 
 // ── Hlavní menu ───────────────────────────────────────────────────────
@@ -152,11 +153,11 @@ $('wait-leave').onclick  = () => { net.leaveLobby(); showView('browse'); net.lis
 
 // ── Start hry ─────────────────────────────────────────────────────────
 net.onLobbyStart = (data) => startGame(new NetGame(canvas, net, net.id, data && data.settings));
-function startGame(game) { inGame = true; lobby.style.display = 'none'; canvas.style.cursor = 'crosshair'; game.start(); }
+function startGame(game) { inGame = true; currentGame = game; lobby.style.display = 'none'; canvas.style.cursor = 'crosshair'; game.start(); }
 
 // ── Esc menu / odpojení ───────────────────────────────────────────────
 const pauseMenu = $('pause-menu'), pauseTitle = $('pause-title'), resumeBtn = $('resume-btn'), leaveBtn = $('leave-btn');
-function showPause(title='PAUZA', disc=false) { pauseTitle.textContent = title; resumeBtn.style.display = disc ? 'none' : ''; pauseMenu.style.display = 'flex'; }
+function showPause(title='PAUZA', disc=false) { currentGame?.input?.clear(); pauseTitle.textContent = title; resumeBtn.style.display = disc ? 'none' : ''; pauseMenu.style.display = 'flex'; }
 const hidePause = () => pauseMenu.style.display = 'none';
 resumeBtn.addEventListener('click', hidePause);
 leaveBtn.addEventListener('click', () => { net.leaveLobby(); location.reload(); });

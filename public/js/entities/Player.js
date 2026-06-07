@@ -319,12 +319,15 @@ export class PlayerBase {
       }
     }
 
-    // Tělo: za jízdy kouká kam jedeš (WASD, stabilní). Když stojím, plynule se pivotuje
-    // KE KURZORU → hokejka se nezasekne na kraji kuželu (můžu mířit kamkoliv otočením).
-    // (Pivot jde přes aimAngle = myš + lerpAngle nejkratší cestou → žádné protáčení.)
+    // Tělo: za jízdy kouká kam jedeš (WASD), když stojím, pivotuje ke kurzoru.
     const sp2 = Math.hypot(this.vx, this.vy);
     if (hasInput) this.skateAngle = lerpAngle(this.skateAngle, Math.atan2(iy, ix), Math.min(1, 9 * dt));
     else          this.skateAngle = lerpAngle(this.skateAngle, this.aimAngle, Math.min(1, 6 * dt));
+    // ZÁRUKA dosahu hole: kurzor musí být vždy v dosahu hole. Když je dál než ~90° od
+    // těla, dotoč tělo tak, aby na něj hůl dosáhla → hokejka se NIKDY nezasekne mimo dosah.
+    const off = angleDiff(this.aimAngle, this.skateAngle);
+    const lim = Math.PI * 0.5;
+    if (Math.abs(off) > lim) this.skateAngle = this.aimAngle - Math.sign(off) * lim;
     this.bodyAngle = this.skateAngle;
 
     // Náklon do oblouku (vizuál)

@@ -19,8 +19,9 @@ function _resolveCorners(puck) {
     puck.y = cy + ny * (cR - r);
     const dot = puck.vx * nx + puck.vy * ny;
     if (dot > 0) { // pohybuje se ven
-      puck.vx = (puck.vx - 2 * dot * nx) * PUCK.bounce;
-      puck.vy = (puck.vy - 2 * dot * ny) * PUCK.bounce;
+      const e = _reb(dot);
+      puck.vx = (puck.vx - 2 * dot * nx) * e;
+      puck.vy = (puck.vy - 2 * dot * ny) * e;
     }
   }
 }
@@ -149,10 +150,10 @@ export class Puck {
     this.x += this.vx * dt;
     this.y += this.vy * dt;
 
-    if (this.y < PUCK.radius)          { this.y = PUCK.radius;          this.vy =  Math.abs(this.vy) * PUCK.bounce; }
-    if (this.y > RINK.h - PUCK.radius) { this.y = RINK.h - PUCK.radius; this.vy = -Math.abs(this.vy) * PUCK.bounce; }
-    if (this.x < PUCK.radius)          { this.x = PUCK.radius;          this.vx =  Math.abs(this.vx) * PUCK.bounce; }
-    if (this.x > RINK.w - PUCK.radius) { this.x = RINK.w - PUCK.radius; this.vx = -Math.abs(this.vx) * PUCK.bounce; }
+    if (this.y < PUCK.radius)          { this.y = PUCK.radius;          this.vy =  Math.abs(this.vy) * _reb(this.vy); }
+    if (this.y > RINK.h - PUCK.radius) { this.y = RINK.h - PUCK.radius; this.vy = -Math.abs(this.vy) * _reb(this.vy); }
+    if (this.x < PUCK.radius)          { this.x = PUCK.radius;          this.vx =  Math.abs(this.vx) * _reb(this.vx); }
+    if (this.x > RINK.w - PUCK.radius) { this.x = RINK.w - PUCK.radius; this.vx = -Math.abs(this.vx) * _reb(this.vx); }
 
     // Rounded corner arcs — puk se odráží od zakřivených rohů
     _resolveCorners(this);
@@ -170,8 +171,9 @@ export class Puck {
           this.y = p.y + ny * (minD + 0.5);
           const dot = this.vx * nx + this.vy * ny;
           if (dot < 0) {
-            this.vx = (this.vx - 2 * dot * nx) * 0.45;
-            this.vy = (this.vy - 2 * dot * ny) * 0.45;
+            const e = _reb(dot);   // rychlá rána do těla se utlumí (žádný obří odraz)
+            this.vx = (this.vx - 2 * dot * nx) * e;
+            this.vy = (this.vy - 2 * dot * ny) * e;
           }
         }
       }
@@ -225,6 +227,10 @@ export class Puck {
   }
 }
 
+// Odraz závislý na rychlosti — rychlá rána ztratí víc energie (žádné obří odrazy),
+// pomalý puk se odrazí živě. (sp = složka rychlosti do překážky)
+function _reb(sp) { return Math.max(0.18, 0.5 - Math.abs(sp) / 2400); }
+
 function _insideCage(x, y) {
   const gy1 = RINK.goalY, gy2 = RINK.goalY + RINK.goalH;
   if (y <= gy1 || y >= gy2) return false;
@@ -251,16 +257,16 @@ function _resolveNetWalls(puck) {
     const inNetY   = puck.y > gy1 && puck.y < gy2;          // ve výškovém rozsahu branky
     // Vrchní mantinel (swept, z vnějšku shora) — neprojde mřížkou shora
     if (inDepthX && puck.vy > 0 && pyPrev <= railTop && puck.y > railTop) {
-      puck.y = railTop; puck.vy = -Math.abs(puck.vy) * PUCK.bounce;
+      puck.y = railTop; puck.vy = -Math.abs(puck.vy) * _reb(puck.vy);
     }
     // Spodní mantinel (swept, zdola)
     if (inDepthX && puck.vy < 0 && pyPrev >= railBot && puck.y < railBot) {
-      puck.y = railBot; puck.vy = Math.abs(puck.vy) * PUCK.bounce;
+      puck.y = railBot; puck.vy = Math.abs(puck.vy) * _reb(puck.vy);
     }
     // Zadní stěna (swept, z vnějšku) — puk zezadu se odrazí, neprojde zády
     if (inNetY) {
-      if (dir > 0 && puck.vx < 0 && pxPrev >= hi + r && puck.x < hi + r) { puck.x = hi + r; puck.vx = Math.abs(puck.vx) * PUCK.bounce; }
-      if (dir < 0 && puck.vx > 0 && pxPrev <= lo - r && puck.x > lo - r) { puck.x = lo - r; puck.vx = -Math.abs(puck.vx) * PUCK.bounce; }
+      if (dir > 0 && puck.vx < 0 && pxPrev >= hi + r && puck.x < hi + r) { puck.x = hi + r; puck.vx = Math.abs(puck.vx) * _reb(puck.vx); }
+      if (dir < 0 && puck.vx > 0 && pxPrev <= lo - r && puck.x > lo - r) { puck.x = lo - r; puck.vx = -Math.abs(puck.vx) * _reb(puck.vx); }
     }
   }
 }
@@ -296,8 +302,9 @@ function _resolveOneGoal(puck, lineX, backX, dir, result) {
       puck.y = py + ny * minD;
       const dot = puck.vx * nx + puck.vy * ny;
       if (dot < 0) {
-        puck.vx = (puck.vx - 2 * dot * nx) * PUCK.bounce;
-        puck.vy = (puck.vy - 2 * dot * ny) * PUCK.bounce;
+        const e = _reb(dot);
+        puck.vx = (puck.vx - 2 * dot * nx) * e;
+        puck.vy = (puck.vy - 2 * dot * ny) * e;
       }
     }
   }
@@ -321,7 +328,7 @@ function _resolveOneGoal(puck, lineX, backX, dir, result) {
       } else {
         // Trefil břevno — odraz zpět a dolů, není gól
         puck.x  = lineX - dir * (r + 0.5);
-        puck.vx = -dir * Math.abs(puck.vx) * PUCK.bounce;
+        puck.vx = -dir * Math.abs(puck.vx) * _reb(puck.vx);
         puck.z  = cbar;
         puck.vz = -Math.abs(puck.vz) * 0.4;
       }

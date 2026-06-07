@@ -33,6 +33,7 @@ export class Input {
     // Use window so release outside canvas is caught (prevents stuck lmb/rmb)
     window.addEventListener('mouseup', e => {
       if (e.button === 0) { this.lmb = false; this.lmbJustReleased = true; }
+      if (e.button === 1) { this.mmb = false; }
       if (e.button === 2) { this.rmb = false; }
     });
 
@@ -46,6 +47,13 @@ export class Input {
     };
     window.addEventListener('blur', clearAll);
     document.addEventListener('visibilitychange', () => { if (document.hidden) clearAll(); });
+  }
+
+  // Vynuluj vše (volá se např. při otevření Esc menu — ať nezůstane „zaseknutá" klávesa)
+  clear() {
+    this.keys = {};
+    this.lmb = this.rmb = this.mmb = false;
+    this.lmbJustPressed = this.lmbJustReleased = this.rmbJustPressed = this.mmbJustPressed = false;
   }
 
   get shift() { return !!(this.keys['ShiftLeft'] || this.keys['ShiftRight']); }
