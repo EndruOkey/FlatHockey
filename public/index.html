@@ -26,15 +26,16 @@
     }
 
     h1 {
-      font-size: 2.8rem;
+      font-size: 2.6rem;
       font-weight: 900;
-      letter-spacing: 0.12em;
+      letter-spacing: 0.01em;
       background: linear-gradient(135deg, #3a9fff, #ff4455);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
-      margin-bottom: 6px;
+      margin-bottom: 22px;
     }
+    h1 span { font-weight: 800; }
 
     .sub { color: #555; margin-bottom: 34px; font-size: 0.82rem; letter-spacing: 0.05em; }
 
@@ -51,6 +52,7 @@
     button {
       width: 100%; padding: 13px;
       border: none; border-radius: 8px;
+      background: #1b2330;
       color: #fff; font-size: 0.95rem; font-weight: 700;
       cursor: pointer; transition: opacity 0.15s;
       margin-bottom: 8px; letter-spacing: 0.05em;
@@ -69,13 +71,34 @@
     }
     .hand-btn.active { background: #1b2740; border-color: #3a9fff; color: #fff; }
 
-    .gear-row { display: flex; gap: 8px; margin-bottom: 14px; }
-    .gear-row label { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
-      color: #889; font-size: 0.62rem; letter-spacing: 0.04em; text-transform: uppercase; }
-    .gear-row input[type=color] { width: 100%; height: 30px; padding: 3px; margin: 0;
-      background: #141720; border: 1px solid #2a2d3a; border-radius: 8px; cursor: pointer; }
+    .box h2 { font-size: 1.15rem; font-weight: 800; letter-spacing: 0.08em; color: #e6e8ee;
+      margin-bottom: 16px; text-transform: uppercase; }
+    .box .lbl { color: #788; font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase;
+      text-align: left; margin: 4px 0 6px; }
+    button.big { padding: 16px; font-size: 1rem; letter-spacing: 0.08em; }
+    button.primary { background: linear-gradient(135deg, #2a7fff, #1146c9); }
+    button.back { margin-top: 6px; background: #181c26; border: 1px solid #2a2d3a; }
 
-    .prof-row { display: flex; gap: 8px; margin-bottom: 10px; }
+    /* barevné dlaždice */
+    .gear-item { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .gear-item > span { width: 92px; flex: none; text-align: left; color: #889;
+      font-size: 0.64rem; letter-spacing: 0.05em; }
+    .swatches { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
+    .sw { width: 24px; height: 24px; padding: 0; margin: 0; border-radius: 6px;
+      border: 2px solid transparent; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.35); }
+    .sw.active { border-color: #fff; transform: scale(1.12); }
+
+    /* tým v create */
+    .team-block { background: #12151d; border: 1px solid #232733; border-radius: 10px;
+      padding: 10px; margin-bottom: 10px; }
+    .tb-head { display: flex; gap: 6px; margin-bottom: 8px; }
+    .tb-head .tname { flex: 1; margin: 0; text-transform: none; letter-spacing: normal;
+      text-align: left; font-size: 0.9rem; padding: 9px; }
+    .tb-head select { background: #1a1e28; color: #fff; border: 1px solid #2a2d3a; border-radius: 8px; padding: 6px; }
+    .team-block .swatches { gap: 5px; }
+    .team-block .sw { width: 22px; height: 22px; }
+
+    .prof-row { display: flex; gap: 8px; margin-bottom: 12px; }
     .prof-row #hand-toggle { flex: 1; margin: 0; }
     #num-input { width: 64px; margin: 0; padding: 11px 6px; font-size: 1rem; letter-spacing: 0.06em; }
 
@@ -149,47 +172,64 @@
 
   <div id="lobby">
     <div class="box">
-      <h1>HOCKEY</h1>
-      <p class="sub">online · flathockey.fun</p>
+      <h1>Flat<span>Hockey</span></h1>
 
-      <!-- Profil hráče -->
-      <input id="name-input" type="text" placeholder="TVÉ JMÉNO" maxlength="12" autocomplete="off" spellcheck="false" />
-      <div class="prof-row">
-        <div id="hand-toggle">
-          <button class="hand-btn" data-hand="-1">LEVÁK</button>
-          <button class="hand-btn active" data-hand="1">PRAVÁK</button>
+      <!-- HLAVNÍ MENU -->
+      <div id="v-main" class="view">
+        <button id="go-online" class="big primary">HRÁT ONLINE</button>
+        <button id="go-solo"   class="big ghost">SOLO TRÉNINK</button>
+        <button id="go-profile" class="ghost">PROFIL & DRES</button>
+      </div>
+
+      <!-- PROFIL -->
+      <div id="v-profile" class="view" style="display:none">
+        <h2>Profil & dres</h2>
+        <input id="name-input" type="text" placeholder="TVÉ JMÉNO" maxlength="12" autocomplete="off" spellcheck="false" />
+        <div class="prof-row">
+          <div id="hand-toggle">
+            <button class="hand-btn" data-hand="-1">LEVÁK</button>
+            <button class="hand-btn active" data-hand="1">PRAVÁK</button>
+          </div>
+          <input id="num-input" type="number" min="0" max="99" placeholder="č." title="Číslo dresu" />
         </div>
-        <input id="num-input" type="number" min="0" max="99" placeholder="č." title="Číslo dresu" />
-      </div>
-      <div class="gear-row">
-        <label>Helma<input id="g-helmet" type="color" value="#eef2f8" /></label>
-        <label>Rukavice<input id="g-gloves" type="color" value="#242c38" /></label>
-        <label>Páska<input id="g-tape" type="color" value="#111111" /></label>
+        <div class="gear-item"><span>HELMA</span><div class="swatches" id="sw-helmet"></div></div>
+        <div class="gear-item"><span>RUKAVICE</span><div class="swatches" id="sw-gloves"></div></div>
+        <div class="gear-item"><span>PÁSKA HOKEJKY</span><div class="swatches" id="sw-tape"></div></div>
+        <button class="back" data-to="main">HOTOVO</button>
       </div>
 
-      <!-- Procházení lobby -->
-      <div id="browse-view" class="view">
+      <!-- ONLINE: SEZNAM -->
+      <div id="v-browse" class="view" style="display:none">
+        <h2>Online hry</h2>
+        <div id="lobby-list"></div>
         <div class="row2">
-          <button id="create-btn">+ VYTVOŘIT LOBBY</button>
+          <button id="create-btn" class="primary">+ VYTVOŘIT</button>
           <button id="refresh-btn" class="ghost">⟳</button>
         </div>
-        <div id="lobby-list"></div>
-        <button id="solo-btn" class="ghost">SOLO TRÉNINK</button>
+        <button class="back" data-to="main">ZPĚT</button>
       </div>
 
-      <!-- Vytvoření lobby -->
-      <div id="create-view" class="view" style="display:none">
+      <!-- ONLINE: VYTVOŘENÍ -->
+      <div id="v-create" class="view" style="display:none">
+        <h2>Nové lobby</h2>
         <input id="lobby-name" type="text" placeholder="NÁZEV LOBBY" maxlength="24" />
-        <div class="team-row">
-          <input id="hteam-name" class="tname" type="text" placeholder="Domácí" maxlength="16" />
-          <input id="hteam-color" type="color" value="#3a9fff" />
-          <select id="hteam-style"><option value="solid">solid</option><option value="stripes">pruhy</option><option value="shoulder">ramena</option></select>
+
+        <div class="team-block">
+          <div class="tb-head">
+            <input id="hteam-name" class="tname" type="text" placeholder="Domácí" maxlength="16" />
+            <select id="hteam-style"><option value="solid">solid</option><option value="stripes">pruhy</option><option value="shoulder">ramena</option></select>
+          </div>
+          <div class="swatches" id="sw-home"></div>
         </div>
-        <div class="team-row">
-          <input id="ateam-name" class="tname" type="text" placeholder="Hosté" maxlength="16" />
-          <input id="ateam-color" type="color" value="#ff4455" />
-          <select id="ateam-style"><option value="solid">solid</option><option value="stripes">pruhy</option><option value="shoulder">ramena</option></select>
+        <div class="team-block">
+          <div class="tb-head">
+            <input id="ateam-name" class="tname" type="text" placeholder="Hosté" maxlength="16" />
+            <select id="ateam-style"><option value="solid">solid</option><option value="stripes">pruhy</option><option value="shoulder">ramena</option></select>
+          </div>
+          <div class="swatches" id="sw-away"></div>
         </div>
+
+        <div class="lbl">FORMÁT</div>
         <div id="format-row">
           <button class="fmt-btn main" data-fmt="1">1v1</button>
           <button class="fmt-btn" data-fmt="2">2v2</button>
@@ -203,13 +243,13 @@
           <label class="chk"><input id="set-rules" type="checkbox" />Pravidla</label>
         </div>
         <div class="row2">
-          <button id="create-go">VYTVOŘIT</button>
-          <button id="create-back" class="ghost">ZPĚT</button>
+          <button id="create-go" class="primary">VYTVOŘIT</button>
+          <button class="ghost back" data-to="browse">ZPĚT</button>
         </div>
       </div>
 
-      <!-- Čekárna -->
-      <div id="wait-view" class="view" style="display:none">
+      <!-- ČEKÁRNA -->
+      <div id="v-wait" class="view" style="display:none">
         <h2 id="wait-title">Lobby</h2>
         <p id="wait-info" class="sub" style="margin-bottom:12px"></p>
         <div id="wait-teams"></div>
@@ -217,7 +257,7 @@
           <button class="pick-btn" data-team="home">DO DOMÁCÍCH</button>
           <button class="pick-btn" data-team="away">DO HOSTŮ</button>
         </div>
-        <button id="start-btn">START</button>
+        <button id="start-btn" class="primary">START</button>
         <button id="wait-leave" class="ghost">ODEJÍT</button>
       </div>
 
