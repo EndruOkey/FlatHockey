@@ -240,19 +240,24 @@ export class NetGame {
       ctx.fillText(this.goalText, cx, H / 2);
     }
 
-    // Předběžné varování — pulsující čára (offside pozice / icing v běhu)
+    // Předběžné varování — výrazně pulsující čára (offside pozice / icing v běhu)
     if (this.pnd && this._cam) {
       const cam = this._cam, y0 = cam.oy, y1 = cam.oy + RINK.h * cam.scale;
-      const pulse = 0.22 + 0.32 * (0.5 + 0.5 * Math.sin(Date.now() / 140));
+      const p = 0.5 + 0.5 * Math.sin(Date.now() / 120);   // 0..1
       const line = (xw, col) => {
         const lx = cam.ox + xw * cam.scale;
-        ctx.save(); ctx.globalAlpha = pulse; ctx.strokeStyle = col;
-        ctx.lineWidth = 6 * cam.scale; ctx.beginPath(); ctx.moveTo(lx, y0); ctx.lineTo(lx, y1); ctx.stroke(); ctx.restore();
+        ctx.save();
+        ctx.strokeStyle = col;
+        ctx.shadowColor = col; ctx.shadowBlur = (12 + 16 * p) * cam.scale; // záře
+        ctx.globalAlpha = 0.5 + 0.5 * p;
+        ctx.lineWidth = (9 + 6 * p) * cam.scale;
+        ctx.beginPath(); ctx.moveTo(lx, y0); ctx.lineTo(lx, y1); ctx.stroke();
+        ctx.restore();
       };
-      if (this.pnd & 1) line(RINK.blueLineRight, '#2a6bff');
-      if (this.pnd & 2) line(RINK.blueLineLeft, '#2a6bff');
-      if (this.pnd & 4) line(RINK.goalLineRight, '#ff3344');
-      if (this.pnd & 8) line(RINK.goalLineLeft, '#ff3344');
+      if (this.pnd & 1) line(RINK.blueLineRight, '#86ccff');  // svítivá modrá (offside)
+      if (this.pnd & 2) line(RINK.blueLineLeft, '#86ccff');
+      if (this.pnd & 4) line(RINK.goalLineRight, '#ff6a55');  // svítivá červená (icing)
+      if (this.pnd & 8) line(RINK.goalLineLeft, '#ff6a55');
     }
 
     // Odpískané pravidlo — zvýraznění čáry na ledě + banner
