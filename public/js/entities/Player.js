@@ -630,21 +630,34 @@ function _renderPlayer(ctx, p, cam) {
   ctx.lineWidth = 1 * s;
   ctx.stroke();
 
-  // Rukavice — dvě ruce u hole, navrch těla (viditelné i při crosschecku)
+  // Rukavice — jeden „úchopový" segment u hole (obě ruce v rukavicích), navrch těla
   {
     const gp = p.gripPoint;
     const sdir = p._stickDisp ?? p.carryAngle ?? p.aimAngle;
-    for (const al of [0, 5.5]) {
-      const gxx = ox + (gp.x + Math.cos(sdir) * al) * s;
-      const gyy = oy + (gp.y + Math.sin(sdir) * al) * s;
-      ctx.beginPath();
-      ctx.arc(gxx, gyy, r * 0.42, 0, Math.PI * 2);
-      ctx.fillStyle = p.gloves || '#242c38';
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(0,0,0,0.45)';
-      ctx.lineWidth = 1 * s;
-      ctx.stroke();
-    }
+    const gx = ox + gp.x * s, gy = oy + gp.y * s;
+    const ex = ox + (gp.x + Math.cos(sdir) * 5.5) * s;
+    const ey = oy + (gp.y + Math.sin(sdir) * 5.5) * s;
+    ctx.lineCap = 'round';
+    // jemný obrys
+    ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(ex, ey);
+    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+    ctx.lineWidth = r * 0.72 + 2 * s;
+    ctx.stroke();
+    // rukavice
+    ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(ex, ey);
+    ctx.strokeStyle = p.gloves || '#242c38';
+    ctx.lineWidth = r * 0.72;
+    ctx.stroke();
+    // rozdělení dvou rukou (jemná spára)
+    const mx = ox + (gp.x + Math.cos(sdir) * 2.75) * s;
+    const my = oy + (gp.y + Math.sin(sdir) * 2.75) * s;
+    const px = Math.cos(sdir + Math.PI / 2), py = Math.sin(sdir + Math.PI / 2);
+    ctx.beginPath();
+    ctx.moveTo(mx + px * r * 0.36, my + py * r * 0.36);
+    ctx.lineTo(mx - px * r * 0.36, my - py * r * 0.36);
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+    ctx.lineWidth = 1 * s;
+    ctx.stroke();
   }
 
   // Pass-request rings (žádost o nahrávku)
