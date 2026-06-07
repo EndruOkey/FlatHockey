@@ -18,7 +18,8 @@ const lobbyList  = $('lobby-list');
 const lobbyName = $('lobby-name');
 const hName = $('hteam-name'), hColor = $('hteam-color'), hStyle = $('hteam-style');
 const aName = $('ateam-name'), aColor = $('ateam-color'), aStyle = $('ateam-style');
-const setPeriods = $('set-periods'), setMinutes = $('set-minutes'), setMax = $('set-max'), setRules = $('set-rules');
+const setPeriods = $('set-periods'), setMinutes = $('set-minutes'), setRules = $('set-rules');
+const fmtBtns = document.querySelectorAll('.fmt-btn');
 // Wait
 const waitTitle = $('wait-title'), waitInfo = $('wait-info'), waitTeams = $('wait-teams'), startBtn = $('start-btn');
 // Pause
@@ -76,6 +77,11 @@ $('create-btn').onclick  = () => showView('create');
 $('solo-btn').onclick     = () => { const g = new SandboxGame(canvas); g.local.name = profile().name; g.local.handed = chosenHand; g.local.num = profile().number; startGame(g); };
 
 // ── Vytvoření lobby ───────────────────────────────────────────────────
+let chosenFmt = 3; // 3v3 default
+fmtBtns.forEach(b => b.addEventListener('click', () => {
+  chosenFmt = parseInt(b.dataset.fmt, 10);
+  fmtBtns.forEach(x => x.classList.toggle('active', x === b));
+}));
 function readSettings() {
   return {
     name: (lobbyName.value || '').trim() || 'Lobby',
@@ -85,7 +91,7 @@ function readSettings() {
     },
     periods: parseInt(setPeriods.value, 10),
     minutes: parseInt(setMinutes.value, 10),
-    max:     parseInt(setMax.value, 10),
+    max:     chosenFmt * 2,        // formát N → N na tým
     rules:   setRules.checked,
   };
 }
@@ -102,7 +108,8 @@ function renderWait(st) {
   currentLobby = st;
   showView('wait');
   waitTitle.textContent = st.settings.name;
-  waitInfo.textContent = `${st.settings.periods}× ${st.settings.minutes} min · ${st.settings.rules ? 'pravidla' : 'arkáda'} · max ${st.settings.max}`;
+  const fmt = (st.settings.max / 2) + 'v' + (st.settings.max / 2);
+  waitInfo.textContent = `${fmt} · ${st.settings.periods}× ${st.settings.minutes} min · ${st.settings.rules ? 'pravidla' : 'arkáda'}`;
   const home = st.players.filter(p => p.team === 'home');
   const away = st.players.filter(p => p.team === 'away');
   waitTeams.innerHTML = teamCol(st.settings.teams.home, home) + teamCol(st.settings.teams.away, away);

@@ -97,6 +97,15 @@
     .set-row label { display: flex; flex-direction: column; gap: 3px; }
     .set-row label.chk { flex-direction: row; align-items: center; gap: 5px; }
 
+    #format-row { display: flex; gap: 6px; margin-bottom: 10px; }
+    .fmt-btn {
+      flex: 1; padding: 10px 2px; margin: 0;
+      background: #141720; border: 1px solid #2a2d3a; border-radius: 8px;
+      color: #667; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.03em;
+    }
+    .fmt-btn.main { color: #9fb4cc; font-size: 0.9rem; }
+    .fmt-btn.active { background: #1b2740; border-color: #3a9fff; color: #fff; }
+
     #wait-teams { display: flex; gap: 8px; margin-bottom: 4px; }
     .wt-col { flex: 1; background: #141720; border: 1px solid #2a2d3a; border-radius: 8px; padding: 8px 10px; min-height: 70px; }
     .wt-col h3 { font-size: 0.82rem; margin-bottom: 6px; }
@@ -170,10 +179,16 @@
           <input id="ateam-color" type="color" value="#ff4455" />
           <select id="ateam-style"><option value="solid">solid</option><option value="stripes">pruhy</option><option value="shoulder">ramena</option></select>
         </div>
+        <div id="format-row">
+          <button class="fmt-btn main" data-fmt="1">1v1</button>
+          <button class="fmt-btn" data-fmt="2">2v2</button>
+          <button class="fmt-btn main active" data-fmt="3">3v3</button>
+          <button class="fmt-btn" data-fmt="4">4v4</button>
+          <button class="fmt-btn main" data-fmt="5">5v5</button>
+        </div>
         <div class="set-row">
           <label>Třetiny<select id="set-periods"><option>1</option><option selected>3</option></select></label>
           <label>Minuty<select id="set-minutes"><option>5</option><option selected>10</option><option>15</option></select></label>
-          <label>Hráčů<select id="set-max"><option>2</option><option>4</option><option>6</option><option>8</option><option selected>10</option></select></label>
           <label class="chk"><input id="set-rules" type="checkbox" />Pravidla</label>
         </div>
         <div class="row2">
