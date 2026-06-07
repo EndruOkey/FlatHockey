@@ -18,7 +18,9 @@ export class Net {
     this.socket.on('room-full', () => this.onFull?.());
   }
 
-  join(room, name, hand) { this.socket.emit('join', { room, name, hand }); }
+  join(room, name, hand, color, num, style) {
+    this.socket.emit('join', { room, name, hand, color, num, style });
+  }
 
   input(msg) { this.socket.emit('input', msg); }
 

@@ -10,6 +10,9 @@ const soloBtn = document.getElementById('solo-btn');
 const status  = document.getElementById('status');
 const nameInput = document.getElementById('name-input');
 const handBtns  = document.querySelectorAll('.hand-btn');
+const colorInput = document.getElementById('color-input');
+const numInput   = document.getElementById('num-input');
+const styleBtns  = document.querySelectorAll('.style-btn');
 const pauseMenu = document.getElementById('pause-menu');
 const pauseTitle = document.getElementById('pause-title');
 const resumeBtn = document.getElementById('resume-btn');
@@ -17,6 +20,9 @@ const leaveBtn  = document.getElementById('leave-btn');
 const LAST_ROOM_KEY = 'hockey_last_room';
 const NAME_KEY = 'hockey_name';
 const HAND_KEY = 'hockey_hand';
+const COLOR_KEY = 'hockey_color';
+const NUM_KEY   = 'hockey_num';
+const STYLE_KEY = 'hockey_style';
 const saved = localStorage.getItem(LAST_ROOM_KEY);
 if (saved) roomInput.value = saved;
 
@@ -32,14 +38,41 @@ handBtns.forEach(b => b.addEventListener('click', () => {
   refreshHand();
 }));
 
+// Dres: barva, číslo, styl
+colorInput.value = localStorage.getItem(COLOR_KEY) || '#3a9fff';
+numInput.value   = localStorage.getItem(NUM_KEY) || '';
+let chosenStyle  = localStorage.getItem(STYLE_KEY) || 'solid';
+function refreshStyle() {
+  styleBtns.forEach(b => b.classList.toggle('active', b.dataset.style === chosenStyle));
+}
+refreshStyle();
+styleBtns.forEach(b => b.addEventListener('click', () => {
+  chosenStyle = b.dataset.style;
+  localStorage.setItem(STYLE_KEY, chosenStyle);
+  refreshStyle();
+}));
+colorInput.addEventListener('change', () => localStorage.setItem(COLOR_KEY, colorInput.value));
+numInput.addEventListener('change', () => localStorage.setItem(NUM_KEY, numInput.value));
+
+function profileColor() { return colorInput.value || '#3a9fff'; }
+function profileNum()   { const n = parseInt(numInput.value, 10); return Number.isFinite(n) ? clamp99(n) : null; }
+function profileStyle() { return chosenStyle; }
+function clamp99(n) { return Math.max(0, Math.min(99, n)); }
+
 function profileName() {
   const name = (nameInput.value || '').trim().slice(0, 12);
   localStorage.setItem(NAME_KEY, name);
   return name;
 }
-// solo: nastav jméno/ruku přímo na lokálního hráče
+// solo: nastav profil přímo na lokálního hráče
 function applyProfile(game) {
-  if (game.local) { game.local.name = profileName(); game.local.handed = chosenHand; }
+  if (game.local) {
+    game.local.name   = profileName();
+    game.local.handed = chosenHand;
+    game.local.color  = profileColor();
+    game.local.num    = profileNum();
+    game.local.jersey = profileStyle();
+  }
   return game;
 }
 
@@ -99,7 +132,7 @@ joinBtn.addEventListener('click', () => {
     setStatus('Připojeno!', '#44ff88');
     startGame(new NetGame(canvas, net, id, team));
   };
-  net.join(roomId, profileName(), chosenHand);
+  net.join(roomId, profileName(), chosenHand, profileColor(), profileNum(), profileStyle());
 });
 
 soloBtn.addEventListener('click', () => {

@@ -69,6 +69,23 @@
     }
     .hand-btn.active { background: #1b2740; border-color: #3a9fff; color: #fff; }
 
+    #jersey-row { display: flex; gap: 8px; margin-bottom: 10px; align-items: stretch; }
+    #color-input {
+      width: 46px; padding: 4px; margin: 0; flex: none;
+      background: #141720; border: 1px solid #2a2d3a; border-radius: 8px; cursor: pointer;
+    }
+    #num-input {
+      width: 56px; margin: 0; flex: none; padding: 11px 6px;
+      font-size: 1rem; letter-spacing: 0.1em;
+    }
+    #style-toggle { display: flex; gap: 6px; flex: 1; }
+    .style-btn {
+      flex: 1; padding: 11px 4px; margin: 0;
+      background: #141720; border: 1px solid #2a2d3a; border-radius: 8px;
+      color: #777; font-size: 0.66rem; font-weight: 700; letter-spacing: 0.04em;
+    }
+    .style-btn.active { background: #1b2740; border-color: #3a9fff; color: #fff; }
+
     #status { color: #666; font-size: 0.82rem; min-height: 18px; margin-top: 10px; }
 
     #hint {
@@ -105,6 +122,16 @@
       <div id="hand-toggle">
         <button class="hand-btn" data-hand="-1">LEVÁK</button>
         <button class="hand-btn active" data-hand="1">PRAVÁK</button>
+      </div>
+
+      <div id="jersey-row">
+        <input id="color-input" type="color" value="#3a9fff" title="Barva dresu" />
+        <input id="num-input" type="number" min="0" max="99" placeholder="#" />
+        <div id="style-toggle">
+          <button class="style-btn active" data-style="solid">SOLID</button>
+          <button class="style-btn" data-style="stripes">PRUHY</button>
+          <button class="style-btn" data-style="shoulder">RAMENA</button>
+        </div>
       </div>
 
       <input id="room-input" type="text" placeholder="ROOM CODE" maxlength="8" autocomplete="off" spellcheck="false" />

@@ -197,6 +197,7 @@ function broadcast(match) {
       sd: r3(p._stickDisp), dr: r1(p._dispReach), dc: r2(p._dispCharge),
       fh: p.forehand ? 1 : 0, hp: p.hasPuck ? 1 : 0, ch: r2(p.charge),
       hd: p.handed, cc: p.crossCheck ? 1 : 0, ln: r2(p._lean),
+      col: p.color || null, num: p.num, js: p.jersey || 'solid',
     });
   }
   const g = (gg) => ({ x: r1(gg.x), y: r1(gg.y), t: r3(gg._tilt), h: gg._holdTimer > 0 ? 1 : 0,
@@ -217,7 +218,7 @@ const r3 = n => Math.round((n || 0) * 1000) / 1000;
 
 // ── Socket.io ────────────────────────────────────────────────────────────
 io.on('connection', (socket) => {
-  socket.on('join', ({ room, name, hand }) => {
+  socket.on('join', ({ room, name, hand, color, num, style }) => {
     let roomId = (room || '').toUpperCase();
     let match = rooms.get(roomId);
     if (match && match.players.size >= MAX_PLAYERS) { socket.emit('room-full'); return; }
@@ -230,6 +231,10 @@ io.on('connection', (socket) => {
     const p = new Player(socket.id, team, makeInput());
     p.name = (name || '').slice(0, 12);
     p.handed = (hand === -1 || hand === 1) ? hand : (team === 'away' ? -1 : 1);
+    // Dres: vlastní barva / číslo / styl
+    p.color  = (typeof color === 'string' && /^#[0-9a-fA-F]{6}$/.test(color)) ? color : null;
+    p.num    = Number.isInteger(num) ? Math.max(0, Math.min(99, num)) : null;
+    p.jersey = ['solid', 'stripes', 'shoulder'].includes(style) ? style : 'solid';
     match.players.set(socket.id, p);
     match.inputs.set(socket.id, p.input);
     rebuildEntities(match);

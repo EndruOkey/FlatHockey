@@ -374,7 +374,7 @@ function _renderPlayer(ctx, p, cam) {
   const sx    = ox + p.x * s;
   const sy    = oy + p.y * s;
   const r     = PLAYER.radius * s;
-  const color = PLAYER.colors[p.team];
+  const color = p.color || PLAYER.colors[p.team]; // vlastní barva dresu, jinak týmová
 
   const vmag  = Math.hypot(p.vx, p.vy);
   const vdir  = Math.atan2(p.vy, p.vx);
@@ -570,7 +570,35 @@ function _renderPlayer(ctx, p, cam) {
   ctx.ellipse(-r * 0.5, 0, r * 0.5, r * 0.95, 0, 0, Math.PI * 2);
   ctx.fill();
 
+  // Styl dresu (akcent)
+  if (p.jersey === 'stripes') {
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.beginPath();
+    ctx.ellipse(-1 * s, 0, r * 0.42, r * 1.25, 0, 0, Math.PI * 2); // pruh přes ramena
+    ctx.fill();
+  } else if (p.jersey === 'shoulder') {
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    for (const soff of [-r * 0.85, r * 0.85]) {
+      ctx.beginPath();
+      ctx.ellipse(-1 * s, soff, r * 0.5, r * 0.42, 0, 0, Math.PI * 2); // ramena
+      ctx.fill();
+    }
+  }
+
   ctx.restore();
+
+  // Číslo na dresu (čitelné, neotáčí se s tělem)
+  if (p.num !== null && p.num !== undefined) {
+    const nstr = String(p.num);
+    ctx.font = `bold ${Math.round(r * 1.0)}px 'Segoe UI', sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const nx = sx - fcos * r * 0.2, nyc = sy - fsin * r * 0.2;
+    ctx.lineWidth = 1.3 * s; ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+    ctx.strokeText(nstr, nx, nyc);
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.fillText(nstr, nx, nyc);
+    ctx.textBaseline = 'alphabetic';
+  }
 
   // Helma (vepředu, ve směru facingu) — naznačí směr
   const hx = sx + fcos * r * 0.55;

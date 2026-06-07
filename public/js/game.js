@@ -116,6 +116,7 @@ export class NetGame {
       // autoritativní diskrétní stav (pro všechny)
       ent.team = ps.team; ent.forehand = !!ps.fh; ent.hasPuck = !!ps.hp; ent.charge = ps.ch;
       ent.handed = ps.hd; ent.name = ps.nm;
+      ent.color = ps.col || null; ent.num = ps.num; ent.jersey = ps.js || 'solid';
       if (isMe) {
         e.sx = ps.x; e.sy = ps.y;  // jen reconcile cíl; pozici/úhly/stick predikuju lokálně
       } else {
