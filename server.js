@@ -175,9 +175,13 @@ function startMatch(lobby) {
     const ts = lobby.settings.teams[m.team] || {};
     p.color  = ts.color || null;
     p.jersey = ts.style || 'solid';
+    p.helmet = m.helmet; p.gloves = m.gloves; p.tape = m.tape;
     match.players.set(sid, p);
     match.inputs.set(sid, p.input);
   }
+  // Gólmani v barvě svého týmu (levá branka = home, pravá = away)
+  match.goalieL.color = lobby.settings.teams.home.color;
+  match.goalieR.color = lobby.settings.teams.away.color;
   rebuildEntities(match);
   faceoff(match);
   lobby.match  = match;
@@ -216,10 +220,12 @@ function broadcast(match) {
       fh: p.forehand ? 1 : 0, hp: p.hasPuck ? 1 : 0, ch: r2(p.charge),
       hd: p.handed, cc: p.crossCheck ? 1 : 0, ln: r2(p._lean),
       col: p.color || null, num: p.num, js: p.jersey || 'solid',
+      hc: p.helmet || null, gc: p.gloves || null, tc: p.tape || null,
     });
   }
   const g = (gg) => ({ x: r1(gg.x), y: r1(gg.y), t: r3(gg._tilt), h: gg._holdTimer > 0 ? 1 : 0,
-                       st: gg._saveType, sf: r2(gg._saveFlash), sm: r2(gg._saveFlashMax), sc: r2(gg._screen) });
+                       st: gg._saveType, sf: r2(gg._saveFlash), sm: r2(gg._saveFlashMax), sc: r2(gg._screen),
+                       col: gg.color || null });
   io.to(match.room).emit('snap', {
     n: match.tick,
     players,
@@ -261,12 +267,16 @@ function sanitizeSettings(s) {
     max:     [2, 4, 6, 8, 10].includes(s.max) ? s.max : 10,
   };
 }
+const hex = (c, d) => (typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c)) ? c : d;
 function makeMember(profile, team) {
   profile = profile || {};
   return {
     name:   String(profile.name || '').slice(0, 12),
     handed: (profile.handed === -1 || profile.handed === 1) ? profile.handed : 1,
     number: Number.isInteger(profile.number) ? Math.max(0, Math.min(99, profile.number)) : null,
+    helmet: hex(profile.helmet, '#eef2f8'),  // osobní doplňky (helma/rukavice/páska)
+    gloves: hex(profile.gloves, '#242c38'),
+    tape:   hex(profile.tape,   '#111111'),
     team,
   };
 }

@@ -293,8 +293,9 @@ export class Goalie {
     ctx.fillStyle = 'rgba(0,0,0,0.18)';
     ctx.fill();
 
-    // Tělo / dres — barva dle týmu (home modrý / away červený)
-    ctx.fillStyle = this.team === 'home' ? '#2f6db0' : '#c0392b';
+    // Tělo / dres — barva týmu (z lobby), jinak default home/away
+    ctx.fillStyle = this.color ? _gdarken(this.color, 0.18)
+                               : (this.team === 'home' ? '#2f6db0' : '#c0392b');
     _roundRect(ctx, -2 * s, -ch * 0.7, cx + 4 * s, ch * 1.4, 5 * s);
     ctx.fill();
     ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1.4 * s; ctx.stroke();
@@ -367,6 +368,14 @@ export class Goalie {
       ctx.restore();
     }
   }
+}
+
+function _gdarken(hex, amt) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.round(((n >> 16) & 255) * (1 - amt));
+  const g = Math.round(((n >> 8) & 255) * (1 - amt));
+  const b = Math.round((n & 255) * (1 - amt));
+  return `rgb(${r},${g},${b})`;
 }
 
 function _segmentAabbHit(x0, y0, x1, y1, minX, minY, maxX, maxY) {

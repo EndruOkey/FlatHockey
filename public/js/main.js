@@ -25,7 +25,9 @@ const waitTitle = $('wait-title'), waitInfo = $('wait-info'), waitTeams = $('wai
 // Pause
 const pauseMenu = $('pause-menu'), pauseTitle = $('pause-title'), resumeBtn = $('resume-btn'), leaveBtn = $('leave-btn');
 
+const gHelmet = $('g-helmet'), gGloves = $('g-gloves'), gTape = $('g-tape');
 const NAME_KEY = 'hockey_name', HAND_KEY = 'hockey_hand', NUM_KEY = 'hockey_num';
+const GEAR_KEYS = { helmet: 'hockey_helmet', gloves: 'hockey_gloves', tape: 'hockey_tape' };
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 nameInput.value = localStorage.getItem(NAME_KEY) || '';
@@ -36,11 +38,23 @@ refreshHand();
 handBtns.forEach(b => b.addEventListener('click', () => { chosenHand = parseInt(b.dataset.hand, 10); localStorage.setItem(HAND_KEY, String(chosenHand)); refreshHand(); }));
 numInput.addEventListener('change', () => localStorage.setItem(NUM_KEY, numInput.value));
 
+// Osobní doplňky (helma/rukavice/páska)
+if (localStorage.getItem(GEAR_KEYS.helmet)) gHelmet.value = localStorage.getItem(GEAR_KEYS.helmet);
+if (localStorage.getItem(GEAR_KEYS.gloves)) gGloves.value = localStorage.getItem(GEAR_KEYS.gloves);
+if (localStorage.getItem(GEAR_KEYS.tape))   gTape.value   = localStorage.getItem(GEAR_KEYS.tape);
+gHelmet.addEventListener('change', () => localStorage.setItem(GEAR_KEYS.helmet, gHelmet.value));
+gGloves.addEventListener('change', () => localStorage.setItem(GEAR_KEYS.gloves, gGloves.value));
+gTape.addEventListener('change',   () => localStorage.setItem(GEAR_KEYS.tape, gTape.value));
+
 function profile() {
   const name = (nameInput.value || '').trim().slice(0, 12);
   localStorage.setItem(NAME_KEY, name);
   const n = parseInt(numInput.value, 10);
-  return { name, handed: chosenHand, number: Number.isFinite(n) ? Math.max(0, Math.min(99, n)) : null };
+  return {
+    name, handed: chosenHand,
+    number: Number.isFinite(n) ? Math.max(0, Math.min(99, n)) : null,
+    helmet: gHelmet.value, gloves: gGloves.value, tape: gTape.value,
+  };
 }
 
 new Tweaker();
@@ -74,7 +88,12 @@ net.onLobbyList = (list) => {
 };
 $('refresh-btn').onclick = () => net.listLobbies();
 $('create-btn').onclick  = () => showView('create');
-$('solo-btn').onclick     = () => { const g = new SandboxGame(canvas); g.local.name = profile().name; g.local.handed = chosenHand; g.local.num = profile().number; startGame(g); };
+$('solo-btn').onclick = () => {
+  const g = new SandboxGame(canvas), pr = profile();
+  Object.assign(g.local, { name: pr.name, handed: pr.handed, num: pr.number,
+    helmet: pr.helmet, gloves: pr.gloves, tape: pr.tape });
+  startGame(g);
+};
 
 // ── Vytvoření lobby ───────────────────────────────────────────────────
 let chosenFmt = 3; // 3v3 default

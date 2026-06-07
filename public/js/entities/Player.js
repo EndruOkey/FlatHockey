@@ -535,13 +535,22 @@ function _renderPlayer(ctx, p, cam) {
   ctx.lineCap     = 'round';
   ctx.stroke();
 
-  // Blade face (tape)
+  // Blade face (tape) — barva pásky dle hráče
   ctx.beginPath();
   ctx.moveTo(bStartX, bStartY);
   ctx.quadraticCurveTo(bCtrlX, bCtrlY, bEndX, bEndY);
-  ctx.strokeStyle = '#111';
+  ctx.strokeStyle = p.tape || '#111';
   ctx.lineWidth   = 2.8 * s;
   ctx.lineCap     = 'round';
+  ctx.stroke();
+
+  // Rukavice — chránič na rukou u úchopu hole
+  ctx.beginPath();
+  ctx.arc(gx, gy, 2.7 * s, 0, Math.PI * 2);
+  ctx.fillStyle = p.gloves || '#242c38';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+  ctx.lineWidth = 1 * s;
   ctx.stroke();
 
   } // end !crossCheck stick
@@ -570,20 +579,27 @@ function _renderPlayer(ctx, p, cam) {
   ctx.ellipse(-r * 0.5, 0, r * 0.5, r * 0.95, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Styl dresu (akcent)
-  if (p.jersey === 'stripes') {
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  // Styl dresu — akcent ořezaný do tvaru trupu → čisté pruhy/yoke, ne blobíky
+  if (p.jersey && p.jersey !== 'solid') {
+    ctx.save();
     ctx.beginPath();
-    ctx.ellipse(-1 * s, 0, r * 0.42, r * 1.25, 0, 0, Math.PI * 2); // pruh přes ramena
-    ctx.fill();
-  } else if (p.jersey === 'shoulder') {
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    for (const soff of [-r * 0.85, r * 0.85]) {
-      ctx.beginPath();
-      ctx.ellipse(-1 * s, soff, r * 0.5, r * 0.42, 0, 0, Math.PI * 2); // ramena
-      ctx.fill();
+    ctx.ellipse(-1 * s, 0, r * 1.05, r * 1.25, 0, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.fillStyle = 'rgba(244,248,252,0.92)';
+    if (p.jersey === 'stripes') {
+      ctx.fillRect(-r * 1.4, -r * 0.64, r * 2.8, r * 0.34);
+      ctx.fillRect(-r * 1.4,  r * 0.30, r * 2.8, r * 0.34);
+    } else if (p.jersey === 'shoulder') {
+      ctx.fillRect(r * 0.08, -r * 1.4, r * 1.1, r * 2.8); // přední yoke (ramena/hruď)
     }
+    ctx.restore();
   }
+
+  // jemné nasvícení trupu (objem)
+  ctx.beginPath();
+  ctx.ellipse(r * 0.15, -r * 0.35, r * 0.55, r * 0.6, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.10)';
+  ctx.fill();
 
   ctx.restore();
 
@@ -605,7 +621,7 @@ function _renderPlayer(ctx, p, cam) {
   const hy = sy + fsin * r * 0.55;
   ctx.beginPath();
   ctx.arc(hx, hy, r * 0.52, 0, Math.PI * 2);
-  ctx.fillStyle = '#e9edf3';
+  ctx.fillStyle = p.helmet || '#eef2f8';
   ctx.fill();
   ctx.strokeStyle = 'rgba(0,0,0,0.4)';
   ctx.lineWidth = 1.2 * s;

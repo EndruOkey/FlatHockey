@@ -117,6 +117,7 @@ export class NetGame {
       ent.team = ps.team; ent.forehand = !!ps.fh; ent.hasPuck = !!ps.hp; ent.charge = ps.ch;
       ent.handed = ps.hd; ent.name = ps.nm;
       ent.color = ps.col || null; ent.num = ps.num; ent.jersey = ps.js || 'solid';
+      ent.helmet = ps.hc || null; ent.gloves = ps.gc || null; ent.tape = ps.tc || null;
       if (isMe) {
         e.sx = ps.x; e.sy = ps.y;  // jen reconcile cíl; pozici/úhly/stick predikuju lokálně
       } else {
@@ -139,6 +140,7 @@ export class NetGame {
     g._tx = d.x; g._ty = d.y; g._ttilt = d.t;
     g._holdTimer = d.h ? 1 : 0; g._saveType = d.st;
     g._saveFlash = d.sf; g._saveFlashMax = d.sm || 0.3; g._screen = d.sc;
+    g.color = d.col || null;
   }
 
   _interp(dt) {
