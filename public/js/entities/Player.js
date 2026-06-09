@@ -51,7 +51,9 @@ export class PlayerBase {
     const tReach = reachMin + (reachMax - reachMin) * clamp((ad - 22) / 95, 0, 1);
     this._dispReach += (tReach - this._dispReach) * Math.min(1, 14 * dt);
     // Základ hole je vždy carry-úhel (spojitý i po ztrátě puku) → žádný skok/záškub
-    const target = this.crossCheck ? this.bodyAngle : (this.carryAngle - this._dispCharge * 0.52);
+    // Nápřah: hůl se „natáhne" do strany dle ruky (zrcadlí se pro leváka) → čitelnější a správně i pro lefty
+    const windBack = (this.handed ?? 1) * this._dispCharge * 0.85;
+    const target = this.crossCheck ? this.bodyAngle : (this.carryAngle - windBack);
     this._stickDisp = lerpAngle(this._stickDisp, target, Math.min(1, 26 * dt));
     // Plynulé MÍCHÁNÍ puku: strana puku na čepeli plynule přejíždí forhend↔bekhend
     // (přes střed lopaty) místo skoku → vizuální dribling/kličkování.

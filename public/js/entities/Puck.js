@@ -196,15 +196,15 @@ export class Puck {
     const elev = this.z * s;
     const tcol = this.trailColor || '#62d0ff';   // barva stopy/overlaye (dle hráče, jinak default)
 
-    // Trail — mizející stopa za pukem (starší body menší a průhlednější)
+    // Trail — jemná mizející stopa za pukem (starší body menší a průhlednější)
     const tr = this._trail || (this._trail = []);
     tr.push({ x: this.x, y: this.y, z: this.z });
-    if (tr.length > 14) tr.shift();
+    if (tr.length > 10) tr.shift();
     for (let i = 0; i < tr.length - 1; i++) {
       const p = tr[i], f = i / tr.length;
       ctx.beginPath();
-      ctx.arc(ox + p.x * s, oy + (p.y - p.z) * s, r * (0.35 + 0.6 * f), 0, Math.PI * 2);
-      ctx.fillStyle = _alpha(tcol, f * 0.5);
+      ctx.arc(ox + p.x * s, oy + (p.y - p.z) * s, r * (0.22 + 0.42 * f), 0, Math.PI * 2);
+      ctx.fillStyle = _alpha(tcol, f * 0.26);
       ctx.fill();
     }
 
@@ -240,14 +240,14 @@ export class Puck {
       ctx.stroke();
     }
 
-    // Overlay — jemná svítící obroučka, ať je puk dobře vidět (barva sladěná se stopou)
+    // Overlay — decentní náznak (ať je puk vidět), ne výrazná záře
     ctx.save();
     ctx.shadowColor = tcol;
-    ctx.shadowBlur  = 5 * s;
+    ctx.shadowBlur  = 2.5 * s;
     ctx.beginPath();
-    ctx.arc(sx, sy - elev, r + 0.6 * s, 0, Math.PI * 2);
-    ctx.strokeStyle = _alpha(tcol, 0.85);
-    ctx.lineWidth = 1.3 * s;
+    ctx.arc(sx, sy - elev, r + 0.3 * s, 0, Math.PI * 2);
+    ctx.strokeStyle = _alpha(tcol, 0.45);
+    ctx.lineWidth = 0.9 * s;
     ctx.stroke();
     ctx.restore();
   }

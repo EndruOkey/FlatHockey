@@ -60,6 +60,7 @@ export class NetGame {
 
     this.call = null;   // odpískané pravidlo (offside/icing) — banner + zvýraznění čáry
     this.pnd = 0;       // předběžné varování (bitmask) — pulsující čára
+    this._notice = null; // nenásilné upozornění (např. odpojení hráče)
     this._cam = null;
     net.onSnap = s => this._onSnap(s);
     net.onGoal = g => { this.goalFlash = 2.5; this.goalText = g.text; };
@@ -86,6 +87,7 @@ export class NetGame {
   _tick(dt, cam) {
     this._cam = cam;
     if (this.call && (this.call.t -= dt) <= 0) this.call = null;
+    if (this._notice && (this._notice.t -= dt) <= 0) this._notice = null;
     const me = this.localEnt;
     let aim = 0, aimDist = 100;
     if (me) {
@@ -207,13 +209,15 @@ export class NetGame {
     for (const e of this.players.values()) solids.push({ ent: e.ent, x: e.ent.x, y: e.ent.y, r: e.ent.radius });
     solids.push({ ent: this.goalieL, x: this.goalieL.x, y: this.goalieL.y, r: this.goalieL.radius });
     solids.push({ ent: this.goalieR, x: this.goalieR.x, y: this.goalieR.y, r: this.goalieR.radius });
+    this.puck.draw(ctx, cam);   // puk POD hráči → hokejka se kreslí navrch (puk leží na ledě u čepele)
     for (const e of this.players.values()) {
       e.ent._solids = solids.filter(so => so.ent !== e.ent);
       e.ent._isLocal = e.isMe;   // charge arc kreslíme jen vlastnímu hráči (ostatní vidí nápřah hole)
       e.ent.draw(ctx, cam);
     }
-    this.puck.draw(ctx, cam);
   }
+
+  notify(text) { this._notice = { text, t: 3 }; }
 
   _overlay(ctx) {
     const W = ctx.canvas.width, H = ctx.canvas.height;
@@ -235,6 +239,13 @@ export class NetGame {
     ctx.font = '12px "Segoe UI", sans-serif';
     ctx.textAlign = 'right'; ctx.fillStyle = tm.home.color; ctx.fillText(this._clip(tm.home.name, 12), cx - 80, 24);
     ctx.textAlign = 'left';  ctx.fillStyle = tm.away.color; ctx.fillText(this._clip(tm.away.name, 12), cx + 80, 24);
+
+    if (this._notice) {                       // nenásilné upozornění (odpojení) — hra běží dál
+      const a = Math.min(1, this._notice.t);
+      ctx.font = '14px "Segoe UI", sans-serif'; ctx.textAlign = 'center';
+      ctx.fillStyle = `rgba(220,230,245,${0.85 * a})`;
+      ctx.fillText(this._notice.text, cx, 80);
+    }
 
     if (this.goalFlash > 0) {
       const a = Math.min(1, this.goalFlash);
@@ -312,7 +323,7 @@ export class SandboxGame {
     this.goalie = new Goalie();
     this.passer = new Passer();
 
-    this.world = new World([new Rink(), this.local, this.goalie, this.passer, this.puck]);
+    this.world = new World([new Rink(), this.puck, this.local, this.goalie, this.passer]);  // puk pod hráči (hokejka navrch)
     this.world.onGoal                 = result => this._handleGoal(result);
     this.world.onResolveInteractions  = world  => this._resolveInteractions(world);
 

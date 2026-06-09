@@ -56,6 +56,8 @@ const DICT = {
     resume: 'POKRAČOVAT',
     disconnect: 'ODPOJIT — ZPĚT DO MENU',
     opp_left: 'SOUPEŘ SE ODPOJIL',
+    peer_left: 'Hráč se odpojil',
+    new_host: 'Jsi teď host lobby',
     // Nápověda
     hint: 'WASD bruslení · Myš míří + vzdálenost = vysunutí hole · LMB: tap = žabička, drž = prdel · RMB přihrávka · Space brzda · Esc menu',
     // Ve hře

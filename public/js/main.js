@@ -245,7 +245,7 @@ function showPause(title=t('pause'), disc=false) { currentGame?.input?.clear(); 
 const hidePause = () => pauseMenu.style.display = 'none';
 resumeBtn.addEventListener('click', hidePause);
 leaveBtn.addEventListener('click', () => { net.leaveLobby(); location.reload(); });
-net.onPeerLeft = () => { if (inGame) showPause(t('opp_left'), true); };
+net.onPeerLeft = () => { if (inGame) currentGame?.notify?.(t('peer_left')); };  // hra běží dál, jen upozorni
 window.addEventListener('keydown', e => { if (e.key !== 'Escape' || !inGame) return; pauseMenu.style.display === 'flex' ? hidePause() : showPause(); });
 window.addEventListener('beforeunload', () => net.leaveLobby());
 
