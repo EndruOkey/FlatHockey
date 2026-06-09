@@ -310,7 +310,7 @@ export class PlayerBase {
       const targetDir = Math.atan2(iy, ix);
       const dA = angleDiff(targetDir, heading);          // kolik chceš zatočit (-π..π)
       const ratio = clamp(sp / PLAYER.speed, 0, 1);
-      const turnRate = 10 - 4 * ratio;                   // svižné: ~10 rad/s pomalu → ~6 naplno
+      const turnRate = 7.5 - 3 * ratio;                  // ~7.5 rad/s pomalu → ~4.5 naplno (váha)
       heading += clamp(dA, -turnRate * dt, turnRate * dt);
       // akcelerace k topSpeed
       const aUp = PLAYER.accel * (crossChecking ? 1.1 : 1) * (charging ? 0.5 : 1);
@@ -320,8 +320,8 @@ export class PlayerBase {
       this.vx = Math.cos(heading) * sp;
       this.vy = Math.sin(heading) * sp;
     } else if (sp > 0) {
-      // glide — postupné doklouzání podél headingu (led nese; po nárazu slabší tření)
-      const dec = (knocked ? 0.3 : (sp < 60 ? 1.4 : 0.85)) * PLAYER.decel * dt;
+      // glide — led NESE: po puštění dlouhý skluz (cítit led); při nízké rychlosti doklouže a zastaví
+      const dec = (knocked ? 0.3 : (sp < 50 ? 1.6 : 0.55)) * PLAYER.decel * dt;
       sp = Math.max(0, sp - dec);
       this.vx = Math.cos(heading) * sp;
       this.vy = Math.sin(heading) * sp;
