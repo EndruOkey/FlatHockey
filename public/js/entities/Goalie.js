@@ -195,12 +195,15 @@ export class Goalie {
     puck.z = 0; puck.vz = 0;
     const mate = world ? _nearestMate(world, this.team, this) : null;
     if (mate) {
-      const ang = Math.atan2(mate.y - puck.y, mate.x - puck.x);
-      puck.vx = Math.cos(ang) * PUCK.passSpeed;   // přesná nahrávka stylem pasu
-      puck.vy = Math.sin(ang) * PUCK.passSpeed;
+      const ang  = Math.atan2(mate.y - puck.y, mate.x - puck.x);
+      const dist = Math.hypot(mate.x - puck.x, mate.y - puck.y);
+      // síla dle vzdálenosti → dorazí ke spoluhráči s rozumným tempem, ne přepal přes celé hřiště
+      const sp = Math.min(PUCK.passSpeed, Math.sqrt(2 * PUCK.decel * dist) + 35);
+      puck.vx = Math.cos(ang) * sp;                // přesná nahrávka stylem pasu
+      puck.vy = Math.sin(ang) * sp;
     } else {
-      puck.vx = this.inX * 170;                    // bez spoluhráče → měkké vyhození do hřiště
-      puck.vy = (relY >= 0 ? 1 : -1) * 70;
+      puck.vx = this.inX * 120;                    // bez spoluhráče → měkké vyhození do hřiště
+      puck.vy = (relY >= 0 ? 1 : -1) * 55;
     }
     this._markSave(high ? 'blocker' : 'pads', 0.3);
     return true;
@@ -248,7 +251,7 @@ export class Goalie {
       const nx = dx / (dist || 1), ny = dy / (dist || 1);
       puck.x = this.x + nx * (pokeDist + PUCK.radius + 2);
       puck.y = this.y + ny * (pokeDist + PUCK.radius + 2);
-      puck.vx = nx * 200; puck.vy = ny * 200; puck.z = 0; puck.vz = 0;
+      puck.vx = nx * 150; puck.vy = ny * 150; puck.z = 0; puck.vz = 0;
       this._markSave('pads', 0.26);
     }
   }
@@ -269,7 +272,7 @@ export class Goalie {
     const targetY = attackerLow ? RINK.goalY - 12 : RINK.goalY + RINK.goalH + 12;
     const angle = Math.atan2(targetY - this.y, this.inX * 120);
     p.x = this.x + this.inX * 16; p.y = this.y; p.z = 0; p.vz = 0;
-    p.vx = Math.cos(angle) * 165; p.vy = Math.sin(angle) * 165;
+    p.vx = Math.cos(angle) * 135; p.vy = Math.sin(angle) * 135;
   }
 
   // ── Vzhled: štíhlý, čitelný top-down gólman (čelem doleva, ke střelci) ──

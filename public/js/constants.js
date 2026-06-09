@@ -25,13 +25,13 @@ export const PLAYER = {
 
 export const PUCK = {
   radius: 3,        // reálně 3″ — zvětšeno kvůli viditelnosti/hratelnosti
-  decel: 54,
+  decel: 100,       // tření — vyšší, aby puk neujížděl přes celé hřiště (vybalancováno na 1080px)
   bounce: 0.62,
-  maxShotSpeed: 560,   // „prdel" — plný slap (plné nabití)
-  minShotSpeed: 160,   // „žabička" — malá měkká rána (lehký tap), umístěná, ne silová
-  passSpeed: 288,
-  maxPassSpeed: 324,
-  maxShotVz: 150,   // max vertical speed on full-charge shot
+  maxShotSpeed: 470,   // „prdel" — plný slap (plné nabití)
+  minShotSpeed: 150,   // „žabička" — malá měkká rána (lehký tap), umístěná, ne silová
+  passSpeed: 250,
+  maxPassSpeed: 280,
+  maxShotVz: 135,   // max vertical speed on full-charge shot
   gravity: 580,     // px/s² downward
   gloveHeight: 6,   // z above which glove/blocker applies
   crossbarHeight: 21,  // břevno ~4 ft

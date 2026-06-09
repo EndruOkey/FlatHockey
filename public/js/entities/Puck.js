@@ -19,7 +19,7 @@ function _resolveCorners(puck) {
     puck.y = cy + ny * (cR - r);
     const dot = puck.vx * nx + puck.vy * ny;
     if (dot > 0) { // pohybuje se ven
-      const e = _reb(dot);
+      const e = _reb(dot) * 0.8;   // rohy tlumenější než rovné mantinely (nevystřelí puk)
       puck.vx = (puck.vx - 2 * dot * nx) * e;
       puck.vy = (puck.vy - 2 * dot * ny) * e;
     }

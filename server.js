@@ -53,7 +53,7 @@ function rateOk(socket, key, minMs) {
 const countMatches = () => [...lobbies.values()].filter(l => l.match).length;
 
 // ── Authoritativní simulace ──────────────────────────────────────────────
-const CHARGE_RATE = 1.4;       // pomalejší nápřah → slap shot je cítit jako wind-up
+const CHARGE_RATE = 1.2;       // pomalejší nápřah → slap shot je cítit jako wind-up (méně twitchy)
 const TICK_HZ = 60;
 const SNAP_HZ = 60;            // snapshot každý tick (ostřejší soupeř)
 const DT = 1 / TICK_HZ;
