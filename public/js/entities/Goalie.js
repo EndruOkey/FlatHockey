@@ -262,17 +262,19 @@ export class Goalie {
     if (!this._heldPuck) return;
     const p = this._heldPuck;
     this._heldPuck = null;
-    const midY = RINK.goalY + RINK.goalH / 2;
-    let nearest = null, best = Infinity;
-    for (const pl of world.players) {
-      const dd = Math.hypot(pl.x - this.x, pl.y - this.y);
-      if (dd < best) { best = dd; nearest = pl; }
-    }
-    const attackerLow = nearest ? nearest.y > midY : this.y < midY;
-    const targetY = attackerLow ? RINK.goalY - 12 : RINK.goalY + RINK.goalH + 12;
-    const angle = Math.atan2(targetY - this.y, this.inX * 120);
     p.x = this.x + this.inX * 16; p.y = this.y; p.z = 0; p.vz = 0;
-    p.vx = Math.cos(angle) * 135; p.vy = Math.sin(angle) * 135;
+    // Rozehrávka: nahraj spoluhráči (přeměřeně dle vzdálenosti). Bez spoluhráče → měkce k mantinelu.
+    const mate = world ? _nearestMate(world, this.team, this) : null;
+    if (mate) {
+      const ang  = Math.atan2(mate.y - p.y, mate.x - p.x);
+      const dist = Math.hypot(mate.x - p.x, mate.y - p.y);
+      const sp = Math.min(PUCK.passSpeed, Math.sqrt(2 * PUCK.decel * dist) + 35);
+      p.vx = Math.cos(ang) * sp; p.vy = Math.sin(ang) * sp;
+    } else {
+      const toBoard = this.y < RINK.h / 2 ? -1 : 1;     // do bližšího rohu, pryč od brány
+      const angle = Math.atan2(toBoard * 60, this.inX * 120);
+      p.vx = Math.cos(angle) * 130; p.vy = Math.sin(angle) * 130;
+    }
   }
 
   // ── Vzhled: štíhlý, čitelný top-down gólman (čelem doleva, ke střelci) ──

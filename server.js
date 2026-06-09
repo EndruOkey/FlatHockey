@@ -96,11 +96,12 @@ function _updateAim(p, rawAim, dt) {
 }
 
 function leadAim(from, target, speed) {
-  let tx = target.x, ty = target.y;
-  if (target.isPlayer) { const a = target.aimAngle ?? 0; tx += Math.cos(a) * 16; ty += Math.sin(a) * 16; }
-  const dist = Math.hypot(tx - from.x, ty - from.y) || 1;
-  const t = dist / speed;
-  return Math.atan2((ty + (target.vy || 0) * t) - from.y, (tx + (target.vx || 0) * t) - from.x);
+  // Předvídání kam spoluhráč dojede — TLUMENÉ (0.6), aby rychlá změna směru nepřepálila pas.
+  const dist = Math.hypot(target.x - from.x, target.y - from.y) || 1;
+  const t = (dist / speed) * 0.6;
+  const tx = target.x + (target.vx || 0) * t;
+  const ty = target.y + (target.vy || 0) * t;
+  return Math.atan2(ty - from.y, tx - from.x);
 }
 
 function nearestTeammate(p, match) {
@@ -144,7 +145,18 @@ function playerActions(p, inp, dt, match) {
 
   if (inp.rmbJustPressed && p.hasPuck) {
     if (p.charge > 0.08) { p.charge = 0; p._chargeDecaying = false; p.overcharged = false; p._chargeBlocked = true; p._chargeCancelled = true; }
-    else { p.charge = 0; const tgt = nearestTeammate(p, match); const lead = tgt ? leadAim(p.stickTip, tgt, PUCK.passSpeed) : null; p.pass(match.puck, lead); }
+    else {
+      // Nahrávka JEN spoluhráči — když nikdo není (sám na mapě), puk si necháš.
+      const tgt = nearestTeammate(p, match);
+      if (tgt) {
+        p.charge = 0;
+        const tip = p.stickTip;
+        const dist = Math.hypot(tgt.x - tip.x, tgt.y - tip.y);
+        // Přeměřená síla: dojede ke spoluhráči s rozumným tempem (nepřepálí, neztratí se).
+        const sp = clamp(Math.sqrt(2 * PUCK.decel * dist) + 45, 175, PUCK.maxPassSpeed);
+        p.pass(match.puck, leadAim(tip, tgt, sp), sp);
+      }
+    }
   }
 
   if (inp.mmbJustPressed && !p.hasPuck) p.passReq = 0.9;
@@ -155,22 +167,33 @@ function rebuildEntities(match) {
 }
 
 function faceoffAt(match, fx, fy) {
-  // Rozmísti týmy kolem buly bodu (home vlevo, away vpravo), čelem k bodu
+  // Realistické rozestavení na buly: centr přímo na bodě, křídla po stranách, obránci vzadu.
+  // Každý tým stojí na své OBRANNÉ straně bodu (home brání vlevo, away vpravo), čelem k bodu.
   const home = [], away = [];
   for (const p of match.players.values()) (p.team === 'home' ? home : away).push(p);
-  const place = (arr, x) => {
-    const n = arr.length;
+  // [vzdálenost ZA bodem (k vlastní brance), odchylka do strany] relativně k buly bodu
+  const SPOTS = [
+    [16,   0],   // centr — na buly bodě
+    [26, -54],   // křídlo
+    [26,  54],   // křídlo
+    [86, -34],   // obránce
+    [86,  34],   // obránce
+  ];
+  const place = (arr, dir) => {   // dir: home = +1 (útočí vpravo), away = -1
     arr.forEach((p, i) => {
-      p.x = clamp(x, 20, RINK.w - 20);
-      p.y = clamp(fy + (i - (n - 1) / 2) * 54, 28, RINK.h - 28);
+      const spot = SPOTS[Math.min(i, SPOTS.length - 1)];
+      const back = spot[0] + (i >= SPOTS.length ? (i - SPOTS.length + 1) * 26 : 0);
+      const sideMul = i >= SPOTS.length ? ((i % 2) ? 1 : -1) : 1;
+      p.x = clamp(fx - dir * back, 16, RINK.w - 16);
+      p.y = clamp(fy + spot[1] * sideMul, 24, RINK.h - 24);
       p.vx = p.vy = 0; p.hasPuck = false; p.charge = 0;
       p._chargeDecaying = false; p._oneTimer = false;
-      const fa = Math.atan2(fy - p.y, fx - p.x);
+      const fa = Math.atan2(fy - p.y, fx - p.x);   // čelem k buly bodu
       p.bodyAngle = p.skateAngle = p.aimAngle = p.carryAngle = fa;
     });
   };
-  place(home, fx - 60);
-  place(away, fx + 60);
+  place(home, 1);
+  place(away, -1);
   match.puck.reset();
   match.puck.x = fx; match.puck.y = fy; match.puck.prevX = fx; match.puck.prevY = fy;
   match.lastTouch = null; match.touchX = fx;

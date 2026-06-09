@@ -217,7 +217,7 @@ export class PlayerBase {
   }
 
   // aimOverride: volitelný směr nahrávky (predikce do jízdy); jinak míří kam ukazuje hůl
-  pass(puck, aimOverride) {
+  pass(puck, aimOverride, speedOverride) {
     this.hasPuck = false;
     this._passCooldown  = 0.15;
     this._shootCooldown = 0.18; // ať si hráč hned NEteční/nesebere vlastní přihrávku
@@ -225,10 +225,11 @@ export class PlayerBase {
     puck.x = tip.x;
     puck.y = tip.y;
     puck.z = 0;
-    // Normální přihrávka — po ledě, plná rychlost (žádný backhand)
+    // Normální přihrávka po ledě; rychlost přeměřená dle vzdálenosti (speedOverride)
     const ang = (aimOverride !== undefined && aimOverride !== null) ? aimOverride : this.carryAngle;
-    puck.vx = Math.cos(ang) * PUCK.passSpeed;
-    puck.vy = Math.sin(ang) * PUCK.passSpeed;
+    const spd = (speedOverride !== undefined && speedOverride !== null) ? speedOverride : PUCK.passSpeed;
+    puck.vx = Math.cos(ang) * spd;
+    puck.vy = Math.sin(ang) * spd;
     puck.vz = 0;
   }
 

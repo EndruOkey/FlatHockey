@@ -14,7 +14,7 @@ export const RINK = {
 export const PLAYER = {
   radius: 7,       // tělo (mírně nad realitou kvůli čitelnosti)
   speed: 180,      // ~34 ft/s top speed (realistický sprint)
-  accel: 315,      // rozjezd (střed mezi těžké a moc svižné)
+  accel: 250,      // rozjezd/změna směru — víc momentu (méně „twitchy", hokejovější)
   decel: 70,       // skluz při puštění (glide), ale kontrolovatelný
   turnRate: 3.8,   // rotace — střed: ovladatelná, ne těžkopádná ani twitchy
   stickLen: 16,    // úměrně k tělu
