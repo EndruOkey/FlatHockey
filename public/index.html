@@ -100,7 +100,8 @@
 
     .prof-row { display: flex; gap: 8px; margin-bottom: 12px; }
     .prof-row #hand-toggle { flex: 1; margin: 0; }
-    #num-input { width: 64px; margin: 0; padding: 11px 6px; font-size: 1rem; letter-spacing: 0.06em; }
+    #num-input { width: 70px; margin: 0 0 0 auto; padding: 9px 6px; font-size: 1rem; letter-spacing: 0.06em; text-align: center; }
+    #profile-intro { color: #8a93a6; font-size: 0.8rem; line-height: 1.4; margin: -4px 0 14px; }
 
     .view { display: flex; flex-direction: column; }
     .row2 { display: flex; gap: 8px; }
@@ -210,19 +211,18 @@
       <!-- PROFIL -->
       <div id="v-profile" class="view" style="display:none">
         <h2 data-i18n="profile_h">Profil & dres</h2>
+        <p id="profile-intro" data-i18n="profile_intro">Nastav si přezdívku a vzhled. Pak dej HOTOVO a můžeš hrát.</p>
         <canvas id="prof-preview" width="260" height="190"></canvas>
         <input id="name-input" type="text" data-i18n-ph="name_ph" placeholder="TVÉ JMÉNO" maxlength="12" autocomplete="off" spellcheck="false" />
-        <div class="prof-row">
-          <div id="hand-toggle">
-            <button class="hand-btn" data-hand="-1" data-i18n="lefty">LEVÁK</button>
-            <button class="hand-btn active" data-hand="1" data-i18n="righty">PRAVÁK</button>
-          </div>
-          <input id="num-input" type="number" min="0" max="99" data-i18n-ph="num_ph" data-i18n-title="num_title" placeholder="č." title="Číslo dresu" />
+        <div id="hand-toggle">
+          <button class="hand-btn" data-hand="-1" data-i18n="lefty">LEVÁK</button>
+          <button class="hand-btn active" data-hand="1" data-i18n="righty">PRAVÁK</button>
         </div>
+        <div class="gear-item"><span data-i18n="number_label">ČÍSLO DRESU</span><input id="num-input" type="number" min="0" max="99" placeholder="0–99" /></div>
         <div class="gear-item"><span data-i18n="helmet">HELMA</span><div class="swatches" id="sw-helmet"></div></div>
         <div class="gear-item"><span data-i18n="gloves">RUKAVICE</span><div class="swatches" id="sw-gloves"></div></div>
         <div class="gear-item"><span data-i18n="tape">PÁSKA HOKEJKY</span><div class="swatches" id="sw-tape"></div></div>
-        <button id="profile-done" class="back" data-i18n="done">HOTOVO</button>
+        <button id="profile-done" class="back primary" data-i18n="done">HOTOVO</button>
       </div>
 
       <!-- ONLINE: SEZNAM -->

@@ -139,15 +139,18 @@ const setStatus = (m, c = '#888') => { status.textContent = m; status.style.colo
 
 // ── Profil — povinný (bez přezdívky nepustíme dál) ────────────────────
 const hasName = () => (nameInput.value || '').trim().length > 0;
+const suggestName = () => t('guest_name') + Math.floor(100 + Math.random() * 900);
 function commitProfile() {
-  if (!hasName()) { setStatus(t('name_required'), '#ff5a5a'); nameInput.focus(); return false; }
+  if (!hasName()) { setStatus(t('name_required'), '#ffcf3a'); nameInput.focus(); return false; }
   profile();                 // ulož jméno + výbavu
   setStatus('');
   return true;
 }
-function requireProfile() {   // skoč do profilu, dokud není přezdívka
+function requireProfile() {   // jemné navedení na profil (ne tvrdá zeď)
+  if (!hasName()) nameInput.value = suggestName();   // předvyplň návrh → nikdo nezůstane zaseklý
   showView('profile'); drawPreview();
-  setStatus(t('welcome'), '#ffcf3a');
+  setStatus(t('welcome'), '#6ee0a0');
+  setTimeout(() => { try { nameInput.focus(); nameInput.select(); } catch {} }, 60);
 }
 $('profile-done').onclick = () => { if (commitProfile()) showView('main'); };
 

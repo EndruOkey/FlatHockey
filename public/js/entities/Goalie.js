@@ -1,5 +1,6 @@
 import { RINK, PUCK } from '../constants.js';
 import { clamp } from '../utils.js';
+import { t } from '../i18n.js';
 
 // ── Save profil (naškálováno na reálnou branku 6 ft = 32px) ───────────────
 // Gólman kryje centrální pásmo, ale má zranitelnosti: horní růžky, pětku, vyrážečka
@@ -372,7 +373,7 @@ export class Goalie {
       ctx.font = `bold ${Math.round(9 * s)}px monospace`;
       ctx.textAlign = 'center';
       ctx.fillStyle = 'rgba(120,220,255,0.9)';
-      ctx.fillText('KRYJE', sx, sy - (ch + 12 * s));
+      ctx.fillText(t('covering'), sx, sy - (ch + 12 * s));
       ctx.restore();
     }
   }
