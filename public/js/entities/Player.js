@@ -298,32 +298,35 @@ export class PlayerBase {
     if (this._knockT > 0) this._knockT = Math.max(0, this._knockT - dt);
     const knocked = this._knockT > 0;            // po nárazu hráč skoro neřídí (náraz dojede)
 
+    // CARVE MODEL: rychlost má MOMENT. Zrychluje/zpomaluje se postupně; směr (heading) se
+    // stáčí k WASD OMEZENOU rychlostí → zatáčíš obloukem a držíš rychlost. Otáčení je
+    // pomalejší při vyšší rychlosti (širší oblouk) → nejde točit „kolotoč" spamem WASD.
+    let sp = Math.hypot(this.vx, this.vy);
+    let heading = sp > 1 ? Math.atan2(this.vy, this.vx) : this.skateAngle;
+
     if (hasInput && !knocked) {
-      // zrychluj k cílové rychlosti ve směru WASD; změna směru = přibrzdit staré +
-      // nabrat nové → přirozený carve/moment (ne okamžitý obrat).
-      const tvx = ix * topSpeed, tvy = iy * topSpeed;
-      let dvx = tvx - this.vx, dvy = tvy - this.vy;
-      const dl = Math.hypot(dvx, dvy);
-      if (dl > 0) {
-        const a = PLAYER.accel * (crossChecking ? 1.1 : 1) * (charging ? 0.5 : 1);
-        const dv = Math.min(dl, a * dt);
-        this.vx += dvx / dl * dv;
-        this.vy += dvy / dl * dv;
-      }
-    } else {
-      // glide — led nese, plynulé doklouzání (po nárazu slabší tření, ať knockback dojede)
-      const sp = Math.hypot(this.vx, this.vy);
-      if (sp > 0) {
-        const dec = (knocked ? 0.3 : (sp < 60 ? 1.4 : 0.85)) * PLAYER.decel * dt;
-        const ns = Math.max(0, sp - dec);
-        this.vx = this.vx / sp * ns; this.vy = this.vy / sp * ns;
-      }
+      const targetDir = Math.atan2(iy, ix);
+      // postupná akcelerace k topSpeed (a měkké stažení, když jsi nad limitem, např. po charge)
+      const aUp = PLAYER.accel * (crossChecking ? 1.1 : 1) * (charging ? 0.5 : 1);
+      sp += clamp(topSpeed - sp, -PLAYER.decel * 2 * dt, aUp * dt);
+      // carve: heading k inputu, rychlost otáčení klesá s rychlostí (naplno = široký oblouk)
+      const ratio = clamp(sp / PLAYER.speed, 0, 1);
+      const turnRate = 8.5 - 5.5 * ratio;        // ~8.5 rad/s pomalu → ~3 rad/s naplno
+      heading += clamp(angleDiff(targetDir, heading), -turnRate * dt, turnRate * dt);
+      this.vx = Math.cos(heading) * sp;
+      this.vy = Math.sin(heading) * sp;
+    } else if (sp > 0) {
+      // glide — postupné doklouzání podél headingu (led nese; po nárazu slabší tření)
+      const dec = (knocked ? 0.3 : (sp < 60 ? 1.4 : 0.85)) * PLAYER.decel * dt;
+      sp = Math.max(0, sp - dec);
+      this.vx = Math.cos(heading) * sp;
+      this.vy = Math.sin(heading) * sp;
     }
 
-    // Tělo: za jízdy kouká kam jedeš (WASD), když stojím, pivotuje ke kurzoru.
+    // Tělo: za jízdy kouká kam jedeš, při stání pivotuje plynule ke kurzoru.
     const sp2 = Math.hypot(this.vx, this.vy);
-    if (hasInput) this.skateAngle = lerpAngle(this.skateAngle, Math.atan2(iy, ix), Math.min(1, 9 * dt));
-    else          this.skateAngle = lerpAngle(this.skateAngle, this.aimAngle, Math.min(1, 6 * dt));
+    if (sp2 > 8) this.skateAngle = heading;
+    else         this.skateAngle = lerpAngle(this.skateAngle, this.aimAngle, Math.min(1, 6 * dt));
     // ZÁRUKA dosahu hole: kurzor musí být vždy v dosahu hole. Když je dál než ~90° od
     // těla, dotoč tělo tak, aby na něj hůl dosáhla → hokejka se NIKDY nezasekne mimo dosah.
     const off = angleDiff(this.aimAngle, this.skateAngle);
