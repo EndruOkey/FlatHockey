@@ -317,19 +317,12 @@ export class PlayerBase {
       this.vy = Math.sin(heading) * sp;
     }
 
-    // Tělo se natáčí podle KLÁVES (kam mačkáš), ne podle setrvačné rychlosti → sedí to na
-    // vstup a hůl se neopře o bok. Při stání/dojíždění koukáš na kurzor; při brzdě držíš směr.
-    // NAVÍC reach-korekce: tělo se natočí tak, aby kurzor byl vždy v dosahu hole (≤90°).
+    // Tělo kouká TAM, KAM MÍŘÍŠ (kurzor) — plynule. Hůl tak vychází přirozeně zepředu a tělo
+    // i hokejka jsou vždy zarovnané (žádné poskakování po 8 směrech kláves, žádné uvíznutí v boku).
+    // Bruslení (WASD) je nezávislé (strafe s momentem) → twin-stick.
     const sp2 = Math.hypot(this.vx, this.vy);
-    let bodyTarget;
-    if (braking)        bodyTarget = heading;                    // brzda: drž směr (žádná rotace)
-    else if (hasInput)  bodyTarget = Math.atan2(iy, ix);          // jízda: podle kláves (WASD)
-    else                bodyTarget = this.aimAngle;               // stání/glide: na kurzor
-    const lim = Math.PI * 0.5;
-    const offT = angleDiff(this.aimAngle, bodyTarget);
-    if (Math.abs(offT) > lim) bodyTarget = this.aimAngle - Math.sign(offT) * lim;
-    this.skateAngle = lerpAngle(this.skateAngle, bodyTarget, Math.min(1, 13 * dt));
-    this.bodyAngle = this.skateAngle;
+    this.skateAngle = lerpAngle(this.skateAngle, this.aimAngle, Math.min(1, 14 * dt));
+    this.bodyAngle  = this.skateAngle;
 
     // Náklon do oblouku (vizuál)
     const leanTarget = hasInput
