@@ -155,22 +155,22 @@ export class PlayerBase {
   // → rotuje s tělem, nejde za záda (ne 360°). Forehand/backhand dle strany těla a
   // handedness (pravák/levák), ne dle pohybu. Carry dojíždí omezenou rychlostí (klička).
   _updateStick(dt) {
-    // Hůl je RELATIVNÍ k tělu (rotuje s tělem). Offset = myš, omezený kuželem → nejde
-    // dokola (žádná helikoptéra). Za zády drží stranu; natočením těla (A/D) ji srovnáš.
-    const cone = Math.PI * 0.55; // realistický dosah hole na každou stranu (~99°): k bokům,
-                                 // sotva za rameno — ne za záda. Dozadu mířit = otočit tělo.
+    // Hůl míří ABSOLUTNĚ na kurzor (nezávisle na rotaci těla) → otočení těla holí NEtrhne.
+    // Kužel kolem těla je jen LIMIT dosahu (~99°): k bokům, sotva za rameno, ne za záda.
+    const cone = Math.PI * 0.55;
     const cursorRel = angleDiff(this.aimAngle, this.bodyAngle);
-    const targetRel = Math.abs(cursorRel) <= cone
-      ? cursorRel                                    // myš v dosahu → sleduj
-      : (cursorRel >= 0 ? cone : -cone);             // mimo dosah → drž nejbližší kraj (ne za záda)
+    const clampedRel = clamp(cursorRel, -cone, cone);
+    const targetAbs = this.bodyAngle + clampedRel;   // dokud je kurzor v dosahu = přímo kurzor
 
     const spd  = Math.hypot(this.vx, this.vy);
-    const rate = (14 - Math.min(1, spd / 180) * 7) * dt;
-    this._stickRel += clamp(targetRel - this._stickRel, -rate, rate);
-    this._stickRel = clamp(this._stickRel, -cone, cone);
+    const rate = (14 - Math.min(1, spd / 180) * 7) * dt;   // vyhlazení v absolutním prostoru
+    this.carryAngle += clamp(angleDiff(targetAbs, this.carryAngle), -rate, rate);
+    // pojistka: drž v kuželu kolem těla (kdyby tělo prudce otočilo)
+    const rel = angleDiff(this.carryAngle, this.bodyAngle);
+    if (Math.abs(rel) > cone) this.carryAngle = this.bodyAngle + (rel > 0 ? cone : -cone);
 
-    this.carryAngle = this.bodyAngle + this._stickRel; // rotuje s tělem
-    this.forehand   = (this._stickRel * this.handed) >= 0;
+    this._stickRel = angleDiff(this.carryAngle, this.bodyAngle);
+    this.forehand  = (this._stickRel * this.handed) >= 0;
   }
 
   // Tečování (deflection) — letící puk u čepele se odrazí pod jiným úhlem (gól z dorážky)
@@ -310,7 +310,7 @@ export class PlayerBase {
       const targetDir = Math.atan2(iy, ix);
       const dA = angleDiff(targetDir, heading);          // kolik chceš zatočit (-π..π)
       const ratio = clamp(sp / PLAYER.speed, 0, 1);
-      const turnRate = 7.5 - 3 * ratio;                  // ~7.5 rad/s pomalu → ~4.5 naplno (váha)
+      const turnRate = 6.5 - 3 * ratio;                  // ~6.5 rad/s pomalu → ~3.5 naplno (těžší)
       heading += clamp(dA, -turnRate * dt, turnRate * dt);
       // akcelerace k topSpeed
       const aUp = PLAYER.accel * (crossChecking ? 1.1 : 1) * (charging ? 0.5 : 1);
@@ -335,7 +335,10 @@ export class PlayerBase {
     // těla, dotoč tělo tak, aby na něj hůl dosáhla → hokejka se NIKDY nezasekne mimo dosah.
     const off = angleDiff(this.aimAngle, this.skateAngle);
     const lim = Math.PI * 0.5;
-    if (Math.abs(off) > lim) this.skateAngle = this.aimAngle - Math.sign(off) * lim;
+    if (Math.abs(off) > lim) {
+      const tgt = this.aimAngle - Math.sign(off) * lim;
+      this.skateAngle = lerpAngle(this.skateAngle, tgt, Math.min(1, 12 * dt)); // plynule, ne skokem
+    }
     this.bodyAngle = this.skateAngle;
 
     // Náklon do oblouku (vizuál)

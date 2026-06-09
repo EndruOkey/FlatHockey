@@ -14,7 +14,7 @@ export const RINK = {
 export const PLAYER = {
   radius: 7,       // tělo (mírně nad realitou kvůli čitelnosti)
   speed: 180,      // ~34 ft/s top speed (realistický sprint)
-  accel: 215,      // rozjezd — těžší push-off (cítit „led", ne pírko); cuty řeší seškrtnutí rychlosti
+  accel: 190,      // rozjezd — těžší push-off (cítit „led", ne pírko); cuty řeší seškrtnutí rychlosti
   decel: 70,       // skluz při puštění (glide), ale kontrolovatelný
   turnRate: 3.8,   // rotace — střed: ovladatelná, ne těžkopádná ani twitchy
   stickLen: 16,    // úměrně k tělu
