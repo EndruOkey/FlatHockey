@@ -298,21 +298,25 @@ export class PlayerBase {
     if (this._knockT > 0) this._knockT = Math.max(0, this._knockT - dt);
     const knocked = this._knockT > 0;            // po nárazu hráč skoro neřídí (náraz dojede)
 
-    // CARVE MODEL: rychlost má MOMENT. Zrychluje/zpomaluje se postupně; směr (heading) se
-    // stáčí k WASD OMEZENOU rychlostí → zatáčíš obloukem a držíš rychlost. Otáčení je
-    // pomalejší při vyšší rychlosti (širší oblouk) → nejde točit „kolotoč" spamem WASD.
+    // CARVE + CUT MODEL: rychlost má moment (plynulý rozjezd/glide). Řízení je SVIŽNÉ
+    // (jde uříznout směr), ale PRUDKÁ změna směru seškrtá rychlost (hrany do ledu):
+    //  • mírný oblouk → drží rychlost (carve),
+    //  • ostrý cut → změníš směr, ale ztratíš tempo (hokejové),
+    //  • držet těsnou rotaci při rychlosti = rychlost odteče → žádný „kolotoč".
     let sp = Math.hypot(this.vx, this.vy);
     let heading = sp > 1 ? Math.atan2(this.vy, this.vx) : this.skateAngle;
 
     if (hasInput && !knocked) {
       const targetDir = Math.atan2(iy, ix);
-      // postupná akcelerace k topSpeed (a měkké stažení, když jsi nad limitem, např. po charge)
+      const dA = angleDiff(targetDir, heading);          // kolik chceš zatočit (-π..π)
+      const ratio = clamp(sp / PLAYER.speed, 0, 1);
+      const turnRate = 10 - 4 * ratio;                   // svižné: ~10 rad/s pomalu → ~6 naplno
+      heading += clamp(dA, -turnRate * dt, turnRate * dt);
+      // akcelerace k topSpeed
       const aUp = PLAYER.accel * (crossChecking ? 1.1 : 1) * (charging ? 0.5 : 1);
       sp += clamp(topSpeed - sp, -PLAYER.decel * 2 * dt, aUp * dt);
-      // carve: heading k inputu, rychlost otáčení klesá s rychlostí (naplno = široký oblouk)
-      const ratio = clamp(sp / PLAYER.speed, 0, 1);
-      const turnRate = 8.5 - 5.5 * ratio;        // ~8.5 rad/s pomalu → ~3 rad/s naplno
-      heading += clamp(angleDiff(targetDir, heading), -turnRate * dt, turnRate * dt);
+      // hrany do ledu: čím prudší změna směru, tím větší ztráta rychlosti
+      sp *= 1 - clamp(Math.abs(dA) / Math.PI, 0, 1) * 3.5 * dt;
       this.vx = Math.cos(heading) * sp;
       this.vy = Math.sin(heading) * sp;
     } else if (sp > 0) {
