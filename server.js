@@ -174,7 +174,7 @@ function faceoffAt(match, fx, fy) {
   match.puck.reset();
   match.puck.x = fx; match.puck.y = fy; match.puck.prevX = fx; match.puck.prevY = fy;
   match.lastTouch = null; match.touchX = fx;
-  match.icing = null; match._goalAt = 0; match.stoppage = false; match._whistleAt = 0;
+  match.icing = null; match.offside = null; match._goalAt = 0; match.stoppage = false; match._whistleAt = 0;
   // "Set" — lehká prodleva při vhazování: vše zmrazené, hráči čelem k puku, pak živé
   match.setup = true;
   match.faceoffUntil = Date.now() + 900;
@@ -201,13 +201,18 @@ function checkRules(match) {
   const inMouthY = pk.y > gy1 && pk.y < gy2;
   const dotY = pk.y < RINK.h / 2 ? 114 : RINK.h - 114;
 
-  // OFFSIDE — útočník v útočném pásmu dřív než puk (home útočí vpravo, away vlevo)
+  // OFFSIDE — útočník v útočném pásmu dřív než puk (home útočí vpravo, away vlevo).
+  // Píšťalka NEhned: puk necháme dojet (jako icing), zmrazíme jen interakce.
   if (match.lastTouch === 'home' && ppx < RINK.blueLineRight && px >= RINK.blueLineRight &&
-      anyInZone(match, 'home', p => p.x > RINK.blueLineRight + 8))
-    return callStoppage(match, 'offside', RINK.blueLineRight, RINK.blueLineRight - 30, dotY);
+      anyInZone(match, 'home', p => p.x > RINK.blueLineRight + 8)) {
+    match.offside = { side: 'home', lineX: RINK.blueLineRight, fx: RINK.blueLineRight - 30, fy: dotY, t: Date.now() };
+    match.world._goalLock = true; return;
+  }
   if (match.lastTouch === 'away' && ppx > RINK.blueLineLeft && px <= RINK.blueLineLeft &&
-      anyInZone(match, 'away', p => p.x < RINK.blueLineLeft - 8))
-    return callStoppage(match, 'offside', RINK.blueLineLeft, RINK.blueLineLeft + 30, dotY);
+      anyInZone(match, 'away', p => p.x < RINK.blueLineLeft - 8)) {
+    match.offside = { side: 'away', lineX: RINK.blueLineLeft, fx: RINK.blueLineLeft + 30, fy: dotY, t: Date.now() };
+    match.world._goalLock = true; return;
+  }
 
   // ICING — vyhození zpoza půlky přes soupeřovu brankovou čáru (mimo branku), bez dotyku.
   // Píšťalka NEhned: puk necháme dojet (physics běží), zmrazíme jen interakce.
@@ -227,7 +232,10 @@ function pendingFlags(match) {
   if (!match.rules || match.stoppage) return 0;
   const cx = RINK.centerX, pk = match.puck;
   let f = 0;
-  if (!match.world._goalLock) {
+  // OFFSIDE — během dojezdu drž čáru zvýrazněnou, jinak předběžné varování
+  if (match.offside) {
+    f |= (match.offside.side === 'home' ? 1 : 2);
+  } else if (!match.world._goalLock) {
     if (pk.x <= RINK.blueLineRight && anyInZone(match, 'home', p => p.x > RINK.blueLineRight + 4)) f |= 1;
     if (pk.x >= RINK.blueLineLeft  && anyInZone(match, 'away', p => p.x < RINK.blueLineLeft - 4))  f |= 2;
   }
@@ -255,6 +263,7 @@ function createMatch(lobbyId) {
     tick: 0, _goalAt: 0, loop: null,
   };
   world.onGoal = (result) => {
+    if (match.offside || match.icing) return;   // gól během dojezdu offside/icing neplatí
     if (result === 'goal-away') match.score.away++; else match.score.home++;
     io.to(match.room).emit('goal', { text: result === 'goal-away' ? 'GOAL! 🔴' : 'GOAL! 🔵' });
     match._goalAt = Date.now();
@@ -304,6 +313,7 @@ function startMatch(lobby) {
   match._whistleAt = 0;
   match._faceoff  = null;
   match.icing     = null;               // icing v běhu (puk dojíždí před píšťalkou)
+  match.offside   = null;               // offside v běhu (puk dojíždí před píšťalkou)
   match.setup     = false;              // buly "set" (lehká prodleva, vše zmrazené)
   match.faceoffUntil = 0;
   rebuildEntities(match);
@@ -336,6 +346,14 @@ function stepMatch(match) {
     if (sp < 45 || Date.now() - match.icing.t > 2600) {
       const ic = match.icing; match.icing = null;
       callStoppage(match, 'icing', ic.lineX, ic.fx, ic.fy);
+    }
+  }
+  // Offside v běhu — stejně jako icing: puk necháme dojet, pak píšťalka
+  if (match.offside && !match.stoppage) {
+    const sp = Math.hypot(match.puck.vx, match.puck.vy);
+    if (sp < 45 || Date.now() - match.offside.t > 2000) {
+      const off = match.offside; match.offside = null;
+      callStoppage(match, 'offside', off.lineX, off.fx, off.fy);
     }
   }
 
