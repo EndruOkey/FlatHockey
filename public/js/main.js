@@ -92,11 +92,14 @@ const refreshHand = () => handBtns.forEach(b => b.classList.toggle('active', par
 refreshHand();
 handBtns.forEach(b => b.addEventListener('click', () => { chosenHand = parseInt(b.dataset.hand,10); localStorage.setItem(HAND_KEY,String(chosenHand)); refreshHand(); drawPreview(); }));
 numInput.addEventListener('input', () => { localStorage.setItem(NUM_KEY, numInput.value); drawPreview(); });
+nameInput.addEventListener('input', drawPreview);
+const codeInput = $('sponsor-code');
+codeInput.value = localStorage.getItem('hockey_code') || '';
 let _spTimer = null;
-nameInput.addEventListener('input', () => {
-  drawPreview();
+codeInput.addEventListener('input', () => {
+  localStorage.setItem('hockey_code', codeInput.value);
   clearTimeout(_spTimer);
-  _spTimer = setTimeout(() => net.checkSponsor(nameInput.value), 350);  // tajný kód v nicku → server ověří
+  _spTimer = setTimeout(() => net.checkSponsor(codeInput.value), 350);  // skrytý kód → server ověří
 });
 
 const swHelmet = makeSwatches($('sw-helmet'), localStorage.getItem(GK.helmet) || '#f4f7fb', drawPreview);
@@ -121,7 +124,7 @@ function updateVisorRow() {
 }
 
 function profile() {
-  const name = (nameInput.value || '').trim().slice(0, 32);   // server strhne tajný kód a ořeže na 12
+  const name = (nameInput.value || '').trim().slice(0, 14);
   localStorage.setItem(NAME_KEY, name);
   localStorage.setItem(GK.helmet, swHelmet.get());
   localStorage.setItem(GK.gloves, swGloves.get());
@@ -137,6 +140,7 @@ function profile() {
     number: Number.isFinite(n) ? Math.max(0, Math.min(99, n)) : null,
     helmet: swHelmet.get(), gloves: swGloves.get(), tape: swTape.get(), trail: swTrail.get(),
     stick: swStick.get(), tapeStyle: chTapeStyle.get(), helmetType: chHelmetType.get(), visor: swVisor.get(),
+    code: codeInput.value || '',
   };
 }
 
@@ -340,7 +344,7 @@ setOnChange(() => {                 // po přepnutí jazyka přerenderuj z cache
 applyI18n();
 updateVisorRow();
 drawPreview();
-if (nameInput.value) net.checkSponsor(nameInput.value);   // ověř uložený nick (možný sponsor kód)
+if (codeInput.value) net.checkSponsor(codeInput.value);   // ověř uložený sponsor kód
 if (hasName()) showView('main');   // vracející se hráč
 else requireProfile();             // první spuštění → vynutit profil/přezdívku
 setInterval(() => { if (!inGame && $('v-browse').style.display !== 'none') net.listLobbies(); }, 4000);

@@ -480,25 +480,17 @@ function sanitizeSettings(s) {
 }
 const hex = (c, d) => (typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c)) ? c : d;
 
-// Tajný sponsor kód: hráč ho napíše jako slovo do nicku. Slovo se z nicku strhne (ve hře
-// se nezobrazí) a aktivuje sponsor vzhled. V repu je jen SOLENÝ HASH → kód z kódu nezjistíš.
+// Tajný sponsor kód — zadává se ve skrytém poli (ne v nicku, nikde se nezobrazí).
+// V repu je jen SOLENÝ HASH → samotný kód z kódu hry nezjistíš.
 const SPONSOR_SALT = 'FH_sp_v1::';
 const SPONSOR_HASH = 'eb863b2123b61372170818b0b710bcd2771cfa82aae85c23752eab8801c736a4';
-function sponsorScan(rawName) {
-  const parts = String(rawName || '').split(/\s+/).filter(Boolean);
-  let sponsor = false; const kept = [];
-  for (const p of parts) {
-    if (crypto.createHash('sha256').update(SPONSOR_SALT + p).digest('hex') === SPONSOR_HASH) sponsor = true;
-    else kept.push(p);
-  }
-  return { name: kept.join(' ').slice(0, 12), sponsor };
-}
+const isSponsorCode = (code) => typeof code === 'string' && code.length > 0 &&
+  crypto.createHash('sha256').update(SPONSOR_SALT + code).digest('hex') === SPONSOR_HASH;
 function makeMember(profile, team) {
   profile = profile || {};
-  const sp = sponsorScan(profile.name);
   return {
-    name:   sp.name,
-    sponsor: sp.sponsor,
+    name:   String(profile.name || '').slice(0, 12),
+    sponsor: isSponsorCode(profile.code),
     handed: (profile.handed === -1 || profile.handed === 1) ? profile.handed : 1,
     number: Number.isInteger(profile.number) ? Math.max(0, Math.min(99, profile.number)) : null,
     helmet: hex(profile.helmet, '#eef2f8'),  // osobní doplňky (helma/rukavice/páska)
@@ -567,9 +559,9 @@ io.on('connection', (socket) => {
 
   socket.on('lobby:list', () => { if (rateOk(socket, 'list', 500)) sendLobbyList(socket); });
 
-  socket.on('sponsor:check', (name) => {        // ověř tajný kód v nicku → odemkne sponsor vzhled
+  socket.on('sponsor:check', (code) => {        // ověř tajný sponsor kód → odemkne vzhled
     if (!rateOk(socket, 'spcheck', 250)) return;
-    socket.emit('sponsor:result', sponsorScan(name).sponsor);
+    socket.emit('sponsor:result', isSponsorCode(code));
   });
 
   socket.on('lobby:create', ({ settings, profile }) => {
