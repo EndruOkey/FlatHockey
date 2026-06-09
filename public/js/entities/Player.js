@@ -669,16 +669,17 @@ function _renderPlayer(ctx, p, cam) {
   ctx.stroke();
   // Ochrana obličeje dle typu helmy (vepředu, ve směru facingu)
   const ht = p.helmetType || 'visor';
-  if (ht === 'visor') {                       // klasika — půlhledí
+  const vcol = p.visor || '#bfe0ff';          // barva vizoru/akvárka (tradiční odstíny)
+  if (ht === 'visor') {                        // klasika — půlhledí
     ctx.beginPath();
     ctx.moveTo(hx + pcos * r * 0.3 + fcos * r * 0.1, hy + psin * r * 0.3 + fsin * r * 0.1);
     ctx.lineTo(hx - pcos * r * 0.3 + fcos * r * 0.1, hy - psin * r * 0.3 + fsin * r * 0.1);
-    ctx.strokeStyle = 'rgba(90,160,220,0.6)'; ctx.lineWidth = 1.5 * s; ctx.stroke();
-  } else if (ht === 'shield') {               // akvárko — průhledná kupole
+    ctx.strokeStyle = vcol; ctx.lineWidth = 1.7 * s; ctx.stroke();
+  } else if (ht === 'shield') {                // akvárko — průhledná kupole
     ctx.beginPath();
     ctx.arc(hx, hy, r * 0.5, ba - Math.PI * 0.55, ba + Math.PI * 0.55);
-    ctx.fillStyle = 'rgba(150,200,240,0.22)'; ctx.fill();
-    ctx.strokeStyle = 'rgba(120,185,230,0.7)'; ctx.lineWidth = 1.2 * s; ctx.stroke();
+    ctx.globalAlpha = 0.25; ctx.fillStyle = vcol; ctx.fill(); ctx.globalAlpha = 1;
+    ctx.strokeStyle = vcol; ctx.lineWidth = 1.3 * s; ctx.stroke();
   } else if (ht === 'cage') {                  // mřížka
     ctx.strokeStyle = 'rgba(15,15,15,0.75)'; ctx.lineWidth = 0.9 * s;
     for (const o of [-0.28, 0, 0.28]) {        // svislé mříže

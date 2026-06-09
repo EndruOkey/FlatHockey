@@ -102,12 +102,15 @@
     .prof-row #hand-toggle { flex: 1; margin: 0; }
     #num-input { width: 70px; margin: 0 0 0 auto; padding: 9px 6px; font-size: 1rem; letter-spacing: 0.06em; text-align: center; }
     #profile-intro { color: #8a93a6; font-size: 0.8rem; line-height: 1.4; margin: -4px 0 14px; }
-    .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-left: auto; }
-    .chip { font-size: 0.62rem; padding: 4px 8px; border-radius: 6px; background: #141720;
-      border: 1px solid #2a2d3a; color: #cfe2f1; cursor: pointer; }
+    .chips { display: flex; gap: 4px; flex: 1; }
+    .chip { flex: 1 1 0; min-width: 0; text-align: center; font-size: 0.58rem; padding: 5px 2px;
+      border-radius: 6px; background: #141720; border: 1px solid #2a2d3a; color: #cfe2f1; cursor: pointer; }
     .chip.active { border-color: #3a9fff; background: #1b2740; color: #fff; }
     .sw.locked, .chip.locked { opacity: 0.45; cursor: not-allowed; position: relative; }
     .sw.locked::after, .chip.locked::after { content: '🔒'; position: absolute; top: -7px; right: -4px; font-size: 0.55rem; }
+    .sw.custom { background: conic-gradient(red,orange,yellow,lime,cyan,blue,magenta,red); }
+    body.sponsor .sw.locked, body.sponsor .chip.locked { opacity: 1; cursor: pointer; }
+    body.sponsor .sw.locked::after, body.sponsor .chip.locked::after { content: '💎'; }
 
     .view { display: flex; flex-direction: column; }
     .row2 { display: flex; gap: 8px; }
@@ -219,7 +222,7 @@
         <h2 data-i18n="profile_h">Profil & dres</h2>
         <p id="profile-intro" data-i18n="profile_intro">Nastav si přezdívku a vzhled. Pak dej HOTOVO a můžeš hrát.</p>
         <canvas id="prof-preview" width="260" height="190"></canvas>
-        <input id="name-input" type="text" data-i18n-ph="name_ph" placeholder="TVÉ JMÉNO" maxlength="12" autocomplete="off" spellcheck="false" />
+        <input id="name-input" type="text" data-i18n-ph="name_ph" placeholder="TVÉ JMÉNO" maxlength="32" autocomplete="off" spellcheck="false" />
         <div id="hand-toggle">
           <button class="hand-btn" data-hand="-1" data-i18n="lefty">LEVÁK</button>
           <button class="hand-btn active" data-hand="1" data-i18n="righty">PRAVÁK</button>
@@ -227,6 +230,7 @@
         <div class="gear-item"><span data-i18n="number_label">ČÍSLO DRESU</span><input id="num-input" type="number" min="0" max="99" placeholder="0–99" /></div>
         <div class="gear-item"><span data-i18n="helmet">HELMA</span><div class="swatches" id="sw-helmet"></div></div>
         <div class="gear-item"><span data-i18n="helmet_type">OCHRANA</span><div class="chips" id="ht-chips"></div></div>
+        <div class="gear-item" id="gear-visor"><span data-i18n="visor_color">VIZOR</span><div class="swatches" id="sw-visor"></div></div>
         <div class="gear-item"><span data-i18n="gloves">RUKAVICE</span><div class="swatches" id="sw-gloves"></div></div>
         <div class="gear-item"><span data-i18n="stick_color">HOKEJKA</span><div class="swatches" id="sw-stick"></div></div>
         <div class="gear-item"><span data-i18n="tape">PÁSKA HOKEJKY</span><div class="swatches" id="sw-tape"></div></div>

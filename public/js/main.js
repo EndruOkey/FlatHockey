@@ -10,15 +10,18 @@ const lobby  = $('lobby');
 const status = $('status');
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-// Předdefinovaná paleta (podrobný picker přijde později)
+// Předdefinovaná paleta
 const PALETTE = ['#3a9fff','#1b4fd1','#ff4455','#b81d3a','#19c37d','#0c7a4a',
                  '#ffcf3a','#ff8a1e','#9b5cff','#ff5bd0','#f4f7fb','#1a1f29'];
+let isSponsor = false;   // odemčeno tajným kódem v nicku (ověřuje server)
+const sponsorMsg = () => setStatus(t('sponsor_only'), '#ffcf3a');
 function makeSwatches(el, initial, onChange, opts = {}) {
   const colors = opts.colors || PALETTE;
   const free = opts.free;                 // null = vše povolené; jinak pole povolených barev
   const isFree = c => !free || free.includes(c);
   let value = (colors.includes(initial) && isFree(initial)) ? initial : (free ? free[0] : colors[0]);
   el.innerHTML = '';
+  const clearActive = () => [...el.children].forEach(x => x.classList.remove('active'));
   colors.forEach(c => {
     const b = document.createElement('button');
     b.type = 'button';
@@ -26,18 +29,29 @@ function makeSwatches(el, initial, onChange, opts = {}) {
     b.className = 'sw' + (c === value ? ' active' : '') + (locked ? ' locked' : '');
     b.style.background = c;
     b.addEventListener('click', () => {
-      if (locked) { opts.onLocked?.(); return; }
-      value = c;
-      [...el.children].forEach(x => x.classList.remove('active'));
-      b.classList.add('active');
-      onChange?.(value);
+      if (locked && !isSponsor) { (opts.onLocked || sponsorMsg)(); return; }   // zamčené = jen sponzor
+      value = c; clearActive(); b.classList.add('active'); onChange?.(value);
     });
     el.appendChild(b);
   });
+  if (!opts.noCustom) {                    // vlastní barva (color picker) = jen pro sponzory
+    const cb = document.createElement('button');
+    cb.type = 'button'; cb.className = 'sw custom locked'; cb.title = 'custom';
+    const ci = document.createElement('input');
+    ci.type = 'color'; ci.style.display = 'none';
+    cb.addEventListener('click', () => {
+      if (!isSponsor) { sponsorMsg(); return; }
+      ci.value = /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#3a9fff'; ci.click();
+    });
+    ci.addEventListener('input', () => {
+      value = ci.value; clearActive(); cb.classList.add('active'); cb.style.background = ci.value; onChange?.(value);
+    });
+    el.appendChild(cb); el.appendChild(ci);
+  }
   return { get: () => value };
 }
 
-// Výběr typu (chips s popiskem). items: [{val, key, free}]. Zamčené = VIP/sponzor.
+// Výběr typu (chips s popiskem). items: [{val, key, free}]. Zamčené = sponzor.
 function makeChips(el, items, initial, onChange, onLocked) {
   const free = items.filter(i => i.free !== false);
   let value = items.some(i => i.val === initial && i.free !== false) ? initial : (free[0]?.val ?? items[0].val);
@@ -50,7 +64,7 @@ function makeChips(el, items, initial, onChange, onLocked) {
     b.dataset.i18n = it.key;             // překlad přes applyI18n
     b.textContent = t(it.key);
     b.addEventListener('click', () => {
-      if (locked) { onLocked?.(); return; }
+      if (locked && !isSponsor) { (onLocked || sponsorMsg)(); return; }
       value = it.val;
       [...el.children].forEach(x => x.classList.remove('active'));
       b.classList.add('active');
@@ -66,10 +80,10 @@ const nameInput = $('name-input'), numInput = $('num-input');
 const handBtns  = document.querySelectorAll('.hand-btn');
 const NAME_KEY='hockey_name', HAND_KEY='hockey_hand', NUM_KEY='hockey_num';
 const GK = { helmet:'hockey_helmet', gloves:'hockey_gloves', tape:'hockey_tape', trail:'hockey_trail',
-             stick:'hockey_stick', tapeStyle:'hockey_tapestyle', helmetType:'hockey_helmettype' };
+             stick:'hockey_stick', tapeStyle:'hockey_tapestyle', helmetType:'hockey_helmettype', visor:'hockey_visor' };
 const TRAIL_GRAY = '#9aa3b2';                                  // jediná stopa zdarma
 const STICK_PALETTE = ['#1a1f29','#f4f7fb','#9aa3b2','#7a5015','#b81d3a','#1b4fd1','#19c37d','#ffcf3a'];
-const vipLock = () => setStatus(t('vip_only'), '#ffcf3a');
+const VISOR_PALETTE = ['#bfe0ff','#39414e','#4f8fd6','#cfe7f2','#e2b25a']; // tradiční odstíny vizoru/akvárka
 
 nameInput.value = localStorage.getItem(NAME_KEY) || '';
 numInput.value  = localStorage.getItem(NUM_KEY) || '';
@@ -78,25 +92,36 @@ const refreshHand = () => handBtns.forEach(b => b.classList.toggle('active', par
 refreshHand();
 handBtns.forEach(b => b.addEventListener('click', () => { chosenHand = parseInt(b.dataset.hand,10); localStorage.setItem(HAND_KEY,String(chosenHand)); refreshHand(); drawPreview(); }));
 numInput.addEventListener('input', () => { localStorage.setItem(NUM_KEY, numInput.value); drawPreview(); });
-nameInput.addEventListener('input', drawPreview);
+let _spTimer = null;
+nameInput.addEventListener('input', () => {
+  drawPreview();
+  clearTimeout(_spTimer);
+  _spTimer = setTimeout(() => net.checkSponsor(nameInput.value), 350);  // tajný kód v nicku → server ověří
+});
 
 const swHelmet = makeSwatches($('sw-helmet'), localStorage.getItem(GK.helmet) || '#f4f7fb', drawPreview);
 const swGloves = makeSwatches($('sw-gloves'), localStorage.getItem(GK.gloves) || '#1a1f29', drawPreview);
 const swStick  = makeSwatches($('sw-stick'),  localStorage.getItem(GK.stick)  || '#1a1f29', drawPreview, { colors: STICK_PALETTE });
 const swTape   = makeSwatches($('sw-tape'),   localStorage.getItem(GK.tape)   || '#1a1f29', drawPreview);
 const swTrail  = makeSwatches($('sw-trail'),  localStorage.getItem(GK.trail)  || TRAIL_GRAY, drawPreview,
-                  { colors: [TRAIL_GRAY, ...PALETTE], free: [TRAIL_GRAY], onLocked: vipLock });  // ostatní barvy VIP
+                  { colors: [TRAIL_GRAY, ...PALETTE], free: [TRAIL_GRAY], onLocked: sponsorMsg });  // ostatní barvy = sponzor
 const chHelmetType = makeChips($('ht-chips'), [
-  { val:'visor', key:'ht_visor' }, { val:'none', key:'ht_none', free:false },
-  { val:'shield', key:'ht_shield', free:false }, { val:'cage', key:'ht_cage', free:false },
-], localStorage.getItem(GK.helmetType) || 'visor', drawPreview, vipLock);
+  { val:'visor', key:'ht_visor' }, { val:'none', key:'ht_none' },
+  { val:'shield', key:'ht_shield' }, { val:'cage', key:'ht_cage' },
+], localStorage.getItem(GK.helmetType) || 'visor', () => { updateVisorRow(); drawPreview(); });
 const chTapeStyle = makeChips($('ts-chips'), [
   { val:'full', key:'ts_full' }, { val:'toe', key:'ts_toe' },
   { val:'heel', key:'ts_heel' }, { val:'candy', key:'ts_candy' },
 ], localStorage.getItem(GK.tapeStyle) || 'full', drawPreview);
+const swVisor = makeSwatches($('sw-visor'), localStorage.getItem(GK.visor) || '#bfe0ff', drawPreview, { colors: VISOR_PALETTE });
+// Řádek barvy vizoru ukaž jen u typů, kde dává smysl (vizír / akvárko)
+function updateVisorRow() {
+  const ht = chHelmetType.get();
+  $('gear-visor').style.display = (ht === 'visor' || ht === 'shield') ? '' : 'none';
+}
 
 function profile() {
-  const name = (nameInput.value || '').trim().slice(0, 12);
+  const name = (nameInput.value || '').trim().slice(0, 32);   // server strhne tajný kód a ořeže na 12
   localStorage.setItem(NAME_KEY, name);
   localStorage.setItem(GK.helmet, swHelmet.get());
   localStorage.setItem(GK.gloves, swGloves.get());
@@ -105,12 +130,13 @@ function profile() {
   localStorage.setItem(GK.stick,  swStick.get());
   localStorage.setItem(GK.tapeStyle,  chTapeStyle.get());
   localStorage.setItem(GK.helmetType, chHelmetType.get());
+  localStorage.setItem(GK.visor, swVisor.get());
   const n = parseInt(numInput.value, 10);
   return {
     name, handed: chosenHand,
     number: Number.isFinite(n) ? Math.max(0, Math.min(99, n)) : null,
     helmet: swHelmet.get(), gloves: swGloves.get(), tape: swTape.get(), trail: swTrail.get(),
-    stick: swStick.get(), tapeStyle: chTapeStyle.get(), helmetType: chHelmetType.get(),
+    stick: swStick.get(), tapeStyle: chTapeStyle.get(), helmetType: chHelmetType.get(), visor: swVisor.get(),
   };
 }
 
@@ -133,7 +159,7 @@ function drawPreview() {
   const p = previewPlayer;
   p.handed = chosenHand;
   p.helmet = swHelmet.get(); p.gloves = swGloves.get(); p.tape = swTape.get();
-  p.stick = swStick.get(); p.tapeStyle = chTapeStyle.get(); p.helmetType = chHelmetType.get();
+  p.stick = swStick.get(); p.tapeStyle = chTapeStyle.get(); p.helmetType = chHelmetType.get(); p.visor = swVisor.get();
   const n = parseInt(numInput.value, 10);
   p.num  = Number.isFinite(n) ? Math.max(0, Math.min(99, n)) : null;
   p.name = (nameInput.value || '').trim();
@@ -210,7 +236,7 @@ $('go-online').onclick  = () => { if (!commitProfile()) return requireProfile();
 $('go-solo').onclick     = () => {
   if (!commitProfile()) return requireProfile();
   const g = new SandboxGame(canvas), pr = profile();
-  Object.assign(g.local, { name: pr.name, handed: pr.handed, num: pr.number, helmet: pr.helmet, gloves: pr.gloves, tape: pr.tape, trail: pr.trail, stick: pr.stick, tapeStyle: pr.tapeStyle, helmetType: pr.helmetType });
+  Object.assign(g.local, { name: pr.name, handed: pr.handed, num: pr.number, helmet: pr.helmet, gloves: pr.gloves, tape: pr.tape, trail: pr.trail, stick: pr.stick, tapeStyle: pr.tapeStyle, helmetType: pr.helmetType, visor: pr.visor });
   startGame(g);
 };
 
@@ -279,6 +305,12 @@ function renderWait(st) {
 net.onLobbyJoined = (st) => { setStatus(''); renderWait(st); };
 net.onLobbyState  = (st) => { if (!inGame) renderWait(st); };
 net.onLobbyError  = (code) => setStatus(t(code), '#ff4455');
+net.onSponsor = (ok) => {                       // tajný kód v nicku odemkne sponsor vzhled
+  if (ok === isSponsor) return;
+  isSponsor = !!ok;
+  document.body.classList.toggle('sponsor', isSponsor);
+  if (isSponsor) setStatus(t('sponsor_on'), '#6ee0a0');
+};
 document.querySelectorAll('.pick-btn').forEach(b => b.addEventListener('click', () => net.setTeam(b.dataset.team)));
 $('start-btn').onclick   = () => net.startLobby();
 $('wait-leave').onclick  = () => { net.leaveLobby(); showView('browse'); net.listLobbies(); };
@@ -306,7 +338,9 @@ setOnChange(() => {                 // po přepnutí jazyka přerenderuj z cache
 
 // init
 applyI18n();
+updateVisorRow();
 drawPreview();
+if (nameInput.value) net.checkSponsor(nameInput.value);   // ověř uložený nick (možný sponsor kód)
 if (hasName()) showView('main');   // vracející se hráč
 else requireProfile();             // první spuštění → vynutit profil/přezdívku
 setInterval(() => { if (!inGame && $('v-browse').style.display !== 'none') net.listLobbies(); }, 4000);

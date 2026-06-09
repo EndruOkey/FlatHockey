@@ -1,5 +1,6 @@
 import express from 'express';
 import http from 'http';
+import crypto from 'crypto';
 import { Server } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -308,7 +309,7 @@ function buildPlayer(lobby, sid, m) {
   p.color  = ts.color || null;
   p.jersey = ts.style || 'solid';
   p.helmet = m.helmet; p.gloves = m.gloves; p.tape = m.tape; p.trail = m.trail;
-  p.stick = m.stick; p.tapeStyle = m.tapeStyle; p.helmetType = m.helmetType;
+  p.stick = m.stick; p.tapeStyle = m.tapeStyle; p.helmetType = m.helmetType; p.visor = m.visor;
   return p;
 }
 
@@ -427,7 +428,7 @@ function broadcast(match) {
       hd: p.handed, cc: p.crossCheck ? 1 : 0, ln: r2(p._lean),
       col: p.color || null, num: p.num, js: p.jersey || 'solid',
       hc: p.helmet || null, gc: p.gloves || null, tc: p.tape || null,
-      sk: p.stick || null, ty: p.tapeStyle || 'full', hy: p.helmetType || 'visor',
+      sk: p.stick || null, ty: p.tapeStyle || 'full', hy: p.helmetType || 'visor', vc: p.visor || null,
     });
   }
   const g = (gg) => ({ x: r1(gg.x), y: r1(gg.y), t: r3(gg._tilt), h: gg._holdTimer > 0 ? 1 : 0,
@@ -478,10 +479,26 @@ function sanitizeSettings(s) {
   };
 }
 const hex = (c, d) => (typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c)) ? c : d;
+
+// Tajný sponsor kód: hráč ho napíše jako slovo do nicku. Slovo se z nicku strhne (ve hře
+// se nezobrazí) a aktivuje sponsor vzhled. V repu je jen SOLENÝ HASH → kód z kódu nezjistíš.
+const SPONSOR_SALT = 'FH_sp_v1::';
+const SPONSOR_HASH = 'ffeb79bc8b3468e1bf1df8ac63484750f3c3d95f7a30ce150b46a79aab44ab8c';
+function sponsorScan(rawName) {
+  const parts = String(rawName || '').split(/\s+/).filter(Boolean);
+  let sponsor = false; const kept = [];
+  for (const p of parts) {
+    if (crypto.createHash('sha256').update(SPONSOR_SALT + p).digest('hex') === SPONSOR_HASH) sponsor = true;
+    else kept.push(p);
+  }
+  return { name: kept.join(' ').slice(0, 12), sponsor };
+}
 function makeMember(profile, team) {
   profile = profile || {};
+  const sp = sponsorScan(profile.name);
   return {
-    name:   String(profile.name || '').slice(0, 12),
+    name:   sp.name,
+    sponsor: sp.sponsor,
     handed: (profile.handed === -1 || profile.handed === 1) ? profile.handed : 1,
     number: Number.isInteger(profile.number) ? Math.max(0, Math.min(99, profile.number)) : null,
     helmet: hex(profile.helmet, '#eef2f8'),  // osobní doplňky (helma/rukavice/páska)
@@ -489,6 +506,7 @@ function makeMember(profile, team) {
     tape:   hex(profile.tape,   '#111111'),
     trail:  hex(profile.trail,  '#9aa3b2'),
     stick:  hex(profile.stick,  '#1a1f29'),
+    visor:  hex(profile.visor,  '#bfe0ff'),
     tapeStyle:  ['full','toe','heel','candy'].includes(profile.tapeStyle) ? profile.tapeStyle : 'full',
     helmetType: ['visor','none','shield','cage'].includes(profile.helmetType) ? profile.helmetType : 'visor',
     team,
@@ -548,6 +566,11 @@ io.on('connection', (socket) => {
   connCount++;
 
   socket.on('lobby:list', () => { if (rateOk(socket, 'list', 500)) sendLobbyList(socket); });
+
+  socket.on('sponsor:check', (name) => {        // ověř tajný kód v nicku → odemkne sponsor vzhled
+    if (!rateOk(socket, 'spcheck', 250)) return;
+    socket.emit('sponsor:result', sponsorScan(name).sponsor);
+  });
 
   socket.on('lobby:create', ({ settings, profile }) => {
     if (!rateOk(socket, 'create', 1000)) return;

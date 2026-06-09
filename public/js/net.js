@@ -20,6 +20,7 @@ export class Net {
     this.socket.on('lobby:state',  d => this.onLobbyState?.(d));
     this.socket.on('lobby:start',  d => this.onLobbyStart?.(d));
     this.socket.on('lobby:error',  d => this.onLobbyError?.(d));
+    this.socket.on('sponsor:result', d => this.onSponsor?.(d));
     this.socket.on('snap', d => this.onSnap?.(d));
     this.socket.on('goal', d => this.onGoal?.(d));
     this.socket.on('whistle', d => this.onWhistle?.(d));
@@ -33,6 +34,7 @@ export class Net {
   updateSettings(settings)   { this.socket.emit('lobby:settings', { settings }); }
   startLobby()               { this.socket.emit('lobby:start'); }
   leaveLobby()               { this.socket.emit('lobby:leave'); }
+  checkSponsor(name)         { this.socket.emit('sponsor:check', name); }
 
   input(msg) { this.socket.emit('input', msg); }
   leave()    { try { this.socket?.disconnect(); } catch {} }
