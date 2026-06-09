@@ -399,6 +399,9 @@ function _renderPlayer(ctx, p, cam) {
   const sy    = oy + p.y * s;
   const r     = PLAYER.radius * s;
   const color = p.color || PLAYER.colors[p.team]; // vlastní barva dresu, jinak týmová
+  const stickCol = p.stick || '#7a5015';          // barva hole (šaft)
+  const tapeCol  = p.tape || '#111';
+  const tapeSty  = p.tapeStyle || 'full';
 
   const vmag  = Math.hypot(p.vx, p.vy);
   const vdir  = Math.atan2(p.vy, p.vx);
@@ -449,7 +452,7 @@ function _renderPlayer(ctx, p, cam) {
     ctx.beginPath();
     ctx.moveTo(gripX, gripY);
     ctx.lineTo(cx - sDirCos * halfLen * 0.3, cy - sDirSin * halfLen * 0.3);
-    ctx.strokeStyle = '#2e1a04';
+    ctx.strokeStyle = _shade(stickCol, -0.55);
     ctx.lineWidth   = 2.8 * s;
     ctx.stroke();
 
@@ -457,7 +460,7 @@ function _renderPlayer(ctx, p, cam) {
     ctx.beginPath();
     ctx.moveTo(cx - sDirCos * halfLen * 0.35, cy - sDirSin * halfLen * 0.35);
     ctx.lineTo(bladeX, bladeY);
-    ctx.strokeStyle = '#7a5015';
+    ctx.strokeStyle = stickCol;
     ctx.lineWidth   = 2.8 * s;
     ctx.stroke();
 
@@ -477,12 +480,7 @@ function _renderPlayer(ctx, p, cam) {
     ctx.lineWidth   = 4 * s;
     ctx.stroke();
 
-    ctx.beginPath();
-    ctx.moveTo(bladeX, bladeY);
-    ctx.quadraticCurveTo(bCtrlX, bCtrlY, bEndX, bEndY);
-    ctx.strokeStyle = p.tape || '#111';
-    ctx.lineWidth   = 2.8 * s;
-    ctx.stroke();
+    _drawBlade(ctx, bladeX, bladeY, bCtrlX, bCtrlY, bEndX, bEndY, tapeCol, tapeSty, 2.8 * s);
   }
 
   if (!p.crossCheck) {
@@ -525,14 +523,14 @@ function _renderPlayer(ctx, p, cam) {
   ctx.beginPath();
   ctx.moveTo(gx, gy);
   ctx.lineTo(gx + windCos * windLen * 0.35 * s, gy + windSin * windLen * 0.35 * s);
-  ctx.strokeStyle = '#2e1a04';
+  ctx.strokeStyle = _shade(stickCol, -0.55);
   ctx.lineWidth   = 2.8 * s;
   ctx.stroke();
   // main shaft
   ctx.beginPath();
   ctx.moveTo(gx + windCos * windLen * 0.30 * s, gy + windSin * windLen * 0.30 * s);
   ctx.lineTo(tipX, tipY);
-  ctx.strokeStyle = '#7a5015';
+  ctx.strokeStyle = stickCol;
   ctx.lineWidth   = 2.8 * s;
   ctx.stroke();
 
@@ -559,14 +557,8 @@ function _renderPlayer(ctx, p, cam) {
   ctx.lineCap     = 'round';
   ctx.stroke();
 
-  // Blade face (tape) — barva pásky dle hráče
-  ctx.beginPath();
-  ctx.moveTo(bStartX, bStartY);
-  ctx.quadraticCurveTo(bCtrlX, bCtrlY, bEndX, bEndY);
-  ctx.strokeStyle = p.tape || '#111';
-  ctx.lineWidth   = 2.8 * s;
-  ctx.lineCap     = 'round';
-  ctx.stroke();
+  // Blade face (tape) — barva + styl tapování
+  _drawBlade(ctx, bStartX, bStartY, bCtrlX, bCtrlY, bEndX, bEndY, tapeCol, tapeSty, 2.8 * s);
   } // end !crossCheck stick
 
   // ── Hokejista (top-down) — orientovaný podle facingu (bodyAngle) ──
@@ -675,13 +667,30 @@ function _renderPlayer(ctx, p, cam) {
   ctx.strokeStyle = 'rgba(0,0,0,0.4)';
   ctx.lineWidth = 1.2 * s;
   ctx.stroke();
-  // hledí
-  ctx.beginPath();
-  ctx.moveTo(hx + pcos * r * 0.3, hy + psin * r * 0.3);
-  ctx.lineTo(hx - pcos * r * 0.3, hy - psin * r * 0.3);
-  ctx.strokeStyle = 'rgba(0,0,0,0.3)';
-  ctx.lineWidth = 1 * s;
-  ctx.stroke();
+  // Ochrana obličeje dle typu helmy (vepředu, ve směru facingu)
+  const ht = p.helmetType || 'visor';
+  if (ht === 'visor') {                       // klasika — půlhledí
+    ctx.beginPath();
+    ctx.moveTo(hx + pcos * r * 0.3 + fcos * r * 0.1, hy + psin * r * 0.3 + fsin * r * 0.1);
+    ctx.lineTo(hx - pcos * r * 0.3 + fcos * r * 0.1, hy - psin * r * 0.3 + fsin * r * 0.1);
+    ctx.strokeStyle = 'rgba(90,160,220,0.6)'; ctx.lineWidth = 1.5 * s; ctx.stroke();
+  } else if (ht === 'shield') {               // akvárko — průhledná kupole
+    ctx.beginPath();
+    ctx.arc(hx, hy, r * 0.5, ba - Math.PI * 0.55, ba + Math.PI * 0.55);
+    ctx.fillStyle = 'rgba(150,200,240,0.22)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(120,185,230,0.7)'; ctx.lineWidth = 1.2 * s; ctx.stroke();
+  } else if (ht === 'cage') {                  // mřížka
+    ctx.strokeStyle = 'rgba(15,15,15,0.75)'; ctx.lineWidth = 0.9 * s;
+    for (const o of [-0.28, 0, 0.28]) {        // svislé mříže
+      ctx.beginPath();
+      ctx.moveTo(hx + pcos * r * o + fcos * r * 0.1, hy + psin * r * o + fsin * r * 0.1);
+      ctx.lineTo(hx + pcos * r * o + fcos * r * 0.5, hy + psin * r * o + fsin * r * 0.5);
+      ctx.stroke();
+    }
+    for (const d of [0.27, 0.43]) {            // příčné mříže
+      ctx.beginPath(); ctx.arc(hx, hy, r * d, ba - Math.PI * 0.42, ba + Math.PI * 0.42); ctx.stroke();
+    }
+  } // 'none' → bez ochrany
 
   // Pass-request rings (žádost o nahrávku)
   if (p.passReq > 0) {
@@ -759,6 +768,33 @@ function _clipRayAABB(px, py, cos, sin, tMax, x1, x2, y1, y2) {
   if (tEnter < tExit && tEnter < tMax && tExit > 0)
     return Math.min(tMax, Math.max(0, tEnter));
   return tMax;
+}
+
+// Bod na kvadratické bézier křivce v parametru t
+function _bezPt(x0, y0, cx, cy, x1, y1, t) {
+  const u = 1 - t;
+  return [u * u * x0 + 2 * u * t * cx + t * t * x1, u * u * y0 + 2 * u * t * cy + t * t * y1];
+}
+// Čepel hokejky se stylem tapování: full (celá), toe (špička), heel (pata), candy (pruhy)
+function _drawBlade(ctx, x0, y0, cx, cy, x1, y1, tape, style, lw) {
+  ctx.lineCap = 'round';
+  if (!style || style === 'full') {
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.quadraticCurveTo(cx, cy, x1, y1);
+    ctx.strokeStyle = tape; ctx.lineWidth = lw; ctx.stroke();
+    return;
+  }
+  const N = 9; ctx.lineWidth = lw;
+  const col = t => style === 'toe'   ? (t > 0.5 ? tape : '#15171c')
+                 : style === 'heel'  ? (t < 0.5 ? tape : '#15171c')
+                 : style === 'candy' ? ((Math.floor(t * 6) % 2 === 0) ? tape : '#f4f7fb')
+                 : tape;
+  let [px, py] = _bezPt(x0, y0, cx, cy, x1, y1, 0);
+  for (let i = 1; i <= N; i++) {
+    const t = i / N, [qx, qy] = _bezPt(x0, y0, cx, cy, x1, y1, t);
+    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(qx, qy);
+    ctx.strokeStyle = col((i - 0.5) / N); ctx.stroke();
+    px = qx; py = qy;
+  }
 }
 
 // Ztmavení/zesvětlení hex barvy (amt < 0 ztmaví, > 0 zesvětlí) → 'rgb(...)'

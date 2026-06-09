@@ -133,6 +133,7 @@ export class NetGame {
       ent.handed = ps.hd; ent.name = ps.nm;
       ent.color = ps.col || null; ent.num = ps.num; ent.jersey = ps.js || 'solid';
       ent.helmet = ps.hc || null; ent.gloves = ps.gc || null; ent.tape = ps.tc || null;
+      ent.stick = ps.sk || null; ent.tapeStyle = ps.ty || 'full'; ent.helmetType = ps.hy || 'visor';
       if (isMe) {
         e.sx = ps.x; e.sy = ps.y;  // jen reconcile cíl; pozici/úhly/stick predikuju lokálně
       } else {

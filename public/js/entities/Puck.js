@@ -194,7 +194,7 @@ export class Puck {
     const sy   = oy + this.y * s;
     const r    = PUCK.radius * s;
     const elev = this.z * s;
-    const tcol = this.trailColor || '#62d0ff';   // barva stopy/overlaye (dle hráče, jinak default)
+    const tcol = this.trailColor || '#9aa3b2';   // barva stopy/overlaye (dle hráče, jinak default šedá)
 
     // Trail — jemná mizející stopa za pukem (starší body menší a průhlednější)
     const tr = this._trail || (this._trail = []);

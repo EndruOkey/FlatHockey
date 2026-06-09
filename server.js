@@ -308,6 +308,7 @@ function buildPlayer(lobby, sid, m) {
   p.color  = ts.color || null;
   p.jersey = ts.style || 'solid';
   p.helmet = m.helmet; p.gloves = m.gloves; p.tape = m.tape; p.trail = m.trail;
+  p.stick = m.stick; p.tapeStyle = m.tapeStyle; p.helmetType = m.helmetType;
   return p;
 }
 
@@ -426,6 +427,7 @@ function broadcast(match) {
       hd: p.handed, cc: p.crossCheck ? 1 : 0, ln: r2(p._lean),
       col: p.color || null, num: p.num, js: p.jersey || 'solid',
       hc: p.helmet || null, gc: p.gloves || null, tc: p.tape || null,
+      sk: p.stick || null, ty: p.tapeStyle || 'full', hy: p.helmetType || 'visor',
     });
   }
   const g = (gg) => ({ x: r1(gg.x), y: r1(gg.y), t: r3(gg._tilt), h: gg._holdTimer > 0 ? 1 : 0,
@@ -485,7 +487,10 @@ function makeMember(profile, team) {
     helmet: hex(profile.helmet, '#eef2f8'),  // osobní doplňky (helma/rukavice/páska)
     gloves: hex(profile.gloves, '#242c38'),
     tape:   hex(profile.tape,   '#111111'),
-    trail:  hex(profile.trail,  '#3a9fff'),
+    trail:  hex(profile.trail,  '#9aa3b2'),
+    stick:  hex(profile.stick,  '#1a1f29'),
+    tapeStyle:  ['full','toe','heel','candy'].includes(profile.tapeStyle) ? profile.tapeStyle : 'full',
+    helmetType: ['visor','none','shield','cage'].includes(profile.helmetType) ? profile.helmetType : 'visor',
     team,
   };
 }

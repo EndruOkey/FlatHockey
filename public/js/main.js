@@ -13,16 +13,45 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
 // Předdefinovaná paleta (podrobný picker přijde později)
 const PALETTE = ['#3a9fff','#1b4fd1','#ff4455','#b81d3a','#19c37d','#0c7a4a',
                  '#ffcf3a','#ff8a1e','#9b5cff','#ff5bd0','#f4f7fb','#1a1f29'];
-function makeSwatches(el, initial, onChange) {
-  let value = PALETTE.includes(initial) ? initial : PALETTE[0];
+function makeSwatches(el, initial, onChange, opts = {}) {
+  const colors = opts.colors || PALETTE;
+  const free = opts.free;                 // null = vše povolené; jinak pole povolených barev
+  const isFree = c => !free || free.includes(c);
+  let value = (colors.includes(initial) && isFree(initial)) ? initial : (free ? free[0] : colors[0]);
   el.innerHTML = '';
-  PALETTE.forEach(c => {
+  colors.forEach(c => {
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = 'sw' + (c === value ? ' active' : '');
+    const locked = !isFree(c);
+    b.className = 'sw' + (c === value ? ' active' : '') + (locked ? ' locked' : '');
     b.style.background = c;
     b.addEventListener('click', () => {
+      if (locked) { opts.onLocked?.(); return; }
       value = c;
+      [...el.children].forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      onChange?.(value);
+    });
+    el.appendChild(b);
+  });
+  return { get: () => value };
+}
+
+// Výběr typu (chips s popiskem). items: [{val, key, free}]. Zamčené = VIP/sponzor.
+function makeChips(el, items, initial, onChange, onLocked) {
+  const free = items.filter(i => i.free !== false);
+  let value = items.some(i => i.val === initial && i.free !== false) ? initial : (free[0]?.val ?? items[0].val);
+  el.innerHTML = '';
+  items.forEach(it => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    const locked = it.free === false;
+    b.className = 'chip' + (it.val === value ? ' active' : '') + (locked ? ' locked' : '');
+    b.dataset.i18n = it.key;             // překlad přes applyI18n
+    b.textContent = t(it.key);
+    b.addEventListener('click', () => {
+      if (locked) { onLocked?.(); return; }
+      value = it.val;
       [...el.children].forEach(x => x.classList.remove('active'));
       b.classList.add('active');
       onChange?.(value);
@@ -36,7 +65,11 @@ function makeSwatches(el, initial, onChange) {
 const nameInput = $('name-input'), numInput = $('num-input');
 const handBtns  = document.querySelectorAll('.hand-btn');
 const NAME_KEY='hockey_name', HAND_KEY='hockey_hand', NUM_KEY='hockey_num';
-const GK = { helmet:'hockey_helmet', gloves:'hockey_gloves', tape:'hockey_tape', trail:'hockey_trail' };
+const GK = { helmet:'hockey_helmet', gloves:'hockey_gloves', tape:'hockey_tape', trail:'hockey_trail',
+             stick:'hockey_stick', tapeStyle:'hockey_tapestyle', helmetType:'hockey_helmettype' };
+const TRAIL_GRAY = '#9aa3b2';                                  // jediná stopa zdarma
+const STICK_PALETTE = ['#1a1f29','#f4f7fb','#9aa3b2','#7a5015','#b81d3a','#1b4fd1','#19c37d','#ffcf3a'];
+const vipLock = () => setStatus(t('vip_only'), '#ffcf3a');
 
 nameInput.value = localStorage.getItem(NAME_KEY) || '';
 numInput.value  = localStorage.getItem(NUM_KEY) || '';
@@ -49,8 +82,18 @@ nameInput.addEventListener('input', drawPreview);
 
 const swHelmet = makeSwatches($('sw-helmet'), localStorage.getItem(GK.helmet) || '#f4f7fb', drawPreview);
 const swGloves = makeSwatches($('sw-gloves'), localStorage.getItem(GK.gloves) || '#1a1f29', drawPreview);
+const swStick  = makeSwatches($('sw-stick'),  localStorage.getItem(GK.stick)  || '#1a1f29', drawPreview, { colors: STICK_PALETTE });
 const swTape   = makeSwatches($('sw-tape'),   localStorage.getItem(GK.tape)   || '#1a1f29', drawPreview);
-const swTrail  = makeSwatches($('sw-trail'),  localStorage.getItem(GK.trail)  || '#3a9fff', drawPreview);
+const swTrail  = makeSwatches($('sw-trail'),  localStorage.getItem(GK.trail)  || TRAIL_GRAY, drawPreview,
+                  { colors: [TRAIL_GRAY, ...PALETTE], free: [TRAIL_GRAY], onLocked: vipLock });  // ostatní barvy VIP
+const chHelmetType = makeChips($('ht-chips'), [
+  { val:'visor', key:'ht_visor' }, { val:'none', key:'ht_none', free:false },
+  { val:'shield', key:'ht_shield', free:false }, { val:'cage', key:'ht_cage', free:false },
+], localStorage.getItem(GK.helmetType) || 'visor', drawPreview, vipLock);
+const chTapeStyle = makeChips($('ts-chips'), [
+  { val:'full', key:'ts_full' }, { val:'toe', key:'ts_toe' },
+  { val:'heel', key:'ts_heel' }, { val:'candy', key:'ts_candy' },
+], localStorage.getItem(GK.tapeStyle) || 'full', drawPreview);
 
 function profile() {
   const name = (nameInput.value || '').trim().slice(0, 12);
@@ -59,11 +102,15 @@ function profile() {
   localStorage.setItem(GK.gloves, swGloves.get());
   localStorage.setItem(GK.tape,   swTape.get());
   localStorage.setItem(GK.trail,  swTrail.get());
+  localStorage.setItem(GK.stick,  swStick.get());
+  localStorage.setItem(GK.tapeStyle,  chTapeStyle.get());
+  localStorage.setItem(GK.helmetType, chHelmetType.get());
   const n = parseInt(numInput.value, 10);
   return {
     name, handed: chosenHand,
     number: Number.isFinite(n) ? Math.max(0, Math.min(99, n)) : null,
     helmet: swHelmet.get(), gloves: swGloves.get(), tape: swTape.get(), trail: swTrail.get(),
+    stick: swStick.get(), tapeStyle: chTapeStyle.get(), helmetType: chHelmetType.get(),
   };
 }
 
@@ -86,6 +133,7 @@ function drawPreview() {
   const p = previewPlayer;
   p.handed = chosenHand;
   p.helmet = swHelmet.get(); p.gloves = swGloves.get(); p.tape = swTape.get();
+  p.stick = swStick.get(); p.tapeStyle = chTapeStyle.get(); p.helmetType = chHelmetType.get();
   const n = parseInt(numInput.value, 10);
   p.num  = Number.isFinite(n) ? Math.max(0, Math.min(99, n)) : null;
   p.name = (nameInput.value || '').trim();
@@ -162,7 +210,7 @@ $('go-online').onclick  = () => { if (!commitProfile()) return requireProfile();
 $('go-solo').onclick     = () => {
   if (!commitProfile()) return requireProfile();
   const g = new SandboxGame(canvas), pr = profile();
-  Object.assign(g.local, { name: pr.name, handed: pr.handed, num: pr.number, helmet: pr.helmet, gloves: pr.gloves, tape: pr.tape, trail: pr.trail });
+  Object.assign(g.local, { name: pr.name, handed: pr.handed, num: pr.number, helmet: pr.helmet, gloves: pr.gloves, tape: pr.tape, trail: pr.trail, stick: pr.stick, tapeStyle: pr.tapeStyle, helmetType: pr.helmetType });
   startGame(g);
 };
 
