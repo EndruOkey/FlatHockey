@@ -483,7 +483,7 @@ const hex = (c, d) => (typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c)) ? c
 // Tajný sponsor kód: hráč ho napíše jako slovo do nicku. Slovo se z nicku strhne (ve hře
 // se nezobrazí) a aktivuje sponsor vzhled. V repu je jen SOLENÝ HASH → kód z kódu nezjistíš.
 const SPONSOR_SALT = 'FH_sp_v1::';
-const SPONSOR_HASH = 'ffeb79bc8b3468e1bf1df8ac63484750f3c3d95f7a30ce150b46a79aab44ab8c';
+const SPONSOR_HASH = 'eb863b2123b61372170818b0b710bcd2771cfa82aae85c23752eab8801c736a4';
 function sponsorScan(rawName) {
   const parts = String(rawName || '').split(/\s+/).filter(Boolean);
   let sponsor = false; const kept = [];
