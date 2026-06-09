@@ -123,6 +123,7 @@ function showView(name) {
   for (const [k, id] of Object.entries(VIEWS)) $(id).style.display = (k === name) ? '' : 'none';
 }
 document.querySelectorAll('.back').forEach(b => b.addEventListener('click', () => {
+  if (!b.dataset.to) return;                           // tlačítka s vlastní logikou (profile-done)
   showView(b.dataset.to);
   if (b.dataset.to === 'browse') net.listLobbies();   // čerstvý seznam při návratu
 }));
@@ -136,10 +137,25 @@ let inGame = false;
 let currentGame = null;
 const setStatus = (m, c = '#888') => { status.textContent = m; status.style.color = c; };
 
+// ── Profil — povinný (bez přezdívky nepustíme dál) ────────────────────
+const hasName = () => (nameInput.value || '').trim().length > 0;
+function commitProfile() {
+  if (!hasName()) { setStatus(t('name_required'), '#ff5a5a'); nameInput.focus(); return false; }
+  profile();                 // ulož jméno + výbavu
+  setStatus('');
+  return true;
+}
+function requireProfile() {   // skoč do profilu, dokud není přezdívka
+  showView('profile'); drawPreview();
+  setStatus(t('welcome'), '#ffcf3a');
+}
+$('profile-done').onclick = () => { if (commitProfile()) showView('main'); };
+
 // ── Hlavní menu ───────────────────────────────────────────────────────
 $('go-profile').onclick = () => { showView('profile'); drawPreview(); };
-$('go-online').onclick  = () => { showView('browse'); net.listLobbies(); };
+$('go-online').onclick  = () => { if (!commitProfile()) return requireProfile(); showView('browse'); net.listLobbies(); };
 $('go-solo').onclick     = () => {
+  if (!commitProfile()) return requireProfile();
   const g = new SandboxGame(canvas), pr = profile();
   Object.assign(g.local, { name: pr.name, handed: pr.handed, num: pr.number, helmet: pr.helmet, gloves: pr.gloves, tape: pr.tape });
   startGame(g);
@@ -237,6 +253,7 @@ setOnChange(() => {                 // po přepnutí jazyka přerenderuj z cache
 
 // init
 applyI18n();
-showView('main');
 drawPreview();
+if (hasName()) showView('main');   // vracející se hráč
+else requireProfile();             // první spuštění → vynutit profil/přezdívku
 setInterval(() => { if (!inGame && $('v-browse').style.display !== 'none') net.listLobbies(); }, 4000);

@@ -18,6 +18,8 @@ const DICT = {
     gloves: 'RUKAVICE',
     tape: 'PÁSKA HOKEJKY',
     done: 'HOTOVO',
+    name_required: 'Zadej si přezdívku',
+    welcome: 'Vítej! Nastav si profil',
     // Procházení
     online_h: 'Online hry',
     create_btn: '+ VYTVOŘIT',
@@ -87,6 +89,8 @@ const DICT = {
     gloves: 'GLOVES',
     tape: 'STICK TAPE',
     done: 'DONE',
+    name_required: 'Enter a nickname',
+    welcome: 'Welcome! Set up your profile',
     online_h: 'Online games',
     create_btn: '+ CREATE',
     back: 'BACK',
