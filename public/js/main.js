@@ -36,7 +36,7 @@ function makeSwatches(el, initial, onChange) {
 const nameInput = $('name-input'), numInput = $('num-input');
 const handBtns  = document.querySelectorAll('.hand-btn');
 const NAME_KEY='hockey_name', HAND_KEY='hockey_hand', NUM_KEY='hockey_num';
-const GK = { helmet:'hockey_helmet', gloves:'hockey_gloves', tape:'hockey_tape' };
+const GK = { helmet:'hockey_helmet', gloves:'hockey_gloves', tape:'hockey_tape', trail:'hockey_trail' };
 
 nameInput.value = localStorage.getItem(NAME_KEY) || '';
 numInput.value  = localStorage.getItem(NUM_KEY) || '';
@@ -50,6 +50,7 @@ nameInput.addEventListener('input', drawPreview);
 const swHelmet = makeSwatches($('sw-helmet'), localStorage.getItem(GK.helmet) || '#f4f7fb', drawPreview);
 const swGloves = makeSwatches($('sw-gloves'), localStorage.getItem(GK.gloves) || '#1a1f29', drawPreview);
 const swTape   = makeSwatches($('sw-tape'),   localStorage.getItem(GK.tape)   || '#1a1f29', drawPreview);
+const swTrail  = makeSwatches($('sw-trail'),  localStorage.getItem(GK.trail)  || '#3a9fff', drawPreview);
 
 function profile() {
   const name = (nameInput.value || '').trim().slice(0, 12);
@@ -57,11 +58,12 @@ function profile() {
   localStorage.setItem(GK.helmet, swHelmet.get());
   localStorage.setItem(GK.gloves, swGloves.get());
   localStorage.setItem(GK.tape,   swTape.get());
+  localStorage.setItem(GK.trail,  swTrail.get());
   const n = parseInt(numInput.value, 10);
   return {
     name, handed: chosenHand,
     number: Number.isFinite(n) ? Math.max(0, Math.min(99, n)) : null,
-    helmet: swHelmet.get(), gloves: swGloves.get(), tape: swTape.get(),
+    helmet: swHelmet.get(), gloves: swGloves.get(), tape: swTape.get(), trail: swTrail.get(),
   };
 }
 
@@ -160,7 +162,7 @@ $('go-online').onclick  = () => { if (!commitProfile()) return requireProfile();
 $('go-solo').onclick     = () => {
   if (!commitProfile()) return requireProfile();
   const g = new SandboxGame(canvas), pr = profile();
-  Object.assign(g.local, { name: pr.name, handed: pr.handed, num: pr.number, helmet: pr.helmet, gloves: pr.gloves, tape: pr.tape });
+  Object.assign(g.local, { name: pr.name, handed: pr.handed, num: pr.number, helmet: pr.helmet, gloves: pr.gloves, tape: pr.tape, trail: pr.trail });
   startGame(g);
 };
 

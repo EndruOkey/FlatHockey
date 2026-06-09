@@ -144,6 +144,7 @@ export class NetGame {
     }
 
     this.puck._tx = s.puck.x; this.puck._ty = s.puck.y; this.puck.z = s.puck.z;
+    this.puck.trailColor = s.puck.tc || null;
     this._applyGoalie(this.goalieL, s.gl);
     this._applyGoalie(this.goalieR, s.gr);
   }
@@ -208,6 +209,7 @@ export class NetGame {
     solids.push({ ent: this.goalieR, x: this.goalieR.x, y: this.goalieR.y, r: this.goalieR.radius });
     for (const e of this.players.values()) {
       e.ent._solids = solids.filter(so => so.ent !== e.ent);
+      e.ent._isLocal = e.isMe;   // charge arc kreslíme jen vlastnímu hráči (ostatní vidí nápřah hole)
       e.ent.draw(ctx, cam);
     }
     this.puck.draw(ctx, cam);
@@ -305,6 +307,7 @@ export class SandboxGame {
 
     this.input  = new Input(canvas);
     this.local  = new Player('local', 'home', this.input);
+    this.local._isLocal = true;   // v solu vidím vlastní charge arc
     this.puck   = new Puck();
     this.goalie = new Goalie();
     this.passer = new Passer();

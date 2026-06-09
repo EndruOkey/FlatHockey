@@ -307,7 +307,7 @@ function buildPlayer(lobby, sid, m) {
   const ts = lobby.settings.teams[m.team] || {};
   p.color  = ts.color || null;
   p.jersey = ts.style || 'solid';
-  p.helmet = m.helmet; p.gloves = m.gloves; p.tape = m.tape;
+  p.helmet = m.helmet; p.gloves = m.gloves; p.tape = m.tape; p.trail = m.trail;
   return p;
 }
 
@@ -434,7 +434,7 @@ function broadcast(match) {
   io.to(match.room).emit('snap', {
     n: match.tick,
     players,
-    puck: { x: r1(match.puck.x), y: r1(match.puck.y), z: r1(match.puck.z) },
+    puck: { x: r1(match.puck.x), y: r1(match.puck.y), z: r1(match.puck.z), tc: match.puck.trailColor || null },
     gl: g(match.goalieL), gr: g(match.goalieR),
     score: match.score,
     lock: match.world._goalLock ? 1 : 0,
@@ -485,6 +485,7 @@ function makeMember(profile, team) {
     helmet: hex(profile.helmet, '#eef2f8'),  // osobní doplňky (helma/rukavice/páska)
     gloves: hex(profile.gloves, '#242c38'),
     tape:   hex(profile.tape,   '#111111'),
+    trail:  hex(profile.trail,  '#3a9fff'),
     team,
   };
 }

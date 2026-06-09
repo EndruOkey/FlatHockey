@@ -132,6 +132,25 @@ export class PlayerBase {
     return true;
   }
 
+  // Obrání: soupeřova hůl na puku (puk je u nositelovy hole) → vezme puk.
+  canSteal(puck) {
+    if (this._shootCooldown > 0 || puck.isAirborne) return false;
+    const tip = this.stickTip;
+    const bladeDir = (this.carryAngle ?? this.aimAngle) + (this.handed ?? 1) * Math.PI / 6.5;
+    const bx = tip.x + Math.cos(bladeDir) * 6, by = tip.y + Math.sin(bladeDir) * 6;
+    const d = Math.min(Math.hypot(puck.x - tip.x, puck.y - tip.y), Math.hypot(puck.x - bx, puck.y - by));
+    return d <= PLAYER.pickupTipRadius * 0.92;
+  }
+
+  stealFrom(carrier, puck) {
+    carrier.hasPuck = false;
+    carrier.charge = 0; carrier._chargeDecaying = false; carrier.overcharged = false; carrier._oneTimer = false;
+    carrier._shootCooldown = 0.4;        // chvíli nemůže puk hned sebrat zpět → žádný ping-pong
+    this._grabPuck();
+    this._shootCooldown = 0.12;
+    puck.trailColor = this.trail || null;
+  }
+
   shoot(puck, charge) {
     this.hasPuck = false;
     this._shootCooldown = 0.18;
@@ -149,6 +168,7 @@ export class PlayerBase {
     puck.vx = Math.cos(dir) * spd;
     puck.vy = Math.sin(dir) * spd;
     puck.vz = Math.pow(c, 1.6) * PUCK.maxShotVz;        // žabička po ledě, slap se zvedne
+    puck.trailColor = this.trail || null;               // stopa v barvě střelce
   }
 
   // Hůl relativně k TĚLU: úhel hole = bodyAngle + clamp(rel) v dosažitelném kuželu.
@@ -231,6 +251,7 @@ export class PlayerBase {
     puck.vx = Math.cos(ang) * spd;
     puck.vy = Math.sin(ang) * spd;
     puck.vz = 0;
+    puck.trailColor = this.trail || null;   // stopa v barvě nahrávajícího
   }
 
   // Called each frame — check if this player's cross-check hits another
@@ -256,16 +277,16 @@ export class PlayerBase {
     // Náraz — VĚTŠÍ knockback při crosschecku: odhodí soupeře, checker se zbrzdí
     const nx = dx / dist;
     const ny = dy / dist;
-    other.vx += nx * 300;
-    other.vy += ny * 300;
-    this.vx  -= nx * 100;
-    this.vy  -= ny * 100;
-    other._knockT = 0.35; this._knockT = 0.18; // náraz dojede, neutlumí se hned
+    other.vx += nx * 175;       // umírněný knockback vůči ploše (dřív 300)
+    other.vy += ny * 175;
+    this.vx  -= nx * 55;
+    this.vy  -= ny * 55;
+    other._knockT = 0.26; this._knockT = 0.13; // náraz dojede, neutlumí se hned
   }
 
   _move(input, dt) {
     const braking       = !!(input.keys && input.keys['Space']); // tvrdá brzda (drž) — puk si necháš
-    const charging      = !!(input.lmb && this.hasPuck);
+    const charging      = !!(input.lmb && (this.hasPuck || this.charge > 0.01)); // i one-timer nápřah zpomaluje
     const crossChecking = this.crossCheck;
 
     // TWIN-STICK: WASD bruslí ve SMĚRECH (world-space), myš míří hokejkou NEZÁVISLE
@@ -276,7 +297,7 @@ export class PlayerBase {
     if (il > 1) { ix /= il; iy /= il; }         // diagonála není rychlejší
     const hasInput = il > 0.01;
 
-    let topSpeed = PLAYER.speed * (crossChecking ? 1.15 : 1);
+    let topSpeed = PLAYER.speed * (crossChecking ? 0.95 : 1);  // crosscheck je neohrabaný, ne rychlejší
     if (this.hasPuck) topSpeed *= 0.92;   // s pukem o chlup pomalejší (kontrola puku)
     if (charging) topSpeed *= clamp(1 - (this.charge || 0) * 0.85, 0.12, 1);
 
@@ -300,10 +321,11 @@ export class PlayerBase {
       const targetDir = Math.atan2(iy, ix);
       const dA = angleDiff(targetDir, heading);          // kolik chceš zatočit (-π..π)
       const ratio = clamp(sp / PLAYER.speed, 0, 1);
-      const turnRate = 6.5 - 3 * ratio;                  // ~6.5 rad/s pomalu → ~3.5 naplno (těžší)
+      let turnRate = 6.5 - 3 * ratio;                    // ~6.5 rad/s pomalu → ~3.5 naplno (těžší)
+      if (crossChecking) turnRate *= 0.45;               // crosscheck = neohrabané zatáčení
       heading += clamp(dA, -turnRate * dt, turnRate * dt);
       // akcelerace k topSpeed
-      const aUp = PLAYER.accel * (crossChecking ? 1.1 : 1) * (charging ? 0.5 : 1);
+      const aUp = PLAYER.accel * (crossChecking ? 0.8 : 1) * (charging ? 0.5 : 1);
       sp += clamp(topSpeed - sp, -PLAYER.decel * 2 * dt, aUp * dt);
       // hrany do ledu: čím prudší změna směru, tím větší ztráta rychlosti
       sp *= 1 - clamp(Math.abs(dA) / Math.PI, 0, 1) * 3.5 * dt;
@@ -674,8 +696,8 @@ function _renderPlayer(ctx, p, cam) {
     }
   }
 
-  // Charge arc
-  if (p.charge > 0.05) {
+  // Charge arc — jen vlastní hráč (ostatní vidí nabíjení jako nápřah hole, ne ukazatel)
+  if (p.charge > 0.05 && p._isLocal) {
     const blink = p.overcharged && Math.floor(Date.now() / 100) % 2 === 0;
     ctx.beginPath();
     ctx.arc(sx, sy, r + 5 * s, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p.charge);

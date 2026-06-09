@@ -41,6 +41,7 @@ export class Puck {
     this.ownerId = null;
     this.goalScored = null;
     this._inNet  = false;   // usazený v brance (po gólu) → tvrdě držen v boxu sítě
+    this.trailColor = null; // barva stopy/overlaye (dle posledního střelce; null = default)
   }
 
   reset() {
@@ -56,6 +57,7 @@ export class Puck {
     this.ownerId = null;
     this.goalScored = null;
     this._inNet  = false;   // usazený v brance (po gólu) → tvrdě držen v boxu sítě
+    this.trailColor = null; // barva stopy/overlaye (dle posledního střelce; null = default)
   }
 
   get isAirborne() { return this.z > 1.5; }
@@ -192,6 +194,19 @@ export class Puck {
     const sy   = oy + this.y * s;
     const r    = PUCK.radius * s;
     const elev = this.z * s;
+    const tcol = this.trailColor || '#62d0ff';   // barva stopy/overlaye (dle hráče, jinak default)
+
+    // Trail — mizející stopa za pukem (starší body menší a průhlednější)
+    const tr = this._trail || (this._trail = []);
+    tr.push({ x: this.x, y: this.y, z: this.z });
+    if (tr.length > 14) tr.shift();
+    for (let i = 0; i < tr.length - 1; i++) {
+      const p = tr[i], f = i / tr.length;
+      ctx.beginPath();
+      ctx.arc(ox + p.x * s, oy + (p.y - p.z) * s, r * (0.35 + 0.6 * f), 0, Math.PI * 2);
+      ctx.fillStyle = _alpha(tcol, f * 0.5);
+      ctx.fill();
+    }
 
     if (this.z > 0.5) {
       // Shadow on ice (grows and fades as puck rises)
@@ -224,7 +239,24 @@ export class Puck {
       ctx.lineWidth = 1 * s;
       ctx.stroke();
     }
+
+    // Overlay — jemná svítící obroučka, ať je puk dobře vidět (barva sladěná se stopou)
+    ctx.save();
+    ctx.shadowColor = tcol;
+    ctx.shadowBlur  = 5 * s;
+    ctx.beginPath();
+    ctx.arc(sx, sy - elev, r + 0.6 * s, 0, Math.PI * 2);
+    ctx.strokeStyle = _alpha(tcol, 0.85);
+    ctx.lineWidth = 1.3 * s;
+    ctx.stroke();
+    ctx.restore();
   }
+}
+
+function _alpha(col, a) {
+  if (typeof col !== 'string' || col[0] !== '#' || col.length < 7) return col;
+  const n = parseInt(col.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }
 
 // Odraz závislý na rychlosti — rychlá rána ztratí víc energie (žádné obří odrazy),

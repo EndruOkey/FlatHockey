@@ -48,7 +48,14 @@ export class World {
       for (let j = i + 1; j < players.length; j++)
         players[i].collideWith(players[j]);
 
-    if (!this.players.some(p => p.hasPuck)) {
+    const carrier = this.players.find(p => p.hasPuck);
+    if (carrier) {
+      // STEAL — soupeř s holí na puku ho obere (puk je u nositelovy hole)
+      for (const p of this.players) {
+        if (p === carrier || p.team === carrier.team) continue;
+        if (p.canSteal(puck)) { p.stealFrom(carrier, puck); break; }
+      }
+    } else {
       for (const g of this.goalies) g.blockPuck(puck, this);
       // Tečování letícího puku hokejkou hráče (dorážky/teče)
       for (const p of this.players) if (p.tryDeflect(puck)) break;
