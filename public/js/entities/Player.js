@@ -264,22 +264,7 @@ export class PlayerBase {
   }
 
   _move(input, dt) {
-    // Space = čistá tvrdá brzda (drž) — bez otáčení, puk si necháš. Tělo míří kam koukáš.
-    if (input.keys && input.keys['Space']) {
-      const spd = Math.hypot(this.vx, this.vy);
-      if (spd > 0) {
-        const newSpd = Math.max(0, spd - 620 * dt);
-        this.vx = newSpd > 0 ? this.vx / spd * newSpd : 0;
-        this.vy = newSpd > 0 ? this.vy / spd * newSpd : 0;
-      }
-      this.bodyAngle = this.skateAngle; // při brzdě tělo nepivotuje (žádné protáčení)
-      this.x = clamp(this.x + this.vx * dt, PLAYER.radius, RINK.w - PLAYER.radius);
-      this.y = clamp(this.y + this.vy * dt, PLAYER.radius, RINK.h - PLAYER.radius);
-      _resolveGoalCage(this, PLAYER.radius);
-      _resolveRinkCorners(this, PLAYER.radius);
-      return;
-    }
-
+    const braking       = !!(input.keys && input.keys['Space']); // tvrdá brzda (drž) — puk si necháš
     const charging      = !!(input.lmb && this.hasPuck);
     const crossChecking = this.crossCheck;
 
@@ -306,7 +291,12 @@ export class PlayerBase {
     let sp = Math.hypot(this.vx, this.vy);
     let heading = sp > 1 ? Math.atan2(this.vy, this.vx) : this.skateAngle;
 
-    if (hasInput && !knocked) {
+    if (braking) {
+      // tvrdá brzda podél směru jízdy (bez carve), puk zůstává
+      sp = Math.max(0, sp - 620 * dt);
+      this.vx = Math.cos(heading) * sp;
+      this.vy = Math.sin(heading) * sp;
+    } else if (hasInput && !knocked) {
       const targetDir = Math.atan2(iy, ix);
       const dA = angleDiff(targetDir, heading);          // kolik chceš zatočit (-π..π)
       const ratio = clamp(sp / PLAYER.speed, 0, 1);
@@ -327,18 +317,15 @@ export class PlayerBase {
       this.vy = Math.sin(heading) * sp;
     }
 
-    // Tělo: za jízdy kouká kam jedeš, při stání pivotuje plynule ke kurzoru.
+    // Tělo: za jízdy/brzdy drží směr jízdy, při stání se stočí ke kurzoru. NAVÍC se vždy
+    // natočí jen TAK, aby byl kurzor v dosahu hole (≤90° od těla) → hůl se nezasekne v boku.
+    // Jeden cíl + plynulé natočení (žádné resetování každý frame → žádné cukání hole/těla).
     const sp2 = Math.hypot(this.vx, this.vy);
-    if (sp2 > 8) this.skateAngle = heading;
-    else         this.skateAngle = lerpAngle(this.skateAngle, this.aimAngle, Math.min(1, 6 * dt));
-    // ZÁRUKA dosahu hole: kurzor musí být vždy v dosahu hole. Když je dál než ~90° od
-    // těla, dotoč tělo tak, aby na něj hůl dosáhla → hokejka se NIKDY nezasekne mimo dosah.
-    const off = angleDiff(this.aimAngle, this.skateAngle);
+    let bodyTarget = (braking || sp2 > 8) ? heading : this.aimAngle;
     const lim = Math.PI * 0.5;
-    if (Math.abs(off) > lim) {
-      const tgt = this.aimAngle - Math.sign(off) * lim;
-      this.skateAngle = lerpAngle(this.skateAngle, tgt, Math.min(1, 12 * dt)); // plynule, ne skokem
-    }
+    const offT = angleDiff(this.aimAngle, bodyTarget);
+    if (Math.abs(offT) > lim) bodyTarget = this.aimAngle - Math.sign(offT) * lim;
+    this.skateAngle = lerpAngle(this.skateAngle, bodyTarget, Math.min(1, 10 * dt));
     this.bodyAngle = this.skateAngle;
 
     // Náklon do oblouku (vizuál)
