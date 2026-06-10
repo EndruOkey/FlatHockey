@@ -14,10 +14,11 @@ const SPEED    = 170;  // boční rychlost (živé přesuny) — z ní plyne ote
 const PADLEN   = 9;    // délka betonů dopředu (vizuál)
 
 export class Goalie {
-  constructor(side = 'right') {
+  constructor(side = 'right', difficulty = 'casual') {
     this.isGoalie   = true;
     // Pravá branka = goal-home → brání away (červený); levá = goal-away → brání home (modrý)
     this.side       = side;
+    this.difficulty = difficulty;  // 'casual' (public) nebo 'competitive'
     this.netX       = side === 'right' ? RINK.goalLineRight : RINK.goalLineLeft;
     this.inX        = side === 'right' ? -1 : 1;   // směr do hřiště (kam gólman kouká/vyjíždí)
     this.team       = side === 'right' ? 'away' : 'home';
@@ -39,6 +40,8 @@ export class Goalie {
     this._saveType     = '';
     this._saveFlash    = 0;
     this._saveFlashMax = 0.3;
+    this._saveRecoil   = 0;     // recoil effect na bodyč
+    this._saveRecoilX  = 0;     // recoil směr
   }
 
   get isHolding() { return this._holdTimer > 0; }
@@ -49,6 +52,7 @@ export class Goalie {
 
     if (this._pokeCooldown > 0) this._pokeCooldown -= dt;
     if (this._saveFlash   > 0) this._saveFlash = Math.max(0, this._saveFlash - dt);
+    if (this._saveRecoil  > 0) this._saveRecoil = Math.max(0, this._saveRecoil - dt * 4);  // fade recoil effect
 
     if (this._holdTimer > 0) {
       this._holdTimer -= dt;
@@ -82,18 +86,23 @@ export class Goalie {
     }
     this._screen += (screen - this._screen) * Math.min(1, 6 * dt);
 
-    // Reakce je při cloně pomalejší (gólman puk hůř vidí)
-    const lag = 8.5 * (1 - this._screen * 0.5);
+    // Reaktivní sledování puku — s clonou je pomalejší
+    // Difficulty modifier: competitive = ostřejší, casual = laxnější
+    const diffMult = this.difficulty === 'competitive' ? 0.8 : 1.15;  // 20% lepší vs 15% horší
+    const baseLag = 5.5 * diffMult;  // ostřejší response
+    const lag = baseLag * (1 - this._screen * 0.6);  // screen ho více slepí
     const pxClamp = this.side === 'right' ? Math.min(puck.x, netX - 1) : Math.max(puck.x, netX + 1);
     this._percX += (pxClamp - this._percX) * Math.min(1, lag * dt);
     this._percY += (puck.y - this._percY) * Math.min(1, lag * dt);
 
-    // Anticipace (bite): čte pohyb puku a kousek ho předbíhá → klička jedním směrem
-    // ho vytáhne, rychlá změna na druhou stranu ho obejde (deke skill, bez kláves).
+    // Anticipace (bite): čte pohyb puku a kousek ho předbíhá
+    // Competitive = lepší bite (lépe čte deky), Casual = horší bite (lehčeji se obejde)
     const rawVy = (puck.y - this._lastPuckY) / Math.max(dt, 1e-3);
     this._lastPuckY = puck.y;
-    this._puckVy += (rawVy - this._puckVy) * Math.min(1, 9 * dt);
-    const bite = clamp(this._puckVy, -240, 240) * 0.085;
+    const biteLearnRate = 12 * (this.difficulty === 'competitive' ? 1.25 : 0.8);  // lepší learning vs horší
+    this._puckVy += (rawVy - this._puckVy) * Math.min(1, biteLearnRate * dt);
+    const biteMult = this.difficulty === 'competitive' ? 1.15 : 0.85;
+    const bite = clamp(this._puckVy, -280, 280) * 0.095 * biteMult;
 
     // ── Hra na úhel: stoj na spojnici puk → střed branky v dané hloubce ──
     const px = this._percX, py = this._percY;
@@ -102,18 +111,20 @@ export class Goalie {
     const distToPuck = Math.hypot(dxN, dyN);
     const angleAbs   = Math.atan2(Math.abs(dyN), dxN);  // 0 = frontální, velký = ostrý úhel
 
-    // Hloubka (challenge vs. retreat): vyjeď proti frontální střele z dálky/slotu,
-    // stáhni se na čáru v těsném i na ostrém úhlu → tím pohyb "žije".
+    // Hloubka (challenge vs. retreat): difficulty makes big difference
+    // Competitive = aggressive challenges, casual = more conservative positioning
+    const depthMult = this.difficulty === 'competitive' ? 1.15 : 0.90;
     let depth;
-    if (distToPuck > 150)      depth = MAX_OUT * 0.9;                       // daleko: výjezd
-    else if (distToPuck > 70)  depth = MAX_OUT;                             // slot: plný challenge
-    else                       depth = clamp(distToPuck * 0.30, 6, MAX_OUT * 0.65); // in-tight: stáhnout se
-    depth *= 1 - Math.min(1, angleAbs / (Math.PI * 0.5)) * 0.6;            // ostrý úhel → blíž čáře/tyči
+    if (distToPuck > 150)      depth = MAX_OUT * 0.95 * depthMult;           // daleko: výjezd
+    else if (distToPuck > 70)  depth = MAX_OUT * 1.05 * depthMult;           // slot: challenge
+    else                       depth = clamp(distToPuck * 0.35, 6, MAX_OUT * 0.7 * depthMult); // in-tight
+    depth *= 1 - Math.min(1, angleAbs / (Math.PI * 0.5)) * (this.difficulty === 'competitive' ? 0.48 : 0.62);
 
-    // HROZBA: jak moc je puk nebezpečný (blízko branky). Daleko (>360px) = klid → gólman
-    // nemíří furt na puk, drží pozici u čáry a hýbe se líně. Blízko = plně aktivní.
-    const threat = clamp((360 - distToPuck) / 260, 0, 1);
-    depth *= 0.28 + 0.72 * threat;                 // klid → mělko u čáry, hrozba → výjezd
+    // HROZBA: competitive detekuje dál (více agrese), casual je laxnější
+    const threatRange = this.difficulty === 'competitive' ? (430 - distToPuck) / 300 : (380 - distToPuck) / 260;
+    const threat = clamp(threatRange, 0, 1);
+    const depthBaseline = this.difficulty === 'competitive' ? 0.40 : 0.32;
+    depth *= depthBaseline + (1 - depthBaseline) * threat;
     const targetX = netX + this.inX * depth;
 
     // Pravý úhlový bod: průsečík spojnice puk→střed branky s hloubkovou rovinou x=targetX.
@@ -125,14 +136,16 @@ export class Goalie {
     targetY = netY + (targetY - netY) * (0.25 + 0.75 * threat);
     targetY = clamp(targetY, RINK.goalY + margin, RINK.goalY + RINK.goalH - margin);
 
-    // Plynulý přesun: požadovaná rychlost = tah k cíli (easing → brzdí u cíle). Při klidu
-    // pomaleji (líné dorovnání), při hrozbě plná rychlost → působí přirozeně.
-    const effSpeed = SPEED * (0.38 + 0.62 * threat);
-    let desVx = (targetX - this.x) * 11;
-    let desVy = (targetY - this.y) * 11;
+    // Plynulý přesun: větší baseline speed + lepší akcelerace
+    // Difficulty: competitive = FAST & SHARP, casual = slower & lazy
+    const speedMult = this.difficulty === 'competitive' ? 1.25 : 0.85;
+    const effSpeed = SPEED * (0.45 + 0.55 * threat) * speedMult;
+    let desVx = (targetX - this.x) * 13;
+    let desVy = (targetY - this.y) * 13;
     const dspd = Math.hypot(desVx, desVy);
     if (dspd > effSpeed) { const f = effSpeed / dspd; desVx *= f; desVy *= f; }
-    const acc = Math.min(1, 10 * dt);
+    const accMult = this.difficulty === 'competitive' ? 1.3 : 0.8;
+    const acc = Math.min(1, 14 * dt * accMult);
     this._gvx += (desVx - this._gvx) * acc;
     this._gvy += (desVy - this._gvy) * acc;
     this.x += this._gvx * dt;
@@ -150,8 +163,12 @@ export class Goalie {
 
     const r = PUCK.radius;
     // Clona zmenší dosah krytí (hráč v zákrytu = hůř chytá)
-    const sc = 1 - this._screen * 0.35;
-    const reachX = (COVER_X + r) * sc, reachY = (COVER_H + r) * sc;
+    // Competitive = lepší pokrytí, casual = snadněji se dostaneš ke gólu
+    const screenPenalty = this.difficulty === 'competitive' ? 0.30 : 0.42;
+    const sc = 1 - this._screen * screenPenalty;
+    const coverXMult = this.difficulty === 'competitive' ? 1.08 : 0.95;
+    const coverYMult = this.difficulty === 'competitive' ? 1.06 : 0.94;
+    const reachX = (COVER_X + r) * sc * coverXMult, reachY = (COVER_H + r) * sc * coverYMult;
     let relX = puck.x - this.x, relY = puck.y - this.y;
     let hitX = null, hitY = null;
 
@@ -257,7 +274,13 @@ export class Goalie {
     }
   }
 
-  _markSave(type, dur) { this._saveType = type; this._saveFlash = dur; this._saveFlashMax = dur; }
+  _markSave(type, dur) {
+    this._saveType = type;
+    this._saveFlash = dur;
+    this._saveFlashMax = dur;
+    this._saveRecoil = 0.15;
+    this._saveRecoilX = Math.random() < 0.5 ? -1 : 1;  // alternating recoil
+  }
 
   _release(world) {
     if (!this._heldPuck) return;
@@ -278,105 +301,206 @@ export class Goalie {
     }
   }
 
-  // ── Vzhled: štíhlý, čitelný top-down gólman (čelem doleva, ke střelci) ──
   draw(ctx, cam) {
-    const s  = cam.scale;
+    const s   = cam.scale;
     const { ox, oy } = cam;
-    const sx = ox + this.x * s;
-    const sy = oy + this.y * s;
+    const sx  = ox + this.x * s;
+    const sy  = oy + this.y * s;
+    const r   = this.radius * s;  // ~8*s — mírně větší než hráč (7*s)
 
-    const ch = COVER_H * s, cx = COVER_X * s, pad = PADLEN * s;
-    const holding = this._holdTimer > 0;
-    const flash   = this._saveFlashMax > 0 ? Math.max(0, this._saveFlash / this._saveFlashMax) : 0;
-    const type    = this._saveType;
+    const holding   = this._holdTimer > 0;
+    const flash     = this._saveFlashMax > 0 ? Math.max(0, this._saveFlash / this._saveFlashMax) : 0;
+    const type      = this._saveType;
+    const recoil    = this._saveRecoil * this._saveRecoilX;
+    const baseColor = this.color || (this.team === 'home' ? '#2f6db0' : '#c0392b');
 
+    // ── Shadow (stejný styl jako hráč) ──
+    ctx.beginPath();
+    ctx.ellipse(sx + 2, sy + 3, r * 0.9, r * 0.6, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.fill();
+
+    // ── Animace padů: kotva = kolena (těsně pod tělem), otevírají se pohybem ──
+    const spread   = clamp(Math.abs(this._vy) / 110, 0, 1);
+    const kneeY    = 2.5 * s;
+    // spread² = nelineární nárůst — při pomalém pohybu malý, při rychlém výrazný
+    const padTilt  = 0.14 + spread * spread * 0.55;
+    const padFwdX  = -spread * 1.5 * s;
+
+    // Přepneme na lokální souřadnice golmana (−X = směr k puku)
     ctx.save();
     ctx.translate(sx, sy);
-    if (this.side === 'left') ctx.scale(-1, 1); // levý gólman = zrcadlo (čelem doprava)
-    ctx.rotate(this._tilt); // natočení čelem k puku
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.scale(-this.inX, 1);
+    ctx.rotate(this._tilt);
 
-    // Stín
+    const bx = recoil * s;
+
+    // ── PADY — oba se stejným kladným úhlem → špičky k bráně, V-tvar otevřen k puku ──
+    _gPad(ctx, s, padFwdX, -kneeY, -1, padTilt, type === 'pads' ? flash : 0);
+    _gPad(ctx, s, padFwdX,  kneeY, +1, padTilt, type === 'pads' ? flash : 0);
+
+    // Strana lapačky závisí na tom, která strana je "levá ruka" golmana.
+    // Po scale(-inX, 1) se Y NEFLIPUJE, takže musíme stranu explicitně korigovat.
+    //   Pravý golman (inX=-1) čelí vlevo → levá ruka = +Y (spodek obrazovky)
+    //   Levý golman  (inX=+1) čelí vpravo → levá ruka = -Y (vršek obrazovky)
+    const gY = -this.inX * 7.5 * s;   // Y pozice lapačky (catch glove = levá ruka)
+    const bkY =  this.inX * 7.5 * s;  // Y pozice vyrážečky (blocker = pravá ruka)
+
+    // ── PAŽE (za tělem, vedou k lapačce a vyrážečce) ──
+    _gArm(ctx, s, bx - r * 0.45, -this.inX * r * 0.3,  -5.5 * s, gY);
+    _gArm(ctx, s, bx - r * 0.45,  this.inX * r * 0.3,  -5.5 * s, bkY);
+
+    // ── TĚLO — stejný kruh jako hráč ──
     ctx.beginPath();
-    ctx.ellipse(2 * s, 0, pad + 3 * s, ch + 2 * s, 0, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    ctx.arc(bx, 0, r, 0, Math.PI * 2);
+    ctx.fillStyle = baseColor;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+    ctx.lineWidth = 1.5 * s;
+    ctx.stroke();
+
+    // ── Direction dot — bílý puntík na přední straně (k puku = −X) ──
+    ctx.beginPath();
+    ctx.arc(bx - r * 0.52, 0, 4 * s, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
     ctx.fill();
 
-    // Tělo / dres — barva týmu (z lobby), jinak default home/away
-    ctx.fillStyle = this.color ? _gdarken(this.color, 0.18)
-                               : (this.team === 'home' ? '#2f6db0' : '#c0392b');
-    _roundRect(ctx, -2 * s, -ch * 0.7, cx + 4 * s, ch * 1.4, 5 * s);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1.4 * s; ctx.stroke();
+    // ── LAPAČKA (levá ruka, strana dle golmana) ──
+    _gGlove(ctx, s, -5.5 * s, gY, holding || type === 'glove' || type === 'cover');
 
-    // Dvě betony (bílé) — přední stěna; mezi nimi tmavá spára = pětka. Rozklek je rozjede.
-    const spread = type === 'pads' ? flash * ch * 0.45 : 0;
-    const fhGap  = FIVEHOLE * s * 0.6;            // půlka spáry pětky
-    const padW   = pad;
-    const drawPad = (yTop, yBot) => {
-      _roundRect(ctx, -pad, yTop, padW, yBot - yTop, 3 * s);
-      ctx.fillStyle = '#f4f7fb'; ctx.fill();
-      ctx.strokeStyle = 'rgba(40,60,90,0.4)'; ctx.lineWidth = 1.1 * s; ctx.stroke();
-      // role po délce padu
-      ctx.strokeStyle = 'rgba(70,90,120,0.3)'; ctx.lineWidth = 0.9 * s;
-      for (const fx of [0.4, 0.72]) {
-        const xx = -pad + padW * fx;
-        ctx.beginPath(); ctx.moveTo(xx, yTop + 1.5 * s); ctx.lineTo(xx, yBot - 1.5 * s); ctx.stroke();
-      }
-    };
-    drawPad(-ch - spread, -fhGap - spread);   // horní beton
-    drawPad( fhGap + spread,  ch + spread);   // dolní beton
+    // ── VYRÁŽEČKA (pravá ruka, opačná strana) ──
+    _gBlocker(ctx, s, -5.5 * s, bkY, type === 'blocker' ? flash : 0);
 
-    // Lapačka — kruh s "C" kapsou otevřenou ke střelci (nahoře). Svítí při chytu.
-    const gloveActive = holding || type === 'glove' || type === 'cover';
-    const gReach = (type === 'glove' || type === 'cover') ? flash * 7 * s : 0;
-    const gx = -pad - 1 * s - gReach, gy = -ch * 0.78 - gReach * 0.5;
-    ctx.beginPath(); ctx.arc(gx, gy, 5 * s, 0, Math.PI * 2);
-    ctx.fillStyle = gloveActive ? '#ffcf3a' : '#d2a23b'; ctx.fill();
-    ctx.strokeStyle = 'rgba(60,40,0,0.5)'; ctx.lineWidth = 1.2 * s; ctx.stroke();
-    ctx.beginPath(); ctx.arc(gx, gy, 5 * s, -Math.PI * 0.55, Math.PI * 0.55); // kapsa "C" doleva
-    ctx.strokeStyle = 'rgba(60,40,0,0.45)'; ctx.lineWidth = 2 * s; ctx.stroke();
-
-    // Vyrážečka — placatá deska (dole), čelem ke střelci. Vymrští se při zákroku.
-    const blkReach = type === 'blocker' ? flash * 6 * s : 0;
-    const bx = -pad - 2 * s - blkReach, by = ch * 0.78 + blkReach * 0.3;
-    ctx.fillStyle = blkReach > 0 ? `rgba(255,220,140,${0.6 + 0.4 * flash})` : '#caa23a';
-    _roundRect(ctx, bx - 2 * s, by - 5 * s, 4 * s, 10 * s, 1.2 * s);
-    ctx.fill(); ctx.strokeStyle = 'rgba(60,40,0,0.5)'; ctx.lineWidth = 1.1 * s; ctx.stroke();
-
-    // Maska — malý bílý kruh ve středu (hlava)
-    ctx.beginPath(); ctx.arc(cx * 0.15, 0, cx * 0.46, 0, Math.PI * 2);
-    ctx.fillStyle = '#eef2f8'; ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 1 * s; ctx.stroke();
-
-    // Flash prstenec u lapačky
-    if (flash > 0 && (type === 'glove' || type === 'cover')) {
-      ctx.beginPath(); ctx.arc(gx, gy, (1 - flash) * 9 * s + 5 * s, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(255,235,140,${0.8 * flash})`; ctx.lineWidth = 2 * s; ctx.stroke();
-    }
-
-    // Puk pod kontrolou
-    if (holding) {
-      ctx.beginPath(); ctx.arc(gx, gy, 2.3 * s, 0, Math.PI * 2);
-      ctx.fillStyle = '#111'; ctx.fill();
-      const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 120);
+    // ── IMPACT FLASH ──
+    if (flash > 0) {
+      const fade = 1 - flash;
       ctx.beginPath();
-      ctx.ellipse(0, 0, pad + 5 * s, ch + 5 * s, 0, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(120,220,255,${0.35 + 0.4 * pulse})`;
-      ctx.lineWidth = 2 * s; ctx.stroke();
+      ctx.ellipse(0, 0, (r + 6 * s) + fade * 4 * s, (r + 4 * s) + fade * 2 * s, 0, 0, Math.PI * 2);
+      ctx.strokeStyle =
+        type === 'glove'   ? `rgba(255,200,80,${0.55 * flash})`  :
+        type === 'pads'    ? `rgba(120,170,255,${0.55 * flash})` :
+        type === 'blocker' ? `rgba(220,160,60,${0.55 * flash})`  :
+        `rgba(160,160,160,${0.35 * flash})`;
+      ctx.lineWidth = 2 * s;
+      ctx.stroke();
     }
 
     ctx.restore();
 
+    // ── HOLDING INDICATOR (mimo lokální transform, ve screen coords) ──
     if (holding) {
+      const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 130);
+      ctx.beginPath();
+      ctx.ellipse(sx, sy, r + 8 * s, r + 6 * s, this._tilt, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(100,200,255,${0.35 + 0.25 * pulse})`;
+      ctx.lineWidth = 1.5 * s;
+      ctx.stroke();
+
       ctx.save();
-      ctx.font = `bold ${Math.round(9 * s)}px monospace`;
+      ctx.font = `bold ${Math.round(6 * s)}px monospace`;
       ctx.textAlign = 'center';
-      ctx.fillStyle = 'rgba(120,220,255,0.9)';
-      ctx.fillText(t('covering'), sx, sy - (ch + 12 * s));
+      ctx.fillStyle = 'rgba(100,200,255,0.85)';
+      ctx.fillText(t('covering'), sx, sy - r - 8 * s);
+      ctx.restore();
+    }
+
+    if (this._screen > 0.15) {
+      ctx.save();
+      ctx.font = `bold ${Math.round(6 * s)}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = `rgba(255,140,90,${0.6 * this._screen})`;
+      ctx.fillText('BLOCKED', sx, sy + r + 8 * s);
       ctx.restore();
     }
   }
+}
+
+// ── Goalie draw helpers ────────────────────────────────────────────────────
+
+// kx/ky = koleno (anchor bod u těla), dir = +1 dolní pad / -1 horní, angle = rotace kolem kolena
+function _gPad(ctx, s, kx, ky, dir, angle, flash) {
+  const pw = 6.5 * s, ph = 12 * s, r = 2.5 * s;
+  ctx.save();
+  ctx.translate(kx, ky);
+  ctx.rotate(angle);
+  // Pad jde OD kolena směrem dir — koleno je na y=0, špička na y=dir*ph
+  _roundRect(ctx, -pw / 2, dir > 0 ? 0 : -ph, pw, ph, r);
+  ctx.fillStyle = flash > 0 ? 'rgba(200,220,255,0.98)' : '#f2f4f6';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(60,80,110,0.75)';
+  ctx.lineWidth = 1.1 * s;
+  ctx.stroke();
+  // dělicí pruh v 1/3 délky od kolena
+  const stripe = dir * ph * 0.33;
+  ctx.beginPath();
+  ctx.moveTo(-pw / 2 + 0.8 * s, stripe);
+  ctx.lineTo( pw / 2 - 0.8 * s, stripe);
+  ctx.strokeStyle = 'rgba(60,80,110,0.22)';
+  ctx.lineWidth = 0.7 * s;
+  ctx.stroke();
+  ctx.restore();
+}
+
+function _gArm(ctx, s, x1, y1, x2, y2) {
+  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+  const len = Math.hypot(x2 - x1, y2 - y1);
+  const ang = Math.atan2(y2 - y1, x2 - x1);
+  const w   = 1.9 * s;
+  ctx.save();
+  ctx.translate(mx, my);
+  ctx.rotate(ang);
+  _roundRect(ctx, -len / 2, -w / 2, len, w, w / 2);
+  ctx.fillStyle = 'rgba(18,22,36,0.72)';
+  ctx.fill();
+  ctx.restore();
+}
+
+function _gGlove(ctx, s, cx, cy, active) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 2.5 * s, 2.2 * s, 0, 0, Math.PI * 2);
+  ctx.fillStyle = active ? '#e8a020' : '#2a2a2a';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+  ctx.lineWidth = 0.8 * s;
+  ctx.stroke();
+  ctx.restore();
+}
+
+function _gBlocker(ctx, s, cx, cy, flash) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  _roundRect(ctx, -2 * s, -2 * s, 4 * s, 4 * s, 1 * s);
+  ctx.fillStyle = flash > 0 ? 'rgba(200,150,50,0.95)' : '#2a2a2a';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(80,80,80,0.5)';
+  ctx.lineWidth = 0.8 * s;
+  ctx.stroke();
+  ctx.restore();
+}
+
+function _gHelmet(ctx, s, cx, cy) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  // Jednoduchá helma — plochý oval (jako z vrchu)
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 3.2 * s, 2.8 * s, 0, 0, Math.PI * 2);
+  ctx.fillStyle = '#d8dde2';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(40,55,70,0.7)';
+  ctx.lineWidth = 1 * s;
+  ctx.stroke();
+  // mřížka/štít — dva svislé pruhy vpředu
+  ctx.strokeStyle = 'rgba(30,40,50,0.55)';
+  ctx.lineWidth = 0.6 * s;
+  for (const dx of [-0.9 * s, 0.9 * s]) {
+    ctx.beginPath();
+    ctx.moveTo(dx, -2.2 * s);
+    ctx.lineTo(dx,  2.2 * s);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function _nearestMate(world, team, goalie) {

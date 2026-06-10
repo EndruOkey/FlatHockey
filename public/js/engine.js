@@ -31,10 +31,14 @@ export class Engine {
 
   run(world) {
     this._world = world;
+    this._running = true;
     requestAnimationFrame(t => this._loop(t));
   }
 
+  stop() { this._running = false; }
+
   _loop(t) {
+    if (!this._running) return;
     if (this._lastTime === null) this._lastTime = t;
     const dt = Math.min((t - this._lastTime) / 1000, 0.05);
     this._lastTime = t;

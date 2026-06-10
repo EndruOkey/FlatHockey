@@ -314,6 +314,29 @@ function buildPlayer(lobby, sid, m) {
 }
 
 // Sestav zápas z členů lobby (týmy + dresy z nastavení, číslo z profilu)
+function shuffleTeams(lobby) {
+  const ids = [...lobby.members.keys()];
+  for (let i = ids.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+  }
+  const half = Math.ceil(ids.length / 2);
+  ids.forEach((id, i) => {
+    const m = lobby.members.get(id);
+    if (m) m.team = i < half ? 'home' : 'away';
+  });
+}
+
+function autoRematch(lobby) {
+  if (!lobby || lobby.members.size === 0) return;
+  if (lobby.match) { clearInterval(lobby.match.loop); lobby.match = null; }
+  lobby.state = 'waiting';
+  shuffleTeams(lobby);
+  startMatch(lobby);
+  io.to('lobby:' + lobby.id).emit('lobby:start', { settings: lobby.settings });
+  sendLobbyList();
+}
+
 function startMatch(lobby) {
   const match = createMatch(lobby.id);
   for (const [sid, m] of lobby.members) {
@@ -395,6 +418,11 @@ function stepMatch(match) {
         match.clock = 0;
         match.ended = true;
         io.to(match.room).emit('gameover', { score: match.score });
+        const lobbyId = match.room.replace('lobby:', '');
+        match.rematchTimer = setTimeout(() => {
+          const lb = lobbies.get(lobbyId);
+          if (lb && lb.match === match) autoRematch(lb);
+        }, 10000);
       }
     }
   }
@@ -544,7 +572,7 @@ function leaveCurrentLobby(socket) {
   if (l.match) { l.match.players.delete(socket.id); l.match.inputs.delete(socket.id); rebuildEntities(l.match); }
   socket.to('lobby:' + id).emit('peer-left');
   if (l.members.size === 0) {
-    if (l.match) clearInterval(l.match.loop);
+    if (l.match) { clearInterval(l.match.loop); clearTimeout(l.match.rematchTimer); }
     lobbies.delete(id);
   } else {
     if (l.hostId === socket.id) l.hostId = l.members.keys().next().value; // předej hostování

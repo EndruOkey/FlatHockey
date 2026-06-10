@@ -9,6 +9,7 @@ import { Puck } from './entities/Puck.js';
 import { Goalie } from './entities/Goalie.js';
 import { Passer } from './entities/Passer.js';
 import { Rink } from './entities/Rink.js';
+import { SFX } from './sound.js';
 
 const CHARGE_RATE = 1.4; // pomalejší nápřah → slap shot je cítit (jen sandbox; online řídí server)
 
@@ -21,16 +22,15 @@ function _updateAim(player, rawAim, dt) {
 
 // Predikce nahrávky do jízdy — míří na HOKEJKU (čepel) příjemce, ne na tělo.
 function _leadAim(from, target, speed) {
-  let tx = target.x, ty = target.y;
-  if (target.isPlayer) {
-    const a = target.aimAngle ?? 0;
-    tx += Math.cos(a) * PLAYER.stickLen;
-    ty += Math.sin(a) * PLAYER.stickLen;
-  }
+  const tx = target.x, ty = target.y;
   const dist = Math.hypot(tx - from.x, ty - from.y) || 1;
-  const t    = dist / speed;
-  const px   = tx + (target.vx || 0) * t;
-  const py   = ty + (target.vy || 0) * t;
+  // 2 iterace pro přesnější lead (konverguje při lineárním pohybu)
+  let t = dist / speed;
+  let px = tx + (target.vx || 0) * t;
+  let py = ty + (target.vy || 0) * t;
+  t  = Math.hypot(px - from.x, py - from.y) / speed;
+  px = tx + (target.vx || 0) * t;
+  py = ty + (target.vy || 0) * t;
   return Math.atan2(py - from.y, px - from.x);
 }
 
@@ -49,12 +49,15 @@ export class NetGame {
     this.input   = new Input(canvas);
     this.engine  = new Engine(canvas);
 
+    // Difficulty: 'competitive' v ranked/tournaments, 'casual' v public lobbies
+    this.difficulty = this.settings.difficulty || 'casual';
+
     this.rink    = new Rink();
     this.players = new Map();              // id -> { ent, isMe, tx,ty,tba,taa,tca,tsd, sx,sy }
     this.localEnt = null;                  // můj hráč (client-side prediction)
     this.puck    = new Puck(); this.puck._tx = this.puck.x; this.puck._ty = this.puck.y;
-    this.goalieL = new Goalie('left');
-    this.goalieR = new Goalie('right');
+    this.goalieL = new Goalie('left', this.difficulty);
+    this.goalieR = new Goalie('right', this.difficulty);
     this.score   = { home: 0, away: 0 };
     this.goalFlash = 0; this.goalText = '';
 
@@ -63,9 +66,15 @@ export class NetGame {
     this._notice = null; // nenásilné upozornění (např. odpojení hráče)
     this._cam = null;
     net.onSnap = s => this._onSnap(s);
-    net.onGoal = g => { this.goalFlash = 2.5; this.goalText = g.text; };
+    net.onGoal = g => {
+      this.goalFlash = 2.5; this.goalText = g.text;
+      SFX.goalWhistle();
+      setTimeout(() => SFX.goalHorn(), 950);
+      setTimeout(() => SFX.crowd(3), 700);
+    };
     net.onWhistle = d => {
       this.call = { rule: d.rule, lineX: d.lineX, color: d.color, t: 1.5 };
+      SFX.whistle();
     };
 
     // Render-svět pro Engine: update = interpolace, draw = vykreslení
@@ -83,6 +92,8 @@ export class NetGame {
     this.engine.onDraw = (ctx)     => this._overlay(ctx);
     this.engine.run(this.renderWorld);
   }
+
+  stop() { this.engine.stop(); this.input.destroy?.(); }
 
   _tick(dt, cam) {
     this._cam = cam;
@@ -112,8 +123,14 @@ export class NetGame {
 
   _onSnap(s) {
     this.score = s.score;
-    if (s.clk !== undefined) { this.clk = s.clk; this.per = s.per; this.pers = s.pers; this.ended = !!s.end; }
+    if (s.clk !== undefined) {
+      this.clk = s.clk; this.per = s.per; this.pers = s.pers;
+      if (s.end && !this.ended) this._endedAt = Date.now();
+      this.ended = !!s.end;
+    }
     this.pnd = s.pnd || 0;
+    // Detekce rozehrávky (lock → unlock): krátká píšťalka bez goalFlash = buly
+    if (this.locked && !s.lock && !this.goalFlash) SFX.whistle();
     this.locked = !!s.lock;
     const seen = new Set();
     for (const ps of s.players) {
@@ -300,7 +317,8 @@ export class NetGame {
       ctx.font = '22px "Segoe UI", sans-serif'; ctx.fillStyle = '#cde';
       ctx.fillText(win ? `${t('winner')}: ${this._clip(win, 14)}` : t('draw'), cx, H / 2 + 48);
       ctx.font = '15px "Segoe UI", sans-serif'; ctx.fillStyle = '#8aa';
-      ctx.fillText(t('esc_back'), cx, H / 2 + 86);
+      const secLeft = this._endedAt ? Math.max(0, Math.ceil((10000 - (Date.now() - this._endedAt)) / 1000)) : 10;
+      ctx.fillText(secLeft > 0 ? t('rematch_in', secLeft) : t('starting_rematch'), cx, H / 2 + 86);
     }
   }
 
@@ -324,9 +342,11 @@ export class SandboxGame {
     this.goalie = new Goalie();
     this.passer = new Passer();
 
-    this.world = new World([new Rink(), this.puck, this.local, this.goalie, this.passer]);  // puk pod hráči (hokejka navrch)
-    this.world.onGoal                 = result => this._handleGoal(result);
-    this.world.onResolveInteractions  = world  => this._resolveInteractions(world);
+    this.world = new World([new Rink(), this.puck, this.local, this.goalie, this.passer]);
+    this.world.onGoal     = result => this._handleGoal(result);
+    this.world.onWhistle  = ev     => this._handleWhistle(ev);
+    this.world.onResolveInteractions = world => this._resolveInteractions(world);
+    this._whistleBanner = null;   // { text, t } — zobrazí se vlajka/banner
 
     this.engine = new Engine(canvas);
     this._rWas            = false;
@@ -341,6 +361,7 @@ export class SandboxGame {
   }
 
   start() {
+    this._reset();   // nájezd: hráč na středu s pukem od začátku
     this.engine.onTick = (dt, cam) => this._tick(dt, cam);
     this.engine.onDraw = (ctx)     => this._drawOverlay(ctx);
     this.engine.run(this.world);
@@ -435,6 +456,7 @@ export class SandboxGame {
     ];
 
     if (this.goalFlash > 0) this.goalFlash -= dt;
+    if (this._whistleBanner && this._whistleBanner.t > 0) this._whistleBanner.t -= dt;
   }
 
   _resolveInteractions(world) {
@@ -512,34 +534,64 @@ export class SandboxGame {
 
   _drawOverlay(ctx) {
     _renderHUD(ctx, this.score);
-
+    if (this._whistleBanner && this._whistleBanner.t > 0) {
+      _renderWhistleBanner(ctx, this._whistleBanner);
+    }
     if (this.goalFlash > 0) {
-      const alpha = Math.min(1, this.goalFlash);
-      ctx.fillStyle = `rgba(255, 220, 60, ${alpha * 0.08})`;
-      ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-      ctx.font = 'bold 64px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = `rgba(255, 220, 60, ${alpha})`;
-      ctx.fillText(this.goalText, ctx.canvas.width / 2, ctx.canvas.height / 2);
+      _renderJumbotron(ctx, this.goalFlash, this._goalTeam, this.score);
     }
   }
 
   _handleGoal(result) {
-    if (result === 'goal-home') {
-      this.score.home++;
-      this.goalText  = 'GOAL!';
-      this.goalFlash = 2.5;
-    }
-    setTimeout(() => this._reset(), result === 'goal-home' ? 1200 : 400);
+    const isHome = result === 'goal-home';
+    if (isHome) this.score.home++; else this.score.away++;
+    this._goalTeam  = isHome ? 'home' : 'away';
+    this.goalFlash  = 4.0;
+    SFX.goalWhistle();
+    setTimeout(() => SFX.goalHorn(), 950);
+    setTimeout(() => SFX.crowd(3), 700);
+    setTimeout(() => this._reset(), 4200);
+  }
+
+  _handleWhistle(ev) {
+    SFX.whistle();
+    const labels = {
+      'goalie-hold':          '🧤 Golman drží příliš dlouho',
+      'goalie-interference':  '🚫 Najíždění do golmana',
+    };
+    this._whistleBanner = { text: labels[ev.reason] ?? 'Přerušení hry', t: 2.5 };
+    // Po 1s resetovat puk (faceoff)
+    setTimeout(() => {
+      this.puck.reset();
+      this._goalLock = false;
+      this.world._goalLock = false;
+    }, 1000);
   }
 
   _reset() {
-    this.local.x  = 200;
-    this.local.y  = RINK.h / 2;
-    this.local.vx = this.local.vy = 0;
-    this.local.hasPuck = false;
+    // Nájezd: hráč na středu ledu, puk u čepele, čelem k bráně
+    const cx = RINK.centerX, cy = RINK.h / 2;
+    const p = this.local;
+    p.x = cx; p.y = cy;
+    p.vx = p.vy = 0;
+    p.hasPuck = false;
+    p.charge = 0; p.overcharged = false;
+    p.bodyAngle = p.skateAngle = p.aimAngle = p.carryAngle = 0;
+
+    // puck.reset() vyčistí goalScored, faceoffTimer a veškerý state
     this.puck.reset();
+    this.puck.x  = cx + 18; this.puck.y  = cy;
+    this.puck.vx = 0;       this.puck.vy = 0;
+    this.puck.z  = 0;       this.puck.vz = 0;
+    this.puck.faceoffTimer = 0;  // bez freeze — nájezd startuje hned
+
+    this.passer.x = cx - 120; this.passer.y = cy;
+    this.passer.vx = this.passer.vy = 0;
+    this.passer.hasPuck = false;
+
+    this.goalFlash = 0;
     this._goalLock = false;
+    this.world._goalLock = false;
   }
 }
 
@@ -555,4 +607,78 @@ function _renderHUD(ctx, score) {
   ctx.fillText('–', width / 2, 44);
   ctx.fillStyle = PLAYER.colors.away;
   ctx.fillText(score.away, width / 2 + 36, 44);
+}
+
+function _renderWhistleBanner(ctx, banner) {
+  const W = ctx.canvas.width, a = Math.min(1, banner.t);
+  const cx = W / 2;
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.fillStyle = 'rgba(0,0,0,0.65)';
+  ctx.fillRect(cx - 200, 80, 400, 52);
+  ctx.font = 'bold 22px "Segoe UI", sans-serif';
+  ctx.textAlign = 'center'; ctx.fillStyle = '#ffdf60';
+  ctx.fillText(banner.text, cx, 115);
+  ctx.restore();
+}
+
+function _renderJumbotron(ctx, flash, goalTeam, score) {
+  const W = ctx.canvas.width, H = ctx.canvas.height;
+  const cx = W / 2, cy = H / 2;
+  // Fáze animace: 4→3 = zoom-in, 3→1 = stable, 1→0 = fade
+  const a = flash < 1 ? flash : 1;
+
+  // Tmavý overlay celé obrazovky
+  ctx.save();
+  ctx.globalAlpha = a * 0.72;
+  ctx.fillStyle = '#07090f';
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 1;
+
+  // Barva gólu
+  const col = goalTeam === 'home' ? PLAYER.colors.home : PLAYER.colors.away;
+
+  // Záře za jumbotronem
+  const grd = ctx.createRadialGradient(cx, cy, 40, cx, cy, 260);
+  grd.addColorStop(0, `rgba(200,200,255,${a * 0.12})`);
+  grd.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, W, H);
+
+  // Rám jumbotrounu (temný obdélník se zlatým okrajem)
+  const bw = Math.min(480, W * 0.88), bh = 200;
+  const bx = cx - bw / 2, by = cy - bh / 2;
+  ctx.globalAlpha = a;
+  ctx.fillStyle = 'rgba(5,8,16,0.94)';
+  ctx.strokeStyle = '#c8a040';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(bx, by, bw, bh, 10);
+  else ctx.rect(bx, by, bw, bh);
+  ctx.fill(); ctx.stroke();
+
+  // "GOAL!" nápis
+  const scale = flash > 3 ? 1 + (flash - 3) * 0.35 : 1;
+  ctx.save();
+  ctx.translate(cx, by + 68);
+  ctx.scale(scale, scale);
+  ctx.font = 'bold 62px "Segoe UI Black", "Arial Black", monospace';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = col; ctx.fillText('GOAL!', 0, 0);
+  // Bílý odlesk
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.fillText('GOAL!', 0, 0);
+  ctx.restore();
+
+  // Skóre pod nápisem
+  ctx.font = 'bold 44px monospace';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = PLAYER.colors.home;
+  ctx.fillText(score.home, cx - 50, by + 148);
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.fillText(':', cx, by + 148);
+  ctx.fillStyle = PLAYER.colors.away;
+  ctx.fillText(score.away, cx + 50, by + 148);
+
+  ctx.restore();
 }

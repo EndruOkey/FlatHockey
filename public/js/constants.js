@@ -19,7 +19,7 @@ export const PLAYER = {
   turnRate: 3.8,   // rotace — střed: ovladatelná, ne těžkopádná ani twitchy
   stickLen: 16,    // úměrně k tělu
   pickupTipRadius: 10,     // dosah čepele na puk (velkorysejší úchop)
-  pickupMaxRelSpeed: 330,  // ať jde chytit i přihrávka (passSpeed 288)
+  pickupMaxRelSpeed: 420,  // ať jde chytit i rychlá přihrávka
   colors: { home: '#3a9fff', away: '#ff4455', passer: '#22cc88' },
 };
 
@@ -29,10 +29,10 @@ export const PUCK = {
   bounce: 0.62,
   maxShotSpeed: 470,   // „prdel" — plný slap (plné nabití)
   minShotSpeed: 150,   // „žabička" — malá měkká rána (lehký tap), umístěná, ne silová
-  passSpeed: 250,
-  maxPassSpeed: 280,
-  maxShotVz: 135,   // max vertical speed on full-charge shot
+  passSpeed: 320,
+  maxPassSpeed: 370,
+  maxShotVz: 158,   // max vertical speed on full-charge shot
   gravity: 580,     // px/s² downward
-  gloveHeight: 6,   // z above which glove/blocker applies
+  gloveHeight: 4,   // z above which glove/blocker applies
   crossbarHeight: 21,  // břevno ~4 ft
 };

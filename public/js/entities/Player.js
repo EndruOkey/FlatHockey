@@ -107,7 +107,9 @@ export class PlayerBase {
   // Může tenhle hráč TEĎ sebrat puk? (geometrie + rychlost, bez mutace)
   canPickup(puck) {
     if (puck.isAirborne) return false;
+    if (puck.faceoffTimer > 0) return false;  // bully freeze
     if (this._shootCooldown > 0) return false;
+    if (this.crossCheck) return false;   // crosscheck = ignoruje pickup
     const tip = this.stickTip;
     // Grab zóna kolem celé čepele — nejen špička, ale i podél lopaty (přesahuje za tip)
     const bladeDir = (this.carryAngle ?? this.aimAngle) + (this.handed ?? 1) * Math.PI / 6.5;
@@ -147,10 +149,17 @@ export class PlayerBase {
   stealFrom(carrier, puck) {
     carrier.hasPuck = false;
     carrier.charge = 0; carrier._chargeDecaying = false; carrier.overcharged = false; carrier._oneTimer = false;
-    carrier._shootCooldown = 0.4;        // chvíli nemůže puk hned sebrat zpět → žádný ping-pong
-    this._grabPuck();
-    this._shootCooldown = 0.12;
-    puck.trailColor = this.trail || null;
+    carrier._shootCooldown = 0.55;
+    // Puk se uvolní v náhodném směru (50-50 battle) — žádný instant transfer
+    const tip = carrier.stickTip;
+    const kickDir = carrier.carryAngle + (Math.random() - 0.5) * 1.1;
+    puck.x  = tip.x;
+    puck.y  = tip.y;
+    puck.vx = Math.cos(kickDir) * 70;
+    puck.vy = Math.sin(kickDir) * 70;
+    puck.vz = 0;
+    this._shootCooldown = 0.14;
+    puck.trailColor = null;
   }
 
   shoot(puck, charge) {
@@ -169,7 +178,7 @@ export class PlayerBase {
     const dir    = this.carryAngle + spread;
     puck.vx = Math.cos(dir) * spd;
     puck.vy = Math.sin(dir) * spd;
-    puck.vz = Math.pow(c, 1.6) * PUCK.maxShotVz;        // žabička po ledě, slap se zvedne
+    puck.vz = Math.pow(c, 1.1) * PUCK.maxShotVz;        // žabička po ledě, slap se zvedne
     puck.trailColor = this.trail || null;               // stopa v barvě střelce
   }
 
@@ -177,19 +186,35 @@ export class PlayerBase {
   // → rotuje s tělem, nejde za záda (ne 360°). Forehand/backhand dle strany těla a
   // handedness (pravák/levák), ne dle pohybu. Carry dojíždí omezenou rychlostí (klička).
   _updateStick(dt) {
-    // Hůl míří ABSOLUTNĚ na kurzor (nezávisle na rotaci těla) → otočení těla holí NEtrhne.
-    // Kužel kolem těla je jen LIMIT dosahu (~99°): k bokům, sotva za rameno, ne za záda.
     const cone = Math.PI * 0.55;
     const cursorRel = angleDiff(this.aimAngle, this.bodyAngle);
     const clampedRel = clamp(cursorRel, -cone, cone);
-    const targetAbs = this.bodyAngle + clampedRel;   // dokud je kurzor v dosahu = přímo kurzor
+    const targetAbs = this.bodyAngle + clampedRel;
 
+    // aimDist blízko = rychlejší rotace hole (kratší páka → hbitější klička)
+    const ad = this.aimDist ?? 60;
+    const manoeuvrability = clamp(ad / 60, 0, 1);  // 0=kurzor na hráči, 1=kurzor daleko
     const spd  = Math.hypot(this.vx, this.vy);
-    const rate = (14 - Math.min(1, spd / 180) * 7) * dt;   // vyhlazení v absolutním prostoru
+    const baseRate = 14 - Math.min(1, spd / 180) * 7;
+    const rate = baseRate * (1.4 - 0.4 * manoeuvrability) * dt;  // blízko = rychlejší rotace hole
+    const prevCarry = this.carryAngle;
     this.carryAngle += clamp(angleDiff(targetAbs, this.carryAngle), -rate, rate);
-    // pojistka: drž v kuželu kolem těla (kdyby tělo prudce otočilo)
     const rel = angleDiff(this.carryAngle, this.bodyAngle);
     if (Math.abs(rel) > cone) this.carryAngle = this.bodyAngle + (rel > 0 ? cone : -cone);
+
+    // Anti-helikoptéra: rychlé šermování holí = puk sklouzne.
+    // Při nabíjení threshold výrazně vyšší — otáčení těla s charge je záměrná mechanika.
+    if (this.hasPuck) {
+      const stickDelta = Math.abs(angleDiff(this.carryAngle, prevCarry)) / Math.max(dt, 0.001);
+      const spinThreshold = (this.charge ?? 0) > 0.05 ? 22 : 7.5;
+      if (stickDelta > spinThreshold) {
+        const slipChance = clamp((stickDelta - spinThreshold) / 6, 0, 1);
+        if (Math.random() < slipChance * dt * 4) {
+          this.hasPuck = false;
+          this._shootCooldown = 0.25;
+        }
+      }
+    }
 
     this._stickRel = angleDiff(this.carryAngle, this.bodyAngle);
     this.forehand  = (this._stickRel * this.handed) >= 0;
@@ -299,9 +324,20 @@ export class PlayerBase {
     if (il > 1) { ix /= il; iy /= il; }         // diagonála není rychlejší
     const hasInput = il > 0.01;
 
-    let topSpeed = PLAYER.speed * (crossChecking ? 0.95 : 1);  // crosscheck je neohrabaný, ne rychlejší
-    if (this.hasPuck) topSpeed *= 0.92;   // s pukem o chlup pomalejší (kontrola puku)
+    let topSpeed = PLAYER.speed * (crossChecking ? 1.12 : 1);
+    if (this.hasPuck) topSpeed *= 0.92;
     if (charging) topSpeed *= clamp(1 - (this.charge || 0) * 0.85, 0.12, 1);
+    // Kurzor blízko = hůl stažená = pohyb výrazně pomalejší (kratší krok)
+    const _ad = this.aimDist ?? 60;
+    topSpeed *= 0.45 + 0.55 * clamp(_ad / 65, 0, 1);  // blízko: ~45-55%, daleko: 100%
+
+    // Zpátečka (backskating): jízda dozadu je ~25% pomalejší
+    // Détekce: pohyb opačný k facing direction (bodyAngle)
+    if (hasInput && !crossChecking) {
+      const movingDir = Math.atan2(iy, ix);
+      const backAngle = Math.abs(angleDiff(movingDir, this.bodyAngle));
+      if (backAngle > Math.PI * 0.6) topSpeed *= 0.75;   // více než 108° od facing = zpátečka
+    }
 
     if (this._knockT > 0) this._knockT = Math.max(0, this._knockT - dt);
     const knocked = this._knockT > 0;            // po nárazu hráč skoro neřídí (náraz dojede)
@@ -327,10 +363,10 @@ export class PlayerBase {
       if (crossChecking) turnRate *= 0.45;               // crosscheck = neohrabané zatáčení
       heading += clamp(dA, -turnRate * dt, turnRate * dt);
       // akcelerace k topSpeed
-      const aUp = PLAYER.accel * (crossChecking ? 0.8 : 1) * (charging ? 0.5 : 1);
+      const aUp = PLAYER.accel * (crossChecking ? 0.65 : 1) * (charging ? 0.5 : 1);
       sp += clamp(topSpeed - sp, -PLAYER.decel * 2 * dt, aUp * dt);
       // hrany do ledu: čím prudší změna směru, tím větší ztráta rychlosti
-      sp *= 1 - clamp(Math.abs(dA) / Math.PI, 0, 1) * 3.5 * dt;
+      sp *= 1 - clamp(Math.abs(dA) / Math.PI, 0, 1) * (crossChecking ? 5.0 : 3.5) * dt;
       this.vx = Math.cos(heading) * sp;
       this.vy = Math.sin(heading) * sp;
     } else if (sp > 0) {
@@ -344,8 +380,12 @@ export class PlayerBase {
     // Tělo kouká TAM, KAM MÍŘÍŠ (kurzor) — plynule. Hůl tak vychází přirozeně zepředu a tělo
     // i hokejka jsou vždy zarovnané (žádné poskakování po 8 směrech kláves, žádné uvíznutí v boku).
     // Bruslení (WASD) je nezávislé (strafe s momentem) → twin-stick.
+    // CROSSCHECK: tělo kouká směrem pohybu (WASD), angle je LOCKED když stojíš — ne kurzorem
     const sp2 = Math.hypot(this.vx, this.vy);
-    this.skateAngle = lerpAngle(this.skateAngle, this.aimAngle, Math.min(1, 14 * dt));
+    // crosscheck: body jde za myší, ale rotace je výrazně zpomalená (žádné rychlé spinny)
+    const targetBodyAngle = this.aimAngle;
+    const bodyLerpRate = crossChecking ? 5 : 14;
+    this.skateAngle = lerpAngle(this.skateAngle, targetBodyAngle, Math.min(1, bodyLerpRate * dt));
     this.bodyAngle  = this.skateAngle;
 
     // Náklon do oblouku (vizuál)
@@ -670,11 +710,23 @@ function _renderPlayer(ctx, p, cam) {
   // Ochrana obličeje dle typu helmy (vepředu, ve směru facingu)
   const ht = p.helmetType || 'visor';
   const vcol = p.visor || '#bfe0ff';          // barva vizoru/akvárka (tradiční odstíny)
-  if (ht === 'visor') {                        // klasika — půlhledí
+  if (ht === 'visor') {                        // klasika — oblouek + nožičky
+    const visorRadius = r * 0.4;
+    const spreadAngle = Math.PI * 0.35;
+    // Oblouek přední části
     ctx.beginPath();
-    ctx.moveTo(hx + pcos * r * 0.3 + fcos * r * 0.1, hy + psin * r * 0.3 + fsin * r * 0.1);
-    ctx.lineTo(hx - pcos * r * 0.3 + fcos * r * 0.1, hy - psin * r * 0.3 + fsin * r * 0.1);
-    ctx.strokeStyle = vcol; ctx.lineWidth = 1.7 * s; ctx.stroke();
+    ctx.arc(hx, hy, visorRadius, ba - spreadAngle, ba + spreadAngle);
+    ctx.strokeStyle = vcol; ctx.lineWidth = 2 * s; ctx.stroke();
+    // Dvě nožičky na stranách (drží visor)
+    const legLen = r * 0.35, legX = r * 0.28;
+    ctx.beginPath();
+    ctx.moveTo(hx + pcos * legX, hy + psin * legX);
+    ctx.lineTo(hx + pcos * legX + fcos * legLen, hy + psin * legX + fsin * legLen);
+    ctx.strokeStyle = vcol; ctx.lineWidth = 1.5 * s; ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(hx - pcos * legX, hy - psin * legX);
+    ctx.lineTo(hx - pcos * legX + fcos * legLen, hy - psin * legX + fsin * legLen);
+    ctx.stroke();
   } else if (ht === 'shield') {                // akvárko — průhledná kupole
     ctx.beginPath();
     ctx.arc(hx, hy, r * 0.5, ba - Math.PI * 0.55, ba + Math.PI * 0.55);

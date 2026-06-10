@@ -42,13 +42,16 @@ export class Puck {
     this.goalScored = null;
     this._inNet  = false;   // usazený v brance (po gólu) → tvrdě držen v boxu sítě
     this.trailColor = null; // barva stopy/overlaye (dle posledního střelce; null = default)
+    this.faceoffTimer = 0;  // bully freeze — po dobu > 0 nikdo nemůže sebrat puk
   }
 
   reset() {
     this.x       = RINK.centerX;
     this.y       = RINK.h / 2;
-    this.vx      = 0;
-    this.vy      = 0;
+    // Drobný náhodný kopanec — jako rozhoz rozhodčího, ne přesně statický puk
+    const kickAngle = Math.random() * Math.PI * 2;
+    this.vx      = Math.cos(kickAngle) * 22;
+    this.vy      = Math.sin(kickAngle) * 22;
     this.z       = 0;
     this.vz      = 0;
     this.prevX   = this.x;
@@ -56,6 +59,7 @@ export class Puck {
     this.prevZ   = this.z;
     this.ownerId = null;
     this.goalScored = null;
+    this.faceoffTimer = 0.7;  // bully freeze: ~0.7s nikdo nesmí sebrat
     this._inNet  = false;   // usazený v brance (po gólu) → tvrdě držen v boxu sítě
     this.trailColor = null; // barva stopy/overlaye (dle posledního střelce; null = default)
   }
@@ -102,6 +106,7 @@ export class Puck {
 
   update(dt, world) {
     if (!world.authoritative) { this._interpolateNet(dt, world); return; }
+    if (this.faceoffTimer > 0) this.faceoffTimer -= dt;
 
     this.prevX = this.x;
     this.prevY = this.y;
@@ -116,15 +121,14 @@ export class Puck {
         this.ownerId = owner.id;
         return;
       }
-      const tip = owner.stickTip;
-      if (_insideCage(tip.x, tip.y)) {
-        owner.hasPuck = false;
-        this.ownerId  = null;
-        return;
-      }
-      // Host drží puk → cradle na lopatu (sdílená geometrie s klientem i _renderPlayer)
+      // Nejdřív aktualizuj pozici puku na lopatu (prevX/Y jsou z tohoto snímku)
       this._cradleTo(owner);
       this.ownerId = owner.id;
+      // Kontrola gólu při nošení přes čáru (swept detekce funguje díky prevX/Y)
+      this.goalScored = _resolveGoals(this);
+      if (this.goalScored) { owner.hasPuck = false; this.ownerId = null; return; }
+      // Puk je fyzicky v kleci (hráč strčil hokejku za branku) → zahoď puk
+      if (_insideCage(this.x, this.y)) { owner.hasPuck = false; this.ownerId = null; }
       return;
     }
 
@@ -196,15 +200,15 @@ export class Puck {
     const elev = this.z * s;
     const tcol = this.trailColor || '#9aa3b2';   // barva stopy/overlaye (dle hráče, jinak default šedá)
 
-    // Trail — jemná mizející stopa za pukem (starší body menší a průhlednější)
+    // Trail — větší a širší, ale jemná (méně výrazná)
     const tr = this._trail || (this._trail = []);
     tr.push({ x: this.x, y: this.y, z: this.z });
-    if (tr.length > 10) tr.shift();
+    if (tr.length > 14) tr.shift();
     for (let i = 0; i < tr.length - 1; i++) {
       const p = tr[i], f = i / tr.length;
       ctx.beginPath();
-      ctx.arc(ox + p.x * s, oy + (p.y - p.z) * s, r * (0.22 + 0.42 * f), 0, Math.PI * 2);
-      ctx.fillStyle = _alpha(tcol, f * 0.26);
+      ctx.arc(ox + p.x * s, oy + (p.y - p.z) * s, r * (0.35 + 0.65 * f), 0, Math.PI * 2);
+      ctx.fillStyle = _alpha(tcol, f * 0.15);
       ctx.fill();
     }
 
@@ -240,14 +244,14 @@ export class Puck {
       ctx.stroke();
     }
 
-    // Overlay — decentní náznak (ať je puk vidět), ne výrazná záře
+    // Overlay — jemnější, méně výrazná záře
     ctx.save();
     ctx.shadowColor = tcol;
-    ctx.shadowBlur  = 2.5 * s;
+    ctx.shadowBlur  = 1.5 * s;
     ctx.beginPath();
-    ctx.arc(sx, sy - elev, r + 0.3 * s, 0, Math.PI * 2);
-    ctx.strokeStyle = _alpha(tcol, 0.45);
-    ctx.lineWidth = 0.9 * s;
+    ctx.arc(sx, sy - elev, r + 1.5 * s, 0, Math.PI * 2);
+    ctx.strokeStyle = _alpha(tcol, 0.22);
+    ctx.lineWidth = 1.2 * s;
     ctx.stroke();
     ctx.restore();
   }
@@ -261,7 +265,8 @@ function _alpha(col, a) {
 
 // Odraz závislý na rychlosti — rychlá rána ztratí víc energie (žádné obří odrazy),
 // pomalý puk se odrazí živě. (sp = složka rychlosti do překážky)
-function _reb(sp) { return Math.max(0.18, 0.5 - Math.abs(sp) / 2400); }
+// Realističtější odrazy: max 0.82 (rychlý puk 80%), min 0.45 (extrémní nárazy)
+function _reb(sp) { return Math.max(0.45, 0.82 - Math.abs(sp) / 1800); }
 
 function _insideCage(x, y) {
   const gy1 = RINK.goalY, gy2 = RINK.goalY + RINK.goalH;
@@ -277,28 +282,31 @@ function _resolveNetWalls(puck) {
   const r   = PUCK.radius;
   const gy1 = RINK.goalY, gy2 = RINK.goalY + RINK.goalH;
   const d   = RINK.goalDepth;
-  const pxPrev = puck.prevX ?? puck.x, pyPrev = puck.prevY ?? puck.y;
-  const railTop = gy1 - r, railBot = gy2 + r;
+  const px  = puck.prevX ?? puck.x, py = puck.prevY ?? puck.y;
   const nets = [
     { lineX: RINK.goalLineRight, backX: RINK.goalLineRight + d, dir: +1 },
     { lineX: RINK.goalLineLeft,  backX: RINK.goalLineLeft  - d, dir: -1 },
   ];
   for (const { lineX, backX, dir } of nets) {
     const lo = Math.min(lineX, backX), hi = Math.max(lineX, backX);
-    const inDepthX = puck.x > lo - r && puck.x < hi + r;   // v hloubkovém rozsahu branky
-    const inNetY   = puck.y > gy1 && puck.y < gy2;          // ve výškovém rozsahu branky
-    // Vrchní mantinel (swept, z vnějšku shora) — neprojde mřížkou shora
-    if (inDepthX && puck.vy > 0 && pyPrev <= railTop && puck.y > railTop) {
-      puck.y = railTop; puck.vy = -Math.abs(puck.vy) * _reb(puck.vy);
+    // Použij sjednocení prev+cur pro X/Y rozsah — zachytí diagonální průnik
+    const inX = (puck.x > lo - r && puck.x < hi + r) || (px > lo - r && px < hi + r);
+    const inY = (puck.y > gy1    && puck.y < gy2)    || (py > gy1    && py < gy2);
+
+    // Vrchní mantinel — blokuj puk přicházející ZESHORA (py < gy1)
+    if (inX && py < gy1 && puck.y >= gy1 - r) {
+      puck.y = gy1 - r;
+      if (puck.vy > 0) puck.vy = -Math.abs(puck.vy) * _reb(puck.vy);
     }
-    // Spodní mantinel (swept, zdola)
-    if (inDepthX && puck.vy < 0 && pyPrev >= railBot && puck.y < railBot) {
-      puck.y = railBot; puck.vy = Math.abs(puck.vy) * _reb(puck.vy);
+    // Spodní mantinel — blokuj zdola (py > gy2)
+    if (inX && py > gy2 && puck.y <= gy2 + r) {
+      puck.y = gy2 + r;
+      if (puck.vy < 0) puck.vy = Math.abs(puck.vy) * _reb(puck.vy);
     }
-    // Zadní stěna (swept, z vnějšku) — puk zezadu se odrazí, neprojde zády
-    if (inNetY) {
-      if (dir > 0 && puck.vx < 0 && pxPrev >= hi + r && puck.x < hi + r) { puck.x = hi + r; puck.vx = Math.abs(puck.vx) * _reb(puck.vx); }
-      if (dir < 0 && puck.vx > 0 && pxPrev <= lo - r && puck.x > lo - r) { puck.x = lo - r; puck.vx = -Math.abs(puck.vx) * _reb(puck.vx); }
+    // Zadní stěna — blokuj z vnějšku (za brankou)
+    if (inY) {
+      if (dir > 0 && px > hi && puck.x <= hi + r) { puck.x = hi + r; if (puck.vx < 0) puck.vx =  Math.abs(puck.vx) * _reb(puck.vx); }
+      if (dir < 0 && px < lo && puck.x >= lo - r) { puck.x = lo - r; if (puck.vx > 0) puck.vx = -Math.abs(puck.vx) * _reb(puck.vx); }
     }
   }
 }

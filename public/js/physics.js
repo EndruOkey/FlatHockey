@@ -54,10 +54,10 @@ export function tickPuck(puck, players, dt) {
   if (puck.y < PUCK.radius) { puck.y = PUCK.radius; puck.vy = Math.abs(puck.vy) * PUCK.bounce; }
   if (puck.y > RINK.h - PUCK.radius) { puck.y = RINK.h - PUCK.radius; puck.vy = -Math.abs(puck.vy) * PUCK.bounce; }
 
-  // Goal scoring — puck crosses goal line while in goal opening
+  // Goal scoring — puk musí proletět čárou ZEVNITŘ hřiště (zkontrolovat směr)
   const inGoal = puck.y > RINK.goalY && puck.y < RINK.goalY + RINK.goalH;
-  if (inGoal && puck.x < RINK.goalLineLeft)  { resetPuck(puck); return 'goal-away'; }
-  if (inGoal && puck.x > RINK.goalLineRight) { resetPuck(puck); return 'goal-home'; }
+  if (inGoal && puck.x < RINK.goalLineLeft  && puck.vx < 0) { resetPuck(puck); return 'goal-away'; }
+  if (inGoal && puck.x > RINK.goalLineRight && puck.vx > 0) { resetPuck(puck); return 'goal-home'; }
 
   // Board bouncing
   if (puck.x < PUCK.radius) { puck.x = PUCK.radius; puck.vx = Math.abs(puck.vx) * PUCK.bounce; }
@@ -152,9 +152,13 @@ export function puckHitsGoalie(puck, goalie) {
 function resetPuck(puck) {
   puck.x = RINK.centerX;
   puck.y = RINK.h / 2;
-  puck.vx = 0;
-  puck.vy = 0;
+  const kickAngle = Math.random() * Math.PI * 2;
+  puck.vx = Math.cos(kickAngle) * 22;
+  puck.vy = Math.sin(kickAngle) * 22;
+  puck.vz = 0;
+  puck.z  = 0;
   puck.ownerId = null;
+  puck.faceoffTimer = 0.7;
 }
 
 function approach(cur, target, step) {

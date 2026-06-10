@@ -320,7 +320,10 @@ $('start-btn').onclick   = () => net.startLobby();
 $('wait-leave').onclick  = () => { net.leaveLobby(); showView('browse'); net.listLobbies(); };
 
 // ── Start hry ─────────────────────────────────────────────────────────
-net.onLobbyStart = (data) => startGame(new NetGame(canvas, net, net.id, data && data.settings));
+net.onLobbyStart = (data) => {
+  if (inGame && currentGame?.stop) currentGame.stop();
+  startGame(new NetGame(canvas, net, net.id, data && data.settings));
+};
 function startGame(game) { inGame = true; currentGame = game; lobby.style.display = 'none'; canvas.style.cursor = 'crosshair'; game.start(); }
 
 // ── Esc menu / odpojení ───────────────────────────────────────────────

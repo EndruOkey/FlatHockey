@@ -78,6 +78,8 @@ const DICT = {
     winner: 'Vítěz',
     draw: 'Remíza',
     esc_back: 'Esc → zpět do menu',
+    rematch_in: (s) => `Nový zápas za ${s}s…`,
+    starting_rematch: 'Startujeme…',
     live_end: 'KONEC',
     prompt_password: 'Heslo lobby:',
     // Chyby ze serveru (kódy)
@@ -157,6 +159,8 @@ const DICT = {
     winner: 'Winner',
     draw: 'Draw',
     esc_back: 'Esc → back to menu',
+    rematch_in: (s) => `Rematch in ${s}s…`,
+    starting_rematch: 'Starting…',
     live_end: 'END',
     prompt_password: 'Lobby password:',
     err_unavailable: 'Lobby not available.',
