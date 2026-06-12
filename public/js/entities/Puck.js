@@ -121,15 +121,15 @@ export class Puck {
         this.ownerId = owner.id;
         return;
       }
-      // Kontrola gölu jen když hráč PUK UŽ NESL minulý frame (ownerId = jeho id).
-      // Při SBĚRU (první frame carry) prevX = volný puk → stick tip může přeskočit čáru
-      // a způsobit falešný gól. Až od druhého frame je swept detekce bezpečná.
+      // alreadyCarried: přeskočí první frame sběru (prevX = volný puk na ledě)
       const alreadyCarried = (this.ownerId === owner.id);
       this._cradleTo(owner);
       this.ownerId = owner.id;
       if (alreadyCarried) {
-        this.goalScored = _resolveGoals(this);
-        if (this.goalScored) { owner.hasPuck = false; this.ownerId = null; return; }
+        // Lightweight swept check BEZ kolizí tyček — _resolveGoals nesmíme volat
+        // protože post-collision kód by odstrčil puk.x za čáru → falešný gól každý frame
+        const g = _carryGoalCheck(this);
+        if (g) { this.goalScored = g; owner.hasPuck = false; this.ownerId = null; return; }
       }
       // Puk je fyzicky v kleci (hráč strčil hokejku za branku) → zahoď puk
       if (_insideCage(this.x, this.y)) { owner.hasPuck = false; this.ownerId = null; }
@@ -313,6 +313,33 @@ function _resolveNetWalls(puck) {
       if (dir < 0 && px < lo && puck.x >= lo - r) { puck.x = lo - r; if (puck.vx > 0) puck.vx = -Math.abs(puck.vx) * _reb(puck.vx); }
     }
   }
+}
+
+// Při nesení puku — jen swept průlet čárou, BEZ kolizí tyček ani containmentu.
+// _resolveGoals nesmíme volat: post-collision kód by odstrčil puk za čáru → falešný gól.
+function _carryGoalCheck(puck) {
+  const gy1 = RINK.goalY, gy2 = RINK.goalY + RINK.goalH;
+  const cbar = PUCK.crossbarHeight;
+  const prevX = puck.prevX ?? puck.x, prevY = puck.prevY ?? puck.y;
+  const POST_R = 2.5;
+  for (const [lineX, dir, result] of [
+    [RINK.goalLineRight, +1, 'goal-home'],
+    [RINK.goalLineLeft,  -1, 'goal-away'],
+  ]) {
+    const prevSide = dir * (prevX - lineX);
+    const curSide  = dir * (puck.x  - lineX);
+    if (prevSide > 0 || curSide <= 0) continue;  // nešel přes čáru
+    const dxm = puck.x - prevX;
+    const t   = Math.abs(dxm) > 1e-9 ? (lineX - prevX) / dxm : 0;
+    const yAt = prevY + (puck.y - prevY) * t;
+    if (yAt > gy1 + POST_R && yAt < gy2 - POST_R && puck.z <= cbar) {
+      puck._inNet = true;
+      puck._netLo = dir > 0 ? lineX : lineX - RINK.goalDepth;
+      puck._netHi = dir > 0 ? lineX + RINK.goalDepth : lineX;
+      return result;
+    }
+  }
+  return null;
 }
 
 // ── Jednotná branková mechanika ──────────────────────────────────────────
