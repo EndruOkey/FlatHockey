@@ -216,12 +216,13 @@ export class Goalie {
     const predY  = puck.y + stopDy;
     const predBehind = this.inX < 0 ? predX > this.netX + 5 : predX < this.netX - 5;
 
-    // Soupeř v útočném pásmu = golman neopouští bránu
-    // 310px vpředu (≈ modrá čára) + 80px vzadu (celá zadní plocha za brankou)
+    // Soupeř v přepadovém pásmu (slot/přepad) = golman neopouští bránu
+    // Původní 310px (modrá čára) blokovalo zajíždění VŽDY v onlinu — útočník je skoro
+    // vždy někde v pásmu. Sníženo na 110px (slot+crease area ≈ 21ft od brány).
     const opponentNearNet = world.players.some(p => {
       if (p.team === this.team) return false;
       const frontDist = (this.netX - p.x) * -this.inX;
-      return frontDist > -80 && frontDist < 310;
+      return frontDist > -35 && frontDist < 110;
     });
 
     const nearestSkaterDist = world.players.reduce((min, p) =>
