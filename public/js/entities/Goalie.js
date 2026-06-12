@@ -9,8 +9,8 @@ const COVER_H  = 14;   // vertikální poloviční dosah krytí (±14 ze 44px ú
 const COVER_X  = 9;    // poloviční tloušťka (X)
 const FIVEHOLE = 5;    // poloviční šířka pětky (nízký střed)
 const TOP_EDGE = 2;    // užší růžek u tyče → těžší trefit
-const MAX_OUT  = 30;   // max výjezd z brankové čáry (~6 ft, challenge k vršku brankoviště)
-const SPEED    = 170;  // boční rychlost (živé přesuny) — z ní plyne otevřený vzdálený roh
+const MAX_OUT  = 38;   // max výjezd (~7.2 ft — challenge ze slotu, ale blíž kreasu)
+const SPEED    = 190;  // laterální rychlost
 const PADLEN   = 9;    // délka betonů dopředu (vizuál)
 
 export class Goalie {
@@ -40,8 +40,15 @@ export class Goalie {
     this._saveType     = '';
     this._saveFlash    = 0;
     this._saveFlashMax = 0.3;
-    this._saveRecoil   = 0;     // recoil effect na bodyč
-    this._saveRecoilX  = 0;     // recoil směr
+    this._saveRecoil   = 0;
+    this._saveRecoilX  = 0;
+    this._wrapReact    = 0;
+    this._formPhase    = Math.random() * Math.PI * 6;
+    this._form         = 0.5 + (Math.random() - 0.5) * 0.3;
+    this._retrieving   = false;
+    this._boardClear   = false;
+    this._passedGate   = false;
+    this._returnTimer  = 0;    // sprint zpět do branky po retrieve
   }
 
   get isHolding() { return this._holdTimer > 0; }
@@ -52,7 +59,13 @@ export class Goalie {
 
     if (this._pokeCooldown > 0) this._pokeCooldown -= dt;
     if (this._saveFlash   > 0) this._saveFlash = Math.max(0, this._saveFlash - dt);
-    if (this._saveRecoil  > 0) this._saveRecoil = Math.max(0, this._saveRecoil - dt * 4);  // fade recoil effect
+    if (this._saveRecoil  > 0) this._saveRecoil = Math.max(0, this._saveRecoil - dt * 4);
+
+    // ── Forma: pomalý drift výkonnosti (hot/cold streaks) ────────────────
+    // Perioda ~90s → zápasové vlny. Form 0=špatný den, 1=skvělý den.
+    this._formPhase += dt * 0.042;
+    const formTarget = 0.5 + 0.45 * Math.sin(this._formPhase) * Math.cos(this._formPhase * 0.61);
+    this._form += (formTarget - this._form) * Math.min(1, 0.25 * dt);
 
     if (this._holdTimer > 0) {
       this._holdTimer -= dt;
@@ -96,8 +109,12 @@ export class Goalie {
     const baseLag       = 5.8 * diffMult;
     const distLagFactor = rawDist > 170 ? Math.max(0.28, 1 - (rawDist - 170) / 220) : 1.0;
     const lag           = baseLag * distLagFactor * (1 - this._screen * 0.55);
-    const pxClamp       = this.side === 'right' ? Math.min(puck.x, netX - 1) : Math.max(puck.x, netX + 1);
-    this._percX += (pxClamp - this._percX) * Math.min(1, lag * dt);
+    // Percepce X: za brankou puk fixuj na goal line (golman nesleduje puk za sebou),
+    // ale jen pokud NENÍ v retrieve fázi — tam potřebujeme skutečnou pozici.
+    const pxRaw   = this._retrieving
+      ? puck.x
+      : (this.side === 'right' ? Math.min(puck.x, netX - 1) : Math.max(puck.x, netX + 1));
+    this._percX += (pxRaw - this._percX) * Math.min(1, lag * dt);
     this._percY += (puck.y  - this._percY) * Math.min(1, lag * dt);
 
     // Anticipace pohybu puku
@@ -113,65 +130,228 @@ export class Goalie {
     const dyN        = py - netY;
     const distToPuck = Math.hypot(dxN, dyN);
     const angleAbs   = Math.atan2(Math.abs(dyN), dxN);
-    const depthMult  = this.difficulty === 'competitive' ? 1.12 : 0.88;
-
-    // ── Hloubka výjezdu (NHL zóny) ───────────────────────────────────────
-    // Slot/kruh (50-140): max výjezd; modrá (140-230): ustup; střed hřiště: drž branku
-    //   ~ odpovídá NHL heatmap: >80% gólů padá ze slotu/kruhů
+    // ── Hloubka výjezdu — NHL zóny (5.3 px/ft, crease edge ≈ 32px) ──────
+    // Klíč: zóna sama zajišťuje ústup z dálky — žádný threat multiplikátor na depth.
+    // Tím se eliminuje problém stacked multiplikátorů, které golmana držely na čáře.
+    // Depth se neškáluje difficulty — obě úrovně stojí na stejném místě geometricky.
+    // Difficulty ovlivňuje přesnost (errAmp) a rychlost přesunu, ne výchozí pozici.
     let depth;
-    if      (distToPuck < 50)  depth = MAX_OUT * 0.65 * (distToPuck / 50);        // v bráně: scale s dist
-    else if (distToPuck < 140) depth = MAX_OUT * 0.92;                            // slot / kruh: max výjezd
-    else if (distToPuck < 240) depth = MAX_OUT * 0.92 * (1 - (distToPuck - 140) / 200); // modrá: ustup
-    else                       depth = MAX_OUT * 0.04;                            // střed/konec: seď v brance
-    depth *= depthMult;
-    depth *= 1 - Math.min(1, angleAbs / (Math.PI * 0.5)) * (this.difficulty === 'competitive' ? 0.45 : 0.60);
+    if      (distToPuck < 25)  depth = MAX_OUT * 0.28 * Math.sqrt(distToPuck / 25); // záros: ustupuje, reaktivní
+    else if (distToPuck < 100) depth = MAX_OUT * 0.90;                              // slot: max challenge (~8.5ft)
+    else if (distToPuck < 200) depth = MAX_OUT * (0.90 - 0.26 * (distToPuck - 100) / 100); // kruhy: 0.90→0.64
+    else if (distToPuck < 340) depth = MAX_OUT * (0.64 - 0.15 * (distToPuck - 200) / 140); // modrá: 0.64→0.49
+    else if (distToPuck < 520) depth = MAX_OUT * (0.49 - 0.22 * (distToPuck - 340) / 180); // neutral: 0.49→0.27
+    else                       depth = MAX_OUT * 0.20;                              // za středem: 10px vpředu
+    // Ostrý úhel → méně vpřed (golman krytý tyčkou, zaujímá near-post pozici)
+    depth *= 1 - clamp(angleAbs / (Math.PI * 0.5), 0, 1) * (this.difficulty === 'competitive' ? 0.35 : 0.48);
 
-    // Threat: relevantní pouze v nebezpečném pásmu (slot + kruh + část modré)
-    // competitive: ohrožení cítí do 250px, casual do 210px
-    const threatRange   = this.difficulty === 'competitive' ? (250 - distToPuck) / 195 : (210 - distToPuck) / 165;
-    const threat        = clamp(threatRange, 0, 1);
-    const depthBaseline = this.difficulty === 'competitive' ? 0.38 : 0.28;
-    depth *= depthBaseline + (1 - depthBaseline) * threat;
+    // Threat: jen pro Y pohyb a rychlost (ne pro depth — to obstarává zone)
+    const threatRange = this.difficulty === 'competitive' ? (300 - distToPuck) / 240 : (260 - distToPuck) / 210;
+    const threat      = clamp(threatRange, 0, 1);
     let targetX = netX + this.inX * depth;
 
-    // ── Cílová Y: úhlová hra bez singularity ────────────────────────────
+    // ── Cílová Y: bisektriz úhlu (NHL angle play) ────────────────────────
     const denomRaw  = netX - px;
     const denomSafe = Math.sign(denomRaw || -this.inX) * Math.max(Math.abs(denomRaw), 30);
     const s         = clamp((targetX - px) / denomSafe, -0.15, 1.05);
     const margin    = COVER_H * 0.45;
     let targetY = py + s * (netY - py) + bite * threat;
-    // Při ostrém úhlu sniž laterální závazek — golman nesmí jít tak daleko k tyčce
-    // že se otevře střed (druhá polovina sítě). Max 72% od středu k ideální poloze.
-    const angleCenterBias = 1 - clamp((angleAbs - 0.55) / 0.85, 0, 1) * 0.28;
-    targetY = netY + (targetY - netY) * (0.20 + 0.60 * threat) * angleCenterBias;
+    // Y tracking: 60% vždy — sleduje úhel přiměřeně i z dálky
+    targetY = netY + (targetY - netY) * (0.60 + 0.40 * threat);
+    // Near-post play z ostrých úhlů (NHL: bližší tyčka, daleká je kryta geometrií)
+    // Podmínka: puk SKUTEČNĚ před brankovou čárou — percX clamping jinak dává falešný
+    // angleAbs≈90° pro puk koulející se za brankou, kde near-post commit nedává smysl
+    const puckActuallyFront = this.inX < 0 ? puck.x <= this.netX + 5 : puck.x >= this.netX - 5;
+    if (angleAbs > 0.75 && puckActuallyFront) {
+      const nearPostY  = dyN < 0 ? RINK.goalY : RINK.goalY + RINK.goalH;
+      const nearCommit = clamp((angleAbs - 0.75) / 0.65, 0, 1) * (this.difficulty === 'competitive' ? 0.48 : 0.36);
+      targetY = targetY + (nearPostY - targetY) * nearCommit;
+    }
     targetY = clamp(targetY, RINK.goalY + margin, RINK.goalY + RINK.goalH - margin);
 
-    // ── Chybovost: vrchol v nebezpečném pásmu (slot/kruh ~70-150px) ──────
+    // ── Chybovost modulovaná formou ─────────────────────────────────────
+    // Dobrá forma (_form→1): méně chyb. Špatná forma (_form→0): větší odchylky.
     this._errPhase = ((this._errPhase ?? 0) + dt * 0.58);
     const errZone    = clamp(1 - Math.pow((distToPuck - 100) / 105, 2), 0, 1);
-    const errAmpBase = this.difficulty === 'competitive' ? 1.4 : 3.2;
+    const formFactor = 1.0 + (0.5 - this._form) * 1.2;  // špatná forma = až 2× větší chyba
+    const errAmpBase = (this.difficulty === 'competitive' ? 1.2 : 2.8) * formFactor;
     const errAmp     = errAmpBase * (0.08 + 0.92 * errZone);
     const errRaw     = Math.sin(this._errPhase * 0.88) * errAmp
                      + Math.cos(this._errPhase * 1.47) * errAmp * 0.52;
     this._errY = ((this._errY ?? 0) + (errRaw - (this._errY ?? 0)) * Math.min(1, 0.9 * dt));
     targetY    = clamp(targetY + this._errY, RINK.goalY + margin * 0.35, RINK.goalY + RINK.goalH - margin * 0.35);
 
-    // ── Wraparound: hráč s pukem za brankou → přilepíme k bližší tyčce ──
+    // ── Wraparound: hráč s pukem za brankou ─────────────────────────────
+    // Reálný golman sleduje pohyb hráče podél brankové čáry (neskočí na fixní tyčku)
+    // + reakční lag: první 0.15s po detekci je golman ještě v přechodu → lze dát gól včas
     const carrier = world.players.find(p => p.hasPuck);
-    if (carrier && this.inX * (carrier.x - netX) > 8) {
+    const carrierBehind = carrier && this.inX * (netX - carrier.x) > 8;
+    if (!carrierBehind) {
+      this._wrapReact = 0;  // reset, hráč vpředu
+    }
+    let wrapOverride = false;
+    if (carrierBehind) {
+      this._wrapReact = (this._wrapReact ?? 0) + dt;
+      // Po reakčním zpoždění (0.12-0.18s dle difficulty) golman začne dynamicky sledovat Y nosiče
+      const reactDelay = this.difficulty === 'competitive' ? 0.06 : 0.10;
+      if (this._wrapReact > reactDelay) {
+        targetX = netX;
+        const wrapY = clamp(carrier.y, RINK.goalY - 1, RINK.goalY + RINK.goalH + 1);
+        // Maximální přitlačení k tyčce — žádná mezírka
+        const wrapBias = this.difficulty === 'competitive' ? 0.99 : 0.96;
+        targetY = netY + (wrapY - netY) * wrapBias;
+        targetY = clamp(targetY, RINK.goalY + 1, RINK.goalY + RINK.goalH - 1);
+        wrapOverride = true;
+      }
+    }
+
+    // ── Trapézová rozehrávka: golman jede pro volný puk za brankou ───────
+    const puckBehindLine = this.inX < 0 ? puck.x > this.netX + 5 : puck.x < this.netX - 5;
+    const puckSpeedTotal = Math.hypot(puck.vx, puck.vy);
+
+    // Predikce: kam puk doklouzne (bez odrazů, přibližně)
+    const stopDx = (puck.vx * Math.abs(puck.vx)) / (2 * PUCK.decel);
+    const stopDy = (puck.vy * Math.abs(puck.vy)) / (2 * PUCK.decel);
+    const predX  = puck.x + stopDx;
+    const predY  = puck.y + stopDy;
+    const predBehind = this.inX < 0 ? predX > this.netX + 5 : predX < this.netX - 5;
+
+    // Soupeř v útočném pásmu = golman neopouští bránu
+    // 310px vpředu (≈ modrá čára) + 80px vzadu (celá zadní plocha za brankou)
+    const opponentNearNet = world.players.some(p => {
+      if (p.team === this.team) return false;
+      const frontDist = (this.netX - p.x) * -this.inX;
+      return frontDist > -80 && frontDist < 310;
+    });
+
+    const nearestSkaterDist = world.players.reduce((min, p) =>
+      Math.min(min, Math.hypot(p.x - puck.x, p.y - puck.y)), Infinity);
+
+    const anyoneHasPuck = world.players.some(p => p.hasPuck);
+
+    // Puk je "volný": nikdo ho nenese, žádný hráč není do 60px od puku, v pásmu klid
+    // Rychlostní filtr: rychlý puk (>200) se odrazí od zadní stěny sám — nejet pro něj
+    const puckFreeBack = puckBehindLine
+      && !anyoneHasPuck
+      && !puck.isAirborne
+      && this._holdTimer <= 0
+      && nearestSkaterDist > 60
+      && !opponentNearNet
+      && puckSpeedTotal < 200;
+
+    // Časná anticipace: pomalý puk míří za bránu, golman se předem přesune k tyčce
+    // Ještě přísnější: hráči musí být 130px+ od puku, puk max 120px/s
+    const vxTowardBehind = this.inX < 0 ? puck.vx : -puck.vx;
+    const puckApproachingSlow = !puckBehindLine
+      && predBehind
+      && vxTowardBehind > 10
+      && puckSpeedTotal < 120
+      && !anyoneHasPuck
+      && !puck.isAirborne
+      && nearestSkaterDist > 130
+      && !opponentNearNet
+      && this._inTrapezoid(predX, predY);
+
+    // Puk v síti = gól — 2D check (X uvnitř klece A Y v ústí branky)
+    const behindGoal = this.inX < 0 ? puck.x - this.netX : this.netX - puck.x;
+    const puckInGoal = behindGoal > 0
+      && behindGoal < RINK.goalDepth + 2
+      && puck.y > RINK.goalY - 2
+      && puck.y < RINK.goalY + RINK.goalH + 2;
+
+    const retrieveCandidate = (puckFreeBack && !puckInGoal && this._inTrapezoid(puck.x, puck.y))
+      || puckApproachingSlow;
+
+    if (retrieveCandidate) {
+      // Confirmation delay — nereagovat okamžitě na krátké okno (hráč o krok ustoupil)
+      this._retrieveReadyTimer = (this._retrieveReadyTimer ?? 0) + dt;
+      if (this._retrieveReadyTimer >= 0.28 && !this._retrieving) {
+        this._passedGate = false;
+        this._retrieving = true;
+      }
+    } else {
+      this._retrieveReadyTimer = 0;
+      if (!puckBehindLine || opponentNearNet || puckInGoal || puckSpeedTotal >= 200) {
+        if (this._retrieving && opponentNearNet) {
+          this._gvx *= 0.2;
+          this._gvy *= 0.2;
+          this._returnTimer = 1.4;
+        }
+        this._retrieving = false;
+      }
+    }
+
+    if (this._retrieving && !wrapOverride) {
+      const bMax = this.inX < 0 ? this.netX + 82 : this.netX;
+      const bMin = this.inX < 0 ? this.netX      : this.netX - 82;
+      const rawTX = clamp(puck.x, bMin, bMax);
+      const rawTY = clamp(puck.y, RINK.trapTopLine - 4, RINK.trapBotLine + 4);
+
+      // Waypoint kolem tyčky: nejdřív ven z Y rozsahu branky, pak za bránu.
+      // _passedGate = true jakmile goalie jednou vyjede z netY rozsahu → žádná oscilace.
+      const POST_GAP = 10;
+      const netTop   = RINK.goalY - POST_GAP;
+      const netBot   = RINK.goalY + RINK.goalH + POST_GAP;
+      const inNetY   = this.y > netTop && this.y < netBot;
+
+      if (!this._passedGate && inNetY) {
+        const gateY = Math.abs(puck.y - netTop) <= Math.abs(puck.y - netBot) ? netTop : netBot;
+        targetX = this.netX - this.inX * 10;  // krok za síť + Y = oblouková cesta kolem tyčky
+        targetY = gateY;
+      } else {
+        this._passedGate = true;  // jednou ven → přímá cesta k puku, bez návratu
+        targetX = rawTX;
+        targetY = rawTY;
+      }
+
+      // One-touch clear v pohybu
+      if (Math.hypot(puck.x - this.x, puck.y - this.y) < this.radius + PUCK.radius + 4) {
+        this._retrieving  = false;
+        this._passedGate  = false;
+        this._returnTimer = 1.6;   // sprint zpět do branky
+        this._gvx *= 0.12;
+        this._gvy *= 0.12;
+
+        // Board clear: výběr směru podle toho, kde puk leží za bránou
+        // Pokud je puk za zadní stěnou sítě (x > goalLine+depth), střílíme NA zadní mantinel
+        // → přirozený odraz do rohu podél boční mantinelu (jako reálné NHL).
+        // Pokud je puk mezi brankovou čárou a zadní stěnou, střílíme přímo nahoru po ledu.
+        const toBoard  = puck.y < RINK.h / 2 ? -1 : 1;
+        const boardY   = toBoard > 0 ? RINK.h - 8 : 8;
+        const backWall = this.inX < 0 ? this.netX + RINK.goalDepth : this.netX - RINK.goalDepth;
+        const pastBack = this.inX < 0 ? puck.x > backWall : puck.x < backWall;
+        const endX = pastBack
+          ? (this.inX < 0 ? RINK.w - 8 : 8)
+          : (this.inX < 0 ? RINK.blueLineRight - 40 : RINK.blueLineLeft + 40);
+        const cdx = endX - puck.x, cdy = boardY - puck.y;
+        const cdist = Math.hypot(cdx, cdy) || 1;
+        puck.vx = (cdx / cdist) * 360;
+        puck.vy = (cdy / cdist) * 360;
+        puck.z = 0; puck.vz = 0;
+      }
+    }
+
+    // ── Sprint zpět po retrieve: přebij target na střed branky ────────────
+    if (this._returnTimer > 0 && !wrapOverride && !this._retrieving) {
+      this._returnTimer -= dt;
       targetX = netX;
-      targetY = carrier.y < netY ? RINK.goalY + 4 : RINK.goalY + RINK.goalH - 4;
+      targetY = netY;
     }
 
     // ── Pohyb (spring-damper) ────────────────────────────────────────────
-    // Z dálky (nízký threat) golman hýbe pomalu → nechybuje se zbytečně
-    const speedMult = this.difficulty === 'competitive' ? 1.22 : 0.85;
-    const effSpeed  = SPEED * (0.12 + 0.88 * threat) * speedMult;
+    const speedMult      = this.difficulty === 'competitive' ? 1.22 : 0.85;
+    const wrapSpeedBoost = wrapOverride ? 1.65 : 1.0;
+    const retrieveBoost  = this._retrieving ? 1.8 : 1.0;
+    const returnBoost    = this._returnTimer > 0 ? 1.55 : 1.0;
+    const moveThreat     = this._retrieving ? Math.max(threat, 0.55) : threat;
+    const formSpeed      = 0.88 + 0.24 * this._form;
+    const effSpeed       = SPEED * (0.28 + 0.72 * moveThreat) * speedMult * wrapSpeedBoost * formSpeed * retrieveBoost * returnBoost;
     let desVx = (targetX - this.x) * 10;
     let desVy = (targetY - this.y) * 10;
     const dspd = Math.hypot(desVx, desVy);
     if (dspd > effSpeed) { const f = effSpeed / dspd; desVx *= f; desVy *= f; }
-    const accMult = this.difficulty === 'competitive' ? 1.18 : 0.72;
+    const returning = this._returnTimer > 0;
+    const accMult = (this._retrieving || returning || wrapOverride) ? 1.0 : (this.difficulty === 'competitive' ? 1.18 : 0.72);
     const acc = Math.min(1, 10 * dt * accMult);
     this._gvx += (desVx - this._gvx) * acc;
     this._gvy += (desVy - this._gvy) * acc;
@@ -179,14 +359,42 @@ export class Goalie {
     this.y += this._gvy * dt;
     this._vy = (this.y - prevY) / Math.max(dt, 1e-3);
 
-    // Natočení čelem k puku
-    let tilt = clamp(-Math.atan2(this._percY - this.y, Math.abs(this._percX - this.x) + 4), -0.42, 0.42);
-    this._tilt += (tilt - this._tilt) * Math.min(1, 8 * dt);
+    // Natočení: při wrapu — postCommit tilt (RVH styl, přitlačen k tyčce)
+    //           jinak — standard angle play
+    let tilt;
+    if (wrapOverride && carrier) {
+      const postCommit = (carrier.y - netY) / (RINK.goalH / 2);  // −1=horní tyčka, +1=dolní
+      tilt = clamp(-postCommit * 0.88, -0.88, 0.88);
+    } else {
+      tilt = clamp(-Math.atan2(this._percY - this.y, Math.abs(this._percX - this.x) + 4), -0.42, 0.42);
+    }
+    this._tilt += (tilt - this._tilt) * Math.min(1, (wrapOverride ? 12 : 8) * dt);
+  }
+
+  // ── Trapézová zóna: je bod (x,y) v golmanově povoleném území za bránou? ─
+  _inTrapezoid(x, y) {
+    const behind = this.inX < 0 ? x - this.netX : this.netX - x;
+    if (behind <= 0) return false;
+    const t         = Math.min(behind / 90, 1.0);
+    const netCY     = RINK.goalY + RINK.goalH / 2;
+    const halfLine  = netCY - RINK.trapTopLine;   // 228 - 174 = 54px
+    const halfBoard = netCY - RINK.trapTopBoard;  // 228 - 154 = 74px
+    return Math.abs(y - netCY) <= halfLine + (halfBoard - halfLine) * t;
   }
 
   // ── Zónový zákrok ─────────────────────────────────────────────────────
   blockPuck(puck, world) {
     if (this._holdTimer > 0) return true;
+
+    // Puk musí přicházet z přední strany těla — nelze vyrazit přes záda
+    // inX < 0 (pravá brána): puk musí být vlevo od golmana (x ≤ this.x + 5)
+    // inX > 0 (levá brána):  puk musí být vpravo od golmana (x ≥ this.x − 5)
+    const fromFront = this.inX < 0 ? puck.x <= this.x + 5 : puck.x >= this.x - 5;
+    if (!fromFront) return false;
+
+    // Puk letící silně OD branky (odraz/přihrávka pryč) nelze zachytit
+    const vxTowardGoal = puck.vx * (-this.inX);  // kladné = k brance
+    if (vxTowardGoal < -120) return false;
 
     const r = PUCK.radius;
     // Clona zmenší dosah krytí (hráč v zákrytu = hůř chytá)
@@ -205,7 +413,11 @@ export class Goalie {
     const distFactor = clamp(0.80 + shotDist / 700, 0.80, 1.0);
 
     const reachX = (COVER_X + r) * sc * coverXMult * speedFactor * distFactor;
-    const reachY = (COVER_H + r) * sc * coverYMult * speedFactor * distFactor;
+    let   reachY = (COVER_H + r) * sc * coverYMult * speedFactor * distFactor;
+    // Boční střela (přichází víc z boku než čelně) → menší boční dosah
+    // Gólman nemá plnou plochu vystavenu výstřelu pod 90°
+    const shotFrontFrac = shotSpeed > 10 ? clamp(Math.max(0, vxTowardGoal) / shotSpeed, 0, 1) : 1.0;
+    reachY *= 0.60 + 0.40 * shotFrontFrac;  // 60 % (čistě boční) → 100 % (čelní)
     let relX = puck.x - this.x, relY = puck.y - this.y;
     let hitX = null, hitY = null;
 
@@ -267,7 +479,11 @@ export class Goalie {
   controlLoosePuck(puck) {
     if (this._holdTimer > 0 || this._heldPuck) return true;
     if (!puck || puck.isAirborne) return false;
+    if (this._retrieving) return false;  // retrieve logika to řeší sama
     if (Math.hypot(puck.vx, puck.vy) > 90) return false;
+    // Za brankou neber volný puk — hráč má prioritu
+    const behindLine = this.inX < 0 ? puck.x > this.netX + 5 : puck.x < this.netX - 5;
+    if (behindLine) return false;
     if (Math.hypot(puck.x - this.x, puck.y - this.y) > this.radius + 9) return false;
     this._holdTimer = 0.85;
     this._heldPuck  = puck;
@@ -324,7 +540,8 @@ export class Goalie {
     const p = this._heldPuck;
     this._heldPuck = null;
     p.x = this.x + this.inX * 16; p.y = this.y; p.z = 0; p.vz = 0;
-    // Rozehrávka: nahraj spoluhráči (přeměřeně dle vzdálenosti). Bez spoluhráče → měkce k mantinelu.
+
+    // Normální hold (po zákroku): nahraj spoluhráči, nebo měkce do hřiště
     const mate = world ? _nearestMate(world, this.team, this) : null;
     if (mate) {
       const ang  = Math.atan2(mate.y - p.y, mate.x - p.x);
@@ -332,7 +549,7 @@ export class Goalie {
       const sp = Math.min(PUCK.passSpeed, Math.sqrt(2 * PUCK.decel * dist) + 35);
       p.vx = Math.cos(ang) * sp; p.vy = Math.sin(ang) * sp;
     } else {
-      const toBoard = this.y < RINK.h / 2 ? -1 : 1;     // do bližšího rohu, pryč od brány
+      const toBoard = this.y < RINK.h / 2 ? -1 : 1;
       const angle = Math.atan2(toBoard * 60, this.inX * 120);
       p.vx = Math.cos(angle) * 130; p.vy = Math.sin(angle) * 130;
     }

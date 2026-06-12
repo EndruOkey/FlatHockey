@@ -374,12 +374,28 @@ function _resolveOneGoal(puck, lineX, backX, dir, result) {
   const gy2  = RINK.goalY + RINK.goalH;
   const cbar = PUCK.crossbarHeight;
 
-  // (1) Tyčky — pevná kolečka v rozích ústí; odrazí puk, který je trefí
+  // (1) Tyčky — swept test zachytí i rychlé puky co by jinak protuneloval
   for (const py of [gy1, gy2]) {
+    if (puck.z > cbar) continue;
     const dx = puck.x - lineX, dy = puck.y - py;
     const dist = Math.hypot(dx, dy);
     const minD = r + POST_R;
-    if (dist > 0 && dist < minD && puck.z <= cbar) {
+
+    let shouldHit = dist > 0 && dist < minD;
+    if (!shouldHit) {
+      // Swept: nejbližší bod trajektorie k tyčce (pro rychlé puky)
+      const px0 = puck.prevX ?? puck.x, py0 = puck.prevY ?? puck.y;
+      const sdx = puck.x - px0, sdy = puck.y - py0;
+      const len2 = sdx * sdx + sdy * sdy;
+      if (len2 > 0.5) {
+        const t = Math.max(0, Math.min(1, -((px0 - lineX) * sdx + (py0 - py) * sdy) / len2));
+        if (t > 0 && Math.hypot(px0 + t * sdx - lineX, py0 + t * sdy - py) < minD) {
+          shouldHit = true;
+        }
+      }
+    }
+
+    if (shouldHit && dist > 0) {
       const nx = dx / dist, ny = dy / dist;
       puck.x = lineX + nx * minD;
       puck.y = py + ny * minD;
