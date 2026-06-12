@@ -131,8 +131,10 @@ export class Puck {
         const g = _carryGoalCheck(this);
         if (g) { this.goalScored = g; owner.hasPuck = false; this.ownerId = null; return; }
       }
-      // Puk je fyzicky v kleci (hráč strčil hokejku za branku) → zahoď puk
-      if (_insideCage(this.x, this.y)) { owner.hasPuck = false; this.ownerId = null; }
+      // Zahoď puk jen když je TĚLO hráče uvnitř sítě (ne jen lopata/špička)
+      // Kontrola puku (this.x/y) způsobovala jitter: lopata sahala do klece →
+      // hasPuck=false → tryPickup → hasPuck=true → každý frame
+      if (_insideCage(owner.x, owner.y)) { owner.hasPuck = false; this.ownerId = null; }
       return;
     }
 

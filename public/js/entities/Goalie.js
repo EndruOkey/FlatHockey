@@ -125,7 +125,7 @@ export class Goalie {
     const threat = clamp(threatRange, 0, 1);
     const depthBaseline = this.difficulty === 'competitive' ? 0.40 : 0.32;
     depth *= depthBaseline + (1 - depthBaseline) * threat;
-    const targetX = netX + this.inX * depth;
+    let targetX = netX + this.inX * depth;
 
     // Pravý úhlový bod: průsečík spojnice puk→střed branky s hloubkovou rovinou x=targetX.
     const denom = Math.abs(netX - px) < 1 ? -this.inX : (netX - px);
