@@ -43,6 +43,7 @@ export class Puck {
     this._inNet  = false;   // usazený v brance (po gólu) → tvrdě držen v boxu sítě
     this.trailColor = null; // barva stopy/overlaye (dle posledního střelce; null = default)
     this.faceoffTimer = 0;  // bully freeze — po dobu > 0 nikdo nemůže sebrat puk
+    this._ev = 0;            // sound-event bitmask (1=boards, 2=post, 4=ice-land); reset each tick
   }
 
   reset() {
@@ -139,14 +140,17 @@ export class Puck {
     }
 
     this.ownerId = null;
+    this._ev = 0; // reset sound events each tick
 
     // Height physics
+    const prevZ = this.z;
     if (this.z > 0 || this.vz > 0) {
       this.vz -= PUCK.gravity * dt;
       this.z  += this.vz * dt;
       if (this.z <= 0) {
         this.z  = 0;
-        this.vz = this.vz < -60 ? -this.vz * 0.12 : 0; // tiny bounce on hard impact
+        if (this.vz < -60) { this.vz = -this.vz * 0.12; } else { this.vz = 0; }
+        if (prevZ > 2) this._ev |= 4; // ice-land sound when dropping from meaningful height
       }
     }
 
@@ -162,13 +166,15 @@ export class Puck {
     this.x += this.vx * dt;
     this.y += this.vy * dt;
 
-    if (this.y < PUCK.radius)          { this.y = PUCK.radius;          this.vy =  Math.abs(this.vy) * _reb(this.vy); }
-    if (this.y > RINK.h - PUCK.radius) { this.y = RINK.h - PUCK.radius; this.vy = -Math.abs(this.vy) * _reb(this.vy); }
-    if (this.x < PUCK.radius)          { this.x = PUCK.radius;          this.vx =  Math.abs(this.vx) * _reb(this.vx); }
-    if (this.x > RINK.w - PUCK.radius) { this.x = RINK.w - PUCK.radius; this.vx = -Math.abs(this.vx) * _reb(this.vx); }
+    if (this.y < PUCK.radius)          { this.y = PUCK.radius;          this.vy =  Math.abs(this.vy) * _reb(this.vy); if (spd > 40) this._ev |= 1; }
+    if (this.y > RINK.h - PUCK.radius) { this.y = RINK.h - PUCK.radius; this.vy = -Math.abs(this.vy) * _reb(this.vy); if (spd > 40) this._ev |= 1; }
+    if (this.x < PUCK.radius)          { this.x = PUCK.radius;          this.vx =  Math.abs(this.vx) * _reb(this.vx); if (spd > 40) this._ev |= 1; }
+    if (this.x > RINK.w - PUCK.radius) { this.x = RINK.w - PUCK.radius; this.vx = -Math.abs(this.vx) * _reb(this.vx); if (spd > 40) this._ev |= 1; }
 
     // Rounded corner arcs — puk se odráží od zakřivených rohů
+    const _preCornerSpd = Math.hypot(this.vx, this.vy);
     _resolveCorners(this);
+    if (_preCornerSpd > 40 && Math.hypot(this.vx, this.vy) < _preCornerSpd * 0.98) this._ev |= 1;
 
     // Player body blocks puck — prevents passing through
     if (!this.isAirborne) {
@@ -192,9 +198,13 @@ export class Puck {
     }
 
     // Pevné stěny sítě (vršek/spodek/záda) — puk projde dovnitř JEN ústím zepředu
+    const _preNetSpd = Math.hypot(this.vx, this.vy);
     _resolveNetWalls(this);
+    if (_preNetSpd > 40 && Math.hypot(this.vx, this.vy) < _preNetSpd * 0.95) this._ev |= 1;
     // Jednotná branková mechanika: tyčky+břevno → detekce → udržení v síti
+    const _preGoalSpd = Math.hypot(this.vx, this.vy);
     this.goalScored = _resolveGoals(this);
+    if (_preGoalSpd > 40 && Math.hypot(this.vx, this.vy) < _preGoalSpd * 0.9) this._ev |= 2; // post hit
   }
 
   draw(ctx, cam) {

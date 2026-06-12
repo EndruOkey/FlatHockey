@@ -24,8 +24,9 @@ export function fromScreen(sx, sy, cam) {
 export class Engine {
   constructor(canvas) {
     this.canvas = canvas;
-    this.onTick = null; // (dt, cam) => void — pre-update hook for input/network
-    this.onDraw = null; // (ctx, cam) => void — post-draw hook for HUD overlay
+    this.onTick      = null; // (dt, cam) => void — pre-update hook for input/network
+    this.onAfterTick = null; // (dt, cam) => void — post-physics hook (read puck._ev etc.)
+    this.onDraw      = null; // (ctx, cam) => void — post-draw hook for HUD overlay
     this._lastTime = null;
   }
 
@@ -48,6 +49,7 @@ export class Engine {
 
     this.onTick?.(dt, cam);
     this._world.update(dt);
+    this.onAfterTick?.(dt, cam);
     this._world.draw(ctx, cam);
     this.onDraw?.(ctx, cam);
 

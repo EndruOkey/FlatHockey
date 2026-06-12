@@ -133,11 +133,19 @@ export class NetGame {
     // Detekce rozehrávky (lock → unlock): krátká píšťalka bez goalFlash = buly
     if (this.locked && !s.lock && !this.goalFlash) SFX.whistle();
     this.locked = !!s.lock;
+
+    // ── Zvukové události puku ─────────────────────────────────────────────
+    const ev = s.puck.ev || 0;
+    if (ev & 1) SFX.boards();          // mantinel / síť
+    if (ev & 2) SFX.post();            // tyčka / břevno
+    if (ev & 4) SFX.iceDrop();         // puk dopadl na led
+
     const seen = new Set();
     for (const ps of s.players) {
       seen.add(ps.id);
       const isMe = ps.id === this.myId;
       let e = this.players.get(ps.id);
+      const prevHasPuck = e ? e.ent.hasPuck : false;
       if (!e) {
         const ent = new Player(ps.id, ps.team, isMe ? this.input : null);
         ent.x = ps.x; ent.y = ps.y; ent.bodyAngle = ps.ba; ent.aimAngle = ps.aa; ent.carryAngle = ps.ca; ent._stickDisp = ps.sd;
@@ -147,11 +155,18 @@ export class NetGame {
       }
       const ent = e.ent;
       // autoritativní diskrétní stav (pro všechny)
-      ent.team = ps.team; ent.forehand = !!ps.fh; ent.hasPuck = !!ps.hp; ent.charge = ps.ch;
+      ent.team = ps.team; ent.forehand = !!ps.fh; ent.charge = ps.ch;
       ent.handed = ps.hd; ent.name = ps.nm;
       ent.color = ps.col || null; ent.num = ps.num; ent.jersey = ps.js || 'solid';
       ent.helmet = ps.hc || null; ent.gloves = ps.gc || null; ent.tape = ps.tc || null;
       ent.stick = ps.sk || null; ent.tapeStyle = ps.ty || 'full'; ent.helmetType = ps.hy || 'visor'; ent.visor = ps.vc || null;
+
+      // Pickup / shoot zvuky z hasPuck přechodu
+      const newHasPuck = !!ps.hp;
+      if (!prevHasPuck && newHasPuck)  SFX.pickup();      // sebral puk
+      if ( prevHasPuck && !newHasPuck && !this.goalFlash) SFX.shoot(ent.charge ?? 0.5); // vystřelil
+      ent.hasPuck = newHasPuck;
+
       if (isMe) {
         e.sx = ps.x; e.sy = ps.y;  // jen reconcile cíl; pozici/úhly/stick predikuju lokálně
       } else {
@@ -172,10 +187,17 @@ export class NetGame {
 
   _applyGoalie(g, d) {
     if (!d) return;
+    const prevSave = g._saveType, prevFlash = g._saveFlash || 0;
     g._tx = d.x; g._ty = d.y; g._ttilt = d.t;
-    g._holdTimer = d.h ? 1 : 0; g._saveType = d.st;
-    g._saveFlash = d.sf; g._saveFlashMax = d.sm || 0.3; g._screen = d.sc;
+    g._holdTimer = d.h ? 1 : 0; g._saveFlashMax = d.sm || 0.3; g._screen = d.sc;
     g.color = d.col || null;
+    // Zvuk zákroku: nový saveFlash vyšší než starý = čerstvý zákrok
+    if (d.sf > prevFlash + 0.05) {
+      if      (d.st === 'glove')   SFX.glove();
+      else if (d.st === 'blocker') SFX.blocker();
+      else if (d.st === 'pads' || d.st === 'cover') SFX.pads();
+    }
+    g._saveType = d.st; g._saveFlash = d.sf;
   }
 
   _interp(dt) {
@@ -363,9 +385,17 @@ export class SandboxGame {
 
   start() {
     this._reset();   // nájezd: hráč na středu s pukem od začátku
-    this.engine.onTick = (dt, cam) => this._tick(dt, cam);
-    this.engine.onDraw = (ctx)     => this._drawOverlay(ctx);
+    this.engine.onTick      = (dt, cam) => this._tick(dt, cam);
+    this.engine.onAfterTick = ()        => this._soundTick();
+    this.engine.onDraw      = (ctx)     => this._drawOverlay(ctx);
     this.engine.run(this.world);
+  }
+
+  _soundTick() {
+    const ev = this.puck._ev || 0;
+    if (ev & 1) SFX.boards();
+    if (ev & 2) SFX.post();
+    if (ev & 4) SFX.iceDrop();
   }
 
   _tick(dt, cam) {
@@ -486,6 +516,15 @@ export class SandboxGame {
     for (const p of world.players) this.goalie.blockPlayer(p);
     for (const p of players) this.goalie.pokeCheck(p, puck);
 
+    // Zvuky pickup/shoot (sandbox)
+    for (const p of players) {
+      const hadPuck = this._prevHasPuck?.get(p.id);
+      if (hadPuck === false && p.hasPuck) SFX.pickup();
+      if (hadPuck === true  && !p.hasPuck && !this.goalFlash) SFX.shoot(p.charge ?? 0.5);
+    }
+    if (!this._prevHasPuck) this._prevHasPuck = new Map();
+    for (const p of players) this._prevHasPuck.set(p.id, p.hasPuck);
+
     // Hráč narazí do passera (Tab) — solidní spoluhráč/překážka
     for (const p of players) {
       const dx = p.x - this.passer.x, dy = p.y - this.passer.y;
@@ -513,7 +552,14 @@ export class SandboxGame {
         if (i !== j) players[i].tryCrossCheck(players[j]);
 
     if (!anyoneHasPuck) {
+      const prevSaveFlash = this.goalie._saveFlash || 0;
       const saved = this.goalie.blockPuck(puck, world);
+      if (saved && (this.goalie._saveFlash || 0) > prevSaveFlash + 0.05) {
+        const st = this.goalie._saveType;
+        if      (st === 'glove')   SFX.glove();
+        else if (st === 'blocker') SFX.blocker();
+        else                       SFX.pads();
+      }
       if (saved) puck.x = Math.min(puck.x, RINK.goalLineRight - 1);
       for (const p of players) if (p.tryDeflect(puck)) break;
       this.goalie.controlLoosePuck(puck);

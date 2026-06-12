@@ -465,7 +465,7 @@ function broadcast(match) {
   io.to(match.room).emit('snap', {
     n: match.tick,
     players,
-    puck: { x: r1(match.puck.x), y: r1(match.puck.y), z: r1(match.puck.z), tc: match.puck.trailColor || null },
+    puck: { x: r1(match.puck.x), y: r1(match.puck.y), z: r1(match.puck.z), tc: match.puck.trailColor || null, ev: match.puck._ev || 0 },
     gl: g(match.goalieL), gr: g(match.goalieR),
     score: match.score,
     lock: match.world._goalLock ? 1 : 0,
