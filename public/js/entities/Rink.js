@@ -231,19 +231,14 @@ function _drawGoal(ctx, cam, glx, dir, postColor) {
   ctx.lineTo(x, y2);
   ctx.stroke();
 
-  // Tyčky: tenký konektor + kolečka na rozích (odpovídají koliznímu rádiusu POST_R=3.5)
+  // Tyčky — úzký pruh na brankové čáře (užší než původních 5*s)
   ctx.strokeStyle = postColor;
-  ctx.lineWidth = 2.5 * s;
+  ctx.lineWidth = 4 * s;
+  ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(x, y1);
   ctx.lineTo(x, y2);
   ctx.stroke();
-  ctx.fillStyle = postColor;
-  for (const py of [y1, y2]) {
-    ctx.beginPath();
-    ctx.arc(x, py, 3.5 * s, 0, Math.PI * 2);
-    ctx.fill();
-  }
 }
 
 function _roundRect(ctx, x, y, w, h, r) {
