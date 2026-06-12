@@ -140,20 +140,20 @@ export class Goalie {
     const s         = clamp((targetX - px) / denomSafe, -0.15, 1.05);
     const margin    = COVER_H * 0.45;
     let targetY = py + s * (netY - py) + bite * threat;
-    // Při nízkém ohrožení tahej ke středu branky
-    targetY = netY + (targetY - netY) * (0.18 + 0.82 * threat);
+    // Při ostrém úhlu sniž laterální závazek — golman nesmí jít tak daleko k tyčce
+    // že se otevře střed (druhá polovina sítě). Max 72% od středu k ideální poloze.
+    const angleCenterBias = 1 - clamp((angleAbs - 0.55) / 0.85, 0, 1) * 0.28;
+    targetY = netY + (targetY - netY) * (0.20 + 0.60 * threat) * angleCenterBias;
     targetY = clamp(targetY, RINK.goalY + margin, RINK.goalY + RINK.goalH - margin);
 
     // ── Chybovost: vrchol v nebezpečném pásmu (slot/kruh ~70-150px) ──────
-    // Z modré / středu hřiště je golman přesný → tam góly nepadají
-    // Ze slotu/kruhů má větší chybu → realistické NHL statistiky
-    this._errPhase = ((this._errPhase ?? 0) + dt * 0.60);
-    const errZone    = clamp(1 - Math.pow((distToPuck - 100) / 105, 2), 0, 1); // bell curve, vrchol ~100px
-    const errAmpBase = this.difficulty === 'competitive' ? 2.0 : 4.8;
+    this._errPhase = ((this._errPhase ?? 0) + dt * 0.58);
+    const errZone    = clamp(1 - Math.pow((distToPuck - 100) / 105, 2), 0, 1);
+    const errAmpBase = this.difficulty === 'competitive' ? 1.4 : 3.2;
     const errAmp     = errAmpBase * (0.08 + 0.92 * errZone);
     const errRaw     = Math.sin(this._errPhase * 0.88) * errAmp
                      + Math.cos(this._errPhase * 1.47) * errAmp * 0.52;
-    this._errY = ((this._errY ?? 0) + (errRaw - (this._errY ?? 0)) * Math.min(1, 1.0 * dt));
+    this._errY = ((this._errY ?? 0) + (errRaw - (this._errY ?? 0)) * Math.min(1, 0.9 * dt));
     targetY    = clamp(targetY + this._errY, RINK.goalY + margin * 0.35, RINK.goalY + RINK.goalH - margin * 0.35);
 
     // ── Wraparound: hráč s pukem za brankou → přilepíme k bližší tyčce ──
