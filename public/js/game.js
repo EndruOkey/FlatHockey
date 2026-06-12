@@ -74,7 +74,8 @@ export class NetGame {
     };
     net.onWhistle = d => {
       this.call = { rule: d.rule, lineX: d.lineX, color: d.color, t: 1.5 };
-      SFX.whistle();
+      // Přerušení hry = jeden ostrý hvizd; rozehrávka z buly se hvízdne při lock→unlock
+      SFX.stopWhistle();
     };
 
     // Render-svět pro Engine: update = interpolace, draw = vykreslení
@@ -554,7 +555,7 @@ export class SandboxGame {
   }
 
   _handleWhistle(ev) {
-    SFX.whistle();
+    SFX.stopWhistle();
     const labels = {
       'goalie-hold':          '🧤 Golman drží příliš dlouho',
       'goalie-interference':  '🚫 Najíždění do golmana',

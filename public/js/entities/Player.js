@@ -301,14 +301,14 @@ export class PlayerBase {
       other.overcharged = false;
     }
 
-    // Náraz — VĚTŠÍ knockback při crosschecku: odhodí soupeře, checker se zbrzdí
+    // Náraz — odhodí soupeře silou, checker se zbrzdí
     const nx = dx / dist;
     const ny = dy / dist;
-    other.vx += nx * 175;       // umírněný knockback vůči ploše (dřív 300)
-    other.vy += ny * 175;
-    this.vx  -= nx * 55;
-    this.vy  -= ny * 55;
-    other._knockT = 0.26; this._knockT = 0.13; // náraz dojede, neutlumí se hned
+    other.vx += nx * 280;
+    other.vy += ny * 280;
+    this.vx  -= nx * 70;
+    this.vy  -= ny * 70;
+    other._knockT = 0.32; this._knockT = 0.14;
   }
 
   _move(input, dt) {
@@ -360,13 +360,13 @@ export class PlayerBase {
       const dA = angleDiff(targetDir, heading);          // kolik chceš zatočit (-π..π)
       const ratio = clamp(sp / PLAYER.speed, 0, 1);
       let turnRate = 6.5 - 3 * ratio;                    // ~6.5 rad/s pomalu → ~3.5 naplno (těžší)
-      if (crossChecking) turnRate *= 0.45;               // crosscheck = neohrabané zatáčení
+      if (crossChecking) turnRate *= 0.55;               // crosscheck = těžší zatočit, ale ne ochrnutý
       heading += clamp(dA, -turnRate * dt, turnRate * dt);
       // akcelerace k topSpeed
-      const aUp = PLAYER.accel * (crossChecking ? 0.65 : 1) * (charging ? 0.5 : 1);
+      const aUp = PLAYER.accel * (crossChecking ? 0.82 : 1) * (charging ? 0.5 : 1);
       sp += clamp(topSpeed - sp, -PLAYER.decel * 2 * dt, aUp * dt);
       // hrany do ledu: čím prudší změna směru, tím větší ztráta rychlosti
-      sp *= 1 - clamp(Math.abs(dA) / Math.PI, 0, 1) * (crossChecking ? 5.0 : 3.5) * dt;
+      sp *= 1 - clamp(Math.abs(dA) / Math.PI, 0, 1) * (crossChecking ? 2.8 : 3.5) * dt;
       this.vx = Math.cos(heading) * sp;
       this.vy = Math.sin(heading) * sp;
     } else if (sp > 0) {
@@ -382,9 +382,11 @@ export class PlayerBase {
     // Bruslení (WASD) je nezávislé (strafe s momentem) → twin-stick.
     // CROSSCHECK: tělo kouká směrem pohybu (WASD), angle je LOCKED když stojíš — ne kurzorem
     const sp2 = Math.hypot(this.vx, this.vy);
-    // crosscheck: body jde za myší, ale rotace je výrazně zpomalená (žádné rychlé spinny)
-    const targetBodyAngle = this.aimAngle;
-    const bodyLerpRate = crossChecking ? 5 : 14;
+    // crosscheck: tělo jde za pohybem (WASD), ne za myší. Při stání = tělo se nezamrzne.
+    const targetBodyAngle = crossChecking
+      ? (hasInput ? Math.atan2(iy, ix) : this.bodyAngle)
+      : this.aimAngle;
+    const bodyLerpRate = crossChecking ? 9 : 14;
     this.skateAngle = lerpAngle(this.skateAngle, targetBodyAngle, Math.min(1, bodyLerpRate * dt));
     this.bodyAngle  = this.skateAngle;
 

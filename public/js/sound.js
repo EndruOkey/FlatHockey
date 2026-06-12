@@ -7,7 +7,43 @@ function _ac() {
 }
 
 export const SFX = {
-  // Referee whistle — two short blasts (breath noise + tonal sine)
+  // Jeden krátký hvizd — přerušení hry (faul, offside, icing, buly-setup)
+  // Tón: 2600 Hz (ostřejší než rozehrávkový), délka 0.18s
+  stopWhistle() {
+    const ac = _ac();
+    const t  = ac.currentTime;
+    const FREQ = 2600;
+    const dur  = 0.18;
+    const len  = Math.ceil(ac.sampleRate * (dur + 0.06));
+    const buf  = ac.createBuffer(1, len, ac.sampleRate);
+    const d    = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    const src = ac.createBufferSource();
+    const bp  = ac.createBiquadFilter();
+    const ng  = ac.createGain();
+    src.buffer = buf;
+    bp.type = 'bandpass'; bp.frequency.value = FREQ; bp.Q.value = 60;
+    src.connect(bp); bp.connect(ng); ng.connect(ac.destination);
+    ng.gain.setValueAtTime(0, t);
+    ng.gain.linearRampToValueAtTime(0.042, t + 0.007);
+    ng.gain.setValueAtTime(0.042, t + dur - 0.02);
+    ng.gain.exponentialRampToValueAtTime(0.001, t + dur + 0.04);
+    src.start(t); src.stop(t + dur + 0.06);
+    const osc = ac.createOscillator();
+    const og  = ac.createGain();
+    osc.connect(og); og.connect(ac.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(FREQ - 60, t);
+    osc.frequency.linearRampToValueAtTime(FREQ + 40, t + 0.05);
+    osc.frequency.linearRampToValueAtTime(FREQ - 20, t + dur);
+    og.gain.setValueAtTime(0, t);
+    og.gain.linearRampToValueAtTime(0.034, t + 0.007);
+    og.gain.setValueAtTime(0.034, t + dur - 0.02);
+    og.gain.exponentialRampToValueAtTime(0.001, t + dur + 0.04);
+    osc.start(t); osc.stop(t + dur + 0.05);
+  },
+
+  // Dva krátké hvizdy — rozehrávka (puk back in play, buly)
   whistle() {
     const ac = _ac();
     const t  = ac.currentTime;

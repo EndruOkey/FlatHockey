@@ -136,6 +136,13 @@ export class Goalie {
     targetY = netY + (targetY - netY) * (0.25 + 0.75 * threat);
     targetY = clamp(targetY, RINK.goalY + margin, RINK.goalY + RINK.goalH - margin);
 
+    // Wraparound obrana: hráč s pukem za brankou → přilep se k bližší tyčce
+    const carrier = world.players.find(p => p.hasPuck);
+    if (carrier && this.inX * (carrier.x - netX) > 8) {
+      targetX = netX;
+      targetY = carrier.y < netY ? RINK.goalY + 4 : RINK.goalY + RINK.goalH - 4;
+    }
+
     // Plynulý přesun: větší baseline speed + lepší akcelerace
     // Difficulty: competitive = FAST & SHARP, casual = slower & lazy
     const speedMult = this.difficulty === 'competitive' ? 1.25 : 0.85;
@@ -167,8 +174,18 @@ export class Goalie {
     const screenPenalty = this.difficulty === 'competitive' ? 0.30 : 0.42;
     const sc = 1 - this._screen * screenPenalty;
     const coverXMult = this.difficulty === 'competitive' ? 1.08 : 0.95;
-    const coverYMult = this.difficulty === 'competitive' ? 1.06 : 0.94;
-    const reachX = (COVER_X + r) * sc * coverXMult, reachY = (COVER_H + r) * sc * coverYMult;
+    const coverYMult = this.difficulty === 'competitive' ? 1.06 : 0.88;
+
+    // Síla střely: rychlý puk = méně reakčního času = menší zone (max −25 %)
+    const shotSpeed = Math.hypot(puck.vx, puck.vy);
+    const speedFactor = clamp(1 - (shotSpeed - 150) / 520, 0.75, 1.0);
+    // Vzdálenost střely: z blízka = kratší čas na read = menší zone (max −20 %)
+    const prevPx = puck.prevX ?? puck.x;
+    const shotDist = Math.abs(prevPx - this.x);
+    const distFactor = clamp(0.80 + shotDist / 700, 0.80, 1.0);
+
+    const reachX = (COVER_X + r) * sc * coverXMult * speedFactor * distFactor;
+    const reachY = (COVER_H + r) * sc * coverYMult * speedFactor * distFactor;
     let relX = puck.x - this.x, relY = puck.y - this.y;
     let hitX = null, hitY = null;
 
@@ -324,7 +341,7 @@ export class Goalie {
     const spread   = clamp(Math.abs(this._vy) / 110, 0, 1);
     const kneeY    = 2.5 * s;
     // spread² = nelineární nárůst — při pomalém pohybu malý, při rychlém výrazný
-    const padTilt  = 0.14 + spread * spread * 0.55;
+    const padTilt  = 0.26 + spread * spread * 0.55;
     const padFwdX  = -spread * 1.5 * s;
 
     // Přepneme na lokální souřadnice golmana (−X = směr k puku)
