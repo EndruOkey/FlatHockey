@@ -86,57 +86,75 @@ export class Goalie {
     }
     this._screen += (screen - this._screen) * Math.min(1, 6 * dt);
 
-    // ── Percepce puku (s clonou a lagem) ────────────────────────────────────
-    const diffMult = this.difficulty === 'competitive' ? 0.75 : 1.2;
-    const baseLag   = 5.8 * diffMult;
-    const lag       = baseLag * (1 - this._screen * 0.55);
-    const pxClamp   = this.side === 'right' ? Math.min(puck.x, netX - 1) : Math.max(puck.x, netX + 1);
-    this._percX += (pxClamp   - this._percX) * Math.min(1, lag * dt);
-    this._percY += (puck.y    - this._percY) * Math.min(1, lag * dt);
+    // ── Vzdálenost puku (raw, pro lag) ─────────────────────────────────────
+    const rawDxN = Math.max(1, (netX - puck.x) * -this.inX);
+    const rawDist = Math.hypot(rawDxN, puck.y - netY);
 
-    // Anticipace pohybu puku — ztlumená, aby golman neskákal dopředu
+    // ── Percepce puku ────────────────────────────────────────────────────
+    // Z dálky (modrá čára+) golman sleduje puk pomaleji → méně chaotický pohyb
+    const diffMult      = this.difficulty === 'competitive' ? 0.75 : 1.2;
+    const baseLag       = 5.8 * diffMult;
+    const distLagFactor = rawDist > 170 ? Math.max(0.28, 1 - (rawDist - 170) / 220) : 1.0;
+    const lag           = baseLag * distLagFactor * (1 - this._screen * 0.55);
+    const pxClamp       = this.side === 'right' ? Math.min(puck.x, netX - 1) : Math.max(puck.x, netX + 1);
+    this._percX += (pxClamp - this._percX) * Math.min(1, lag * dt);
+    this._percY += (puck.y  - this._percY) * Math.min(1, lag * dt);
+
+    // Anticipace pohybu puku
     const rawVy = (puck.y - this._lastPuckY) / Math.max(dt, 1e-3);
     this._lastPuckY = puck.y;
-    this._puckVy += (rawVy - this._puckVy) * Math.min(1, 10 * dt);
-    const biteMult = this.difficulty === 'competitive' ? 0.70 : 0.45;
-    const bite     = clamp(this._puckVy, -260, 260) * 0.060 * biteMult;
+    this._puckVy += (rawVy - this._puckVy) * Math.min(1, 9 * dt);
+    const biteMult = this.difficulty === 'competitive' ? 0.60 : 0.38;
+    const bite     = clamp(this._puckVy, -240, 240) * 0.055 * biteMult;
 
-    // ── Hloubka výjezdu ─────────────────────────────────────────────────
+    // ── Zónová vzdálenost puku ──────────────────────────────────────────
     const px = this._percX, py = this._percY;
     const dxN        = Math.max(1, (netX - px) * -this.inX);
     const dyN        = py - netY;
     const distToPuck = Math.hypot(dxN, dyN);
     const angleAbs   = Math.atan2(Math.abs(dyN), dxN);
-    const depthMult  = this.difficulty === 'competitive' ? 1.15 : 0.90;
+    const depthMult  = this.difficulty === 'competitive' ? 1.12 : 0.88;
+
+    // ── Hloubka výjezdu (NHL zóny) ───────────────────────────────────────
+    // Slot/kruh (50-140): max výjezd; modrá (140-230): ustup; střed hřiště: drž branku
+    //   ~ odpovídá NHL heatmap: >80% gólů padá ze slotu/kruhů
     let depth;
-    if (distToPuck > 150)     depth = MAX_OUT * 0.95 * depthMult;
-    else if (distToPuck > 70) depth = MAX_OUT * 1.05 * depthMult;
-    else                      depth = clamp(distToPuck * 0.35, 6, MAX_OUT * 0.7 * depthMult);
-    depth *= 1 - Math.min(1, angleAbs / (Math.PI * 0.5)) * (this.difficulty === 'competitive' ? 0.48 : 0.62);
-    const threatRange  = this.difficulty === 'competitive' ? (430 - distToPuck) / 300 : (380 - distToPuck) / 260;
-    const threat       = clamp(threatRange, 0, 1);
-    const depthBaseline = this.difficulty === 'competitive' ? 0.40 : 0.32;
+    if      (distToPuck < 50)  depth = MAX_OUT * 0.65 * (distToPuck / 50);        // v bráně: scale s dist
+    else if (distToPuck < 140) depth = MAX_OUT * 0.92;                            // slot / kruh: max výjezd
+    else if (distToPuck < 240) depth = MAX_OUT * 0.92 * (1 - (distToPuck - 140) / 200); // modrá: ustup
+    else                       depth = MAX_OUT * 0.04;                            // střed/konec: seď v brance
+    depth *= depthMult;
+    depth *= 1 - Math.min(1, angleAbs / (Math.PI * 0.5)) * (this.difficulty === 'competitive' ? 0.45 : 0.60);
+
+    // Threat: relevantní pouze v nebezpečném pásmu (slot + kruh + část modré)
+    // competitive: ohrožení cítí do 250px, casual do 210px
+    const threatRange   = this.difficulty === 'competitive' ? (250 - distToPuck) / 195 : (210 - distToPuck) / 165;
+    const threat        = clamp(threatRange, 0, 1);
+    const depthBaseline = this.difficulty === 'competitive' ? 0.38 : 0.28;
     depth *= depthBaseline + (1 - depthBaseline) * threat;
     let targetX = netX + this.inX * depth;
 
     // ── Cílová Y: úhlová hra bez singularity ────────────────────────────
-    // denom je vzdálenost puku od čáry; clamp na min 30 aby s nevyletělo při puku těsně u čáry
     const denomRaw  = netX - px;
     const denomSafe = Math.sign(denomRaw || -this.inX) * Math.max(Math.abs(denomRaw), 30);
     const s         = clamp((targetX - px) / denomSafe, -0.15, 1.05);
     const margin    = COVER_H * 0.45;
     let targetY = py + s * (netY - py) + bite * threat;
-    // Při nízkém ohrožení tahej ke středu branky; při hrozbě hraje plný úhel
-    targetY = netY + (targetY - netY) * (0.20 + 0.80 * threat);
+    // Při nízkém ohrožení tahej ke středu branky
+    targetY = netY + (targetY - netY) * (0.18 + 0.82 * threat);
     targetY = clamp(targetY, RINK.goalY + margin, RINK.goalY + RINK.goalH - margin);
 
-    // ── Chybovost — pomalý lidský drift ──────────────────────────────────
-    this._errPhase = ((this._errPhase ?? 0) + dt * 0.65);
-    const errAmp   = this.difficulty === 'competitive' ? 1.8 : 4.0;
-    const errRaw   = Math.sin(this._errPhase * 0.93) * errAmp
-                   + Math.cos(this._errPhase * 1.41) * errAmp * 0.55;
-    this._errY = ((this._errY ?? 0) + (errRaw - (this._errY ?? 0)) * Math.min(1, 1.2 * dt));
-    targetY    = clamp(targetY + this._errY, RINK.goalY + margin * 0.4, RINK.goalY + RINK.goalH - margin * 0.4);
+    // ── Chybovost: vrchol v nebezpečném pásmu (slot/kruh ~70-150px) ──────
+    // Z modré / středu hřiště je golman přesný → tam góly nepadají
+    // Ze slotu/kruhů má větší chybu → realistické NHL statistiky
+    this._errPhase = ((this._errPhase ?? 0) + dt * 0.60);
+    const errZone    = clamp(1 - Math.pow((distToPuck - 100) / 105, 2), 0, 1); // bell curve, vrchol ~100px
+    const errAmpBase = this.difficulty === 'competitive' ? 2.0 : 4.8;
+    const errAmp     = errAmpBase * (0.08 + 0.92 * errZone);
+    const errRaw     = Math.sin(this._errPhase * 0.88) * errAmp
+                     + Math.cos(this._errPhase * 1.47) * errAmp * 0.52;
+    this._errY = ((this._errY ?? 0) + (errRaw - (this._errY ?? 0)) * Math.min(1, 1.0 * dt));
+    targetY    = clamp(targetY + this._errY, RINK.goalY + margin * 0.35, RINK.goalY + RINK.goalH - margin * 0.35);
 
     // ── Wraparound: hráč s pukem za brankou → přilepíme k bližší tyčce ──
     const carrier = world.players.find(p => p.hasPuck);
@@ -146,14 +164,15 @@ export class Goalie {
     }
 
     // ── Pohyb (spring-damper) ────────────────────────────────────────────
-    const speedMult = this.difficulty === 'competitive' ? 1.25 : 0.88;
-    const effSpeed  = SPEED * (0.40 + 0.60 * threat) * speedMult;
-    let desVx = (targetX - this.x) * 11;
-    let desVy = (targetY - this.y) * 11;
+    // Z dálky (nízký threat) golman hýbe pomalu → nechybuje se zbytečně
+    const speedMult = this.difficulty === 'competitive' ? 1.22 : 0.85;
+    const effSpeed  = SPEED * (0.12 + 0.88 * threat) * speedMult;
+    let desVx = (targetX - this.x) * 10;
+    let desVy = (targetY - this.y) * 10;
     const dspd = Math.hypot(desVx, desVy);
     if (dspd > effSpeed) { const f = effSpeed / dspd; desVx *= f; desVy *= f; }
-    const accMult = this.difficulty === 'competitive' ? 1.2 : 0.75;
-    const acc = Math.min(1, 11 * dt * accMult);
+    const accMult = this.difficulty === 'competitive' ? 1.18 : 0.72;
+    const acc = Math.min(1, 10 * dt * accMult);
     this._gvx += (desVx - this._gvx) * acc;
     this._gvy += (desVy - this._gvy) * acc;
     this.x += this._gvx * dt;
