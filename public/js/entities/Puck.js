@@ -357,7 +357,8 @@ function _carryGoalCheck(puck) {
 // ── Jednotná branková mechanika ──────────────────────────────────────────
 // Jeden průchod per gól, jedna geometrie: (1) tyčky + břevno odrazí, (2) detekce
 // gólu při průletu čárou mezi tyčkami pod břevnem, (3) síť puk udrží uvnitř.
-const POST_R = 2.5; // tloušťka tyčky
+const POST_R      = 3.5; // kolizní rádius tyčky (px)
+const GOAL_Y_MARG = 1.5; // y-okraj pro detekci gólu — odděleno od POST_R
 
 function _resolveGoals(puck) {
   const d = RINK.goalDepth;
@@ -418,7 +419,7 @@ function _resolveOneGoal(puck, lineX, backX, dir, result) {
     const t   = Math.abs(dxm) > 1e-9 ? (lineX - prevX) / dxm : 0;
     const yAt = (puck.prevY ?? puck.y) + (puck.y - (puck.prevY ?? puck.y)) * t;
     const zAt = (puck.prevZ ?? puck.z) + (puck.z - (puck.prevZ ?? puck.z)) * t;
-    if (yAt > gy1 + POST_R && yAt < gy2 - POST_R) {
+    if (yAt > gy1 + GOAL_Y_MARG && yAt < gy2 - GOAL_Y_MARG) {
       if (zAt <= cbar) {
         goal = true;
         puck._inNet = true;                       // od teď puk tvrdě držíme v boxu sítě

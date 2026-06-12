@@ -61,6 +61,7 @@ const DICT = {
     mode_rules: 'pravidla',
     mode_arcade: 'arkáda',
     // Pauza
+    vol_label: 'Hlasitost',
     pause: 'PAUZA',
     resume: 'POKRAČOVAT',
     disconnect: 'ODPOJIT — ZPĚT DO MENU',
@@ -146,6 +147,7 @@ const DICT = {
     player: 'player',
     mode_rules: 'rules',
     mode_arcade: 'arcade',
+    vol_label: 'Volume',
     pause: 'PAUSE',
     resume: 'RESUME',
     disconnect: 'DISCONNECT — BACK TO MENU',

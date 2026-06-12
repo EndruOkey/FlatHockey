@@ -3,12 +3,33 @@ import { NetGame, SandboxGame } from './game.js';
 import { Player } from './entities/Player.js';
 import { PLAYER, RINK } from './constants.js';
 import { t, applyI18n, toggleLang, setOnChange } from './i18n.js';
+import { setVolume, getVolume } from './sound.js';
 
 const $ = id => document.getElementById(id);
 const canvas = $('canvas');
 const lobby  = $('lobby');
 const status = $('status');
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// Volume slidery — inicializace + sync při změně
+function _initVolSliders() {
+  const pct = Math.round(getVolume() * 100);
+  for (const [sliderId, pctId] of [['vol-slider', 'vol-pct'], ['vol-slider-pause', 'vol-pct-pause']]) {
+    const sl = $(sliderId), lb = $(pctId);
+    if (!sl) continue;
+    sl.value = pct;
+    lb.textContent = pct + '%';
+    sl.addEventListener('input', () => {
+      const v = sl.value / 100;
+      setVolume(v);
+      $('vol-pct').textContent       = sl.value + '%';
+      $('vol-pct-pause').textContent = sl.value + '%';
+      $('vol-slider').value       = sl.value;
+      $('vol-slider-pause').value = sl.value;
+    });
+  }
+}
+_initVolSliders();
 
 // Předdefinovaná paleta
 const PALETTE = ['#3a9fff','#1b4fd1','#ff4455','#b81d3a','#19c37d','#0c7a4a',

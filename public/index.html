@@ -200,6 +200,10 @@
     }
     #resume-btn { background: linear-gradient(135deg, #2266cc, #1144aa); }
     #leave-btn  { background: #3a1620; border: 1px solid #5a2230; color: #ff8a9a; }
+    .vol-row { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 0 2px; }
+    .vol-row label { font-size: 0.75rem; color: #667; white-space: nowrap; letter-spacing: 0.04em; text-transform: uppercase; }
+    .vol-row input[type=range] { flex: 1; height: 4px; accent-color: #3a9fff; cursor: pointer; }
+    .vol-pct { font-size: 0.78rem; color: #8a93a6; min-width: 34px; text-align: right; }
   </style>
 </head>
 <body>
@@ -215,6 +219,11 @@
         <button id="go-online" class="big primary" data-i18n="play_online">HRÁT ONLINE</button>
         <button id="go-solo"   class="big ghost" data-i18n="solo">SOLO TRÉNINK</button>
         <button id="go-profile" class="ghost" data-i18n="profile_btn">PROFIL & DRES</button>
+        <div class="vol-row">
+          <label data-i18n="vol_label">Hlasitost</label>
+          <input type="range" id="vol-slider" min="0" max="100" step="1" value="80">
+          <span class="vol-pct" id="vol-pct">80%</span>
+        </div>
       </div>
 
       <!-- PROFIL -->
@@ -324,6 +333,11 @@
     <div class="box">
       <h2 id="pause-title" data-i18n="pause">PAUZA</h2>
       <button id="resume-btn" data-i18n="resume">POKRAČOVAT</button>
+      <div class="vol-row">
+        <label data-i18n="vol_label">Hlasitost</label>
+        <input type="range" id="vol-slider-pause" min="0" max="100" step="1" value="80">
+        <span class="vol-pct" id="vol-pct-pause">80%</span>
+      </div>
       <button id="leave-btn" data-i18n="disconnect">ODPOJIT — ZPĚT DO MENU</button>
     </div>
   </div>

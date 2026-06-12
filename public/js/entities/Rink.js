@@ -87,6 +87,10 @@ export class Rink {
       ctx.stroke();
     }
 
+    // Trapézové čáry za oběma brankami (NHL Rule 1.7)
+    _drawTrapezoid(ctx, cam, RINK.goalLineLeft,  -1);
+    _drawTrapezoid(ctx, cam, RINK.goalLineRight, +1);
+
     ctx.restore();
 
     // Goals drawn outside clip — cage protrudes behind boards
@@ -161,6 +165,24 @@ function _drawFaceoffCircle(ctx, cam, cx, cy) {
   }
 }
 
+// Trapézové čáry za brankou (dir=+1: vpravo k x=1080, dir=-1: vlevo k x=0)
+function _drawTrapezoid(ctx, cam, glx, dir) {
+  const s = cam.scale, { ox, oy } = cam;
+  const endX = glx + dir * 90;
+  ctx.strokeStyle = '#cc2233';
+  ctx.lineWidth = 2 * s;
+  ctx.setLineDash([5 * s, 4 * s]);
+  ctx.beginPath();
+  ctx.moveTo(ox + glx * s,  oy + RINK.trapTopLine  * s);
+  ctx.lineTo(ox + endX * s, oy + RINK.trapTopBoard * s);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(ox + glx * s,  oy + RINK.trapBotLine  * s);
+  ctx.lineTo(ox + endX * s, oy + RINK.trapBotBoard * s);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
 // Rectangular goal cage that protrudes outside the rink
 // dir=+1: cage extends right (right goal), dir=-1: cage extends left (left goal)
 function _drawGoal(ctx, cam, glx, dir, postColor) {
@@ -209,13 +231,19 @@ function _drawGoal(ctx, cam, glx, dir, postColor) {
   ctx.lineTo(x, y2);
   ctx.stroke();
 
-  // Colored goal post on goal line
+  // Tyčky: tenký konektor + kolečka na rozích (odpovídají koliznímu rádiusu POST_R=3.5)
   ctx.strokeStyle = postColor;
-  ctx.lineWidth = 5 * s;
+  ctx.lineWidth = 2.5 * s;
   ctx.beginPath();
   ctx.moveTo(x, y1);
   ctx.lineTo(x, y2);
   ctx.stroke();
+  ctx.fillStyle = postColor;
+  for (const py of [y1, y2]) {
+    ctx.beginPath();
+    ctx.arc(x, py, 3.5 * s, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 function _roundRect(ctx, x, y, w, h, r) {
