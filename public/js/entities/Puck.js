@@ -121,12 +121,16 @@ export class Puck {
         this.ownerId = owner.id;
         return;
       }
-      // Nejdřív aktualizuj pozici puku na lopatu (prevX/Y jsou z tohoto snímku)
+      // Kontrola gölu jen když hráč PUK UŽ NESL minulý frame (ownerId = jeho id).
+      // Při SBĚRU (první frame carry) prevX = volný puk → stick tip může přeskočit čáru
+      // a způsobit falešný gól. Až od druhého frame je swept detekce bezpečná.
+      const alreadyCarried = (this.ownerId === owner.id);
       this._cradleTo(owner);
       this.ownerId = owner.id;
-      // Kontrola gólu při nošení přes čáru (swept detekce funguje díky prevX/Y)
-      this.goalScored = _resolveGoals(this);
-      if (this.goalScored) { owner.hasPuck = false; this.ownerId = null; return; }
+      if (alreadyCarried) {
+        this.goalScored = _resolveGoals(this);
+        if (this.goalScored) { owner.hasPuck = false; this.ownerId = null; return; }
+      }
       // Puk je fyzicky v kleci (hráč strčil hokejku za branku) → zahoď puk
       if (_insideCage(this.x, this.y)) { owner.hasPuck = false; this.ownerId = null; }
       return;
