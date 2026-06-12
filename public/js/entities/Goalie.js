@@ -86,80 +86,81 @@ export class Goalie {
     }
     this._screen += (screen - this._screen) * Math.min(1, 6 * dt);
 
-    // Reaktivní sledování puku — s clonou je pomalejší
-    // Difficulty modifier: competitive = ostřejší, casual = laxnější
-    const diffMult = this.difficulty === 'competitive' ? 0.8 : 1.15;  // 20% lepší vs 15% horší
-    const baseLag = 5.5 * diffMult;  // ostřejší response
-    const lag = baseLag * (1 - this._screen * 0.6);  // screen ho více slepí
-    const pxClamp = this.side === 'right' ? Math.min(puck.x, netX - 1) : Math.max(puck.x, netX + 1);
-    this._percX += (pxClamp - this._percX) * Math.min(1, lag * dt);
-    this._percY += (puck.y - this._percY) * Math.min(1, lag * dt);
+    // ── Percepce puku (s clonou a lagem) ────────────────────────────────────
+    const diffMult = this.difficulty === 'competitive' ? 0.75 : 1.2;
+    const baseLag   = 5.8 * diffMult;
+    const lag       = baseLag * (1 - this._screen * 0.55);
+    const pxClamp   = this.side === 'right' ? Math.min(puck.x, netX - 1) : Math.max(puck.x, netX + 1);
+    this._percX += (pxClamp   - this._percX) * Math.min(1, lag * dt);
+    this._percY += (puck.y    - this._percY) * Math.min(1, lag * dt);
 
-    // Anticipace (bite): čte pohyb puku a kousek ho předbíhá
-    // Competitive = lepší bite (lépe čte deky), Casual = horší bite (lehčeji se obejde)
+    // Anticipace pohybu puku — ztlumená, aby golman neskákal dopředu
     const rawVy = (puck.y - this._lastPuckY) / Math.max(dt, 1e-3);
     this._lastPuckY = puck.y;
-    const biteLearnRate = 12 * (this.difficulty === 'competitive' ? 1.25 : 0.8);  // lepší learning vs horší
-    this._puckVy += (rawVy - this._puckVy) * Math.min(1, biteLearnRate * dt);
-    const biteMult = this.difficulty === 'competitive' ? 1.15 : 0.85;
-    const bite = clamp(this._puckVy, -280, 280) * 0.095 * biteMult;
+    this._puckVy += (rawVy - this._puckVy) * Math.min(1, 10 * dt);
+    const biteMult = this.difficulty === 'competitive' ? 0.70 : 0.45;
+    const bite     = clamp(this._puckVy, -260, 260) * 0.060 * biteMult;
 
-    // ── Hra na úhel: stoj na spojnici puk → střed branky v dané hloubce ──
+    // ── Hloubka výjezdu ─────────────────────────────────────────────────
     const px = this._percX, py = this._percY;
-    const dxN = Math.max(1, (netX - px) * -this.inX);   // vodorovná vzdálenost puku PŘED brankou
-    const dyN = py - netY;                              // boční odchylka puku
+    const dxN        = Math.max(1, (netX - px) * -this.inX);
+    const dyN        = py - netY;
     const distToPuck = Math.hypot(dxN, dyN);
-    const angleAbs   = Math.atan2(Math.abs(dyN), dxN);  // 0 = frontální, velký = ostrý úhel
-
-    // Hloubka (challenge vs. retreat): difficulty makes big difference
-    // Competitive = aggressive challenges, casual = more conservative positioning
-    const depthMult = this.difficulty === 'competitive' ? 1.15 : 0.90;
+    const angleAbs   = Math.atan2(Math.abs(dyN), dxN);
+    const depthMult  = this.difficulty === 'competitive' ? 1.15 : 0.90;
     let depth;
-    if (distToPuck > 150)      depth = MAX_OUT * 0.95 * depthMult;           // daleko: výjezd
-    else if (distToPuck > 70)  depth = MAX_OUT * 1.05 * depthMult;           // slot: challenge
-    else                       depth = clamp(distToPuck * 0.35, 6, MAX_OUT * 0.7 * depthMult); // in-tight
+    if (distToPuck > 150)     depth = MAX_OUT * 0.95 * depthMult;
+    else if (distToPuck > 70) depth = MAX_OUT * 1.05 * depthMult;
+    else                      depth = clamp(distToPuck * 0.35, 6, MAX_OUT * 0.7 * depthMult);
     depth *= 1 - Math.min(1, angleAbs / (Math.PI * 0.5)) * (this.difficulty === 'competitive' ? 0.48 : 0.62);
-
-    // HROZBA: competitive detekuje dál (více agrese), casual je laxnější
-    const threatRange = this.difficulty === 'competitive' ? (430 - distToPuck) / 300 : (380 - distToPuck) / 260;
-    const threat = clamp(threatRange, 0, 1);
+    const threatRange  = this.difficulty === 'competitive' ? (430 - distToPuck) / 300 : (380 - distToPuck) / 260;
+    const threat       = clamp(threatRange, 0, 1);
     const depthBaseline = this.difficulty === 'competitive' ? 0.40 : 0.32;
     depth *= depthBaseline + (1 - depthBaseline) * threat;
     let targetX = netX + this.inX * depth;
 
-    // Pravý úhlový bod: průsečík spojnice puk→střed branky s hloubkovou rovinou x=targetX.
-    const denom = Math.abs(netX - px) < 1 ? -this.inX : (netX - px);
-    const s = (targetX - px) / denom;
-    const margin = COVER_H * 0.45;
-    let targetY = py + s * (netY - py) + bite * threat;  // anticipace jen při hrozbě
-    // při klidu drž střed branky (nezrcadli vzdálený puk laterálně) → přirozený, ne hyperaktivní
-    targetY = netY + (targetY - netY) * (0.25 + 0.75 * threat);
+    // ── Cílová Y: úhlová hra bez singularity ────────────────────────────
+    // denom je vzdálenost puku od čáry; clamp na min 30 aby s nevyletělo při puku těsně u čáry
+    const denomRaw  = netX - px;
+    const denomSafe = Math.sign(denomRaw || -this.inX) * Math.max(Math.abs(denomRaw), 30);
+    const s         = clamp((targetX - px) / denomSafe, -0.15, 1.05);
+    const margin    = COVER_H * 0.45;
+    let targetY = py + s * (netY - py) + bite * threat;
+    // Při nízkém ohrožení tahej ke středu branky; při hrozbě hraje plný úhel
+    targetY = netY + (targetY - netY) * (0.20 + 0.80 * threat);
     targetY = clamp(targetY, RINK.goalY + margin, RINK.goalY + RINK.goalH - margin);
 
-    // Wraparound obrana: hráč s pukem za brankou → přilep se k bližší tyčce
+    // ── Chybovost — pomalý lidský drift ──────────────────────────────────
+    this._errPhase = ((this._errPhase ?? 0) + dt * 0.65);
+    const errAmp   = this.difficulty === 'competitive' ? 1.8 : 4.0;
+    const errRaw   = Math.sin(this._errPhase * 0.93) * errAmp
+                   + Math.cos(this._errPhase * 1.41) * errAmp * 0.55;
+    this._errY = ((this._errY ?? 0) + (errRaw - (this._errY ?? 0)) * Math.min(1, 1.2 * dt));
+    targetY    = clamp(targetY + this._errY, RINK.goalY + margin * 0.4, RINK.goalY + RINK.goalH - margin * 0.4);
+
+    // ── Wraparound: hráč s pukem za brankou → přilepíme k bližší tyčce ──
     const carrier = world.players.find(p => p.hasPuck);
     if (carrier && this.inX * (carrier.x - netX) > 8) {
       targetX = netX;
       targetY = carrier.y < netY ? RINK.goalY + 4 : RINK.goalY + RINK.goalH - 4;
     }
 
-    // Plynulý přesun: větší baseline speed + lepší akcelerace
-    // Difficulty: competitive = FAST & SHARP, casual = slower & lazy
-    const speedMult = this.difficulty === 'competitive' ? 1.25 : 0.85;
-    const effSpeed = SPEED * (0.45 + 0.55 * threat) * speedMult;
-    let desVx = (targetX - this.x) * 13;
-    let desVy = (targetY - this.y) * 13;
+    // ── Pohyb (spring-damper) ────────────────────────────────────────────
+    const speedMult = this.difficulty === 'competitive' ? 1.25 : 0.88;
+    const effSpeed  = SPEED * (0.40 + 0.60 * threat) * speedMult;
+    let desVx = (targetX - this.x) * 11;
+    let desVy = (targetY - this.y) * 11;
     const dspd = Math.hypot(desVx, desVy);
     if (dspd > effSpeed) { const f = effSpeed / dspd; desVx *= f; desVy *= f; }
-    const accMult = this.difficulty === 'competitive' ? 1.3 : 0.8;
-    const acc = Math.min(1, 14 * dt * accMult);
+    const accMult = this.difficulty === 'competitive' ? 1.2 : 0.75;
+    const acc = Math.min(1, 11 * dt * accMult);
     this._gvx += (desVx - this._gvx) * acc;
     this._gvy += (desVy - this._gvy) * acc;
     this.x += this._gvx * dt;
     this.y += this._gvy * dt;
-    this._vy = (this.y - prevY) / Math.max(dt, 1e-3); // boční rychlost pro pětku
+    this._vy = (this.y - prevY) / Math.max(dt, 1e-3);
 
-    // Natočení čelem k puku (square-up) — náklon dle výškové odchylky puku (symetrické, nezávislé na straně)
+    // Natočení čelem k puku
     let tilt = clamp(-Math.atan2(this._percY - this.y, Math.abs(this._percX - this.x) + 4), -0.42, 0.42);
     this._tilt += (tilt - this._tilt) * Math.min(1, 8 * dt);
   }
