@@ -92,11 +92,13 @@ router.get('/discord/callback', async (req, res) => {
     const userRes = await fetch('https://discord.com/api/users/@me', {
       headers: { Authorization: authHeader },
     });
+    if (!userRes.ok) throw new Error(`Discord /users/@me ${userRes.status}`);
     const discordUser = await userRes.json();
+    if (!discordUser.id) throw new Error('Discord user missing id');
 
     let is_sponsor = false;
-    const sponsorRoleId = e().DISCORD_SPONSOR_ROLE_ID;
-    const guildId = e().DISCORD_GUILD_ID;
+    const sponsorRoleId = e().DISCORD_SPONSOR_ROLE_ID?.trim();
+    const guildId = e().DISCORD_GUILD_ID?.trim();
     if (sponsorRoleId && guildId) {
       try {
         const memberRes = await fetch(
@@ -143,11 +145,13 @@ router.post('/email/request', express.json(), async (req, res) => {
     return res.status(400).json({ error: 'invalid_email' });
   }
   const key = email.toLowerCase();
+  const now = Date.now();
   const rl = magicRateLimit.get(key);
-  if (rl && rl.count >= 3 && Date.now() - rl.ts < 600_000) {
+  const fresh = rl && now - rl.ts < 600_000;
+  if (fresh && rl.count >= 3) {
     return res.status(429).json({ error: 'rate_limited' });
   }
-  magicRateLimit.set(key, { count: (rl?.count || 0) + 1, ts: rl?.ts || Date.now() });
+  magicRateLimit.set(key, { count: fresh ? rl.count + 1 : 1, ts: fresh ? rl.ts : now });
 
   const display_name = key.split('@')[0];
   const user_id = upsertEmailUser(key, display_name);

@@ -154,7 +154,6 @@ function profile() {
     number: Number.isFinite(n) ? Math.max(0, Math.min(99, n)) : null,
     helmet: swHelmet.get(), gloves: swGloves.get(), tape: swTape.get(), trail: swTrail.get(),
     stick: swStick.get(), tapeStyle: chTapeStyle.get(), helmetType: chHelmetType.get(), visor: swVisor.get(),
-    code: codeInput.value || '',
   };
 }
 
@@ -435,15 +434,21 @@ $('discord-login-btn').addEventListener('click', loginWithDiscord);
 $('magic-send-btn').addEventListener('click', async () => {
   const email = $('magic-email').value.trim();
   if (!email) { authMsg.textContent = 'Zadej emailovou adresu.'; authMsg.style.color = '#ff8a9a'; return; }
-  $('magic-send-btn').disabled = true;
+  const btn = $('magic-send-btn');
+  btn.disabled = true;
   authMsg.textContent = 'Odesílám…'; authMsg.style.color = '#8a93a6';
-  const res = await requestMagicLink(email);
-  $('magic-send-btn').disabled = false;
-  if (res.ok) {
-    authMsg.textContent = '✅ Odkaz odeslán! Zkontroluj email.'; authMsg.style.color = '#6ee0a0';
-  } else {
-    const msgs = { invalid_email: 'Neplatný email.', rate_limited: 'Příliš mnoho pokusů — zkus za 10 minut.' };
-    authMsg.textContent = msgs[res.error] || 'Chyba odesílání.'; authMsg.style.color = '#ff8a9a';
+  try {
+    const res = await requestMagicLink(email);
+    if (res.ok) {
+      authMsg.textContent = '✅ Odkaz odeslán! Zkontroluj email.'; authMsg.style.color = '#6ee0a0';
+    } else {
+      const msgs = { invalid_email: 'Neplatný email.', rate_limited: 'Příliš mnoho pokusů — zkus za 10 minut.' };
+      authMsg.textContent = msgs[res.error] || 'Chyba odesílání.'; authMsg.style.color = '#ff8a9a';
+    }
+  } catch {
+    authMsg.textContent = 'Síťová chyba — zkus znovu.'; authMsg.style.color = '#ff8a9a';
+  } finally {
+    btn.disabled = false;
   }
 });
 

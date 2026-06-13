@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { randomBytes } from 'crypto';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -66,6 +67,8 @@ export function upsertDiscordUser({ discord_id, display_name, avatar_url, is_spo
     db.prepare(`
       UPDATE users SET display_name = ?, avatar_url = ?, is_sponsor = ? WHERE discord_id = ?
     `).run(display_name, avatar_url, is_sponsor ? 1 : 0, discord_id);
+    ensureProfile(existing.id);
+    ensureStats(existing.id);
     return existing.id;
   }
   const info = db.prepare(`
@@ -118,7 +121,7 @@ export function getStats(user_id) {
 // ── Magic-link session helpers ────────────────────────────────────────────────
 
 export function createMagicToken(user_id, ttlSeconds = 900) {
-  const token = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+  const token = randomBytes(32).toString('hex');
   const expires_at = Math.floor(Date.now() / 1000) + ttlSeconds;
   db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)').run(token, user_id, expires_at);
   return token;
@@ -133,7 +136,8 @@ export function consumeMagicToken(token) {
 }
 
 export function cleanExpiredTokens() {
-  db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(Math.floor(Date.now() / 1000));
+  const now = Math.floor(Date.now() / 1000);
+  db.prepare('DELETE FROM sessions WHERE expires_at < ? OR used = 1').run(now);
 }
 
 export default db;

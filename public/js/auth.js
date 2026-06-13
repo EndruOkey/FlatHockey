@@ -16,16 +16,18 @@ function notify() {
 }
 
 // Načte session ze serveru (při startu stránky)
+// 401 = určitě nepřihlášen; 5xx/síťová chyba = zachovej předchozí stav
 export async function loadSession() {
   try {
     const res = await fetch('/auth/me', { credentials: 'same-origin' });
     if (res.ok) {
       _user = await res.json();
-    } else {
+    } else if (res.status === 401) {
       _user = null;
     }
+    // 5xx — stav nezměníme, server je dočasně nedostupný
   } catch {
-    _user = null;
+    // Síťová chyba — stav nezměníme
   }
   notify();
 }
