@@ -187,15 +187,17 @@ export class NetGame {
 
   _applyGoalie(g, d) {
     if (!d) return;
-    const prevSave = g._saveType, prevFlash = g._saveFlash || 0;
+    const prevFlash = g._saveFlash || 0;
     g._tx = d.x; g._ty = d.y; g._ttilt = d.t;
     g._holdTimer = d.h ? 1 : 0; g._saveFlashMax = d.sm || 0.3; g._screen = d.sc;
     g.color = d.col || null;
-    // Zvuk zákroku: nový saveFlash vyšší než starý = čerstvý zákrok
+    // Zvuk zákroku + vizuální recoil: nový saveFlash vyšší než starý = čerstvý zákrok
     if (d.sf > prevFlash + 0.05) {
       if      (d.st === 'glove')   SFX.glove();
       else if (d.st === 'blocker') SFX.blocker();
       else if (d.st === 'pads' || d.st === 'cover') SFX.pads();
+      g._saveRecoil  = 0.15;
+      g._saveRecoilX = Math.random() < 0.5 ? -1 : 1;
     }
     g._saveType = d.st; g._saveFlash = d.sf;
   }
@@ -233,9 +235,13 @@ export class NetGame {
       this.puck.y += (this.puck._ty - this.puck.y) * k;
     }
     for (const g of [this.goalieL, this.goalieR]) {
-      g.x += ((g._tx ?? g.x) - g.x) * k; g.y += ((g._ty ?? g.y) - g.y) * k;
+      const prevGY = g.y;
+      g.x += ((g._tx ?? g.x) - g.x) * k;
+      g.y += ((g._ty ?? g.y) - g.y) * k;
+      g._vy = (g.y - prevGY) / Math.max(dt, 1e-3);
       g._tilt = lerpAngle(g._tilt, g._ttilt ?? 0, ka);
-      if (g._saveFlash > 0) g._saveFlash = Math.max(0, g._saveFlash - dt);
+      if (g._saveFlash  > 0) g._saveFlash  = Math.max(0, g._saveFlash  - dt);
+      if (g._saveRecoil > 0) g._saveRecoil = Math.max(0, g._saveRecoil - dt * 4);
     }
   }
 
