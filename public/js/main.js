@@ -211,7 +211,7 @@ function readSettings() {
 }
 
 // ── Navigace mezi obrazovkami ─────────────────────────────────────────
-const VIEWS = { main:'v-main', profile:'v-profile', browse:'v-browse', create:'v-create', wait:'v-wait' };
+const VIEWS = { splash:'v-splash', main:'v-main', profile:'v-profile', browse:'v-browse', create:'v-create', wait:'v-wait' };
 function showView(name) {
   for (const [k, id] of Object.entries(VIEWS)) $(id).style.display = (k === name) ? '' : 'none';
 }
@@ -239,11 +239,32 @@ function commitProfile() {
   setStatus('');
   return true;
 }
-function requireProfile() {   // jemné navedení na profil (ne tvrdá zeď)
-  if (!hasName()) nameInput.value = suggestName();   // předvyplň návrh → nikdo nezůstane zaseklý
+function requireProfile() {
+  if (!hasName()) nameInput.value = getUser()?.display_name || suggestName();
   showView('profile'); drawPreview();
   setStatus(t('welcome'), '#6ee0a0');
   setTimeout(() => { try { nameInput.focus(); nameInput.select(); } catch {} }, 60);
+}
+
+// Guest flow — tutorial pokud první návštěva, jinak profil/menu
+function proceedAsGuest() {
+  if (!localStorage.getItem('hockey_tutorial_done')) { _startTutorial(); return; }
+  if (!hasName()) { requireProfile(); return; }
+  showView('main');
+}
+
+// Rozhodne jakou obrazovku ukázat po načtení session
+function initFlow() {
+  const user = getUser();
+  const tutorialDone = !!localStorage.getItem('hockey_tutorial_done');
+  if (user) {
+    // Přihlášený uživatel
+    if (!tutorialDone) { _startTutorial(); return; }
+    showView('main');
+  } else {
+    // Guest nebo nepřihlášený
+    showView('splash');
+  }
 }
 $('profile-done').onclick = () => { if (commitProfile()) showView('main'); };
 
@@ -373,7 +394,6 @@ const authAvatar  = $('auth-avatar');
 const authTier    = $('auth-tier');
 const authDropdown = $('auth-dropdown');
 const authModal   = $('auth-modal');
-const authMsg     = $('auth-msg');
 
 function updateAuthUI(user) {
   if (user) {
@@ -409,9 +429,13 @@ document.addEventListener('click', e => {
   if (!authWrap.contains(e.target)) authDropdown.classList.remove('open');
 });
 
+$('splash-discord-btn').addEventListener('click', loginWithDiscord);
+$('splash-guest-btn').addEventListener('click', proceedAsGuest);
+
 $('dd-logout').addEventListener('click', async () => {
   await logout();
   authDropdown.classList.remove('open');
+  showView('splash');
 });
 $('dd-profile').addEventListener('click', () => {
   authDropdown.classList.remove('open');
@@ -420,13 +444,14 @@ $('dd-profile').addEventListener('click', () => {
 
 // Modal
 function openAuthModal() {
-  authMsg.textContent = '';
-  $('magic-email').value = '';
   authModal.classList.add('open');
 }
 function closeAuthModal() { authModal.classList.remove('open'); }
 
-$('auth-close-btn').addEventListener('click', closeAuthModal);
+$('auth-close-btn').addEventListener('click', () => {
+  closeAuthModal();
+  if ($('v-splash').style.display !== 'none') proceedAsGuest();
+});
 authModal.addEventListener('click', e => { if (e.target === authModal) closeAuthModal(); });
 
 $('discord-login-btn').addEventListener('click', loginWithDiscord);
@@ -439,14 +464,12 @@ applyI18n();
 updateVisorRow();
 drawPreview();
 
-// Auth: načti session + zpracuj OAuth redirect
 const oauthResult = handleOAuthRedirect();
+// Nejdřív načti session, pak rozhoduj o view — aby se přihlášený uživatel nikdy nezobrazil na splash
 loadSession().then(() => {
   if (oauthResult === 'ok') setStatus('✅ Přihlášení úspěšné!', '#6ee0a0');
   else if (oauthResult?.error) setStatus('❌ Přihlášení selhalo: ' + oauthResult.error, '#ff4455');
+  initFlow();
 });
 
-if (hasName()) showView('main');
-else if (!localStorage.getItem('hockey_tutorial_done')) _startTutorial();  // první návštěva → tutorial → profil
-else requireProfile();
 setInterval(() => { if (!inGame && $('v-browse').style.display !== 'none') net.listLobbies(); }, 4000);
