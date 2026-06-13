@@ -8,16 +8,8 @@ import {
 
 const router = express.Router();
 
-const {
-  DISCORD_CLIENT_ID,
-  DISCORD_CLIENT_SECRET,
-  DISCORD_REDIRECT_URI,
-  DISCORD_SPONSOR_ROLE_ID,
-  RESEND_API_KEY,
-  EMAIL_FROM = 'noreply@flathockey.fun',
-  JWT_SECRET,
-  BASE_URL = 'https://flathockey.fun',
-} = process.env;
+// env vars čteme lazy uvnitř handlerů — ESM hoisting způsobuje undefined při top-level destructuringu
+const e = () => process.env;
 
 const JWT_COOKIE = 'fh_session';
 const JWT_TTL    = 60 * 60 * 24 * 30; // 30 dní
@@ -25,7 +17,7 @@ const JWT_TTL    = 60 * 60 * 24 * 30; // 30 dní
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function signJwt(user_id) {
-  return jwt.sign({ sub: user_id }, JWT_SECRET, { expiresIn: JWT_TTL });
+  return jwt.sign({ sub: user_id }, e().JWT_SECRET, { expiresIn: JWT_TTL });
 }
 
 function setCookie(res, token) {
@@ -41,7 +33,7 @@ export function requireAuth(req, res, next) {
   const token = req.cookies?.[JWT_COOKIE];
   if (!token) return res.status(401).json({ error: 'unauthenticated' });
   try {
-    const { sub } = jwt.verify(token, JWT_SECRET);
+    const { sub } = jwt.verify(token, e().JWT_SECRET);
     req.userId = sub;
     next();
   } catch {
@@ -63,8 +55,8 @@ router.get('/discord', (_req, res) => {
   const state = crypto.randomBytes(16).toString('hex');
   oauthStates.set(state, Date.now() + 600_000);
   const params = new URLSearchParams({
-    client_id: DISCORD_CLIENT_ID,
-    redirect_uri: DISCORD_REDIRECT_URI,
+    client_id: e().DISCORD_CLIENT_ID,
+    redirect_uri: e().DISCORD_REDIRECT_URI,
     response_type: 'code',
     scope: 'identify guilds.members.read',
     state,
@@ -74,22 +66,22 @@ router.get('/discord', (_req, res) => {
 
 router.get('/discord/callback', async (req, res) => {
   const { code, state } = req.query;
+  const BASE_URL = e().BASE_URL || 'https://flathockey.fun';
   if (!code || !state || !oauthStates.has(state)) {
     return res.redirect(`${BASE_URL}/?auth_error=invalid_state`);
   }
   oauthStates.delete(state);
 
   try {
-    // Exchange code for token
     const tokenRes = await fetch('https://discord.com/api/oauth2/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
-        client_id: DISCORD_CLIENT_ID,
-        client_secret: DISCORD_CLIENT_SECRET,
+        client_id: e().DISCORD_CLIENT_ID,
+        client_secret: e().DISCORD_CLIENT_SECRET,
         grant_type: 'authorization_code',
         code,
-        redirect_uri: DISCORD_REDIRECT_URI,
+        redirect_uri: e().DISCORD_REDIRECT_URI,
       }),
     });
     const tokenData = await tokenRes.json();
@@ -97,23 +89,23 @@ router.get('/discord/callback', async (req, res) => {
 
     const authHeader = `Bearer ${tokenData.access_token}`;
 
-    // Get user info
     const userRes = await fetch('https://discord.com/api/users/@me', {
       headers: { Authorization: authHeader },
     });
     const discordUser = await userRes.json();
 
-    // Check sponsor role
     let is_sponsor = false;
-    if (DISCORD_SPONSOR_ROLE_ID) {
+    const sponsorRoleId = e().DISCORD_SPONSOR_ROLE_ID;
+    const guildId = e().DISCORD_GUILD_ID;
+    if (sponsorRoleId && guildId) {
       try {
         const memberRes = await fetch(
-          `https://discord.com/api/users/@me/guilds/${process.env.DISCORD_GUILD_ID}/member`,
+          `https://discord.com/api/users/@me/guilds/${guildId}/member`,
           { headers: { Authorization: authHeader } }
         );
         if (memberRes.ok) {
           const member = await memberRes.json();
-          is_sponsor = member.roles?.includes(DISCORD_SPONSOR_ROLE_ID) ?? false;
+          is_sponsor = member.roles?.includes(sponsorRoleId) ?? false;
         }
       } catch { /* guild check nepovinný */ }
     }
@@ -133,13 +125,12 @@ router.get('/discord/callback', async (req, res) => {
     res.redirect(`${BASE_URL}/?auth_ok=1`);
   } catch (err) {
     console.error('Discord OAuth error:', err);
-    res.redirect(`${BASE_URL}/?auth_error=discord_failed`);
+    res.redirect(`${e().BASE_URL || 'https://flathockey.fun'}/?auth_error=discord_failed`);
   }
 });
 
 // ── Email magic link ───────────────────────────────────────────────────────────
 
-// Rate limit: max 3 magic links / email / 10 min
 const magicRateLimit = new Map();
 setInterval(() => {
   const cut = Date.now() - 600_000;
@@ -161,7 +152,10 @@ router.post('/email/request', express.json(), async (req, res) => {
   const display_name = key.split('@')[0];
   const user_id = upsertEmailUser(key, display_name);
   const token = createMagicToken(user_id);
+  const BASE_URL = e().BASE_URL || 'https://flathockey.fun';
   const link = `${BASE_URL}/auth/email/verify?token=${token}`;
+  const RESEND_API_KEY = e().RESEND_API_KEY;
+  const EMAIL_FROM = e().EMAIL_FROM || 'noreply@flathockey.fun';
 
   if (RESEND_API_KEY) {
     await fetch('https://api.resend.com/emails', {
@@ -190,6 +184,7 @@ router.post('/email/request', express.json(), async (req, res) => {
 });
 
 router.get('/email/verify', (req, res) => {
+  const BASE_URL = e().BASE_URL || 'https://flathockey.fun';
   const { token } = req.query;
   if (!token) return res.redirect(`${BASE_URL}/?auth_error=missing_token`);
   const user_id = consumeMagicToken(token);
@@ -217,7 +212,6 @@ router.post('/logout', (req, res) => {
   res.json({ ok: true });
 });
 
-// Periodicky čistí expirované magic tokeny
 setInterval(cleanExpiredTokens, 3_600_000);
 
 export default router;
