@@ -406,9 +406,7 @@ function updateAuthUI(user) {
     authTier.textContent  = user.is_sponsor ? '💎' : '';
     if (user.avatar_url) { authAvatar.src = user.avatar_url; authAvatar.style.display = 'block'; }
     else authAvatar.style.display = 'none';
-    // Synchronizuj jméno do profilu (pokud ještě nemá vlastní)
     if (!nameInput.value.trim()) nameInput.value = user.display_name;
-    // Sponsor přístup — synchronizuj vždy (i při odhlášení)
     isSponsor = !!user.is_sponsor;
     document.body.classList.toggle('sponsor', isSponsor);
   } else {
@@ -419,6 +417,8 @@ function updateAuthUI(user) {
     document.body.classList.remove('sponsor');
   }
   authDropdown.classList.remove('open');
+  // Zobraz Discord login banner v profilu jen pro guestů
+  $('profile-guest-login').style.display = user ? 'none' : '';
 }
 
 // Otevření/zavření dropdownu
@@ -437,6 +437,7 @@ document.addEventListener('click', e => {
 $('splash-tutorial-btn').addEventListener('click', _startTutorial);
 $('splash-discord-btn').addEventListener('click', loginWithDiscord);
 $('splash-guest-btn').addEventListener('click', proceedAsGuest);
+$('profile-discord-btn').addEventListener('click', loginWithDiscord);
 
 $('dd-logout').addEventListener('click', async () => {
   await logout();
