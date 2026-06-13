@@ -214,6 +214,11 @@ function readSettings() {
 const VIEWS = { splash:'v-splash', main:'v-main', profile:'v-profile', browse:'v-browse', create:'v-create', wait:'v-wait' };
 function showView(name) {
   for (const [k, id] of Object.entries(VIEWS)) $(id).style.display = (k === name) ? '' : 'none';
+  if (name === 'splash') {
+    const tutorialDone = !!localStorage.getItem('hockey_tutorial_done');
+    $('splash-first').style.display  = tutorialDone ? 'none' : '';
+    $('splash-return').style.display = tutorialDone ? '' : 'none';
+  }
 }
 document.querySelectorAll('.back').forEach(b => b.addEventListener('click', () => {
   if (!b.dataset.to) return;                           // tlačítka s vlastní logikou (profile-done)
@@ -429,6 +434,7 @@ document.addEventListener('click', e => {
   if (!authWrap.contains(e.target)) authDropdown.classList.remove('open');
 });
 
+$('splash-tutorial-btn').addEventListener('click', _startTutorial);
 $('splash-discord-btn').addEventListener('click', loginWithDiscord);
 $('splash-guest-btn').addEventListener('click', proceedAsGuest);
 
