@@ -4,7 +4,7 @@ import { Player } from './entities/Player.js';
 import { PLAYER, RINK } from './constants.js';
 import { t, applyI18n, toggleLang, setOnChange } from './i18n.js';
 import { setVolume, getVolume } from './sound.js';
-import { loadSession, onAuthChange, loginWithDiscord, requestMagicLink, logout, handleOAuthRedirect, getUser, isSponsor as authIsSponsor } from './auth.js';
+import { loadSession, onAuthChange, loginWithDiscord, logout, handleOAuthRedirect, getUser } from './auth.js';
 
 const $ = id => document.getElementById(id);
 const canvas = $('canvas');
@@ -431,26 +431,6 @@ authModal.addEventListener('click', e => { if (e.target === authModal) closeAuth
 
 $('discord-login-btn').addEventListener('click', loginWithDiscord);
 
-$('magic-send-btn').addEventListener('click', async () => {
-  const email = $('magic-email').value.trim();
-  if (!email) { authMsg.textContent = 'Zadej emailovou adresu.'; authMsg.style.color = '#ff8a9a'; return; }
-  const btn = $('magic-send-btn');
-  btn.disabled = true;
-  authMsg.textContent = 'Odesílám…'; authMsg.style.color = '#8a93a6';
-  try {
-    const res = await requestMagicLink(email);
-    if (res.ok) {
-      authMsg.textContent = '✅ Odkaz odeslán! Zkontroluj email.'; authMsg.style.color = '#6ee0a0';
-    } else {
-      const msgs = { invalid_email: 'Neplatný email.', rate_limited: 'Příliš mnoho pokusů — zkus za 10 minut.' };
-      authMsg.textContent = msgs[res.error] || 'Chyba odesílání.'; authMsg.style.color = '#ff8a9a';
-    }
-  } catch {
-    authMsg.textContent = 'Síťová chyba — zkus znovu.'; authMsg.style.color = '#ff8a9a';
-  } finally {
-    btn.disabled = false;
-  }
-});
 
 onAuthChange(updateAuthUI);
 

@@ -1,10 +1,7 @@
 import express from 'express';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
-import {
-  upsertDiscordUser, upsertEmailUser, getUserById,
-  createMagicToken, consumeMagicToken, cleanExpiredTokens,
-} from './db.js';
+import { upsertDiscordUser, getUserById } from './db.js';
 
 const router = express.Router();
 
@@ -131,72 +128,6 @@ router.get('/discord/callback', async (req, res) => {
   }
 });
 
-// ── Email magic link ───────────────────────────────────────────────────────────
-
-const magicRateLimit = new Map();
-setInterval(() => {
-  const cut = Date.now() - 600_000;
-  for (const [k, v] of magicRateLimit) if (v.ts < cut) magicRateLimit.delete(k);
-}, 60_000);
-
-router.post('/email/request', express.json(), async (req, res) => {
-  const { email } = req.body;
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return res.status(400).json({ error: 'invalid_email' });
-  }
-  const key = email.toLowerCase();
-  const now = Date.now();
-  const rl = magicRateLimit.get(key);
-  const fresh = rl && now - rl.ts < 600_000;
-  if (fresh && rl.count >= 3) {
-    return res.status(429).json({ error: 'rate_limited' });
-  }
-  magicRateLimit.set(key, { count: fresh ? rl.count + 1 : 1, ts: fresh ? rl.ts : now });
-
-  const display_name = key.split('@')[0];
-  const user_id = upsertEmailUser(key, display_name);
-  const token = createMagicToken(user_id);
-  const BASE_URL = e().BASE_URL || 'https://flathockey.fun';
-  const link = `${BASE_URL}/auth/email/verify?token=${token}`;
-  const RESEND_API_KEY = e().RESEND_API_KEY;
-  const EMAIL_FROM = e().EMAIL_FROM || 'noreply@flathockey.fun';
-
-  if (RESEND_API_KEY) {
-    await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: EMAIL_FROM,
-        to: key,
-        subject: 'Přihlášení do FlatHockey',
-        html: `
-          <p>Ahoj!</p>
-          <p>Klikni na odkaz níže pro přihlášení do FlatHockey. Platí 15 minut.</p>
-          <p><a href="${link}" style="font-size:18px;font-weight:bold">Přihlásit se</a></p>
-          <p style="color:#888;font-size:12px">Pokud jsi o přihlášení nežádal/a, tento email ignoruj.</p>
-        `,
-      }),
-    }).catch(err => console.error('Resend error:', err));
-  } else {
-    console.log('[magic link]', link);
-  }
-
-  res.json({ ok: true });
-});
-
-router.get('/email/verify', (req, res) => {
-  const BASE_URL = e().BASE_URL || 'https://flathockey.fun';
-  const { token } = req.query;
-  if (!token) return res.redirect(`${BASE_URL}/?auth_error=missing_token`);
-  const user_id = consumeMagicToken(token);
-  if (!user_id) return res.redirect(`${BASE_URL}/?auth_error=invalid_token`);
-  setCookie(res, signJwt(user_id));
-  res.redirect(`${BASE_URL}/?auth_ok=1`);
-});
-
 // ── Session API ───────────────────────────────────────────────────────────────
 
 router.get('/me', requireAuth, (req, res) => {
@@ -215,7 +146,5 @@ router.post('/logout', (req, res) => {
   res.clearCookie(JWT_COOKIE, { httpOnly: true, secure: true, sameSite: 'lax' });
   res.json({ ok: true });
 });
-
-setInterval(cleanExpiredTokens, 3_600_000);
 
 export default router;

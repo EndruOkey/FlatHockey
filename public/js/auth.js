@@ -36,17 +36,6 @@ export function loginWithDiscord() {
   window.location.href = '/auth/discord';
 }
 
-// Vrátí { ok: true } nebo { error: string }
-export async function requestMagicLink(email) {
-  const res = await fetch('/auth/email/request', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
-    credentials: 'same-origin',
-  });
-  return res.json();
-}
-
 export async function logout() {
   await fetch('/auth/logout', { method: 'POST', credentials: 'same-origin' });
   _user = null;
