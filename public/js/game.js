@@ -111,6 +111,8 @@ export class NetGame {
       me.aimDist = aimDist;
       _updateAim(me, aim, dt);
       if (!this.locked) me.update(dt);   // při buly setu / oslavě / píšťalce stojíme čelem k puku
+      // Client-side passReq: okamžitá odezva (server si to taky nastaví)
+      if (this.input.mmbJustPressed && !me.hasPuck) me.passReq = 0.9;
     }
     this.net.input({
       dx: this.input.dx, dy: this.input.dy,
@@ -172,6 +174,7 @@ export class NetGame {
       } else {
         e.tx = ps.x; e.ty = ps.y; e.tba = ps.ba; e.taa = ps.aa; e.tca = ps.ca; e.tsd = ps.sd;
         ent._dispReach = ps.dr; ent._dispCharge = ps.dc; ent.crossCheck = !!ps.cc; ent._lean = ps.ln;
+        ent.passReq = ps.pr ?? 0;
       }
     }
     for (const id of [...this.players.keys()]) if (!seen.has(id)) {
@@ -225,6 +228,7 @@ export class NetGame {
       ent.aimAngle   = lerpAngle(ent.aimAngle,   e.taa, ka);
       ent.carryAngle = lerpAngle(ent.carryAngle, e.tca, k);
       ent._stickDisp = lerpAngle(ent._stickDisp ?? e.tsd, e.tsd, k);
+      if (ent.passReq > 0) ent.passReq = Math.max(0, ent.passReq - dt);
     }
     // Puk: když ho držím lokálně, cradle k MÉ predikované holi (ostré vedení bez lagu),
     // jinak plynule k pozici od serveru.
@@ -249,8 +253,6 @@ export class NetGame {
     ctx.fillStyle = '#07090f';
     ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     this.rink.draw(ctx, cam);
-    this.goalieL.draw(ctx, cam);
-    this.goalieR.draw(ctx, cam);
     // Pevné objekty pro clip hokejky (hokejka neprojde hráči/gólmany)
     const solids = [];
     for (const e of this.players.values()) solids.push({ ent: e.ent, x: e.ent.x, y: e.ent.y, r: e.ent.radius });
@@ -262,6 +264,9 @@ export class NetGame {
       e.ent._isLocal = e.isMe;   // charge arc kreslíme jen vlastnímu hráči (ostatní vidí nápřah hole)
       e.ent.draw(ctx, cam);
     }
+    // Golmani navrchu — stejné pořadí jako solo (world: rink→puk→hráč→golman)
+    this.goalieL.draw(ctx, cam);
+    this.goalieR.draw(ctx, cam);
   }
 
   notify(text) { this._notice = { text, t: 3 }; }
