@@ -15,7 +15,8 @@ import cookieParser from 'cookie-parser';
 import { Server } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import authRouter from './auth.js';
+import authRouter, { verifySession } from './auth.js';
+import { updateStats } from './db.js';
 
 import { World } from './public/js/world.js';
 import { Player } from './public/js/entities/Player.js';
@@ -29,6 +30,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 app.disable('x-powered-by');
+app.use(express.json());
 app.use(cookieParser());
 app.use('/auth', authRouter);
 const server = http.createServer(app);
@@ -303,6 +305,10 @@ function createMatch(lobbyId) {
   world.onGoal = (result) => {
     if (match.offside || match.icing) return;   // gól během dojezdu offside/icing neplatí
     if (result === 'goal-away') match.score.away++; else match.score.home++;
+    if (match._lastTouchSid) {
+      if (!match._goalScorers) match._goalScorers = [];
+      match._goalScorers.push(match._lastTouchSid);
+    }
     io.to(match.room).emit('goal', { text: result === 'goal-away' ? 'GOAL! 🔴' : 'GOAL! 🔵' });
     match._goalAt = Date.now();
   };
@@ -433,6 +439,21 @@ function stepMatch(match) {
         match.ended = true;
         io.to(match.room).emit('gameover', { score: match.score });
         const lobbyId = match.room.replace('lobby:', '');
+        // Aktualizuj statistiky přihlášených hráčů
+        const endLobby = lobbies.get(lobbyId);
+        if (endLobby) {
+          const winTeam = match.score.home > match.score.away ? 'home' :
+                          match.score.away > match.score.home ? 'away' : null;
+          for (const [sid, mem] of endLobby.members) {
+            const sock = io.sockets.sockets.get(sid);
+            const userId = sock?.data?.userId;
+            if (!userId) continue;
+            const goals = (match._goalScorers || []).filter(s => s === sid).length;
+            const isWin = !!(winTeam && mem.team === winTeam);
+            const isLoss = !!(winTeam && mem.team !== winTeam);
+            try { updateStats(userId, { goals, games_played: 1, wins: isWin ? 1 : 0, losses: isLoss ? 1 : 0 }); } catch {}
+          }
+        }
         match.rematchTimer = setTimeout(() => {
           const lb = lobbies.get(lobbyId);
           if (lb && lb.match === match) autoRematch(lb);
@@ -451,8 +472,8 @@ function stepMatch(match) {
 
   match.world.update(DT);
 
-  // Sleduj poslední dotek (tým + origin pro icing)
-  for (const p of match.players.values()) if (p.hasPuck) { match.lastTouch = p.team; match.touchX = match.puck.x; }
+  // Sleduj poslední dotek (tým + hráč + origin pro icing)
+  for (const [sid, p] of match.players) if (p.hasPuck) { match.lastTouch = p.team; match.touchX = match.puck.x; match._lastTouchSid = sid; }
   // Kontrola pravidel (jen když je zapnuto a hraje se)
   if (match.rules && !match.stoppage && !match.world._goalLock && !match.ended) checkRules(match);
 
@@ -598,6 +619,10 @@ function leaveCurrentLobby(socket) {
 io.on('connection', (socket) => {
   if (connCount >= MAX_CONN) { socket.disconnect(true); return; }
   connCount++;
+  // Přečti JWT cookie a ulož userId pro tracking statistik
+  const rawCookie = socket.handshake.headers.cookie || '';
+  const cm = rawCookie.match(/(?:^|;\s*)fh_session=([^;]+)/);
+  socket.data.userId = cm ? verifySession(decodeURIComponent(cm[1])) : null;
 
   socket.on('lobby:list', () => { if (rateOk(socket, 'list', 500)) sendLobbyList(socket); });
 

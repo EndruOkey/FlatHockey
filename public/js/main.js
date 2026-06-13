@@ -4,7 +4,7 @@ import { Player } from './entities/Player.js';
 import { PLAYER, RINK } from './constants.js';
 import { t, applyI18n, toggleLang, setOnChange } from './i18n.js';
 import { setVolume, getVolume } from './sound.js';
-import { loadSession, onAuthChange, loginWithDiscord, logout, handleOAuthRedirect, getUser } from './auth.js';
+import { loadSession, onAuthChange, loginWithDiscord, logout, handleOAuthRedirect, getUser, loadServerStats, saveServerProfile } from './auth.js';
 
 const $ = id => document.getElementById(id);
 const canvas = $('canvas');
@@ -233,6 +233,8 @@ window.addEventListener('resize', resizeCanvas);
 const net = new Net();
 let inGame = false;
 let currentGame = null;
+let lastLobbyId = null;
+let _pendingJoinId = null;
 const setStatus = (m, c = '#888') => { status.textContent = m; status.style.color = c; };
 
 // ── Profil — povinný (bez přezdívky nepustíme dál) ────────────────────
@@ -240,7 +242,14 @@ const hasName = () => (nameInput.value || '').trim().length > 0;
 const suggestName = () => t('guest_name') + Math.floor(100 + Math.random() * 900);
 function commitProfile() {
   if (!hasName()) { setStatus(t('name_required'), '#ffcf3a'); nameInput.focus(); return false; }
-  profile();                 // ulož jméno + výbavu
+  const p = profile();       // ulož jméno + výbavu do localStorage
+  if (getUser()) {
+    saveServerProfile({      // synchronizuj na server pro přihlášené hráče
+      helmet: p.helmet, gloves: p.gloves, tape: p.tape, trail: p.trail, stick: p.stick,
+      tape_style: p.tapeStyle, helmet_type: p.helmetType, visor: p.visor,
+      handed: p.handed, number: p.number,
+    });
+  }
   setStatus('');
   return true;
 }
@@ -271,10 +280,30 @@ function initFlow() {
     showView('splash');
   }
 }
-$('profile-done').onclick = () => { if (commitProfile()) showView('main'); };
+$('profile-done').onclick = () => {
+  if (!commitProfile()) return;
+  if (_pendingJoinId) {
+    const id = _pendingJoinId; _pendingJoinId = null;
+    showView('browse'); net.joinLobby(id, profile(), null);
+  } else {
+    showView('main');
+  }
+};
 
 // ── Hlavní menu ───────────────────────────────────────────────────────
-$('go-profile').onclick = () => { showView('profile'); drawPreview(); };
+$('go-profile').onclick = () => { showView('profile'); drawPreview(); _loadStats(); };
+async function _loadStats() {
+  const stats = await loadServerStats();
+  const statsEl = $('profile-stats');
+  if (!stats || !getUser()) { statsEl.style.display = 'none'; return; }
+  statsEl.style.display = '';
+  $('stat-goals').textContent   = stats.goals        ?? 0;
+  $('stat-assists').textContent = stats.assists       ?? 0;
+  $('stat-saves').textContent   = stats.saves         ?? 0;
+  $('stat-games').textContent   = stats.games_played  ?? 0;
+  $('stat-wins').textContent    = stats.wins          ?? 0;
+  $('stat-losses').textContent  = stats.losses        ?? 0;
+}
 $('go-online').onclick  = () => { if (!commitProfile()) return requireProfile(); showView('browse'); net.listLobbies(); };
 $('go-solo').onclick     = () => {
   if (!commitProfile()) return requireProfile();
@@ -346,17 +375,27 @@ function renderWait(st) {
   sb.style.display = isHost ? '' : 'none';
   sb.disabled = st.players.length === 0;
 }
-net.onLobbyJoined = (st) => { setStatus(''); renderWait(st); };
+net.onLobbyJoined = (st) => { lastLobbyId = st.id; setStatus(''); renderWait(st); };
 net.onLobbyState  = (st) => { if (!inGame) renderWait(st); };
 net.onLobbyError  = (code) => setStatus(t(code), '#ff4455');
 document.querySelectorAll('.pick-btn').forEach(b => b.addEventListener('click', () => net.setTeam(b.dataset.team)));
 $('start-btn').onclick   = () => net.startLobby();
-$('wait-leave').onclick  = () => { net.leaveLobby(); showView('browse'); net.listLobbies(); };
+$('wait-leave').onclick  = () => { net.leaveLobby(); lastLobbyId = null; showView('browse'); net.listLobbies(); };
+$('share-btn').addEventListener('click', () => {
+  if (!lastLobbyId) return;
+  const url = location.origin + '/?join=' + lastLobbyId;
+  navigator.clipboard?.writeText(url).then(() => {
+    setStatus(t('link_copied'), '#6ee0a0');
+    setTimeout(() => setStatus(''), 3000);
+  }).catch(() => setStatus(url, '#8aa'));
+});
 
 // ── Start hry ─────────────────────────────────────────────────────────
 net.onLobbyStart = (data) => {
   if (inGame && currentGame?.stop) currentGame.stop();
-  startGame(new NetGame(canvas, net, net.id, data && data.settings));
+  const g = new NetGame(canvas, net, net.id, data && data.settings);
+  g.onExit = () => { stopGame(); showView('main'); };
+  startGame(g);
 };
 function startGame(game) { inGame = true; currentGame = game; lobby.style.display = 'none'; canvas.style.cursor = 'crosshair'; game.start(); }
 function stopGame()  { if (currentGame?.stop) currentGame.stop(); currentGame = null; inGame = false; lobby.style.display = ''; canvas.style.cursor = 'default'; }
@@ -379,7 +418,7 @@ const pauseMenu = $('pause-menu'), pauseTitle = $('pause-title'), resumeBtn = $(
 function showPause(title=t('pause'), disc=false) { currentGame?.input?.clear(); pauseTitle.textContent = title; resumeBtn.style.display = disc ? 'none' : ''; pauseMenu.style.display = 'flex'; }
 const hidePause = () => pauseMenu.style.display = 'none';
 resumeBtn.addEventListener('click', hidePause);
-leaveBtn.addEventListener('click', () => { net.leaveLobby(); location.reload(); });
+leaveBtn.addEventListener('click', () => { net.leaveLobby(); stopGame(); hidePause(); showView('main'); });
 net.onPeerLeft = () => { if (inGame) currentGame?.notify?.(t('peer_left')); };  // hra běží dál, jen upozorni
 window.addEventListener('keydown', e => { if (e.key !== 'Escape' || !inGame) return; pauseMenu.style.display === 'flex' ? hidePause() : showPause(); });
 window.addEventListener('beforeunload', () => net.leaveLobby());
@@ -410,15 +449,16 @@ function updateAuthUI(user) {
     isSponsor = !!user.is_sponsor;
     document.body.classList.toggle('sponsor', isSponsor);
   } else {
-    authLabel.textContent = '👤 Přihlásit se';
+    authLabel.textContent = t('auth_label_guest');
     authTier.textContent  = '';
     authAvatar.style.display = 'none';
     isSponsor = false;
     document.body.classList.remove('sponsor');
   }
   authDropdown.classList.remove('open');
-  // Zobraz Discord login banner v profilu jen pro guestů
+  // Zobraz/skryj Discord login banner + stats sekci v profilu
   $('profile-guest-login').style.display = user ? 'none' : '';
+  $('profile-stats').style.display = 'none'; // stats se načítají lazy při otevření profilu
 }
 
 // Otevření/zavření dropdownu
@@ -472,11 +512,28 @@ updateVisorRow();
 drawPreview();
 
 const oauthResult = handleOAuthRedirect();
+// Detekuj share link (?join=LOBBYID)
+const _joinParam = new URLSearchParams(location.search).get('join');
+if (_joinParam) history.replaceState(null, '', location.pathname);
+
 // Nejdřív načti session, pak rozhoduj o view — aby se přihlášený uživatel nikdy nezobrazil na splash
 loadSession().then(() => {
-  if (oauthResult === 'ok') setStatus('✅ Přihlášení úspěšné!', '#6ee0a0');
-  else if (oauthResult?.error) setStatus('❌ Přihlášení selhalo: ' + oauthResult.error, '#ff4455');
-  initFlow();
+  if (oauthResult === 'ok') setStatus(t('login_ok'), '#6ee0a0');
+  else if (oauthResult?.error) setStatus(t('login_fail') + oauthResult.error, '#ff4455');
+
+  if (_joinParam) {
+    // Share link — auto-join lobby
+    if (!hasName()) {
+      _pendingJoinId = _joinParam;
+      requireProfile();
+      setStatus(t('join_found'), '#ffcf3a');
+    } else if (commitProfile()) {
+      showView('browse');
+      net.joinLobby(_joinParam, profile(), null);
+    }
+  } else {
+    initFlow();
+  }
 });
 
 setInterval(() => { if (!inGame && $('v-browse').style.display !== 'none') net.listLobbies(); }, 4000);

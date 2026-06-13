@@ -138,6 +138,19 @@ export function consumeMagicToken(token) {
   return row.user_id;
 }
 
+export function updateStats(user_id, { goals = 0, assists = 0, saves = 0, games_played = 0, wins = 0, losses = 0 }) {
+  db.prepare(`
+    UPDATE stats SET
+      goals        = goals        + ?,
+      assists      = assists      + ?,
+      saves        = saves        + ?,
+      games_played = games_played + ?,
+      wins         = wins         + ?,
+      losses       = losses       + ?
+    WHERE user_id = ?
+  `).run(goals, assists, saves, games_played, wins, losses, user_id);
+}
+
 export function cleanExpiredTokens() {
   const now = Math.floor(Date.now() / 1000);
   db.prepare('DELETE FROM sessions WHERE expires_at < ? OR used = 1').run(now);

@@ -1,7 +1,7 @@
 import express from 'express';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
-import { upsertDiscordUser, getUserById } from './db.js';
+import { upsertDiscordUser, getUserById, getProfile, saveProfile, getStats } from './db.js';
 
 const router = express.Router();
 
@@ -24,6 +24,14 @@ function setCookie(res, token) {
     sameSite: 'lax',
     maxAge: JWT_TTL * 1000,
   });
+}
+
+export function verifySession(token) {
+  if (!token) return null;
+  try {
+    const { sub } = jwt.verify(token, e().JWT_SECRET);
+    return sub;
+  } catch { return null; }
 }
 
 export function requireAuth(req, res, next) {
@@ -140,6 +148,26 @@ router.get('/me', requireAuth, (req, res) => {
     is_sponsor: !!user.is_sponsor,
     tier: user.is_sponsor ? 'sponsor' : 'registered',
   });
+});
+
+router.get('/profile', requireAuth, (req, res) => {
+  const prof = getProfile(req.userId);
+  if (!prof) return res.status(404).json({ error: 'not_found' });
+  res.json(prof);
+});
+
+router.post('/profile', requireAuth, (req, res) => {
+  const allowed = ['helmet','gloves','tape','trail','stick','tape_style','helmet_type','visor','handed','number'];
+  const fields = {};
+  for (const k of allowed) if (req.body?.[k] !== undefined) fields[k] = req.body[k];
+  if (Object.keys(fields).length) saveProfile(req.userId, fields);
+  res.json({ ok: true });
+});
+
+router.get('/stats', requireAuth, (req, res) => {
+  const stats = getStats(req.userId);
+  if (!stats) return res.status(404).json({ error: 'not_found' });
+  res.json(stats);
 });
 
 router.post('/logout', (req, res) => {

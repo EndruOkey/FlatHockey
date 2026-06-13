@@ -32,6 +32,27 @@ export async function loadSession() {
   notify();
 }
 
+export async function loadServerStats() {
+  if (!_user) return null;
+  try {
+    const res = await fetch('/auth/stats', { credentials: 'same-origin' });
+    if (res.ok) return await res.json();
+  } catch {}
+  return null;
+}
+
+export async function saveServerProfile(data) {
+  if (!_user) return;
+  try {
+    await fetch('/auth/profile', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  } catch {}
+}
+
 export function loginWithDiscord() {
   window.location.href = '/auth/discord';
 }

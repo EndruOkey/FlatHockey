@@ -65,6 +65,8 @@ export class NetGame {
     this.pnd = 0;       // předběžné varování (bitmask) — pulsující čára
     this._notice = null; // nenásilné upozornění (např. odpojení hráče)
     this._cam = null;
+    this.onExit = null; // callback pro "zpět do menu"
+    this._endBackBtn = null;
     net.onSnap = s => this._onSnap(s);
     net.onGoal = g => {
       this.goalFlash = 2.5; this.goalText = g.text;
@@ -100,6 +102,15 @@ export class NetGame {
     this._cam = cam;
     if (this.call && (this.call.t -= dt) <= 0) this.call = null;
     if (this._notice && (this._notice.t -= dt) <= 0) this._notice = null;
+    // Tlačítko "Zpět do menu" v end-game overlay
+    if (this.ended && this._endBackBtn && this.input.lmbJustPressed) {
+      const b = this._endBackBtn;
+      if (this.input.mouseX >= b.x && this.input.mouseX <= b.x + b.w &&
+          this.input.mouseY >= b.y && this.input.mouseY <= b.y + b.h) {
+        this.onExit?.();
+        return;
+      }
+    }
     const me = this.localEnt;
     let aim = 0, aimDist = 100;
     if (me) {
@@ -379,6 +390,27 @@ export class NetGame {
       ctx.font = '15px "Segoe UI", sans-serif'; ctx.fillStyle = '#8aa';
       const secLeft = this._endedAt ? Math.max(0, Math.ceil((10000 - (Date.now() - this._endedAt)) / 1000)) : 10;
       ctx.fillText(secLeft > 0 ? t('rematch_in', secLeft) : t('starting_rematch'), cx, H / 2 + 86);
+      // Tlačítko "Zpět do menu"
+      if (this.onExit) {
+        const btnW = 200, btnH = 38;
+        const btnX = cx - btnW / 2, btnY = H / 2 + 112;
+        this._endBackBtn = { x: btnX, y: btnY, w: btnW, h: btnH };
+        const mx = this.input.mouseX, my = this.input.mouseY;
+        const hover = mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH;
+        ctx.fillStyle = hover ? '#1a2a3a' : '#0e1620';
+        ctx.strokeStyle = hover ? '#3a5070' : '#1e2a36';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(btnX, btnY, btnW, btnH, 8); else ctx.rect(btnX, btnY, btnW, btnH);
+        ctx.fill(); ctx.stroke();
+        ctx.font = '13px "Segoe UI", sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = hover ? '#90b8d8' : '#4a6a82';
+        ctx.fillText(t('esc_back'), cx, btnY + 19);
+        ctx.textBaseline = 'alphabetic';
+      } else {
+        this._endBackBtn = null;
+      }
     }
   }
 
