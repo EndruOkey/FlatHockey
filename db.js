@@ -64,8 +64,11 @@ db.exec(`
 export function upsertDiscordUser({ discord_id, display_name, avatar_url, is_sponsor }) {
   const existing = db.prepare('SELECT id FROM users WHERE discord_id = ?').get(discord_id);
   if (existing) {
+    // is_sponsor se jen zvyšuje (Discord role přidá), nikdy nemaže — ruční DB set zůstane
     db.prepare(`
-      UPDATE users SET display_name = ?, avatar_url = ?, is_sponsor = ? WHERE discord_id = ?
+      UPDATE users SET display_name = ?, avatar_url = ?,
+        is_sponsor = CASE WHEN ? = 1 THEN 1 ELSE is_sponsor END
+      WHERE discord_id = ?
     `).run(display_name, avatar_url, is_sponsor ? 1 : 0, discord_id);
     ensureProfile(existing.id);
     ensureStats(existing.id);
