@@ -1,9 +1,10 @@
 import { Net } from './net.js';
-import { NetGame, SandboxGame } from './game.js';
+import { NetGame, SandboxGame, TutorialGame } from './game.js';
 import { Player } from './entities/Player.js';
 import { PLAYER, RINK } from './constants.js';
 import { t, applyI18n, toggleLang, setOnChange } from './i18n.js';
 import { setVolume, getVolume } from './sound.js';
+import { loadSession, onAuthChange, loginWithDiscord, requestMagicLink, logout, handleOAuthRedirect, getUser, isSponsor as authIsSponsor } from './auth.js';
 
 const $ = id => document.getElementById(id);
 const canvas = $('canvas');
@@ -115,13 +116,18 @@ handBtns.forEach(b => b.addEventListener('click', () => { chosenHand = parseInt(
 numInput.addEventListener('input', () => { localStorage.setItem(NUM_KEY, numInput.value); drawPreview(); });
 nameInput.addEventListener('input', drawPreview);
 const codeInput = $('sponsor-code');
+const sponsorBtn = $('sponsor-btn');
 codeInput.value = localStorage.getItem('hockey_code') || '';
-let _spTimer = null;
-codeInput.addEventListener('input', () => {
-  localStorage.setItem('hockey_code', codeInput.value);
-  clearTimeout(_spTimer);
-  _spTimer = setTimeout(() => net.checkSponsor(codeInput.value), 350);  // skrytý kód → server ověří
-});
+codeInput.addEventListener('input', () => localStorage.setItem('hockey_code', codeInput.value));
+const _activateSponsor = () => {
+  const code = codeInput.value.trim();
+  if (!code) return;
+  sponsorBtn.disabled = true;
+  sponsorBtn.textContent = '…';
+  net.checkSponsor(code);
+};
+codeInput.addEventListener('keydown', e => { if (e.key === 'Enter') _activateSponsor(); });
+sponsorBtn.addEventListener('click', _activateSponsor);
 
 const swHelmet = makeSwatches($('sw-helmet'), localStorage.getItem(GK.helmet) || '#f4f7fb', drawPreview);
 const swGloves = makeSwatches($('sw-gloves'), localStorage.getItem(GK.gloves) || '#1a1f29', drawPreview);
@@ -264,6 +270,7 @@ $('go-solo').onclick     = () => {
   Object.assign(g.local, { name: pr.name, handed: pr.handed, num: pr.number, helmet: pr.helmet, gloves: pr.gloves, tape: pr.tape, trail: pr.trail, stick: pr.stick, tapeStyle: pr.tapeStyle, helmetType: pr.helmetType, visor: pr.visor });
   startGame(g);
 };
+$('go-tutorial').onclick = () => _startTutorial();
 
 // ── Procházení ────────────────────────────────────────────────────────
 let lastLobbyList = [];
@@ -330,11 +337,16 @@ function renderWait(st) {
 net.onLobbyJoined = (st) => { setStatus(''); renderWait(st); };
 net.onLobbyState  = (st) => { if (!inGame) renderWait(st); };
 net.onLobbyError  = (code) => setStatus(t(code), '#ff4455');
-net.onSponsor = (ok) => {                       // tajný kód v nicku odemkne sponsor vzhled
-  if (ok === isSponsor) return;
-  isSponsor = !!ok;
-  document.body.classList.toggle('sponsor', isSponsor);
-  if (isSponsor) setStatus(t('sponsor_on'), '#6ee0a0');
+net.onSponsor = (ok) => {
+  const btn = $('sponsor-btn');
+  if (btn) { btn.disabled = false; btn.textContent = t('sponsor_activate'); }
+  if (ok) {
+    isSponsor = true;
+    document.body.classList.add('sponsor');
+    setStatus(t('sponsor_on'), '#6ee0a0');
+  } else if (!isSponsor) {
+    setStatus('❌ ' + (document.documentElement.lang === 'en' ? 'Invalid code' : 'Neplatný kód'), '#ff4455');
+  }
 };
 document.querySelectorAll('.pick-btn').forEach(b => b.addEventListener('click', () => net.setTeam(b.dataset.team)));
 $('start-btn').onclick   = () => net.startLobby();
@@ -346,6 +358,20 @@ net.onLobbyStart = (data) => {
   startGame(new NetGame(canvas, net, net.id, data && data.settings));
 };
 function startGame(game) { inGame = true; currentGame = game; lobby.style.display = 'none'; canvas.style.cursor = 'crosshair'; game.start(); }
+function stopGame()  { if (currentGame?.stop) currentGame.stop(); currentGame = null; inGame = false; lobby.style.display = ''; canvas.style.cursor = 'default'; }
+
+function _startTutorial() {
+  if (!hasName()) nameInput.value = suggestName();   // guest jméno pro hru
+  const g = new TutorialGame(canvas);
+  const pr = profile();
+  Object.assign(g.local, { name: pr.name, handed: pr.handed, num: pr.number, helmet: pr.helmet, gloves: pr.gloves, tape: pr.tape, trail: pr.trail, stick: pr.stick, tapeStyle: pr.tapeStyle, helmetType: pr.helmetType, visor: pr.visor });
+  g.onComplete = (isFirst) => {
+    stopGame();
+    if (isFirst) { showView('profile'); drawPreview(); setStatus(t('welcome'), '#6ee0a0'); }
+    else showView('main');
+  };
+  startGame(g);
+}
 
 // ── Esc menu / odpojení ───────────────────────────────────────────────
 const pauseMenu = $('pause-menu'), pauseTitle = $('pause-title'), resumeBtn = $('resume-btn'), leaveBtn = $('leave-btn');
@@ -364,11 +390,103 @@ setOnChange(() => {                 // po přepnutí jazyka přerenderuj z cache
   if ($('v-wait').style.display !== 'none' && lastWaitState) renderWait(lastWaitState);
 });
 
+// ── Auth UI ───────────────────────────────────────────────────────────
+const authWrap    = $('auth-wrap');
+const authBtn     = $('auth-btn');
+const authLabel   = $('auth-label');
+const authAvatar  = $('auth-avatar');
+const authTier    = $('auth-tier');
+const authDropdown = $('auth-dropdown');
+const authModal   = $('auth-modal');
+const authMsg     = $('auth-msg');
+
+function updateAuthUI(user) {
+  if (user) {
+    authLabel.textContent = user.display_name;
+    authTier.textContent  = user.is_sponsor ? '💎' : '';
+    if (user.avatar_url) { authAvatar.src = user.avatar_url; authAvatar.style.display = 'block'; }
+    else authAvatar.style.display = 'none';
+    // Synchronizuj jméno do profilu (pokud ještě nemá vlastní)
+    if (!nameInput.value.trim()) nameInput.value = user.display_name;
+    // Sponsor přístup
+    if (user.is_sponsor && !isSponsor) {
+      isSponsor = true;
+      document.body.classList.add('sponsor');
+    }
+  } else {
+    authLabel.textContent = '👤 Přihlásit se';
+    authTier.textContent  = '';
+    authAvatar.style.display = 'none';
+  }
+  authDropdown.classList.remove('open');
+}
+
+// Otevření/zavření dropdownu
+authBtn.addEventListener('click', () => {
+  if (!getUser()) {
+    authDropdown.classList.remove('open');
+    openAuthModal();
+  } else {
+    authDropdown.classList.toggle('open');
+  }
+});
+document.addEventListener('click', e => {
+  if (!authWrap.contains(e.target)) authDropdown.classList.remove('open');
+});
+
+$('dd-logout').addEventListener('click', async () => {
+  await logout();
+  authDropdown.classList.remove('open');
+});
+$('dd-profile').addEventListener('click', () => {
+  authDropdown.classList.remove('open');
+  showView('profile'); drawPreview();
+});
+
+// Modal
+function openAuthModal() {
+  authMsg.textContent = '';
+  $('magic-email').value = '';
+  authModal.classList.add('open');
+}
+function closeAuthModal() { authModal.classList.remove('open'); }
+
+$('auth-close-btn').addEventListener('click', closeAuthModal);
+authModal.addEventListener('click', e => { if (e.target === authModal) closeAuthModal(); });
+
+$('discord-login-btn').addEventListener('click', loginWithDiscord);
+
+$('magic-send-btn').addEventListener('click', async () => {
+  const email = $('magic-email').value.trim();
+  if (!email) { authMsg.textContent = 'Zadej emailovou adresu.'; authMsg.style.color = '#ff8a9a'; return; }
+  $('magic-send-btn').disabled = true;
+  authMsg.textContent = 'Odesílám…'; authMsg.style.color = '#8a93a6';
+  const res = await requestMagicLink(email);
+  $('magic-send-btn').disabled = false;
+  if (res.ok) {
+    authMsg.textContent = '✅ Odkaz odeslán! Zkontroluj email.'; authMsg.style.color = '#6ee0a0';
+  } else {
+    const msgs = { invalid_email: 'Neplatný email.', rate_limited: 'Příliš mnoho pokusů — zkus za 10 minut.' };
+    authMsg.textContent = msgs[res.error] || 'Chyba odesílání.'; authMsg.style.color = '#ff8a9a';
+  }
+});
+
+onAuthChange(updateAuthUI);
+
 // init
 applyI18n();
 updateVisorRow();
 drawPreview();
-if (codeInput.value) net.checkSponsor(codeInput.value);   // ověř uložený sponsor kód
-if (hasName()) showView('main');   // vracející se hráč
-else requireProfile();             // první spuštění → vynutit profil/přezdívku
+if (codeInput.value) net.socket.once('connect', () => net.checkSponsor(codeInput.value));  // ověř po připojení
+
+// Auth: načti session + zpracuj OAuth redirect
+const oauthResult = handleOAuthRedirect();
+loadSession().then(() => {
+  if (oauthResult === 'ok') setStatus('✅ Přihlášení úspěšné!', '#6ee0a0');
+  else if (oauthResult?.error) setStatus('❌ Přihlášení selhalo: ' + oauthResult.error, '#ff4455');
+});
+
+if (hasName()) showView('main');
+else if (!localStorage.getItem('hockey_tutorial_done')) _startTutorial();  // první návštěva → tutorial → profil
+else requireProfile();
 setInterval(() => { if (!inGame && $('v-browse').style.display !== 'none') net.listLobbies(); }, 4000);

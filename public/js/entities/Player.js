@@ -178,7 +178,7 @@ export class PlayerBase {
     const dir    = this.carryAngle + spread;
     puck.vx = Math.cos(dir) * spd;
     puck.vy = Math.sin(dir) * spd;
-    puck.vz = Math.pow(c, 1.1) * PUCK.maxShotVz;        // žabička po ledě, slap se zvedne
+    puck.vz = Math.pow(c, 2.5) * PUCK.maxShotVz;        // jen plný slap se zvedne, wrist/snap jde po ledě
     puck.trailColor = this.trail || null;               // stopa v barvě střelce
   }
 

@@ -9,6 +9,12 @@ export const RINK = {
   blueLineLeft: 405,
   blueLineRight: 675,
   centerX: 540,
+  // Trapézová zóna (NHL Rule 1.7): golman smí hrát puk za brankou jen v trapézu
+  // 6ft od každé tyčky na brankové čáře → 32px; 14ft od středu u zadního mantinelu → 74px
+  trapTopLine:  174,   // y horní hranice u brankové čáry  (206 − 32)
+  trapBotLine:  282,   // y dolní hranice u brankové čáry  (250 + 32)
+  trapTopBoard: 154,   // y horní hranice u zadního mantinelu (228 − 74)
+  trapBotBoard: 302,   // y dolní hranice u zadního mantinelu (228 + 74)
 };
 
 export const PLAYER = {

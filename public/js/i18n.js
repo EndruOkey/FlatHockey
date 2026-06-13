@@ -3,7 +3,8 @@ const DICT = {
   cs: {
     // Hlavní menu
     play_online: 'HRÁT ONLINE',
-    solo: 'SOLO TRÉNINK',
+    solo: 'TRÉNINK',
+    tutorial_btn: '🏒 TUTORIÁL',
     profile_btn: 'PROFIL & DRES',
     wip: 'Hra je ve vývoji · work in progress',
     discord: 'Připoj se na Discord · nahlas bugy',
@@ -27,6 +28,7 @@ const DICT = {
     sponsor_only: 'Jen pro sponzory 💎',
     sponsor_on: 'Sponsor odemčen! 💎',
     sponsor_code_ph: 'SPONSOR KÓD (nepovinné)',
+    sponsor_activate: 'AKTIVOVAT',
     done: 'HOTOVO',
     name_required: 'Napiš si přezdívku 🙂',
     welcome: 'Vítej ve FlatHockey! 🏒',
@@ -69,7 +71,7 @@ const DICT = {
     peer_left: 'Hráč se odpojil',
     new_host: 'Jsi teď host lobby',
     // Nápověda
-    hint: 'WASD bruslení · Myš míří + vzdálenost = vysunutí hole · LMB: tap = žabička, drž = prdel · RMB přihrávka · Space brzda · Esc menu',
+    hint: 'WASD bruslení · Myš míří + vzdálenost = vysunutí hole · LMB střela · RMB přihrávka/bodycheck · MMB žádost o nahrávku · Space brzda · Esc menu',
     // Ve hře
     covering: 'KRYJE',
     offside: 'OFFSIDE',
@@ -94,7 +96,8 @@ const DICT = {
   },
   en: {
     play_online: 'PLAY ONLINE',
-    solo: 'SOLO PRACTICE',
+    solo: 'PRACTICE',
+    tutorial_btn: '🏒 TUTORIAL',
     profile_btn: 'PROFILE & KIT',
     wip: 'Game is work in progress',
     discord: 'Join Discord · report bugs',
@@ -117,6 +120,7 @@ const DICT = {
     sponsor_only: 'Sponsors only 💎',
     sponsor_on: 'Sponsor unlocked! 💎',
     sponsor_code_ph: 'SPONSOR CODE (optional)',
+    sponsor_activate: 'ACTIVATE',
     done: 'DONE',
     name_required: 'Pick a nickname 🙂',
     welcome: 'Welcome to FlatHockey! 🏒',
@@ -152,7 +156,7 @@ const DICT = {
     resume: 'RESUME',
     disconnect: 'DISCONNECT — BACK TO MENU',
     opp_left: 'OPPONENT DISCONNECTED',
-    hint: 'WASD skate · Mouse aims + distance = stick reach · LMB: tap = flick, hold = slapshot · RMB pass · Space brake · Esc menu',
+    hint: 'WASD skate · Mouse aims + distance = stick reach · LMB shoot · RMB pass/bodycheck · MMB request pass · Space brake · Esc menu',
     covering: 'COVER',
     offside: 'OFFSIDE',
     icing: 'ICING',

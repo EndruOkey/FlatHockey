@@ -1,9 +1,21 @@
+import { readFileSync } from 'fs';
+// Načti .env před všemi ostatními importy
+try {
+  const env = readFileSync(new URL('.env', import.meta.url), 'utf8');
+  for (const line of env.split('\n')) {
+    const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
+    if (m) process.env[m[1]] ??= m[2].trim();
+  }
+} catch { /* .env neexistuje na produkci — proměnné nastaveny jinak */ }
+
 import express from 'express';
 import http from 'http';
 import crypto from 'crypto';
+import cookieParser from 'cookie-parser';
 import { Server } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import authRouter from './auth.js';
 
 import { World } from './public/js/world.js';
 import { Player } from './public/js/entities/Player.js';
@@ -17,6 +29,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 app.disable('x-powered-by');
+app.use(cookieParser());
+app.use('/auth', authRouter);
 const server = http.createServer(app);
 const io = new Server(server, {
   maxHttpBufferSize: 8 * 1024,   // vstupy jsou drobné → obří payloady rovnou zahodíme
@@ -511,9 +525,9 @@ const hex = (c, d) => (typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c)) ? c
 // Tajný sponsor kód — zadává se ve skrytém poli (ne v nicku, nikde se nezobrazí).
 // V repu je jen SOLENÝ HASH → samotný kód z kódu hry nezjistíš.
 const SPONSOR_SALT = 'FH_sp_v1::';
-const SPONSOR_HASH = 'eb863b2123b61372170818b0b710bcd2771cfa82aae85c23752eab8801c736a4';
+const SPONSOR_HASH = '6ca63a5475d6396dc2c544b9b236d22eac7bced69b2a88c24135dccf292424d1';
 const isSponsorCode = (code) => typeof code === 'string' && code.length > 0 &&
-  crypto.createHash('sha256').update(SPONSOR_SALT + code).digest('hex') === SPONSOR_HASH;
+  crypto.createHash('sha256').update(SPONSOR_SALT + code.trim().toUpperCase()).digest('hex') === SPONSOR_HASH;
 function makeMember(profile, team) {
   profile = profile || {};
   return {
