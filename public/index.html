@@ -42,10 +42,8 @@
       max-width: unset;
       width: 100%;
       height: 100%;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
+      display: block;
+      position: relative;
     }
     #lobby.on-main h1 { display: none; }
     #lobby.on-main #wip { display: none; }
@@ -371,86 +369,251 @@
     #auth-modal .sub { margin-bottom: 20px; text-align: left; }
 
     /* ═══════════════════════════════════════════════════════════════
-       MAIN MENU — FULLSCREEN HERO
+       MAIN MENU — ESPORTS FULLSCREEN  (Valorant × Apex × NHL × Fortnite)
        ═══════════════════════════════════════════════════════════════ */
+
+    /* NAV BAR */
     #main-nav {
       display: none;
-      position: absolute; top: 0; left: 0; right: 0; height: 54px;
-      align-items: center; padding: 0 24px; gap: 14px;
-      border-bottom: 1px solid rgba(255,255,255,0.05);
-      z-index: 5;
+      position: absolute; top: 0; left: 0; right: 0; height: 56px;
+      align-items: center; padding: 0 clamp(24px,4vw,64px); gap: 16px;
+      background: rgba(4,7,16,0.82);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      z-index: 20;
     }
     #lobby.on-main #main-nav { display: flex; }
 
     .nav-logo {
-      font-family: 'Barlow Condensed', 'Segoe UI', system-ui;
-      font-size: 1.3rem; font-weight: 900; letter-spacing: 0.02em;
+      font-family: 'Barlow Condensed', system-ui;
+      font-size: 1.4rem; font-weight: 900; letter-spacing: 0.05em;
       text-transform: uppercase; line-height: 1;
     }
-    .nav-logo-flat  { color: #4a9eff; }
+    .nav-logo-flat  { color: #00D4FF; }
     .nav-logo-hockey { color: #fff; }
 
     #nav-online-badge {
-      display: flex; align-items: center; gap: 5px;
-      font-size: 0.66rem; font-weight: 700; letter-spacing: 0.1em;
+      display: flex; align-items: center; gap: 6px;
+      font-size: 0.6rem; font-weight: 700; letter-spacing: 0.16em;
       color: #3ecf4a; text-transform: uppercase;
+      margin-left: auto;
     }
     #nav-online-dot {
-      width: 7px; height: 7px; border-radius: 50%;
-      background: #3ecf4a;
-      box-shadow: 0 0 6px #3ecf4a;
-      animation: pulse 2s ease-in-out infinite;
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #3ecf4a; box-shadow: 0 0 8px #3ecf4a;
+      animation: pulse 2.4s ease-in-out infinite;
     }
-    @keyframes pulse {
-      0%,100% { opacity: 1; } 50% { opacity: 0.5; }
-    }
+    @keyframes pulse { 0%,100% { opacity: 1; box-shadow: 0 0 8px #3ecf4a; } 50% { opacity: 0.35; box-shadow: 0 0 2px #3ecf4a; } }
 
-    #v-main-hero {
-      text-align: center;
-      margin-bottom: 40px;
-    }
-    .hero-title {
-      font-family: 'Barlow Condensed', 'Segoe UI', system-ui;
-      font-weight: 900;
-      font-size: clamp(4.5rem, 13vw, 9.5rem);
-      line-height: 0.86;
-      letter-spacing: -0.01em;
-      text-transform: uppercase;
-    }
-    .t-flat   { color: #4a9eff; display: block; text-shadow: 0 0 40px rgba(74,158,255,0.35); }
-    .t-hockey { color: #fff; display: block; }
-    .hero-tagline {
-      font-size: 0.72rem; letter-spacing: 0.2em;
-      color: #334; margin-top: 14px; text-transform: uppercase;
-    }
-
-    #v-main-buttons {
-      display: flex; flex-direction: column; gap: 8px;
-      width: 380px; max-width: 90vw;
-    }
-
-    /* big primary for main play button */
-    #go-online {
-      padding: 20px 24px;
-      font-family: 'Barlow Condensed', 'Segoe UI', system-ui;
-      font-size: 1.3rem; font-weight: 900; letter-spacing: 0.12em;
-    }
-
-    #v-main-footer {
-      position: absolute; bottom: 14px; left: 20px; right: 20px;
-      display: flex; align-items: center; justify-content: space-between;
-      font-size: 0.62rem; letter-spacing: 0.06em;
-      color: #223; text-transform: uppercase;
-    }
-
-    /* v-main fills the box when in fullscreen mode */
+    /* v-main: absolute fullscreen, escapes .box flex */
     #lobby.on-main #v-main {
-      width: 100%;
-      height: 100%;
-      align-items: center;
-      justify-content: center;
-      padding-top: 54px; /* nav height */
+      position: absolute;
+      inset: 0;
+      width: 100%; height: 100%;
+      display: block;
+      padding: 0;
     }
+
+    /* BACKGROUND — dark overhead rink SVG */
+    #v-main-bg {
+      position: absolute; inset: 0;
+      overflow: hidden;
+    }
+    #v-main-bg svg { width: 100%; height: 100%; display: block; }
+
+    /* Vignette: dark panel left + subtle right fade */
+    #v-main-vignette {
+      position: absolute; inset: 0;
+      background:
+        linear-gradient(103deg,
+          rgba(4,7,16,0.98) 0%,
+          rgba(4,7,16,0.96) 38%,
+          rgba(4,7,16,0.72) 56%,
+          rgba(4,7,16,0.25) 72%,
+          rgba(4,7,16,0.08) 100%
+        ),
+        radial-gradient(ellipse 60% 100% at 85% 50%,
+          rgba(0,40,80,0.15) 0%, transparent 70%
+        );
+    }
+
+    /* Diagonal accent slash (Valorant decorative edge) */
+    #v-main-diag-line {
+      position: absolute;
+      top: 56px; bottom: 0;
+      left: 55%;
+      width: 2px;
+      background: linear-gradient(180deg,
+        transparent 0%,
+        rgba(0,212,255,0.18) 20%,
+        rgba(0,212,255,0.10) 80%,
+        transparent 100%
+      );
+      transform: skewX(-5deg);
+      pointer-events: none;
+    }
+
+    /* CONTENT */
+    #v-main-content {
+      position: absolute;
+      inset: 0;
+      top: 56px;
+      display: flex;
+      align-items: center;
+      padding: 0 clamp(28px,5vw,72px);
+    }
+    #v-main-left {
+      position: relative;
+      z-index: 3;
+      max-width: 600px;
+    }
+
+    /* Eyebrow label (orange — Apex/Fortnite accent) */
+    #main-eyebrow {
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 0.26em;
+      color: #FF6B00;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    #main-eyebrow::before {
+      content: '';
+      display: block;
+      width: 22px; height: 2px;
+      background: #FF6B00;
+      flex-shrink: 0;
+    }
+
+    /* HERO TITLE — massive Barlow Condensed with NHL ice glow */
+    #main-title { margin-bottom: 38px; }
+    #main-title-flat {
+      font-family: 'Barlow Condensed', system-ui;
+      font-size: clamp(5.5rem, 13vw, 11.5rem);
+      font-weight: 900;
+      color: #00D4FF;
+      display: block;
+      line-height: 0.84;
+      text-transform: uppercase;
+      letter-spacing: -0.01em;
+      animation: iceGlow 4s ease-in-out infinite;
+    }
+    #main-title-hockey {
+      font-family: 'Barlow Condensed', system-ui;
+      font-size: clamp(3.8rem, 8.8vw, 7.6rem);
+      font-weight: 900;
+      color: #EEF4FF;
+      display: block;
+      line-height: 0.9;
+      text-transform: uppercase;
+      letter-spacing: 0.01em;
+    }
+    @keyframes iceGlow {
+      0%,100% { text-shadow: 0 0 50px rgba(0,212,255,0.45), 0 0 100px rgba(0,212,255,0.18); }
+      50%      { text-shadow: 0 0 70px rgba(0,212,255,0.65), 0 0 140px rgba(0,212,255,0.28); }
+    }
+
+    /* ACTIONS */
+    #main-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-width: 400px;
+    }
+
+    /* PRIMARY CTA — Fortnite 3D press, orange */
+    #go-online {
+      font-family: 'Barlow Condensed', system-ui;
+      font-size: 1.45rem;
+      font-weight: 900;
+      letter-spacing: 0.14em;
+      padding: 18px 40px;
+      background: linear-gradient(180deg, #FFA020 0%, #E06000 52%, #C04800 100%);
+      color: #fff;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.45);
+      border: none;
+      border-top: 1px solid rgba(255,200,100,0.28);
+      border-radius: 0;
+      clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 0 100%);
+      box-shadow: 0 6px 0 #7A2C00, 0 10px 32px rgba(210,90,0,0.35);
+      cursor: pointer;
+      text-transform: uppercase;
+      width: 100%;
+      margin: 0;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      transition: transform 0.07s, box-shadow 0.07s, background 0.1s;
+    }
+    #go-online:hover:not(:disabled) {
+      background: linear-gradient(180deg, #FFB030 0%, #EF7000 52%, #CF5800 100%);
+      box-shadow: 0 6px 0 #7A2C00, 0 16px 44px rgba(230,100,0,0.52);
+      transform: translateY(-2px);
+      filter: none;
+    }
+    #go-online:active:not(:disabled) {
+      box-shadow: 0 1px 0 #7A2C00, 0 3px 10px rgba(200,80,0,0.25);
+      transform: translateY(5px);
+      filter: none;
+    }
+
+    /* SECONDARY BUTTONS */
+    #main-secondary {
+      display: flex;
+      gap: 8px;
+    }
+    #main-secondary button {
+      flex: 1;
+      background: rgba(6,10,22,0.55);
+      border: 1px solid rgba(255,255,255,0.055);
+      border-left: 2px solid rgba(0,212,255,0.32);
+      border-radius: 0;
+      color: #4A6070;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      padding: 13px 10px;
+      margin: 0;
+      cursor: pointer;
+      text-transform: uppercase;
+      width: auto;
+      white-space: nowrap;
+      backdrop-filter: blur(8px);
+      transition: background 0.12s, border-color 0.12s, color 0.12s;
+    }
+    #main-secondary button:hover:not(:disabled) {
+      background: rgba(0,212,255,0.07);
+      border-left-color: #00D4FF;
+      color: #B8D8F0;
+      filter: none;
+    }
+
+    /* Volume row */
+    #lobby.on-main .vol-row { margin-top: 10px; max-width: 400px; }
+    #lobby.on-main .vol-row label { color: #1E2A36; }
+
+    /* FOOTER */
+    #v-main-footer {
+      position: absolute;
+      bottom: 14px;
+      left: clamp(28px,5vw,72px);
+      right: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.58rem;
+      letter-spacing: 0.08em;
+      color: #151F28;
+      text-transform: uppercase;
+      z-index: 5;
+      pointer-events: auto;
+    }
+    #v-main-footer a {
+      color: #151F28; text-decoration: none;
+      display: flex; align-items: center; gap: 5px;
+    }
+    #v-main-footer a:hover { color: #26394A; }
 
     #lobby-list:empty::after { content: 'Žádná lobby — vytvoř první.'; color: #445; font-size: 0.8rem; text-align: center; padding: 18px 0; }
   </style>
@@ -522,33 +685,77 @@
         </div>
       </div>
 
-      <!-- HLAVNÍ MENU -->
+      <!-- HLAVNÍ MENU — ESPORTS FULLSCREEN -->
       <div id="v-main" class="view" style="display:none">
-        <div id="v-main-hero">
-          <div class="hero-title">
-            <span class="t-flat">Flat</span>
-            <span class="t-hockey">Hockey</span>
-          </div>
-          <p class="hero-tagline">Multiplayer · Browser · Zdarma</p>
+
+        <!-- Background: darkened overhead rink SVG -->
+        <div id="v-main-bg">
+          <svg viewBox="0 0 1400 800" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+            <rect width="1400" height="800" fill="#040810"/>
+            <!-- Rink surface -->
+            <rect x="40" y="40" width="1320" height="720" rx="88" fill="#071224" stroke="#0B1B30" stroke-width="2"/>
+            <!-- Icing lines (top/bottom) -->
+            <line x1="40" y1="205" x2="1360" y2="205" stroke="#0A1826" stroke-width="1"/>
+            <line x1="40" y1="595" x2="1360" y2="595" stroke="#0A1826" stroke-width="1"/>
+            <!-- Center red line -->
+            <line x1="700" y1="40" x2="700" y2="760" stroke="#2C0A12" stroke-width="5"/>
+            <!-- Blue lines -->
+            <line x1="430" y1="40" x2="430" y2="760" stroke="#081838" stroke-width="4"/>
+            <line x1="970" y1="40" x2="970" y2="760" stroke="#081838" stroke-width="4"/>
+            <!-- Center circle -->
+            <circle cx="700" cy="400" r="115" fill="none" stroke="#081838" stroke-width="3"/>
+            <circle cx="700" cy="400" r="7"   fill="#2C0A12"/>
+            <!-- Faceoff circles + dots -->
+            <circle cx="278" cy="200" r="72" fill="none" stroke="#200A14" stroke-width="2"/>
+            <circle cx="278" cy="600" r="72" fill="none" stroke="#200A14" stroke-width="2"/>
+            <circle cx="1122" cy="200" r="72" fill="none" stroke="#200A14" stroke-width="2"/>
+            <circle cx="1122" cy="600" r="72" fill="none" stroke="#200A14" stroke-width="2"/>
+            <circle cx="278" cy="200" r="6" fill="#2C0A12"/>
+            <circle cx="278" cy="600" r="6" fill="#2C0A12"/>
+            <circle cx="1122" cy="200" r="6" fill="#2C0A12"/>
+            <circle cx="1122" cy="600" r="6" fill="#2C0A12"/>
+            <!-- Goal creases -->
+            <path d="M42 358 Q138 358 138 400 Q138 442 42 442Z" fill="#081A30" stroke="#0C2244" stroke-width="2"/>
+            <path d="M1358 358 Q1262 358 1262 400 Q1262 442 1358 442Z" fill="#081A30" stroke="#0C2244" stroke-width="2"/>
+            <!-- Nets (thin dark rects) -->
+            <rect x="40" y="372" width="18" height="56" fill="#0A1620" rx="1"/>
+            <rect x="1342" y="372" width="18" height="56" fill="#0A1620" rx="1"/>
+          </svg>
+          <div id="v-main-vignette"></div>
         </div>
-        <div id="v-main-buttons">
-          <button id="go-online" class="primary" data-i18n="play_online">▶ HRÁT ONLINE</button>
-          <div style="display:flex;gap:8px">
-            <button id="go-solo"     class="ghost" style="flex:1;font-size:0.82rem" data-i18n="solo">TRÉNINK</button>
-            <button id="go-tutorial" class="ghost" style="flex:1;font-size:0.82rem" data-i18n="tutorial_btn">🏒 TUTORIÁL</button>
-          </div>
-          <button id="go-profile" class="ghost" data-i18n="profile_btn">PROFIL & DRES</button>
-          <div class="vol-row" style="margin-top:6px">
-            <label data-i18n="vol_label">Hlasitost</label>
-            <input type="range" id="vol-slider" min="0" max="100" step="1" value="80">
-            <span class="vol-pct" id="vol-pct">80%</span>
+
+        <!-- Diagonal accent line -->
+        <div id="v-main-diag-line"></div>
+
+        <!-- Hero content (left-aligned) -->
+        <div id="v-main-content">
+          <div id="v-main-left">
+            <div id="main-eyebrow">SEZÓNA 1 · ONLINE</div>
+            <div id="main-title">
+              <span id="main-title-flat">Flat</span>
+              <span id="main-title-hockey">Hockey</span>
+            </div>
+            <div id="main-actions">
+              <button id="go-online" data-i18n="play_online">▶ HRÁT ONLINE</button>
+              <div id="main-secondary">
+                <button id="go-solo"     data-i18n="solo">TRÉNINK</button>
+                <button id="go-tutorial" data-i18n="tutorial_btn">🏒 TUTORIÁL</button>
+                <button id="go-profile"  data-i18n="profile_btn">PROFIL</button>
+              </div>
+              <div class="vol-row">
+                <label data-i18n="vol_label">Hlasitost</label>
+                <input type="range" id="vol-slider" min="0" max="100" step="1" value="80">
+                <span class="vol-pct" id="vol-pct">80%</span>
+              </div>
+            </div>
           </div>
         </div>
+
+        <!-- Footer bar -->
         <div id="v-main-footer">
           <span>v0.4 · hra je ve vývoji</span>
-          <a id="discord-footer-link" href="https://discord.gg/r5eMjmvAsg" target="_blank" rel="noopener noreferrer"
-             style="color:#445;text-decoration:none;display:flex;align-items:center;gap:5px">
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M19.27 5.33C17.94 4.71 16.5 4.26 15 4a.09.09 0 0 0-.07.03c-.18.33-.39.76-.53 1.09a16.09 16.09 0 0 0-4.8 0c-.14-.34-.35-.76-.54-1.09-.01-.02-.04-.03-.07-.03-1.5.26-2.93.71-4.27 1.33-.01 0-.02.01-.03.02-2.72 4.07-3.47 8.03-3.1 11.95 0 .02.01.04.03.05 1.8 1.32 3.53 2.12 5.24 2.65.03.01.06 0 .07-.02.4-.55.76-1.13 1.07-1.74.02-.04 0-.08-.04-.09-.57-.22-1.11-.48-1.64-.78-.04-.02-.04-.08-.01-.11.11-.08.22-.17.33-.25.02-.02.05-.02.07-.01 3.44 1.57 7.15 1.57 10.55 0 .02-.01.05-.01.07.01.11.09.22.17.33.26.04.03.04.09-.01.11-.52.31-1.07.56-1.64.78-.04.01-.05.06-.04.09.32.61.68 1.19 1.07 1.74.03.02.06.03.09.02 1.72-.53 3.45-1.33 5.25-2.65.02-.01.03-.03.03-.05.44-4.53-.73-8.46-3.1-11.95-.01-.01-.02-.02-.04-.02z"/></svg>
+          <a id="discord-footer-link" href="https://discord.gg/r5eMjmvAsg" target="_blank" rel="noopener noreferrer">
+            <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M19.27 5.33C17.94 4.71 16.5 4.26 15 4a.09.09 0 0 0-.07.03c-.18.33-.39.76-.53 1.09a16.09 16.09 0 0 0-4.8 0c-.14-.34-.35-.76-.54-1.09-.01-.02-.04-.03-.07-.03-1.5.26-2.93.71-4.27 1.33-.01 0-.02.01-.03.02-2.72 4.07-3.47 8.03-3.1 11.95 0 .02.01.04.03.05 1.8 1.32 3.53 2.12 5.24 2.65.03.01.06 0 .07-.02.4-.55.76-1.13 1.07-1.74.02-.04 0-.08-.04-.09-.57-.22-1.11-.48-1.64-.78-.04-.02-.04-.08-.01-.11.11-.08.22-.17.33-.25.02-.02.05-.02.07-.01 3.44 1.57 7.15 1.57 10.55 0 .02-.01.05-.01.07.01.11.09.22.17.33.26.04.03.04.09-.01.11-.52.31-1.07.56-1.64.78-.04.01-.05.06-.04.09.32.61.68 1.19 1.07 1.74.03.02.06.03.09.02 1.72-.53 3.45-1.33 5.25-2.65.02-.01.03-.03.03-.05.44-4.53-.73-8.46-3.1-11.95-.01-.01-.02-.02-.04-.02z"/></svg>
             Discord
           </a>
         </div>
