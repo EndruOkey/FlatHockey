@@ -16,7 +16,7 @@ import { Server } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import authRouter, { verifySession } from './auth.js';
-import { updateStats } from './db.js';
+import { updateStats, updateRankAndCredits, getRankPosition, getLeaderboard, getStoreItems, getUserUnlocks, buyItem, getPuckCredits, getActiveSeason } from './db.js';
 
 import { World } from './public/js/world.js';
 import { Player } from './public/js/entities/Player.js';
@@ -303,12 +303,30 @@ function createMatch(lobbyId) {
     tick: 0, _goalAt: 0, loop: null,
   };
   world.onGoal = (result) => {
-    if (match.offside || match.icing) return;   // gól během dojezdu offside/icing neplatí
+    if (match.offside || match.icing) return;
+    const scoringTeam = result === 'goal-home' ? 'home' : 'away';
     if (result === 'goal-away') match.score.away++; else match.score.home++;
-    if (match._lastTouchSid) {
-      if (!match._goalScorers) match._goalScorers = [];
-      match._goalScorers.push(match._lastTouchSid);
+
+    // Scorer tracking
+    if (!match._goalScorers) match._goalScorers = [];
+    if (match._lastTouchSid) match._goalScorers.push(match._lastTouchSid);
+
+    // Assist: druhý dotyk z téhož týmu jako střelec
+    if (!match._assists) match._assists = [];
+    if (match._prevTouchSid && match._prevTouchSid !== match._lastTouchSid) {
+      const prevMem = lobbies.get(lobbyId)?.members.get(match._prevTouchSid);
+      if (prevMem?.team === scoringTeam) match._assists.push(match._prevTouchSid);
     }
+
+    // Plus/minus: +1 pro tým který vstřelil, -1 pro druhý
+    if (!match._plusMinus) match._plusMinus = new Map();
+    const endLobbyPM = lobbies.get(lobbyId);
+    if (endLobbyPM) {
+      for (const [sid, mem] of endLobbyPM.members) {
+        match._plusMinus.set(sid, (match._plusMinus.get(sid) || 0) + (mem.team === scoringTeam ? 1 : -1));
+      }
+    }
+
     io.to(match.room).emit('goal', { text: result === 'goal-away' ? 'GOAL! 🔴' : 'GOAL! 🔵' });
     match._goalAt = Date.now();
   };
@@ -444,14 +462,45 @@ function stepMatch(match) {
         if (endLobby) {
           const winTeam = match.score.home > match.score.away ? 'home' :
                           match.score.away > match.score.home ? 'away' : null;
+
+          // Najdi MVP: hráč s nejvyšším počtem gólů+asistencí
+          const scorers = match._goalScorers || [];
+          const assisters = match._assists || [];
+          const contributions = new Map();
+          for (const sid of [...scorers, ...assisters])
+            contributions.set(sid, (contributions.get(sid) || 0) + 1);
+          let mvpSid = null, mvpScore = 0;
+          for (const [sid, n] of contributions)
+            if (n > mvpScore) { mvpScore = n; mvpSid = sid; }
+
           for (const [sid, mem] of endLobby.members) {
             const sock = io.sockets.sockets.get(sid);
             const userId = sock?.data?.userId;
             if (!userId) continue;
-            const goals = (match._goalScorers || []).filter(s => s === sid).length;
-            const isWin = !!(winTeam && mem.team === winTeam);
-            const isLoss = !!(winTeam && mem.team !== winTeam);
-            try { updateStats(userId, { goals, games_played: 1, wins: isWin ? 1 : 0, losses: isLoss ? 1 : 0 }); } catch {}
+
+            const goals   = scorers.filter(s => s === sid).length;
+            const assists = assisters.filter(s => s === sid).length;
+            const isWin   = !!(winTeam && mem.team === winTeam);
+            const isLoss  = !!(winTeam && mem.team !== winTeam);
+            const isMVP   = sid === mvpSid;
+            const pm      = (match._plusMinus?.get(sid)) || 0;
+
+            // NHL-style rank delta
+            const rankDelta = (isWin ? 20 : isLoss ? -10 : 0)
+              + goals * 5 + assists * 3 + pm * 2 + (isMVP ? 10 : 0);
+
+            // Puck Credits earned
+            const creditsDelta = 5
+              + (isWin ? 50 : isLoss ? 10 : 15)
+              + goals * 15 + assists * 10;
+
+            try {
+              updateStats(userId, { goals, assists, games_played: 1, wins: isWin ? 1 : 0, losses: isLoss ? 1 : 0 });
+              updateRankAndCredits(userId, { rankDelta, creditsDelta, plusMinusDelta: pm });
+            } catch {}
+
+            // Pošli hráči výsledek s jeho odměnami
+            sock.emit('match_rewards', { goals, assists, isWin, isMVP, rankDelta, creditsDelta, pm });
           }
         }
         match.rematchTimer = setTimeout(() => {
@@ -473,7 +522,13 @@ function stepMatch(match) {
   match.world.update(DT);
 
   // Sleduj poslední dotek (tým + hráč + origin pro icing)
-  for (const [sid, p] of match.players) if (p.hasPuck) { match.lastTouch = p.team; match.touchX = match.puck.x; match._lastTouchSid = sid; }
+  for (const [sid, p] of match.players) if (p.hasPuck) {
+    if (match._lastTouchSid !== sid) {
+      match._prevTouchSid  = match._lastTouchSid;
+      match._prevTouchTeam = match.lastTouch;
+    }
+    match.lastTouch = p.team; match.touchX = match.puck.x; match._lastTouchSid = sid;
+  }
   // Kontrola pravidel (jen když je zapnuto a hraje se)
   if (match.rules && !match.stoppage && !match.world._goalLock && !match.ended) checkRules(match);
 
@@ -713,6 +768,51 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => { connCount--; leaveCurrentLobby(socket); });
+});
+
+// ── API: Leaderboard ──────────────────────────────────────────────────────────
+app.get('/api/leaderboard', (_req, res) => {
+  try { res.json(getLeaderboard(100)); }
+  catch { res.status(500).json({ error: 'db_error' }); }
+});
+
+// ── API: Season ───────────────────────────────────────────────────────────────
+app.get('/api/season', (_req, res) => {
+  try { res.json(getActiveSeason() ?? null); }
+  catch { res.status(500).json({ error: 'db_error' }); }
+});
+
+// ── API: Rank pozice přihlášeného hráče ──────────────────────────────────────
+app.get('/api/me/rank', verifySession, (req, res) => {
+  try { res.json(getRankPosition(req.user.id) ?? { rank_points: 1000, position: null }); }
+  catch { res.status(500).json({ error: 'db_error' }); }
+});
+
+// ── API: Puck Credits ─────────────────────────────────────────────────────────
+app.get('/api/me/credits', verifySession, (req, res) => {
+  try { res.json({ puck_credits: getPuckCredits(req.user.id) }); }
+  catch { res.status(500).json({ error: 'db_error' }); }
+});
+
+// ── API: Store items + co hráč vlastní ───────────────────────────────────────
+app.get('/api/store', verifySession, (req, res) => {
+  try {
+    const items = getStoreItems();
+    const owned = getUserUnlocks(req.user.id);
+    const credits = getPuckCredits(req.user.id);
+    res.json({ items, owned, puck_credits: credits });
+  } catch { res.status(500).json({ error: 'db_error' }); }
+});
+
+// ── API: Nákup položky ────────────────────────────────────────────────────────
+app.post('/api/store/buy', verifySession, (req, res) => {
+  const item_id = parseInt(req.body?.item_id, 10);
+  if (!item_id) return res.status(400).json({ error: 'missing_item_id' });
+  try {
+    const result = buyItem(req.user.id, item_id);
+    if (!result.ok) return res.status(400).json(result);
+    res.json(result);
+  } catch { res.status(500).json({ error: 'db_error' }); }
 });
 
 const PORT = process.env.PORT || 3000;
