@@ -632,8 +632,8 @@
        LOCKER ROOM — ESPORTS PROFILE REDESIGN
        ═══════════════════════════════════════════════════════════════ */
 
-    /* Wider box for all sub-views */
-    #lobby:not(.on-main) .box { max-width: 540px; }
+    /* Wider box — only for splash card (sub-views use fullscreen via .on-* classes) */
+    #lobby:not(.on-main):not(.on-browse):not(.on-profile):not(.on-create):not(.on-wait) .box { max-width: 540px; }
 
     /* Heading */
     #v-profile > h2 {
@@ -786,6 +786,257 @@
       clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
     }
     #profile-discord-btn:hover { filter: none; background: #4752E0; box-shadow: 0 0 20px rgba(88,101,242,0.4); }
+
+    /* ═══════════════════════════════════════════════════════════════
+       FULLSCREEN SUB-VIEW SYSTEM
+       ═══════════════════════════════════════════════════════════════ */
+
+    /* Card only for splash (no on-* class active) */
+    #lobby:not(.on-main):not(.on-browse):not(.on-profile):not(.on-create):not(.on-wait) .box { max-width: 540px; }
+
+    /* Transparent passthrough .box for fullscreen sub-views */
+    #lobby.on-browse > .box,
+    #lobby.on-profile > .box,
+    #lobby.on-create > .box,
+    #lobby.on-wait > .box {
+      background: transparent; border: none; box-shadow: none; border-radius: 0;
+      padding: 0; min-width: unset; max-width: unset;
+      width: 100%; height: 100%; display: block; position: relative;
+    }
+
+    /* Hide h1 + wip badge in fullscreen states */
+    #lobby.on-browse h1, #lobby.on-profile h1, #lobby.on-create h1, #lobby.on-wait h1,
+    #lobby.on-browse #wip, #lobby.on-profile #wip, #lobby.on-create #wip, #lobby.on-wait #wip { display: none; }
+
+    /* Sub-views go fullscreen */
+    #lobby.on-browse  #v-browse,
+    #lobby.on-profile #v-profile,
+    #lobby.on-create  #v-create,
+    #lobby.on-wait    #v-wait {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      display: flex !important; flex-direction: column; overflow: hidden;
+    }
+
+    /* ── Shared sub-view header bar ─────────────────────────────── */
+    .sv-header {
+      display: flex; align-items: center;
+      height: 56px; flex-shrink: 0;
+      padding: 0 clamp(14px,2vw,36px);
+      background: rgba(5,7,18,0.95); backdrop-filter: blur(16px);
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      gap: 14px; z-index: 5;
+    }
+    .sv-back {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 14px; width: auto; margin: 0; border-radius: 0;
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.06); border-left: 2px solid rgba(0,212,255,0.4);
+      color: #4A6078; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.1em;
+      cursor: pointer; text-transform: uppercase; white-space: nowrap;
+      transition: color 0.12s, border-left-color 0.12s, background 0.12s;
+    }
+    .sv-back:hover:not(:disabled) { background: rgba(0,212,255,0.06); border-left-color: #00D4FF; color: #C8E8F4; filter: none; }
+
+    .sv-title-block { display: flex; flex-direction: column; line-height: 1; }
+    .sv-eyebrow-sm { font-size: 0.44rem; font-weight: 700; letter-spacing: 0.18em; color: #FF2080; text-transform: uppercase; margin-bottom: 2px; }
+    .sv-title-txt {
+      font-family: 'Barlow Condensed', system-ui;
+      font-size: 1rem; font-weight: 900; letter-spacing: 0.12em; color: #EEF4FF; text-transform: uppercase;
+    }
+    .sv-spacer { flex: 1; }
+    .sv-actions { display: flex; align-items: center; gap: 8px; }
+    .sv-icon-btn {
+      padding: 6px 12px; width: auto; margin: 0;
+      background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); border-radius: 0;
+      color: #4A6078; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+      cursor: pointer;
+    }
+    .sv-icon-btn:hover:not(:disabled) { background: rgba(255,255,255,0.06); color: #C8D8E8; filter: none; }
+
+    .sv-body { flex: 1; overflow: hidden; display: grid; }
+
+    /* Eyebrow + big title */
+    .sv-eyebrow {
+      font-size: 0.56rem; font-weight: 700; letter-spacing: 0.24em;
+      color: #FF2080; text-transform: uppercase; margin-bottom: 10px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .sv-eyebrow::before { content: ''; display: block; width: 16px; height: 2px; background: #FF2080; flex-shrink: 0; }
+    .sv-big-title {
+      font-family: 'Barlow Condensed', system-ui;
+      font-size: clamp(2.4rem,5.5vw,4.5rem);
+      font-weight: 900; font-style: italic; color: #fff; line-height: 0.87;
+      text-transform: uppercase; letter-spacing: -0.01em;
+      margin-bottom: clamp(18px,2.5vw,32px);
+    }
+    .sv-section-lbl {
+      font-size: 0.48rem; font-weight: 700; letter-spacing: 0.18em;
+      text-transform: uppercase; color: #2E4055; margin-bottom: 10px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .sv-section-lbl::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.04); }
+
+    /* ═══════════════════════════════════════════════════════════════
+       BROWSE SCREEN — 2-COLUMN
+       ═══════════════════════════════════════════════════════════════ */
+    .sv-body-browse { grid-template-columns: 36% 64%; }
+
+    .sv-browse-hero {
+      background: #07090F; overflow: hidden;
+      display: flex; flex-direction: column; justify-content: center;
+      padding: clamp(24px,3vw,48px);
+      border-right: 1px solid rgba(255,255,255,0.04); position: relative;
+    }
+    .sv-browse-hero::before {
+      content: ''; position: absolute; inset: 0; pointer-events: none;
+      background: radial-gradient(ellipse 80% 60% at 15% 70%, rgba(0,40,180,0.05) 0%, transparent 70%);
+    }
+    .sv-create-cta {
+      display: flex; align-items: center; gap: 14px;
+      padding: 16px 18px; margin: 0; border-radius: 0; width: auto;
+      background: rgba(255,255,255,0.025);
+      border: 1px solid rgba(255,255,255,0.07); border-top: 2px solid rgba(100,130,255,0.2);
+      clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+      cursor: pointer; text-align: left; transition: background 0.14s, transform 0.1s;
+    }
+    .sv-create-cta:hover:not(:disabled) { background: rgba(255,255,255,0.05); transform: translateY(-1px); filter: none; }
+
+    .sv-browse-list {
+      display: flex; flex-direction: column; overflow: hidden;
+      padding: clamp(16px,2vw,32px); background: #090A18;
+    }
+    #lobby.on-browse #lobby-list { flex: 1; max-height: unset; overflow-y: auto; }
+    #lobby.on-browse .lobby-item { padding: 14px 18px; }
+    #lobby.on-browse .lobby-item .li-name {
+      font-family: 'Barlow Condensed', system-ui; font-size: 1rem; font-weight: 900; letter-spacing: 0.04em;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       PROFILE / LOCKER ROOM — 2-COLUMN
+       ═══════════════════════════════════════════════════════════════ */
+    .sv-body-profile { grid-template-columns: 38% 62%; overflow: hidden; }
+
+    .sv-profile-left {
+      background: linear-gradient(160deg, #050810 0%, #080F1A 100%);
+      display: flex; flex-direction: column; align-items: center;
+      padding: 18px 16px;
+      border-right: 1px solid rgba(255,255,255,0.04);
+      overflow-y: auto; gap: 8px; position: relative;
+    }
+    .sv-profile-left::after {
+      content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 80px;
+      background: linear-gradient(0deg, rgba(0,212,255,0.025) 0%, transparent 100%);
+      pointer-events: none;
+    }
+    #lobby.on-profile #prof-preview { width: 100%; max-width: 260px; height: 200px; margin: 0; }
+    #lobby.on-profile #name-input {
+      text-align: center; width: 100%; max-width: 260px;
+      font-family: 'Barlow Condensed', system-ui;
+      font-size: 1.35rem; font-weight: 900; letter-spacing: 0.22em;
+      margin: 0; background: rgba(255,255,255,0.02);
+      border: none; border-bottom: 2px solid rgba(0,212,255,0.25);
+      border-radius: 0; padding: 8px 10px;
+    }
+    #lobby.on-profile #name-input:focus { border-bottom-color: #00D4FF; outline: none; box-shadow: none; }
+    #lobby.on-profile #hand-toggle { width: 100%; max-width: 260px; margin: 0; gap: 4px; }
+    #lobby.on-profile .sv-num-row { display: flex; align-items: center; gap: 8px; width: 100%; max-width: 260px; }
+    #lobby.on-profile .sv-num-row .lbl { margin: 0; flex: 1; white-space: nowrap; }
+    #lobby.on-profile .sv-num-row #num-input { width: 70px; margin: 0; padding: 8px 6px; text-align: center; font-family: 'Barlow Condensed', system-ui; font-size: 1.05rem; font-weight: 700; }
+    #lobby.on-profile #profile-rank-row { width: 100%; max-width: 260px; margin: 0; }
+    #lobby.on-profile #profile-stats { width: 100%; max-width: 260px; margin: 0; }
+    #lobby.on-profile #profile-guest-login { width: 100%; max-width: 260px; margin: 0; }
+    #lobby.on-profile #profile-guest-login button { margin: 0; }
+
+    .sv-profile-gear {
+      overflow-y: auto; padding: 16px 22px;
+      background: #090A18; display: flex; flex-direction: column;
+    }
+
+    /* DONE button compact in header */
+    #lobby.on-profile #profile-done {
+      padding: 7px 18px; margin: 0; font-size: 0.82rem; letter-spacing: 0.1em; width: auto;
+      clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+      box-shadow: none; min-height: unset;
+    }
+    #lobby.on-profile #profile-done:hover:not(:disabled) { transform: none; box-shadow: 0 0 20px rgba(200,80,0,0.35); }
+    #lobby.on-profile #profile-done:active:not(:disabled) { transform: none; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       CREATE SCREEN — 2-COLUMN
+       ═══════════════════════════════════════════════════════════════ */
+    .sv-body-create { grid-template-columns: 42% 58%; overflow: hidden; }
+
+    .sv-create-left {
+      background: #07090F;
+      display: flex; flex-direction: column; justify-content: center;
+      padding: clamp(16px,2.5vw,36px);
+      border-right: 1px solid rgba(255,255,255,0.04);
+      gap: 8px; overflow-y: auto; position: relative;
+    }
+    .sv-create-left::before {
+      content: ''; position: absolute; inset: 0; pointer-events: none;
+      background: radial-gradient(ellipse 60% 80% at 80% 20%, rgba(255,32,128,0.03) 0%, transparent 65%);
+    }
+    #lobby.on-create .team-block {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.07); border-top: 2px solid rgba(0,212,255,0.2);
+      padding: 14px 16px; margin: 0;
+    }
+    .sv-vs-divider {
+      text-align: center;
+      font-family: 'Barlow Condensed', system-ui; font-size: 1.6rem; font-weight: 900; font-style: italic;
+      color: rgba(255,255,255,0.05); letter-spacing: 0.12em; pointer-events: none;
+    }
+
+    .sv-create-right {
+      overflow-y: auto; padding: clamp(16px,2.5vw,36px);
+      background: #090A18; display: flex; flex-direction: column;
+    }
+    #lobby.on-create #create-go {
+      margin-top: auto; padding: 16px;
+      font-family: 'Barlow Condensed', system-ui; font-size: 1.1rem; font-weight: 900; letter-spacing: 0.12em;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       WAIT ROOM — CENTERED FULLSCREEN
+       ═══════════════════════════════════════════════════════════════ */
+    .sv-wait-body {
+      flex: 1; overflow-y: auto;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: clamp(16px,3vw,48px); gap: 14px; background: #090A18; position: relative;
+    }
+    .sv-wait-body::before {
+      content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+      width: 200px; height: 2px;
+      background: linear-gradient(90deg, transparent, rgba(255,32,128,0.25), transparent);
+    }
+    #lobby.on-wait #wait-info { font-size: 0.65rem; color: #3E5268; letter-spacing: 0.08em; text-align: center; margin: 0; }
+
+    .sv-wait-vs-wrap { position: relative; width: 100%; max-width: 700px; }
+    .sv-wait-vs-wrap::after {
+      content: 'VS'; pointer-events: none;
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      font-family: 'Barlow Condensed', system-ui; font-size: 3.5rem; font-weight: 900; font-style: italic;
+      color: rgba(255,255,255,0.04); z-index: 2;
+    }
+    #lobby.on-wait #wait-teams { display: flex !important; width: 100%; gap: 0; }
+    #lobby.on-wait .wt-col { flex: 1; padding: 20px 22px; min-height: 120px; }
+    #lobby.on-wait .wt-col:first-child { border-right: none; }
+    #lobby.on-wait .wt-col h3 { font-size: 1rem; margin-bottom: 12px; }
+    #lobby.on-wait .wt-col .wt-p { font-size: 0.9rem; padding: 5px 0; }
+
+    .sv-wait-actions {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 10px; width: 100%; max-width: 700px;
+    }
+    #lobby.on-wait #team-pick { display: flex !important; gap: 14px; width: 100%; }
+    #lobby.on-wait .pick-btn { flex: 1; padding: 13px 4px; }
+    #lobby.on-wait #start-btn {
+      width: 100%;
+      font-family: 'Barlow Condensed', system-ui; font-size: 1.1rem; font-weight: 900; letter-spacing: 0.14em;
+      padding: 18px;
+    }
   </style>
 </head>
 <body>
@@ -1018,125 +1269,189 @@
 
       <!-- PROFIL -->
       <div id="v-profile" class="view" style="display:none">
-        <h2 data-i18n="profile_h">Profil & dres</h2>
-        <p id="profile-intro" data-i18n="profile_intro">Nastav si přezdívku a vzhled. Pak dej HOTOVO a můžeš hrát.</p>
-        <canvas id="prof-preview" width="260" height="190"></canvas>
-        <input id="name-input" type="text" data-i18n-ph="name_ph" placeholder="TVÉ JMÉNO" maxlength="14" autocomplete="off" spellcheck="false" />
-        <div id="hand-toggle">
-          <button class="hand-btn" data-hand="-1" data-i18n="lefty">LEVÁK</button>
-          <button class="hand-btn active" data-hand="1" data-i18n="righty">PRAVÁK</button>
-        </div>
-        <div class="gear-item"><span data-i18n="number_label">ČÍSLO DRESU</span><input id="num-input" type="number" min="0" max="99" placeholder="0–99" /></div>
-        <div class="gear-item"><span data-i18n="helmet">HELMA</span><div class="swatches" id="sw-helmet"></div></div>
-        <div class="gear-item"><span data-i18n="helmet_type">OCHRANA</span><div class="chips" id="ht-chips"></div></div>
-        <div class="gear-item" id="gear-visor"><span data-i18n="visor_color">VIZOR</span><div class="swatches" id="sw-visor"></div></div>
-        <div class="gear-item"><span data-i18n="gloves">RUKAVICE</span><div class="swatches" id="sw-gloves"></div></div>
-        <div class="gear-item"><span data-i18n="stick_color">HOKEJKA</span><div class="swatches" id="sw-stick"></div></div>
-        <div class="gear-item"><span data-i18n="tape">PÁSKA HOKEJKY</span><div class="swatches" id="sw-tape"></div></div>
-        <div class="gear-item"><span data-i18n="tape_style">STYL TAPU</span><div class="chips" id="ts-chips"></div></div>
-        <div class="gear-item"><span data-i18n="trail">STOPA PUKU</span><div class="swatches" id="sw-trail"></div></div>
-        <!-- Rank + Kredity (jen pro přihlášené) -->
-        <div id="profile-rank-row">
-          <div class="rank-card green">
-            <span class="rc-label">Global Rank</span>
-            <div class="rc-value" id="stat-position">#—</div>
+        <div class="sv-header">
+          <button class="sv-back back" data-to="main">← HOME</button>
+          <div class="sv-title-block">
+            <div class="sv-eyebrow-sm">ALPHA SEASON 1</div>
+            <div class="sv-title-txt">LOCKER ROOM</div>
           </div>
-          <div class="rank-card">
-            <span class="rc-label">Rank Body</span>
-            <div class="rc-value" id="stat-rank">1000</div>
-          </div>
-          <div class="rank-card orange">
-            <span class="rc-label">Puck Credits</span>
-            <div class="rc-value" id="stat-credits">0</div>
+          <div class="sv-spacer"></div>
+          <div class="sv-actions">
+            <button id="profile-done" data-i18n="done">SAVE LOADOUT</button>
           </div>
         </div>
-
-        <!-- Statistiky (jen pro přihlášené) -->
-        <div id="profile-stats" style="display:none;margin-bottom:10px">
-          <div class="stats-heading" data-i18n="stats_title">Statistiky</div>
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px">
-            <div class="stat-cell"><span id="stat-goals">0</span><label data-i18n="stats_goals">Góly</label></div>
-            <div class="stat-cell"><span id="stat-assists">0</span><label data-i18n="stats_assists">Asistence</label></div>
-            <div class="stat-cell"><span id="stat-saves">0</span><label data-i18n="stats_saves">Zákroky</label></div>
-            <div class="stat-cell"><span id="stat-games">0</span><label data-i18n="stats_games">Zápasy</label></div>
-            <div class="stat-cell"><span id="stat-wins">0</span><label data-i18n="stats_wins">Výhry</label></div>
-            <div class="stat-cell"><span id="stat-losses">0</span><label data-i18n="stats_losses">Prohry</label></div>
+        <div class="sv-body sv-body-profile">
+          <!-- Left: Player display + identity -->
+          <div class="sv-profile-left">
+            <canvas id="prof-preview" width="260" height="190"></canvas>
+            <input id="name-input" type="text" data-i18n-ph="name_ph" placeholder="TVÉ JMÉNO" maxlength="14" autocomplete="off" spellcheck="false" />
+            <div id="hand-toggle">
+              <button class="hand-btn" data-hand="-1" data-i18n="lefty">LEVÁK</button>
+              <button class="hand-btn active" data-hand="1" data-i18n="righty">PRAVÁK</button>
+            </div>
+            <div class="sv-num-row">
+              <span class="lbl" data-i18n="number_label">ČÍSLO DRESU</span>
+              <input id="num-input" type="number" min="0" max="99" placeholder="99" />
+            </div>
+            <!-- Rank + Kredity (jen pro přihlášené) -->
+            <div id="profile-rank-row">
+              <div class="rank-card green">
+                <span class="rc-label">Global Rank</span>
+                <div class="rc-value" id="stat-position">#—</div>
+              </div>
+              <div class="rank-card">
+                <span class="rc-label">Rank Body</span>
+                <div class="rc-value" id="stat-rank">1000</div>
+              </div>
+              <div class="rank-card orange">
+                <span class="rc-label">Puck Credits</span>
+                <div class="rc-value" id="stat-credits">0</div>
+              </div>
+            </div>
+            <!-- Statistiky (jen pro přihlášené) -->
+            <div id="profile-stats" style="display:none">
+              <div class="stats-heading" data-i18n="stats_title">Statistiky</div>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px">
+                <div class="stat-cell"><span id="stat-goals">0</span><label data-i18n="stats_goals">Góly</label></div>
+                <div class="stat-cell"><span id="stat-assists">0</span><label data-i18n="stats_assists">Asistence</label></div>
+                <div class="stat-cell"><span id="stat-saves">0</span><label data-i18n="stats_saves">Zákroky</label></div>
+                <div class="stat-cell"><span id="stat-games">0</span><label data-i18n="stats_games">Zápasy</label></div>
+                <div class="stat-cell"><span id="stat-wins">0</span><label data-i18n="stats_wins">Výhry</label></div>
+                <div class="stat-cell"><span id="stat-losses">0</span><label data-i18n="stats_losses">Prohry</label></div>
+              </div>
+            </div>
+            <div id="profile-guest-login" style="display:none">
+              <button id="profile-discord-btn" style="display:flex;align-items:center;justify-content:center;gap:9px">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19.27 5.33C17.94 4.71 16.5 4.26 15 4a.09.09 0 0 0-.07.03c-.18.33-.39.76-.53 1.09a16.09 16.09 0 0 0-4.8 0c-.14-.34-.35-.76-.54-1.09-.01-.02-.04-.03-.07-.03-1.5.26-2.93.71-4.27 1.33-.01 0-.02.01-.03.02-2.72 4.07-3.47 8.03-3.1 11.95 0 .02.01.04.03.05 1.8 1.32 3.53 2.12 5.24 2.65.03.01.06 0 .07-.02.4-.55.76-1.13 1.07-1.74.02-.04 0-.08-.04-.09-.57-.22-1.11-.48-1.64-.78-.04-.02-.04-.08-.01-.11.11-.08.22-.17.33-.25.02-.02.05-.02.07-.01 3.44 1.57 7.15 1.57 10.55 0 .02-.01.05-.01.07.01.11.09.22.17.33.26.04.03.04.09-.01.11-.52.31-1.07.56-1.64.78-.04.01-.05.06-.04.09.32.61.68 1.19 1.07 1.74.03.02.06.03.09.02 1.72-.53 3.45-1.33 5.25-2.65.02-.01.03-.03.03-.05.44-4.53-.73-8.46-3.1-11.95-.01-.01-.02-.02-.04-.02z"/></svg>
+                <span data-i18n="profile_discord_cta">Přihlásit se přes Discord — uložit profil & statistiky</span>
+              </button>
+            </div>
+          </div>
+          <!-- Right: Gear customization -->
+          <div class="sv-profile-gear">
+            <p id="profile-intro" data-i18n="profile_intro">Nastav si přezdívku a vzhled. Pak dej HOTOVO a můžeš hrát.</p>
+            <div class="gear-item"><span data-i18n="helmet">HELMA</span><div class="swatches" id="sw-helmet"></div></div>
+            <div class="gear-item"><span data-i18n="helmet_type">OCHRANA</span><div class="chips" id="ht-chips"></div></div>
+            <div class="gear-item" id="gear-visor"><span data-i18n="visor_color">VIZOR</span><div class="swatches" id="sw-visor"></div></div>
+            <div class="gear-item"><span data-i18n="gloves">RUKAVICE</span><div class="swatches" id="sw-gloves"></div></div>
+            <div class="gear-item"><span data-i18n="stick_color">HOKEJKA</span><div class="swatches" id="sw-stick"></div></div>
+            <div class="gear-item"><span data-i18n="tape">PÁSKA HOKEJKY</span><div class="swatches" id="sw-tape"></div></div>
+            <div class="gear-item"><span data-i18n="tape_style">STYL TAPU</span><div class="chips" id="ts-chips"></div></div>
+            <div class="gear-item"><span data-i18n="trail">STOPA PUKU</span><div class="swatches" id="sw-trail"></div></div>
           </div>
         </div>
-        <div id="profile-guest-login" style="display:none;margin-bottom:8px">
-          <div style="border-top:1px solid #1e2230;margin:12px 0 14px"></div>
-          <button id="profile-discord-btn" style="background:#5865F2;display:flex;align-items:center;justify-content:center;gap:9px">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19.27 5.33C17.94 4.71 16.5 4.26 15 4a.09.09 0 0 0-.07.03c-.18.33-.39.76-.53 1.09a16.09 16.09 0 0 0-4.8 0c-.14-.34-.35-.76-.54-1.09-.01-.02-.04-.03-.07-.03-1.5.26-2.93.71-4.27 1.33-.01 0-.02.01-.03.02-2.72 4.07-3.47 8.03-3.1 11.95 0 .02.01.04.03.05 1.8 1.32 3.53 2.12 5.24 2.65.03.01.06 0 .07-.02.4-.55.76-1.13 1.07-1.74.02-.04 0-.08-.04-.09-.57-.22-1.11-.48-1.64-.78-.04-.02-.04-.08-.01-.11.11-.08.22-.17.33-.25.02-.02.05-.02.07-.01 3.44 1.57 7.15 1.57 10.55 0 .02-.01.05-.01.07.01.11.09.22.17.33.26.04.03.04.09-.01.11-.52.31-1.07.56-1.64.78-.04.01-.05.06-.04.09.32.61.68 1.19 1.07 1.74.03.02.06.03.09.02 1.72-.53 3.45-1.33 5.25-2.65.02-.01.03-.03.03-.05.44-4.53-.73-8.46-3.1-11.95-.01-.01-.02-.02-.04-.02z"/></svg>
-            <span data-i18n="profile_discord_cta">Přihlásit se přes Discord — uložit profil & statistiky</span>
-          </button>
-        </div>
-        <button id="profile-done" class="back primary" data-i18n="done">HOTOVO</button>
       </div>
 
       <!-- ONLINE: SEZNAM -->
       <div id="v-browse" class="view" style="display:none">
-        <h2 data-i18n="online_h">Online hry</h2>
-        <div id="lobby-list"></div>
-        <div class="row2">
-          <button id="create-btn" class="primary" data-i18n="create_btn">+ VYTVOŘIT</button>
-          <button id="refresh-btn" class="ghost">⟳</button>
+        <div class="sv-header">
+          <button class="sv-back back" data-to="main">← HOME</button>
+          <div class="sv-title-block">
+            <div class="sv-eyebrow-sm">ONLINE PLAY</div>
+            <div class="sv-title-txt">FIND A MATCH</div>
+          </div>
+          <div class="sv-spacer"></div>
+          <div class="sv-actions">
+            <button id="refresh-btn" class="sv-icon-btn">⟳ REFRESH</button>
+          </div>
         </div>
-        <button class="back" data-to="main" data-i18n="back">ZPĚT</button>
+        <div class="sv-body sv-body-browse">
+          <div class="sv-browse-hero">
+            <div class="sv-eyebrow">QUICK MATCH</div>
+            <div class="sv-big-title">BROWSE<br>THE<br>ARENA</div>
+            <button id="create-btn" class="sv-create-cta">
+              <span class="vmcta-icon" style="font-size:1.4rem;font-weight:300;line-height:1">+</span>
+              <div>
+                <div class="vmcta-title">CREATE ROOM</div>
+                <div class="vmcta-sub">PRIVATE LOBBY · CUSTOM RULES</div>
+              </div>
+            </button>
+          </div>
+          <div class="sv-browse-list">
+            <div class="sv-section-lbl">OPEN LOBBIES</div>
+            <div id="lobby-list"></div>
+          </div>
+        </div>
       </div>
 
       <!-- ONLINE: VYTVOŘENÍ -->
       <div id="v-create" class="view" style="display:none">
-        <h2 data-i18n="new_lobby_h">Nové lobby</h2>
-        <input id="lobby-name" type="text" data-i18n-ph="lobby_name_ph" placeholder="NÁZEV LOBBY" maxlength="24" />
-        <input id="lobby-pass" type="text" data-i18n-ph="pass_ph" placeholder="HESLO (nepovinné)" maxlength="24" />
-
-        <div class="team-block">
-          <div class="tb-head">
-            <input id="hteam-name" class="tname" type="text" data-i18n-ph="home_ph" placeholder="Domácí" maxlength="16" />
-            <select id="hteam-style"><option value="solid" data-i18n="style_solid">solid</option><option value="stripes" data-i18n="style_stripes">pruhy</option><option value="shoulder" data-i18n="style_shoulder">ramena</option></select>
+        <div class="sv-header">
+          <button class="sv-back back" data-to="browse">← BACK</button>
+          <div class="sv-title-block">
+            <div class="sv-eyebrow-sm">LOBBY SETUP</div>
+            <div class="sv-title-txt">NEW LOBBY</div>
           </div>
-          <div class="swatches" id="sw-home"></div>
+          <div class="sv-spacer"></div>
         </div>
-        <div class="team-block">
-          <div class="tb-head">
-            <input id="ateam-name" class="tname" type="text" data-i18n-ph="away_ph" placeholder="Hosté" maxlength="16" />
-            <select id="ateam-style"><option value="solid" data-i18n="style_solid">solid</option><option value="stripes" data-i18n="style_stripes">pruhy</option><option value="shoulder" data-i18n="style_shoulder">ramena</option></select>
+        <div class="sv-body sv-body-create">
+          <!-- Left: Team setup -->
+          <div class="sv-create-left">
+            <div class="sv-eyebrow">CONFIGURE TEAMS</div>
+            <div class="team-block">
+              <div class="tb-head">
+                <input id="hteam-name" class="tname" type="text" data-i18n-ph="home_ph" placeholder="Domácí" maxlength="16" />
+                <select id="hteam-style"><option value="solid" data-i18n="style_solid">solid</option><option value="stripes" data-i18n="style_stripes">pruhy</option><option value="shoulder" data-i18n="style_shoulder">ramena</option></select>
+              </div>
+              <div class="swatches" id="sw-home"></div>
+            </div>
+            <div class="sv-vs-divider">VS</div>
+            <div class="team-block">
+              <div class="tb-head">
+                <input id="ateam-name" class="tname" type="text" data-i18n-ph="away_ph" placeholder="Hosté" maxlength="16" />
+                <select id="ateam-style"><option value="solid" data-i18n="style_solid">solid</option><option value="stripes" data-i18n="style_stripes">pruhy</option><option value="shoulder" data-i18n="style_shoulder">ramena</option></select>
+              </div>
+              <div class="swatches" id="sw-away"></div>
+            </div>
           </div>
-          <div class="swatches" id="sw-away"></div>
-        </div>
-
-        <div class="lbl" data-i18n="format">FORMÁT</div>
-        <div id="format-row">
-          <button class="fmt-btn main" data-fmt="1">1v1</button>
-          <button class="fmt-btn" data-fmt="2">2v2</button>
-          <button class="fmt-btn main active" data-fmt="3">3v3</button>
-          <button class="fmt-btn" data-fmt="4">4v4</button>
-          <button class="fmt-btn main" data-fmt="5">5v5</button>
-        </div>
-        <div class="set-row">
-          <label><span data-i18n="periods">Třetiny</span><select id="set-periods"><option>1</option><option selected>3</option></select></label>
-          <label><span data-i18n="minutes">Minuty</span><select id="set-minutes"><option>5</option><option selected>10</option><option>15</option></select></label>
-          <label class="chk"><input id="set-rules" type="checkbox" /><span data-i18n="rules">Pravidla</span></label>
-        </div>
-        <div class="row2">
-          <button id="create-go" class="primary" data-i18n="create">VYTVOŘIT</button>
-          <button class="ghost back" data-to="browse" data-i18n="back">ZPĚT</button>
+          <!-- Right: Game settings -->
+          <div class="sv-create-right">
+            <div class="sv-eyebrow">GAME SETTINGS</div>
+            <input id="lobby-name" type="text" data-i18n-ph="lobby_name_ph" placeholder="NÁZEV LOBBY" maxlength="24" />
+            <input id="lobby-pass" type="text" data-i18n-ph="pass_ph" placeholder="HESLO (nepovinné)" maxlength="24" />
+            <div class="lbl" data-i18n="format">FORMÁT</div>
+            <div id="format-row">
+              <button class="fmt-btn main" data-fmt="1">1v1</button>
+              <button class="fmt-btn" data-fmt="2">2v2</button>
+              <button class="fmt-btn main active" data-fmt="3">3v3</button>
+              <button class="fmt-btn" data-fmt="4">4v4</button>
+              <button class="fmt-btn main" data-fmt="5">5v5</button>
+            </div>
+            <div class="set-row">
+              <label><span data-i18n="periods">Třetiny</span><select id="set-periods"><option>1</option><option selected>3</option></select></label>
+              <label><span data-i18n="minutes">Minuty</span><select id="set-minutes"><option>5</option><option selected>10</option><option>15</option></select></label>
+              <label class="chk"><input id="set-rules" type="checkbox" /><span data-i18n="rules">Pravidla</span></label>
+            </div>
+            <button id="create-go" class="primary" data-i18n="create">🏒 VYTVOŘIT LOBBY</button>
+          </div>
         </div>
       </div>
 
       <!-- ČEKÁRNA -->
       <div id="v-wait" class="view" style="display:none">
-        <h2 id="wait-title">Lobby</h2>
-        <p id="wait-info" class="sub" style="margin-bottom:12px"></p>
-        <div id="wait-teams"></div>
-        <div id="team-pick" class="row2" style="margin-top:8px">
-          <button class="pick-btn" data-team="home" data-i18n="join_home">DO DOMÁCÍCH</button>
-          <button class="pick-btn" data-team="away" data-i18n="join_away">DO HOSTŮ</button>
+        <div class="sv-header">
+          <button id="wait-leave" class="sv-back" data-i18n="leave">← LEAVE</button>
+          <div class="sv-title-block">
+            <div class="sv-eyebrow-sm">PRE-GAME</div>
+            <div class="sv-title-txt" id="wait-title">LOBBY</div>
+          </div>
+          <div class="sv-spacer"></div>
+          <div class="sv-actions">
+            <button id="share-btn" class="sv-icon-btn" data-i18n="share_lobby">🔗 SHARE</button>
+          </div>
         </div>
-        <button id="start-btn" class="primary" data-i18n="start">START</button>
-        <div style="display:flex;gap:8px">
-          <button id="wait-leave" class="ghost" style="flex:1" data-i18n="leave">ODEJÍT</button>
-          <button id="share-btn" class="ghost" style="flex:1;font-size:0.8rem" data-i18n="share_lobby">🔗 Sdílet lobby</button>
+        <div class="sv-wait-body">
+          <p id="wait-info" class="sub"></p>
+          <div class="sv-wait-vs-wrap">
+            <div id="wait-teams"></div>
+          </div>
+          <div class="sv-wait-actions">
+            <div id="team-pick" class="row2">
+              <button class="pick-btn" data-team="home" data-i18n="join_home">DO DOMÁCÍCH</button>
+              <button class="pick-btn" data-team="away" data-i18n="join_away">DO HOSTŮ</button>
+            </div>
+            <button id="start-btn" class="primary" data-i18n="start">START</button>
+          </div>
         </div>
       </div>
 

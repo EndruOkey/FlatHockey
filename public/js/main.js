@@ -214,7 +214,11 @@ function readSettings() {
 const VIEWS = { splash:'v-splash', main:'v-main', profile:'v-profile', browse:'v-browse', create:'v-create', wait:'v-wait' };
 function showView(name) {
   for (const [k, id] of Object.entries(VIEWS)) $(id).style.display = (k === name) ? '' : 'none';
-  lobby.classList.toggle('on-main', name === 'main');
+  lobby.classList.toggle('on-main',    name === 'main');
+  lobby.classList.toggle('on-browse',  name === 'browse');
+  lobby.classList.toggle('on-profile', name === 'profile');
+  lobby.classList.toggle('on-create',  name === 'create');
+  lobby.classList.toggle('on-wait',    name === 'wait');
   if (name === 'main') {
     _loadStats();  // refresh bottom stats bar + ELO overlay
     // keep HOME tab active when returning to main
