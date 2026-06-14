@@ -616,6 +616,181 @@
     #v-main-footer a:hover { color: #26394A; }
 
     #lobby-list:empty::after { content: 'Žádná lobby — vytvoř první.'; color: #445; font-size: 0.8rem; text-align: center; padding: 18px 0; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       LOCKER ROOM — ESPORTS PROFILE REDESIGN
+       ═══════════════════════════════════════════════════════════════ */
+
+    /* Wider box for all sub-views */
+    #lobby:not(.on-main) .box { max-width: 560px; }
+
+    /* Heading */
+    #v-profile > h2 {
+      font-family: 'Barlow Condensed', system-ui;
+      font-size: 1.55rem; font-weight: 900;
+      letter-spacing: 0.1em; color: #EEF4FF;
+      border-left: 3px solid #00D4FF; padding-left: 12px;
+      margin-bottom: 2px;
+    }
+    #profile-intro { color: #253342; font-size: 0.68rem; margin: 0 0 10px; text-align: left; }
+
+    /* Canvas preview */
+    #prof-preview {
+      width: 100%; max-width: 100%; height: 160px; margin: 0 0 10px;
+      background: linear-gradient(135deg, #06101E 0%, #0A1828 100%);
+      border: 1px solid rgba(0,212,255,0.1);
+      border-bottom: 2px solid rgba(0,212,255,0.18);
+      border-radius: 0;
+      box-shadow: inset 0 0 40px rgba(0,30,80,0.4);
+    }
+
+    /* Name input */
+    #name-input {
+      background: #06101E;
+      border: 1px solid rgba(255,255,255,0.04);
+      border-bottom: 2px solid rgba(0,212,255,0.22);
+      border-radius: 0; margin-bottom: 8px; padding: 10px 14px;
+      font-family: 'Barlow Condensed', system-ui;
+      font-size: 1.15rem; font-weight: 700; letter-spacing: 0.18em;
+      color: #EEF4FF;
+    }
+    #name-input:focus {
+      border-bottom-color: #00D4FF;
+      box-shadow: none; outline: none;
+    }
+
+    /* Hand toggle */
+    #hand-toggle { margin-bottom: 8px; gap: 4px; }
+    .hand-btn {
+      background: #06101E;
+      border: 1px solid rgba(255,255,255,0.04);
+      border-radius: 0; color: #2A3A4A;
+      font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em;
+    }
+    .hand-btn.active {
+      background: rgba(0,212,255,0.06);
+      border-color: rgba(0,212,255,0.18);
+      border-left: 3px solid #00D4FF; color: #B8D8F0;
+    }
+    .hand-btn:hover:not(.active) { background: rgba(255,255,255,0.02); color: #445566; filter: none; }
+
+    /* Gear items */
+    .gear-item { align-items: flex-start; padding: 5px 0 7px; margin-bottom: 1px; gap: 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.025); }
+    .gear-item > span { width: 80px; flex: none; text-align: left; color: #253342;
+      font-size: 0.56rem; letter-spacing: 0.1em; text-transform: uppercase; padding-top: 5px; }
+
+    /* Swatches — bigger, sharper */
+    .sw { width: 28px; height: 28px; border-radius: 2px;
+      border: 2px solid transparent;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,0.35); }
+    .sw.active {
+      border-color: #00D4FF;
+      box-shadow: 0 0 10px rgba(0,212,255,0.35);
+      transform: scale(1.13);
+    }
+    .sw.locked { opacity: 0.32; cursor: not-allowed; filter: saturate(0.3); }
+    .sw.locked::after { content: '🔒'; font-size: 0.5rem; top: -6px; right: -5px; }
+
+    /* Chips */
+    .chip {
+      background: #06101E; border: 1px solid rgba(255,255,255,0.04);
+      border-radius: 0; color: #253342;
+      font-size: 0.58rem; letter-spacing: 0.05em; padding: 7px 2px;
+    }
+    .chip.active {
+      background: rgba(0,212,255,0.06);
+      border-color: rgba(0,212,255,0.18);
+      border-left: 2px solid #00D4FF; color: #B8D8F0;
+    }
+    .chip:hover:not(.active) { background: rgba(255,255,255,0.02); color: #445566; filter: none; }
+
+    /* Rank + Credits row */
+    #profile-rank-row {
+      display: none; grid-template-columns: 1fr 1fr 1fr;
+      gap: 6px; margin-bottom: 8px;
+    }
+    #profile-rank-row.show { display: grid; }
+    .rank-card {
+      background: #06101E; border: 1px solid rgba(255,255,255,0.04);
+      border-top: 2px solid #00D4FF; padding: 8px 10px;
+    }
+    .rank-card .rc-label {
+      font-size: 0.5rem; letter-spacing: 0.1em; color: #1E2C38;
+      text-transform: uppercase; margin-bottom: 2px; display: block;
+    }
+    .rank-card .rc-value {
+      font-family: 'Barlow Condensed', system-ui;
+      font-size: 1.4rem; font-weight: 900; color: #C0D8F0; line-height: 1;
+    }
+    .rank-card.orange { border-top-color: #FF8C00; }
+    .rank-card.orange .rc-value { color: #FF8C00; }
+    .rank-card.green { border-top-color: #00C864; }
+    .rank-card.green .rc-value { color: #00C864; }
+
+    /* Stats section heading */
+    .stats-heading {
+      font-size: 0.54rem; letter-spacing: 0.14em; text-transform: uppercase;
+      color: #1E2C38; margin-bottom: 6px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .stats-heading::before { content: ''; display: block; width: 14px; height: 1px; background: #1E2C38; }
+
+    /* Stat cells update */
+    .stat-cell {
+      background: #06101E; border: 1px solid rgba(255,255,255,0.04);
+      border-top: 2px solid #1A2A3A; border-radius: 0; padding: 10px 4px;
+    }
+    .stat-cell:nth-child(1) { border-top-color: #00D4FF; }
+    .stat-cell:nth-child(2) { border-top-color: #4A7FFF; }
+    .stat-cell:nth-child(3) { border-top-color: #4A7FFF; }
+    .stat-cell:nth-child(4) { border-top-color: #334455; }
+    .stat-cell:nth-child(5) { border-top-color: #00C864; }
+    .stat-cell:nth-child(6) { border-top-color: #8B1A1A; }
+    .stat-cell span {
+      font-family: 'Barlow Condensed', system-ui;
+      font-size: 1.65rem; font-weight: 900; color: #B8C8D8; line-height: 1;
+    }
+    .stat-cell label { color: #1A2838; font-size: 0.5rem; letter-spacing: 0.1em; margin-top: 4px; }
+
+    /* Jersey number */
+    #num-input {
+      font-family: 'Barlow Condensed', system-ui; font-size: 1.1rem; font-weight: 700;
+      background: #06101E; color: #EEF4FF; text-align: center;
+      border: 1px solid rgba(255,255,255,0.04);
+      border-bottom: 2px solid rgba(0,212,255,0.2);
+      border-radius: 0; padding: 8px 6px; margin: 0;
+    }
+    #num-input:focus { border-bottom-color: #00D4FF; box-shadow: none; outline: none; }
+
+    /* Done button — Fortnite orange CTA */
+    #profile-done {
+      font-family: 'Barlow Condensed', system-ui;
+      font-size: 1.2rem; font-weight: 900; letter-spacing: 0.14em;
+      padding: 16px; margin-top: 14px;
+      background: linear-gradient(180deg, #FFA020 0%, #E06000 52%, #C04800 100%);
+      color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.35);
+      border: none; border-top: 1px solid rgba(255,200,100,0.18);
+      border-left: none; border-radius: 0;
+      clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+      box-shadow: 0 4px 0 #7A2C00, 0 6px 18px rgba(200,80,0,0.2);
+      transition: transform 0.07s, box-shadow 0.07s;
+    }
+    #profile-done:hover:not(:disabled) {
+      background: linear-gradient(180deg, #FFB030 0%, #EF6800 52%, #CF5000 100%);
+      box-shadow: 0 4px 0 #7A2C00, 0 10px 28px rgba(220,100,0,0.4);
+      transform: translateY(-1px); filter: none;
+    }
+    #profile-done:active:not(:disabled) {
+      box-shadow: 0 1px 0 #7A2C00; transform: translateY(3px); filter: none;
+    }
+
+    /* Discord btn in profile */
+    #profile-discord-btn {
+      background: #5865F2; border-radius: 0;
+      clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+    }
+    #profile-discord-btn:hover { filter: none; background: #4752E0; box-shadow: 0 0 20px rgba(88,101,242,0.4); }
   </style>
 </head>
 <body>
@@ -780,11 +955,26 @@
         <div class="gear-item"><span data-i18n="tape">PÁSKA HOKEJKY</span><div class="swatches" id="sw-tape"></div></div>
         <div class="gear-item"><span data-i18n="tape_style">STYL TAPU</span><div class="chips" id="ts-chips"></div></div>
         <div class="gear-item"><span data-i18n="trail">STOPA PUKU</span><div class="swatches" id="sw-trail"></div></div>
+        <!-- Rank + Kredity (jen pro přihlášené) -->
+        <div id="profile-rank-row">
+          <div class="rank-card green">
+            <span class="rc-label">Global Rank</span>
+            <div class="rc-value" id="stat-position">#—</div>
+          </div>
+          <div class="rank-card">
+            <span class="rc-label">Rank Body</span>
+            <div class="rc-value" id="stat-rank">1000</div>
+          </div>
+          <div class="rank-card orange">
+            <span class="rc-label">Puck Credits</span>
+            <div class="rc-value" id="stat-credits">0</div>
+          </div>
+        </div>
+
         <!-- Statistiky (jen pro přihlášené) -->
-        <div id="profile-stats" style="display:none;margin-bottom:12px">
-          <div style="border-top:1px solid #1e2230;margin:12px 0 10px"></div>
-          <div style="font-size:0.64rem;letter-spacing:0.08em;text-transform:uppercase;color:#556;margin-bottom:8px" data-i18n="stats_title">Statistiky</div>
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
+        <div id="profile-stats" style="display:none;margin-bottom:10px">
+          <div class="stats-heading" data-i18n="stats_title">Statistiky</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px">
             <div class="stat-cell"><span id="stat-goals">0</span><label data-i18n="stats_goals">Góly</label></div>
             <div class="stat-cell"><span id="stat-assists">0</span><label data-i18n="stats_assists">Asistence</label></div>
             <div class="stat-cell"><span id="stat-saves">0</span><label data-i18n="stats_saves">Zákroky</label></div>

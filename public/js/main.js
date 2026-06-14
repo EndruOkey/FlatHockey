@@ -4,7 +4,7 @@ import { Player } from './entities/Player.js';
 import { PLAYER, RINK } from './constants.js';
 import { t, applyI18n, toggleLang, setOnChange } from './i18n.js';
 import { setVolume, getVolume } from './sound.js';
-import { loadSession, onAuthChange, loginWithDiscord, logout, handleOAuthRedirect, getUser, loadServerStats, saveServerProfile } from './auth.js';
+import { loadSession, onAuthChange, loginWithDiscord, logout, handleOAuthRedirect, getUser, loadServerStats, saveServerProfile, loadRankAndCredits } from './auth.js';
 
 const $ = id => document.getElementById(id);
 const canvas = $('canvas');
@@ -294,16 +294,32 @@ $('profile-done').onclick = () => {
 // ── Hlavní menu ───────────────────────────────────────────────────────
 $('go-profile').onclick = () => { showView('profile'); drawPreview(); _loadStats(); };
 async function _loadStats() {
-  const stats = await loadServerStats();
+  const [stats, rankData] = await Promise.all([loadServerStats(), loadRankAndCredits()]);
+  const user = getUser();
+
+  // Stats grid
   const statsEl = $('profile-stats');
-  if (!stats || !getUser()) { statsEl.style.display = 'none'; return; }
-  statsEl.style.display = '';
-  $('stat-goals').textContent   = stats.goals        ?? 0;
-  $('stat-assists').textContent = stats.assists       ?? 0;
-  $('stat-saves').textContent   = stats.saves         ?? 0;
-  $('stat-games').textContent   = stats.games_played  ?? 0;
-  $('stat-wins').textContent    = stats.wins          ?? 0;
-  $('stat-losses').textContent  = stats.losses        ?? 0;
+  if (!stats || !user) { statsEl.style.display = 'none'; }
+  else {
+    statsEl.style.display = '';
+    $('stat-goals').textContent   = stats.goals        ?? 0;
+    $('stat-assists').textContent = stats.assists       ?? 0;
+    $('stat-saves').textContent   = stats.saves         ?? 0;
+    $('stat-games').textContent   = stats.games_played  ?? 0;
+    $('stat-wins').textContent    = stats.wins          ?? 0;
+    $('stat-losses').textContent  = stats.losses        ?? 0;
+  }
+
+  // Rank + Credits row
+  const rankRow = $('profile-rank-row');
+  if (rankData && user) {
+    rankRow.classList.add('show');
+    $('stat-rank').textContent    = rankData.rank_points ?? 1000;
+    $('stat-position').textContent = rankData.position ? `#${rankData.position}` : '#—';
+    $('stat-credits').textContent  = rankData.puck_credits ?? 0;
+  } else {
+    rankRow.classList.remove('show');
+  }
 }
 $('go-online').onclick  = () => { if (!commitProfile()) return requireProfile(); showView('browse'); net.listLobbies(); };
 $('go-solo').onclick     = () => {

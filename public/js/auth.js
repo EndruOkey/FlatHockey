@@ -41,6 +41,24 @@ export async function loadServerStats() {
   return null;
 }
 
+export async function loadRankAndCredits() {
+  if (!_user) return null;
+  try {
+    const [rankRes, credRes] = await Promise.all([
+      fetch('/api/me/rank',    { credentials: 'same-origin' }),
+      fetch('/api/me/credits', { credentials: 'same-origin' }),
+    ]);
+    const rank    = rankRes.ok    ? await rankRes.json()    : null;
+    const credits = credRes.ok    ? await credRes.json()    : null;
+    return {
+      rank_points:  rank?.rank_points  ?? 1000,
+      position:     rank?.position     ?? null,
+      puck_credits: credits?.puck_credits ?? 0,
+    };
+  } catch {}
+  return null;
+}
+
 export async function saveServerProfile(data) {
   if (!_user) return;
   try {
