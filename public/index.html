@@ -3,270 +3,456 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hockey</title>
+  <title>FlatHockey</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;900&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: #07090f; color: #fff; font-family: 'Segoe UI', system-ui, sans-serif; overflow: hidden; }
     canvas { display: block; }
 
+    /* ═══════════════════════════════════════════════════════════════
+       ESPORTS DESIGN SYSTEM — FlatHockey
+       ═══════════════════════════════════════════════════════════════ */
+
+    /* ── Layout ────────────────────────────────────────────────────── */
     #lobby {
       position: fixed; inset: 0;
       display: flex; align-items: center; justify-content: center;
-      background: rgba(7,9,15,0.96);
+      background: #07090f;
       z-index: 10;
     }
 
+    /* Fullscreen main menu state */
+    #lobby.on-main {
+      align-items: flex-start;
+      background:
+        radial-gradient(ellipse 100% 60% at 50% 0%, rgba(42,127,255,0.07) 0%, transparent 70%),
+        repeating-linear-gradient(135deg, transparent, transparent 40px, rgba(255,255,255,0.008) 40px, rgba(255,255,255,0.008) 41px),
+        #07090f;
+    }
+    #lobby.on-main > .box {
+      background: transparent;
+      border: none;
+      box-shadow: none;
+      border-radius: 0;
+      padding: 0;
+      min-width: unset;
+      max-width: unset;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    #lobby.on-main h1 { display: none; }
+    #lobby.on-main #wip { display: none; }
+
+    /* ── Card (sub-views) ─────────────────────────────────────────── */
     .box {
       text-align: center;
-      padding: 44px 40px;
-      border: 1px solid #222;
-      border-radius: 14px;
-      background: #0f1118;
+      padding: 36px 36px 28px;
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 3px;
+      background: #0d1018;
       min-width: 320px;
+      max-width: 440px;
+      box-shadow: 0 32px 80px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.04);
     }
 
+    /* ── Legacy h1 (sub-views card header) ───────────────────────── */
     h1 {
-      font-size: 2.6rem;
+      font-size: 2rem;
       font-weight: 900;
       letter-spacing: 0.01em;
-      background: linear-gradient(135deg, #3a9fff, #ff4455);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      margin-bottom: 22px;
+      color: #fff;
+      margin-bottom: 18px;
     }
-    h1 span { font-weight: 800; }
+    h1 span { color: #4a9eff; }
+    .sub { color: #556; margin-bottom: 28px; font-size: 0.8rem; letter-spacing: 0.05em; }
 
-    .sub { color: #555; margin-bottom: 34px; font-size: 0.82rem; letter-spacing: 0.05em; }
-
+    /* ── Inputs ───────────────────────────────────────────────────── */
     input {
-      width: 100%; padding: 13px 16px;
-      background: #141720; border: 1px solid #2a2d3a; border-radius: 8px;
-      color: #fff; font-size: 1.15rem; text-align: center;
-      letter-spacing: 0.25em; text-transform: uppercase;
-      margin-bottom: 10px; transition: border-color 0.15s;
+      width: 100%; padding: 12px 16px;
+      background: #0a0d14; border: 1px solid #1a1e2a; border-radius: 2px;
+      color: #fff; font-size: 1.1rem; text-align: center;
+      letter-spacing: 0.2em; text-transform: uppercase;
+      margin-bottom: 10px; transition: border-color 0.15s, box-shadow 0.15s;
     }
-    input:focus { outline: none; border-color: #3a9fff; }
-    input::placeholder { color: #333; letter-spacing: 0.1em; }
+    input:focus { outline: none; border-color: #4a9eff; box-shadow: 0 0 0 1px rgba(74,158,255,0.3); }
+    input::placeholder { color: #222; letter-spacing: 0.1em; }
 
+    /* ═══════════════════════════════════════════════════════════════
+       BUTTON SYSTEM
+       ═══════════════════════════════════════════════════════════════ */
     button {
-      width: 100%; padding: 13px;
-      border: none; border-radius: 8px;
-      background: #1b2330;
-      color: #fff; font-size: 0.95rem; font-weight: 700;
-      cursor: pointer; transition: opacity 0.15s;
-      margin-bottom: 8px; letter-spacing: 0.05em;
+      width: 100%; padding: 13px 18px;
+      border: none; border-radius: 2px;
+      color: #fff; font-size: 0.9rem; font-weight: 700;
+      cursor: pointer; transition: filter 0.12s, box-shadow 0.12s;
+      margin-bottom: 8px; letter-spacing: 0.08em; text-transform: uppercase;
+      background: #131720;
     }
-    button:hover:not(:disabled) { opacity: 0.85; }
-    button:disabled { opacity: 0.4; cursor: default; }
+    button:hover:not(:disabled) { filter: brightness(1.15); }
+    button:disabled { opacity: 0.35; cursor: default; }
 
-    #join-btn { background: linear-gradient(135deg, #2266cc, #1144aa); }
-    #solo-btn  { background: #181c26; border: 1px solid #2a2d3a; }
+    /* PRIMARY — cut top-right corner + glow */
+    button.primary {
+      background: linear-gradient(90deg, #1a6fd4 0%, #2a8fff 100%);
+      color: #fff;
+      clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
+      border-radius: 0;
+      position: relative;
+    }
+    button.primary:hover:not(:disabled) {
+      filter: none;
+      background: linear-gradient(90deg, #1e7be0 0%, #3da0ff 100%);
+      box-shadow: 0 0 28px rgba(42,143,255,0.45), 0 4px 16px rgba(42,143,255,0.3);
+    }
 
-    #hand-toggle { display: flex; gap: 8px; margin-bottom: 14px; }
+    /* GHOST / BACK — left accent bar */
+    button.ghost, button.back {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-left: 3px solid #4a9eff;
+      border-radius: 2px;
+      color: #8a93a6;
+    }
+    button.ghost:hover:not(:disabled), button.back:hover:not(:disabled) {
+      filter: none;
+      background: rgba(74,158,255,0.08);
+      border-color: rgba(255,255,255,0.12);
+      border-left-color: #7fc2ff;
+      color: #e0e8ff;
+    }
+
+    /* BIG variant */
+    button.big { padding: 16px 20px; font-size: 0.95rem; letter-spacing: 0.1em; }
+
+    /* Specific overrides */
+    #join-btn { background: linear-gradient(90deg, #1a6fd4, #2a8fff);
+      clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%); }
+    #solo-btn { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
+      border-left: 3px solid #4a9eff; border-radius: 2px; color: #8a93a6; }
+    #create-btn { clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+      background: linear-gradient(90deg, #1a6fd4, #2a8fff); border-radius: 0; }
+    #start-btn { background: linear-gradient(90deg, #11924e, #19c46a);
+      clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%); border-radius: 0; }
+    #start-btn:hover:not(:disabled) { box-shadow: 0 0 24px rgba(25,196,106,0.4); }
+    #start-btn:disabled { opacity: 0.35; }
+    #resume-btn { background: linear-gradient(90deg, #1a6fd4, #2a8fff);
+      clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%); border-radius: 0; }
+    #leave-btn { background: rgba(180,30,50,0.15); border: 1px solid rgba(180,30,50,0.3);
+      border-left: 3px solid #e05252; border-radius: 2px; color: #ff8a9a; }
+    #leave-btn:hover:not(:disabled) { filter: none; background: rgba(180,30,50,0.25); }
+    #discord-login-btn { background: #5865F2; clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+      border-radius: 0; display: flex; align-items: center; justify-content: center; gap: 9px; }
+    #discord-login-btn:hover:not(:disabled) { filter: none; background: #4752e0; box-shadow: 0 0 20px rgba(88,101,242,0.5); }
+    #auth-close-btn { background: transparent; border: none; color: #445; font-size: 0.75rem; margin-top: 2px; clip-path: none; }
+    #auth-close-btn:hover { color: #8a93a6; }
+
+    /* ── HAND TOGGLE ─────────────────────────────────────────────── */
+    #hand-toggle { display: flex; gap: 6px; margin-bottom: 14px; }
     .hand-btn {
-      flex: 1; padding: 11px; margin: 0;
-      background: #141720; border: 1px solid #2a2d3a; border-radius: 8px;
-      color: #777; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.06em;
+      flex: 1; padding: 10px; margin: 0;
+      background: #0a0d14; border: 1px solid #1a1e2a; border-radius: 2px;
+      color: #556; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em;
     }
-    .hand-btn.active { background: #1b2740; border-color: #3a9fff; color: #fff; }
+    .hand-btn.active { background: #0d1a2e; border-color: #4a9eff; border-left: 3px solid #4a9eff; color: #fff; }
 
-    .box h2 { font-size: 1.15rem; font-weight: 800; letter-spacing: 0.08em; color: #e6e8ee;
-      margin-bottom: 16px; text-transform: uppercase; }
-    .box .lbl { color: #788; font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase;
-      text-align: left; margin: 4px 0 6px; }
-    button.big { padding: 16px; font-size: 1rem; letter-spacing: 0.08em; }
-    button.primary { background: linear-gradient(135deg, #2a7fff, #1146c9); }
-    button.back { margin-top: 6px; background: #181c26; border: 1px solid #2a2d3a; }
+    /* ── SECTION HEADINGS ─────────────────────────────────────────── */
+    .box h2 {
+      font-size: 1rem; font-weight: 800; letter-spacing: 0.12em; color: #e6e8ee;
+      margin-bottom: 14px; text-transform: uppercase;
+      border-left: 3px solid #4a9eff; padding-left: 10px; text-align: left;
+    }
+    .box .lbl { color: #667; font-size: 0.62rem; letter-spacing: 0.12em; text-transform: uppercase;
+      text-align: left; margin: 6px 0 5px; }
 
-    /* barevné dlaždice */
+    /* ── GEAR / PROFILE ──────────────────────────────────────────── */
     .gear-item { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-    .gear-item > span { width: 92px; flex: none; text-align: left; color: #889;
-      font-size: 0.64rem; letter-spacing: 0.05em; }
+    .gear-item > span { width: 88px; flex: none; text-align: left; color: #667;
+      font-size: 0.62rem; letter-spacing: 0.07em; text-transform: uppercase; }
     .swatches { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
-    .sw { width: 24px; height: 24px; padding: 0; margin: 0; border-radius: 6px;
-      border: 2px solid transparent; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.35); }
-    .sw.active { border-color: #fff; transform: scale(1.12); }
+    .sw { width: 24px; height: 24px; padding: 0; margin: 0; border-radius: 3px;
+      border: 2px solid transparent; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.4); }
+    .sw.active { border-color: #fff; transform: scale(1.14); box-shadow: 0 0 6px rgba(255,255,255,0.4); }
 
-    /* tým v create */
-    .team-block { background: #12151d; border: 1px solid #232733; border-radius: 10px;
+    /* team block */
+    .team-block { background: #0a0d14; border: 1px solid #1a1e2a; border-radius: 2px;
       padding: 10px; margin-bottom: 10px; }
     .tb-head { display: flex; gap: 6px; margin-bottom: 8px; }
     .tb-head .tname { flex: 1; margin: 0; text-transform: none; letter-spacing: normal;
       text-align: left; font-size: 0.9rem; padding: 9px; }
-    .tb-head select { background: #1a1e28; color: #fff; border: 1px solid #2a2d3a; border-radius: 8px; padding: 6px; }
+    .tb-head select { background: #0a0d14; color: #fff; border: 1px solid #1a1e2a; border-radius: 2px; padding: 6px; }
     .team-block .swatches { gap: 5px; }
     .team-block .sw { width: 22px; height: 22px; }
 
     .prof-row { display: flex; gap: 8px; margin-bottom: 12px; }
     .prof-row #hand-toggle { flex: 1; margin: 0; }
     #num-input { width: 70px; margin: 0 0 0 auto; padding: 9px 6px; font-size: 1rem; letter-spacing: 0.06em; text-align: center; }
-    #profile-intro { color: #8a93a6; font-size: 0.8rem; line-height: 1.4; margin: -4px 0 14px; }
+    #profile-intro { color: #667; font-size: 0.78rem; line-height: 1.4; margin: -4px 0 14px; text-align: left; }
     .chips { display: flex; gap: 4px; flex: 1; }
     .chip { flex: 1 1 0; min-width: 0; text-align: center; font-size: 0.58rem; padding: 5px 2px;
-      border-radius: 6px; background: #141720; border: 1px solid #2a2d3a; color: #cfe2f1; cursor: pointer; }
-    .chip.active { border-color: #3a9fff; background: #1b2740; color: #fff; }
+      border-radius: 2px; background: #0a0d14; border: 1px solid #1a1e2a; color: #cfe2f1; cursor: pointer; letter-spacing: 0.04em; }
+    .chip.active { border-color: #4a9eff; border-left: 2px solid #4a9eff; background: #0d1a2e; color: #fff; }
     .sw.locked, .chip.locked { opacity: 0.45; cursor: not-allowed; position: relative; }
     .sw.locked::after, .chip.locked::after { content: '🔒'; position: absolute; top: -7px; right: -4px; font-size: 0.55rem; }
     .sw.custom { background: conic-gradient(red,orange,yellow,lime,cyan,blue,magenta,red); }
     body.sponsor .sw.locked, body.sponsor .chip.locked { opacity: 1; cursor: pointer; }
     body.sponsor .sw.locked::after, body.sponsor .chip.locked::after { content: '💎'; }
 
+    /* ── LAYOUT HELPERS ──────────────────────────────────────────── */
     .view { display: flex; flex-direction: column; }
     .row2 { display: flex; gap: 8px; }
     .row2 > button { flex: 1; }
-    #create-btn { background: linear-gradient(135deg, #2266cc, #1144aa); }
-    button.ghost { background: #181c26; border: 1px solid #2a2d3a; }
-    #refresh-btn { flex: none; width: 48px; }
+    #refresh-btn { flex: none; width: 44px; border-left: 1px solid rgba(255,255,255,0.07) !important; }
 
-    #lobby-list { max-height: 230px; overflow-y: auto; margin: 10px 0; display: flex; flex-direction: column; gap: 6px; }
+    /* ── LOBBY LIST ──────────────────────────────────────────────── */
+    #lobby-list { max-height: 230px; overflow-y: auto; margin: 10px 0; display: flex; flex-direction: column; gap: 4px; }
     .lobby-item { display: flex; justify-content: space-between; align-items: center; gap: 8px;
-      padding: 10px 12px; background: #141720; border: 1px solid #2a2d3a; border-radius: 8px; cursor: pointer; }
-    .lobby-item:hover { border-color: #3a9fff; }
-    .lobby-item .li-name { font-weight: 700; font-size: 0.92rem; }
-    .lobby-item .li-sub { color: #667; font-size: 0.72rem; }
-    .lobby-item .li-cnt { color: #6ee0a0; font-size: 0.82rem; font-weight: 700; }
+      padding: 10px 12px; background: #0a0d14; border: 1px solid #1a1e2a;
+      border-left: 3px solid #1a1e2a; border-radius: 2px; cursor: pointer;
+      transition: border-left-color 0.12s; }
+    .lobby-item:hover { border-left-color: #4a9eff; }
+    .lobby-item .li-name { font-weight: 700; font-size: 0.9rem; }
+    .lobby-item .li-sub { color: #556; font-size: 0.7rem; }
+    .lobby-item .li-cnt { color: #3ecf4a; font-size: 0.8rem; font-weight: 700; }
     .lobby-item .li-live { text-align: right; }
     .lobby-item .li-score { color: #ffd95e; font-size: 0.95rem; font-weight: 800; }
-    .lobby-item .li-time { color: #8a93a6; font-size: 0.68rem; }
-    .lobby-item .li-tag { color: #ff5a5a; font-size: 0.6rem; font-weight: 800; border: 1px solid #ff5a5a; border-radius: 4px; padding: 1px 4px; vertical-align: middle; }
-    .lobby-item.full { opacity: 0.55; cursor: not-allowed; }
-    .lobby-item.full:hover { border-color: #2a2d3a; }
-    .lobby-empty { color: #556; font-size: 0.8rem; text-align: center; padding: 18px 0; }
+    .lobby-item .li-time { color: #778; font-size: 0.68rem; }
+    .lobby-item .li-tag { color: #ff5a5a; font-size: 0.6rem; font-weight: 800; border: 1px solid #ff5a5a; border-radius: 2px; padding: 1px 4px; vertical-align: middle; }
+    .lobby-item.full { opacity: 0.5; cursor: not-allowed; }
+    .lobby-item.full:hover { border-left-color: #1a1e2a; }
+    .lobby-empty { color: #445; font-size: 0.8rem; text-align: center; padding: 18px 0; }
+
+    /* ── FOOTER ──────────────────────────────────────────────────── */
     #footer { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6;
       display: flex; align-items: center; justify-content: center; gap: 20px;
       padding: 10px 14px; pointer-events: none; }
     #footer > * { pointer-events: auto; }
     #discord-link { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; white-space: nowrap;
-      font-size: 0.66rem; font-weight: 600; color: #8a93a6; opacity: 0.8; }
+      font-size: 0.66rem; font-weight: 600; color: #445; opacity: 0.8; }
     #discord-link:hover { color: #5865F2; opacity: 1; }
     #discord-link svg { flex: none; }
-    #wip { display: block; width: max-content; max-width: 100%; margin: 8px auto 16px; font-size: 0.64rem; letter-spacing: 0.6px;
-      text-transform: uppercase; color: #ffcf3a; background: rgba(255,207,58,0.12);
-      border: 1px solid rgba(255,207,58,0.4); border-radius: 999px; padding: 4px 12px; }
+
+    #wip { display: block; width: max-content; max-width: 100%; margin: 8px auto 16px;
+      font-size: 0.62rem; letter-spacing: 0.8px; text-transform: uppercase;
+      color: #ffcf3a; background: rgba(255,207,58,0.08);
+      border: 1px solid rgba(255,207,58,0.3); border-radius: 2px; padding: 4px 12px; }
+
     #lang-btn { display: inline-flex; align-items: center; gap: 4px; font-size: 0.62rem; font-weight: 700;
-      color: #8a93a6; background: transparent; border: none; padding: 2px; cursor: pointer; opacity: 0.75; }
+      color: #556; background: transparent; border: none; padding: 2px; cursor: pointer; opacity: 0.75; }
     #lang-btn:hover { color: #cfe2f1; opacity: 1; }
     #lang-btn .globe { font-size: 0.9rem; line-height: 1; }
+
+    /* ── PROFILE PREVIEW ─────────────────────────────────────────── */
     #prof-preview { display: block; width: 260px; max-width: 100%; height: 190px; margin: 4px auto 12px;
       background: radial-gradient(circle at 50% 42%, #e8f3fb 0%, #cfe2f1 70%, #bcd5e8 100%);
-      border: 1px solid #2a2d3a; border-radius: 12px; }
-    #lobby-list:empty::after { content: 'Žádná lobby — vytvoř první.'; color: #556; font-size: 0.8rem; text-align: center; padding: 18px 0; }
+      border: 1px solid #1a1e2a; border-radius: 2px; }
 
+    /* ── FORMAT BUTTONS ──────────────────────────────────────────── */
+    #format-row { display: flex; gap: 4px; margin-bottom: 10px; }
+    .fmt-btn {
+      flex: 1; padding: 10px 2px; margin: 0;
+      background: #0a0d14; border: 1px solid #1a1e2a; border-radius: 2px;
+      color: #445; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em;
+    }
+    .fmt-btn.main { color: #8a93a6; font-size: 0.88rem; }
+    .fmt-btn.active { background: #0d1a2e; border-color: #4a9eff; border-bottom: 2px solid #4a9eff; color: #fff; }
+
+    /* ── WAIT ROOM ───────────────────────────────────────────────── */
+    #wait-teams { display: flex; gap: 6px; margin-bottom: 4px; }
+    .wt-col { flex: 1; background: #0a0d14; border: 1px solid #1a1e2a; border-radius: 2px;
+      padding: 8px 10px; min-height: 70px; }
+    .wt-col h3 { font-size: 0.78rem; margin-bottom: 6px; letter-spacing: 0.08em; text-transform: uppercase; }
+    .wt-col .wt-p { font-size: 0.82rem; color: #cdd; padding: 1px 0; }
+    .pick-btn { font-size: 0.7rem; padding: 9px 4px; background: #0a0d14; border: 1px solid #1a1e2a; border-radius: 2px; }
+
+    /* ── SETTINGS ROWS ───────────────────────────────────────────── */
     .team-row { display: flex; gap: 6px; margin-bottom: 8px; }
     .team-row .tname { flex: 1; margin: 0; text-transform: none; letter-spacing: normal; text-align: left; font-size: 0.9rem; padding: 10px; }
-    .team-row input[type=color] { width: 42px; padding: 4px; margin: 0; background: #141720; border: 1px solid #2a2d3a; border-radius: 8px; }
-    .team-row select, .set-row select { background: #141720; color: #fff; border: 1px solid #2a2d3a; border-radius: 8px; padding: 7px; font-size: 0.85rem; }
-    .set-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; color: #9aa; font-size: 0.76rem; align-items: center; }
+    .team-row input[type=color] { width: 42px; padding: 4px; margin: 0; background: #0a0d14; border: 1px solid #1a1e2a; border-radius: 2px; }
+    .team-row select, .set-row select { background: #0a0d14; color: #fff; border: 1px solid #1a1e2a; border-radius: 2px; padding: 7px; font-size: 0.85rem; }
+    .set-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; color: #8a93a6; font-size: 0.76rem; align-items: center; }
     .set-row label { display: flex; flex-direction: column; gap: 3px; }
     .set-row label.chk { flex-direction: row; align-items: center; gap: 5px; }
 
-    #format-row { display: flex; gap: 6px; margin-bottom: 10px; }
-    .fmt-btn {
-      flex: 1; padding: 10px 2px; margin: 0;
-      background: #141720; border: 1px solid #2a2d3a; border-radius: 8px;
-      color: #667; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.03em;
-    }
-    .fmt-btn.main { color: #9fb4cc; font-size: 0.9rem; }
-    .fmt-btn.active { background: #1b2740; border-color: #3a9fff; color: #fff; }
+    /* ── STATUS ──────────────────────────────────────────────────── */
+    #status { color: #556; font-size: 0.82rem; min-height: 18px; margin-top: 10px; }
 
-    #wait-teams { display: flex; gap: 8px; margin-bottom: 4px; }
-    .wt-col { flex: 1; background: #141720; border: 1px solid #2a2d3a; border-radius: 8px; padding: 8px 10px; min-height: 70px; }
-    .wt-col h3 { font-size: 0.82rem; margin-bottom: 6px; }
-    .wt-col .wt-p { font-size: 0.82rem; color: #cdd; padding: 1px 0; }
-    .pick-btn { font-size: 0.7rem; padding: 9px 4px; background: #141720; border: 1px solid #2a2d3a; }
-    #start-btn { margin-top: 10px; background: linear-gradient(135deg, #19a86a, #0c7a4a); }
-    #start-btn:disabled { opacity: 0.4; cursor: default; }
-
-    #status { color: #666; font-size: 0.82rem; min-height: 18px; margin-top: 10px; }
-
+    /* ── HINT (in-game) ──────────────────────────────────────────── */
     #hint {
       position: fixed; bottom: 14px; left: 50%;
       transform: translateX(-50%);
-      color: #333; font-size: 0.72rem;
+      color: #222; font-size: 0.7rem;
       pointer-events: none; white-space: nowrap;
     }
 
+    /* ── PAUSE MENU ──────────────────────────────────────────────── */
     #pause-menu {
       position: fixed; inset: 0;
       display: none; align-items: center; justify-content: center;
-      background: rgba(7,9,15,0.82);
+      background: rgba(7,9,15,0.85);
       z-index: 20;
     }
     #pause-menu .box { min-width: 280px; }
     #pause-menu h2 {
-      font-size: 1.6rem; font-weight: 800; letter-spacing: 0.14em;
-      margin-bottom: 22px; color: #e6e8ee;
+      font-size: 1.4rem; font-weight: 900; letter-spacing: 0.16em;
+      margin-bottom: 22px; color: #e6e8ee; text-align: left;
+      border-left: 4px solid #4a9eff; padding-left: 10px;
     }
-    #resume-btn { background: linear-gradient(135deg, #2266cc, #1144aa); }
-    #leave-btn  { background: #3a1620; border: 1px solid #5a2230; color: #ff8a9a; }
     .vol-row { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 0 2px; }
-    .vol-row label { font-size: 0.75rem; color: #667; white-space: nowrap; letter-spacing: 0.04em; text-transform: uppercase; }
-    .vol-row input[type=range] { flex: 1; height: 4px; accent-color: #3a9fff; cursor: pointer; }
-    .vol-pct { font-size: 0.78rem; color: #8a93a6; min-width: 34px; text-align: right; }
+    .vol-row label { font-size: 0.72rem; color: #556; white-space: nowrap; letter-spacing: 0.06em; text-transform: uppercase; }
+    .vol-row input[type=range] { flex: 1; height: 3px; accent-color: #4a9eff; cursor: pointer; }
+    .vol-pct { font-size: 0.78rem; color: #667; min-width: 34px; text-align: right; }
 
-    .stat-cell { background:#12151d;border:1px solid #1e2230;border-radius:8px;padding:8px 4px;text-align:center; }
+    /* ── STATS CELLS ─────────────────────────────────────────────── */
+    .stat-cell { background:#0a0d14;border:1px solid #1a1e2a;border-radius:2px;padding:8px 4px;text-align:center; }
     .stat-cell span { display:block;font-size:1.3rem;font-weight:800;color:#e0e8f4;line-height:1.1; }
-    .stat-cell label { display:block;font-size:0.56rem;letter-spacing:0.06em;text-transform:uppercase;color:#445566;margin-top:2px; }
+    .stat-cell label { display:block;font-size:0.54rem;letter-spacing:0.08em;text-transform:uppercase;color:#334;margin-top:3px; }
 
-    /* ── Auth button (vpravo nahoře) ─────────────────────────────── */
+    /* ═══════════════════════════════════════════════════════════════
+       AUTH ELEMENTS
+       ═══════════════════════════════════════════════════════════════ */
     #auth-wrap {
       position: fixed; top: 12px; right: 14px; z-index: 30;
     }
     #auth-btn {
       display: flex; align-items: center; gap: 7px;
-      padding: 7px 13px; border-radius: 20px;
-      background: #141720; border: 1px solid #2a2d3a;
+      padding: 7px 14px;
+      background: #0d1018; border: 1px solid rgba(255,255,255,0.08);
+      border-left: 2px solid #4a9eff;
+      border-radius: 2px;
       color: #8a93a6; font-size: 0.75rem; font-weight: 700;
-      cursor: pointer; letter-spacing: 0.05em;
-      transition: border-color 0.15s, color 0.15s;
+      cursor: pointer; letter-spacing: 0.06em;
+      transition: border-color 0.12s, color 0.12s, box-shadow 0.12s;
       white-space: nowrap; width: auto; margin: 0;
     }
-    #auth-btn:hover { border-color: #3a9fff; color: #fff; }
+    #auth-btn:hover { border-left-color: #7fc2ff; color: #fff; box-shadow: 0 0 14px rgba(74,158,255,0.2); }
     #auth-avatar {
-      width: 22px; height: 22px; border-radius: 50%;
+      width: 20px; height: 20px; border-radius: 50%;
       object-fit: cover; display: none; flex: none;
     }
-    #auth-tier {
-      font-size: 0.62rem; opacity: 0.7;
-    }
+    #auth-tier { font-size: 0.6rem; opacity: 0.6; }
 
-    /* dropdown */
     #auth-dropdown {
-      display: none; position: absolute; top: calc(100% + 6px); right: 0;
-      background: #0f1118; border: 1px solid #2a2d3a; border-radius: 10px;
-      min-width: 160px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      display: none; position: absolute; top: calc(100% + 4px); right: 0;
+      background: #0d1018; border: 1px solid rgba(255,255,255,0.07);
+      border-top: 2px solid #4a9eff;
+      border-radius: 2px;
+      min-width: 160px; overflow: hidden; box-shadow: 0 12px 32px rgba(0,0,0,0.6);
     }
     #auth-dropdown.open { display: block; }
     .dd-item {
       display: block; width: 100%; padding: 11px 16px;
-      text-align: left; font-size: 0.82rem; font-weight: 600;
-      color: #cdd; background: transparent; border: none;
-      cursor: pointer; letter-spacing: 0.03em; margin: 0; border-radius: 0;
+      text-align: left; font-size: 0.8rem; font-weight: 600;
+      color: #8a93a6; background: transparent; border: none;
+      cursor: pointer; letter-spacing: 0.05em; margin: 0; border-radius: 0;
+      text-transform: uppercase;
     }
-    .dd-item:hover { background: #1a1e28; color: #fff; }
-    .dd-item.danger { color: #ff8a9a; }
-    .dd-sep { border: none; border-top: 1px solid #1e2230; margin: 0; }
+    .dd-item:hover { background: rgba(74,158,255,0.08); color: #fff; }
+    .dd-item.danger { color: #e05252; }
+    .dd-item.danger:hover { background: rgba(224,82,82,0.08); color: #ff8a9a; }
+    .dd-sep { border: none; border-top: 1px solid rgba(255,255,255,0.05); margin: 0; }
 
-    /* ── Auth modal ───────────────────────────────────────────────── */
     #auth-modal {
       display: none; position: fixed; inset: 0; z-index: 40;
       align-items: center; justify-content: center;
-      background: rgba(7,9,15,0.88);
+      background: rgba(7,9,15,0.9);
     }
     #auth-modal.open { display: flex; }
     #auth-modal .box { min-width: 300px; max-width: 340px; }
-    #auth-modal h2 { font-size: 1.1rem; font-weight: 800; letter-spacing: 0.08em;
-      margin-bottom: 6px; color: #e6e8ee; text-transform: uppercase; }
-    #auth-modal .sub { margin-bottom: 20px; }
-    #discord-login-btn {
-      background: #5865F2; display: flex; align-items: center;
-      justify-content: center; gap: 9px;
+    #auth-modal h2 { font-size: 1rem; font-weight: 900; letter-spacing: 0.12em;
+      margin-bottom: 6px; color: #e6e8ee; text-transform: uppercase;
+      border-left: 3px solid #4a9eff; padding-left: 10px; text-align: left; }
+    #auth-modal .sub { margin-bottom: 20px; text-align: left; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       MAIN MENU — FULLSCREEN HERO
+       ═══════════════════════════════════════════════════════════════ */
+    #main-nav {
+      display: none;
+      position: absolute; top: 0; left: 0; right: 0; height: 54px;
+      align-items: center; padding: 0 24px; gap: 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      z-index: 5;
     }
-    #discord-login-btn:hover:not(:disabled) { background: #4752c4; opacity: 1; }
-    #auth-close-btn { background: transparent; border: none; color: #556;
-      font-size: 0.75rem; margin-top: 2px; }
-    #auth-close-btn:hover { color: #aaa; }
+    #lobby.on-main #main-nav { display: flex; }
+
+    .nav-logo {
+      font-family: 'Barlow Condensed', 'Segoe UI', system-ui;
+      font-size: 1.3rem; font-weight: 900; letter-spacing: 0.02em;
+      text-transform: uppercase; line-height: 1;
+    }
+    .nav-logo-flat  { color: #4a9eff; }
+    .nav-logo-hockey { color: #fff; }
+
+    #nav-online-badge {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 0.66rem; font-weight: 700; letter-spacing: 0.1em;
+      color: #3ecf4a; text-transform: uppercase;
+    }
+    #nav-online-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: #3ecf4a;
+      box-shadow: 0 0 6px #3ecf4a;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; } 50% { opacity: 0.5; }
+    }
+
+    #v-main-hero {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    .hero-title {
+      font-family: 'Barlow Condensed', 'Segoe UI', system-ui;
+      font-weight: 900;
+      font-size: clamp(4.5rem, 13vw, 9.5rem);
+      line-height: 0.86;
+      letter-spacing: -0.01em;
+      text-transform: uppercase;
+    }
+    .t-flat   { color: #4a9eff; display: block; text-shadow: 0 0 40px rgba(74,158,255,0.35); }
+    .t-hockey { color: #fff; display: block; }
+    .hero-tagline {
+      font-size: 0.72rem; letter-spacing: 0.2em;
+      color: #334; margin-top: 14px; text-transform: uppercase;
+    }
+
+    #v-main-buttons {
+      display: flex; flex-direction: column; gap: 8px;
+      width: 380px; max-width: 90vw;
+    }
+
+    /* big primary for main play button */
+    #go-online {
+      padding: 20px 24px;
+      font-family: 'Barlow Condensed', 'Segoe UI', system-ui;
+      font-size: 1.3rem; font-weight: 900; letter-spacing: 0.12em;
+    }
+
+    #v-main-footer {
+      position: absolute; bottom: 14px; left: 20px; right: 20px;
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 0.62rem; letter-spacing: 0.06em;
+      color: #223; text-transform: uppercase;
+    }
+
+    /* v-main fills the box when in fullscreen mode */
+    #lobby.on-main #v-main {
+      width: 100%;
+      height: 100%;
+      align-items: center;
+      justify-content: center;
+      padding-top: 54px; /* nav height */
+    }
+
+    #lobby-list:empty::after { content: 'Žádná lobby — vytvoř první.'; color: #445; font-size: 0.8rem; text-align: center; padding: 18px 0; }
   </style>
 </head>
 <body>
@@ -300,6 +486,18 @@
   </div>
 
   <div id="lobby">
+
+    <!-- NAV BAR (visible only in main view via .on-main) -->
+    <nav id="main-nav">
+      <div class="nav-logo">
+        <span class="nav-logo-flat">Flat</span><span class="nav-logo-hockey">Hockey</span>
+      </div>
+      <div id="nav-online-badge">
+        <span id="nav-online-dot"></span>
+        <span>Online</span>
+      </div>
+    </nav>
+
     <div class="box">
       <h1>Flat<span>Hockey</span></h1>
       <div id="wip" data-i18n="wip">Hra je ve vývoji · work in progress</div>
@@ -315,7 +513,7 @@
         </div>
         <!-- Zobrazí se při návratu (tutorial splněn) -->
         <div id="splash-return" style="display:none">
-          <button id="splash-discord-btn" class="big primary" style="display:flex;align-items:center;justify-content:center;gap:9px">
+          <button id="splash-discord-btn" class="primary" style="display:flex;align-items:center;justify-content:center;gap:9px;padding:16px 20px">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M19.27 5.33C17.94 4.71 16.5 4.26 15 4a.09.09 0 0 0-.07.03c-.18.33-.39.76-.53 1.09a16.09 16.09 0 0 0-4.8 0c-.14-.34-.35-.76-.54-1.09-.01-.02-.04-.03-.07-.03-1.5.26-2.93.71-4.27 1.33-.01 0-.02.01-.03.02-2.72 4.07-3.47 8.03-3.1 11.95 0 .02.01.04.03.05 1.8 1.32 3.53 2.12 5.24 2.65.03.01.06 0 .07-.02.4-.55.76-1.13 1.07-1.74.02-.04 0-.08-.04-.09-.57-.22-1.11-.48-1.64-.78-.04-.02-.04-.08-.01-.11.11-.08.22-.17.33-.25.02-.02.05-.02.07-.01 3.44 1.57 7.15 1.57 10.55 0 .02-.01.05-.01.07.01.11.09.22.17.33.26.04.03.04.09-.01.11-.52.31-1.07.56-1.64.78-.04.01-.05.06-.04.09.32.61.68 1.19 1.07 1.74.03.02.06.03.09.02 1.72-.53 3.45-1.33 5.25-2.65.02-.01.03-.03.03-.05.44-4.53-.73-8.46-3.1-11.95-.01-.01-.02-.02-.04-.02z"/></svg>
             <span data-i18n="splash_discord">Přihlásit se přes Discord</span>
           </button>
@@ -326,16 +524,33 @@
 
       <!-- HLAVNÍ MENU -->
       <div id="v-main" class="view" style="display:none">
-        <button id="go-online" class="big primary" data-i18n="play_online">HRÁT ONLINE</button>
-        <div style="display:flex;gap:8px;width:100%">
-          <button id="go-solo"     class="big ghost" style="flex:1;white-space:nowrap;overflow:hidden;font-size:0.88rem" data-i18n="solo">TRÉNINK</button>
-          <button id="go-tutorial" class="big ghost" style="flex:1;white-space:nowrap;overflow:hidden;font-size:0.88rem" data-i18n="tutorial_btn">🏒 TUTORIÁL</button>
+        <div id="v-main-hero">
+          <div class="hero-title">
+            <span class="t-flat">Flat</span>
+            <span class="t-hockey">Hockey</span>
+          </div>
+          <p class="hero-tagline">Multiplayer · Browser · Zdarma</p>
         </div>
-        <button id="go-profile" class="ghost" data-i18n="profile_btn">PROFIL & DRES</button>
-        <div class="vol-row">
-          <label data-i18n="vol_label">Hlasitost</label>
-          <input type="range" id="vol-slider" min="0" max="100" step="1" value="80">
-          <span class="vol-pct" id="vol-pct">80%</span>
+        <div id="v-main-buttons">
+          <button id="go-online" class="primary" data-i18n="play_online">▶ HRÁT ONLINE</button>
+          <div style="display:flex;gap:8px">
+            <button id="go-solo"     class="ghost" style="flex:1;font-size:0.82rem" data-i18n="solo">TRÉNINK</button>
+            <button id="go-tutorial" class="ghost" style="flex:1;font-size:0.82rem" data-i18n="tutorial_btn">🏒 TUTORIÁL</button>
+          </div>
+          <button id="go-profile" class="ghost" data-i18n="profile_btn">PROFIL & DRES</button>
+          <div class="vol-row" style="margin-top:6px">
+            <label data-i18n="vol_label">Hlasitost</label>
+            <input type="range" id="vol-slider" min="0" max="100" step="1" value="80">
+            <span class="vol-pct" id="vol-pct">80%</span>
+          </div>
+        </div>
+        <div id="v-main-footer">
+          <span>v0.4 · hra je ve vývoji</span>
+          <a id="discord-footer-link" href="https://discord.gg/r5eMjmvAsg" target="_blank" rel="noopener noreferrer"
+             style="color:#445;text-decoration:none;display:flex;align-items:center;gap:5px">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M19.27 5.33C17.94 4.71 16.5 4.26 15 4a.09.09 0 0 0-.07.03c-.18.33-.39.76-.53 1.09a16.09 16.09 0 0 0-4.8 0c-.14-.34-.35-.76-.54-1.09-.01-.02-.04-.03-.07-.03-1.5.26-2.93.71-4.27 1.33-.01 0-.02.01-.03.02-2.72 4.07-3.47 8.03-3.1 11.95 0 .02.01.04.03.05 1.8 1.32 3.53 2.12 5.24 2.65.03.01.06 0 .07-.02.4-.55.76-1.13 1.07-1.74.02-.04 0-.08-.04-.09-.57-.22-1.11-.48-1.64-.78-.04-.02-.04-.08-.01-.11.11-.08.22-.17.33-.25.02-.02.05-.02.07-.01 3.44 1.57 7.15 1.57 10.55 0 .02-.01.05-.01.07.01.11.09.22.17.33.26.04.03.04.09-.01.11-.52.31-1.07.56-1.64.78-.04.01-.05.06-.04.09.32.61.68 1.19 1.07 1.74.03.02.06.03.09.02 1.72-.53 3.45-1.33 5.25-2.65.02-.01.03-.03.03-.05.44-4.53-.73-8.46-3.1-11.95-.01-.01-.02-.02-.04-.02z"/></svg>
+            Discord
+          </a>
         </div>
       </div>
 

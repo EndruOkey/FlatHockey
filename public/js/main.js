@@ -214,6 +214,7 @@ function readSettings() {
 const VIEWS = { splash:'v-splash', main:'v-main', profile:'v-profile', browse:'v-browse', create:'v-create', wait:'v-wait' };
 function showView(name) {
   for (const [k, id] of Object.entries(VIEWS)) $(id).style.display = (k === name) ? '' : 'none';
+  lobby.classList.toggle('on-main', name === 'main');
   if (name === 'splash') {
     const tutorialDone = !!localStorage.getItem('hockey_tutorial_done');
     $('splash-first').style.display  = tutorialDone ? 'none' : '';
