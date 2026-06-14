@@ -215,6 +215,11 @@ const VIEWS = { splash:'v-splash', main:'v-main', profile:'v-profile', browse:'v
 function showView(name) {
   for (const [k, id] of Object.entries(VIEWS)) $(id).style.display = (k === name) ? '' : 'none';
   lobby.classList.toggle('on-main', name === 'main');
+  if (name === 'main') {
+    _loadStats();  // refresh bottom stats bar + ELO overlay
+    // keep HOME tab active when returning to main
+    document.querySelectorAll('.mn-tab').forEach(t => t.classList.toggle('active', t.id === 'mn-tab-home'));
+  }
   if (name === 'splash') {
     const tutorialDone = !!localStorage.getItem('hockey_tutorial_done');
     $('splash-first').style.display  = tutorialDone ? 'none' : '';
@@ -226,6 +231,19 @@ document.querySelectorAll('.back').forEach(b => b.addEventListener('click', () =
   showView(b.dataset.to);
   if (b.dataset.to === 'browse') net.listLobbies();   // čerstvý seznam při návratu
 }));
+
+// ── Nav tab clicks ────────────────────────────────────────────────────
+document.querySelectorAll('.mn-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    if (tab.id === 'mn-tab-home') {
+      showView('main');
+    } else if (tab.id === 'mn-tab-locker') {
+      document.querySelectorAll('.mn-tab').forEach(t => t.classList.toggle('active', t === tab));
+      showView('profile'); drawPreview(); _loadStats();
+    }
+    // STORE + STATS: coming soon — no-op for now
+  });
+});
 
 function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
 resizeCanvas();
@@ -297,7 +315,7 @@ async function _loadStats() {
   const [stats, rankData] = await Promise.all([loadServerStats(), loadRankAndCredits()]);
   const user = getUser();
 
-  // Stats grid
+  // Profile stats grid (Locker Room)
   const statsEl = $('profile-stats');
   if (!stats || !user) { statsEl.style.display = 'none'; }
   else {
@@ -310,18 +328,39 @@ async function _loadStats() {
     $('stat-losses').textContent  = stats.losses        ?? 0;
   }
 
-  // Rank + Credits row
+  // Profile rank + credits row
   const rankRow = $('profile-rank-row');
   if (rankData && user) {
     rankRow.classList.add('show');
-    $('stat-rank').textContent    = rankData.rank_points ?? 1000;
+    $('stat-rank').textContent     = rankData.rank_points ?? 1000;
     $('stat-position').textContent = rankData.position ? `#${rankData.position}` : '#—';
     $('stat-credits').textContent  = rankData.puck_credits ?? 0;
   } else {
     rankRow.classList.remove('show');
   }
+
+  // Main menu bottom stats bar
+  const gp  = stats?.games_played ?? 0;
+  const wins = stats?.wins ?? 0;
+  const wr   = gp > 0 ? Math.round(wins / gp * 100) + '%' : '—';
+  const rp   = rankData?.rank_points ?? 1000;
+  const pos  = rankData?.position;
+  const cred = rankData?.puck_credits ?? 0;
+  const sbRank    = $('vmsb-rank');
+  const sbGames   = $('vmsb-games');
+  const sbCredits = $('vmsb-credits');
+  const sbWr      = $('vmsb-winrate');
+  if (sbRank)    sbRank.textContent    = pos ? `#${pos}` : '#—';
+  if (sbGames)   sbGames.textContent   = gp;
+  if (sbCredits) sbCredits.textContent = `⊙ ${cred}`;
+  if (sbWr)      sbWr.textContent      = wr;
+  // ELO overlay on art panel
+  const eloEl = $('vm-elo-val'), wrEl = $('vm-wr-val');
+  if (eloEl) eloEl.textContent = rp;
+  if (wrEl)  wrEl.textContent  = wr;
 }
-$('go-online').onclick  = () => { if (!commitProfile()) return requireProfile(); showView('browse'); net.listLobbies(); };
+$('go-online').onclick      = () => { if (!commitProfile()) return requireProfile(); showView('browse'); net.listLobbies(); };
+$('vm-create-btn').onclick  = () => { if (!commitProfile()) return requireProfile(); showView('create'); };
 $('go-solo').onclick     = () => {
   if (!commitProfile()) return requireProfile();
   const g = new SandboxGame(canvas), pr = profile();
