@@ -124,13 +124,11 @@ export class Puck {
       }
       this._cradleTo(owner);
       this.ownerId = owner.id;
-      // Gól POUZE střelou. Pokud špička hole vstoupí do klece, vytlač puk zpět na čáru
-      // (nestačí jen drop — volný puk uvnitř by okamžitě triggeroval _resolveGoals).
+      // Hokejka se zastaví na okraji branky — puk zůstane v držení, jen se ořízne na čáru.
       if (_insideCage(this.x, this.y)) {
         if (this.x > RINK.goalLineRight) this.x = RINK.goalLineRight - PUCK.radius - 1;
         else                             this.x = RINK.goalLineLeft  + PUCK.radius + 1;
         this.vx = 0; this.vy = 0;
-        owner.hasPuck = false; this.ownerId = null;
       } else if (_insideCage(owner.x, owner.y)) {
         owner.hasPuck = false; this.ownerId = null;
       }
