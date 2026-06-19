@@ -124,9 +124,14 @@ export class Puck {
       }
       this._cradleTo(owner);
       this.ownerId = owner.id;
-      // Gól lze dát POUZE střelou (volný puk) — nesením do branky se gól nepočítá.
-      // Pokud špička hole nebo tělo hráče vstoupí do klece → odhoď puk (on ice, volný).
-      if (_insideCage(this.x, this.y) || _insideCage(owner.x, owner.y)) {
+      // Gól POUZE střelou. Pokud špička hole vstoupí do klece, vytlač puk zpět na čáru
+      // (nestačí jen drop — volný puk uvnitř by okamžitě triggeroval _resolveGoals).
+      if (_insideCage(this.x, this.y)) {
+        if (this.x > RINK.goalLineRight) this.x = RINK.goalLineRight - PUCK.radius - 1;
+        else                             this.x = RINK.goalLineLeft  + PUCK.radius + 1;
+        this.vx = 0; this.vy = 0;
+        owner.hasPuck = false; this.ownerId = null;
+      } else if (_insideCage(owner.x, owner.y)) {
         owner.hasPuck = false; this.ownerId = null;
       }
       return;
