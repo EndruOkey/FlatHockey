@@ -2024,7 +2024,11 @@
     /* ═══════════════════════════════════════════════════════════════
        CREATE SCREEN — 2-COLUMN
        ═══════════════════════════════════════════════════════════════ */
-    .sv-body-create { grid-template-columns: 42% 58%; overflow: hidden; }
+    #v-create { flex-direction: column; align-items: center; overflow-y: auto; }
+    .sv-body-create {
+      grid-template-columns: 42% 58%; overflow: hidden;
+      width: 100%; max-width: 1280px;
+    }
 
     .sv-create-left {
       background: #07090F;

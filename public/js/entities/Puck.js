@@ -122,20 +122,13 @@ export class Puck {
         this.ownerId = owner.id;
         return;
       }
-      // alreadyCarried: přeskočí první frame sběru (prevX = volný puk na ledě)
-      const alreadyCarried = (this.ownerId === owner.id);
       this._cradleTo(owner);
       this.ownerId = owner.id;
-      if (alreadyCarried) {
-        // Lightweight swept check BEZ kolizí tyček — _resolveGoals nesmíme volat
-        // protože post-collision kód by odstrčil puk.x za čáru → falešný gól každý frame
-        const g = _carryGoalCheck(this);
-        if (g) { this.goalScored = g; owner.hasPuck = false; this.ownerId = null; return; }
+      // Gól lze dát POUZE střelou (volný puk) — nesením do branky se gól nepočítá.
+      // Pokud špička hole nebo tělo hráče vstoupí do klece → odhoď puk (on ice, volný).
+      if (_insideCage(this.x, this.y) || _insideCage(owner.x, owner.y)) {
+        owner.hasPuck = false; this.ownerId = null;
       }
-      // Zahoď puk jen když je TĚLO hráče uvnitř sítě (ne jen lopata/špička)
-      // Kontrola puku (this.x/y) způsobovala jitter: lopata sahala do klece →
-      // hasPuck=false → tryPickup → hasPuck=true → každý frame
-      if (_insideCage(owner.x, owner.y)) { owner.hasPuck = false; this.ownerId = null; }
       return;
     }
 

@@ -5,12 +5,12 @@ import { t } from '../i18n.js';
 // ── Save profil (naškálováno na reálnou branku 6 ft = 32px) ───────────────
 // Gólman kryje centrální pásmo, ale má zranitelnosti: horní růžky, pětku, vyrážečka
 // pouští dorážky. Z postavení neprostřelíš, z pohybu/výškou ano.
-const COVER_H  = 14;   // vertikální poloviční dosah krytí (±14 ze 44px ústí → uličky u tyček)
-const COVER_X  = 9;    // poloviční tloušťka (X)
-const FIVEHOLE = 5;    // poloviční šířka pětky (nízký střed)
-const TOP_EDGE = 2;    // užší růžek u tyče → těžší trefit
-const MAX_OUT  = 38;   // max výjezd (~7.2 ft — challenge ze slotu, ale blíž kreasu)
-const SPEED    = 190;  // laterální rychlost
+const COVER_H  = 18;   // vertikální poloviční dosah krytí (±18 ze 22px polostínu → malá ulička)
+const COVER_X  = 10;   // poloviční tloušťka (X)
+const FIVEHOLE = 4;    // poloviční šířka pětky (nízký střed — těžší trefit)
+const TOP_EDGE = 3;    // užší růžek u tyče → těžší trefit
+const MAX_OUT  = 28;   // max výjezd — méně agresivní, zůstává blíž bráně
+const SPEED    = 220;  // laterální rychlost — rychlejší odezva
 const PADLEN   = 9;    // délka betonů dopředu (vizuál)
 
 export class Goalie {
@@ -105,7 +105,7 @@ export class Goalie {
 
     // ── Percepce puku ────────────────────────────────────────────────────
     // Z dálky (modrá čára+) golman sleduje puk pomaleji → méně chaotický pohyb
-    const diffMult      = this.difficulty === 'competitive' ? 0.75 : 1.2;
+    const diffMult      = this.difficulty === 'competitive' ? 0.75 : 1.0;
     const baseLag       = 5.8 * diffMult;
     const distLagFactor = rawDist > 170 ? Math.max(0.28, 1 - (rawDist - 170) / 220) : 1.0;
     const lag           = baseLag * distLagFactor * (1 - this._screen * 0.55);
@@ -136,12 +136,12 @@ export class Goalie {
     // Depth se neškáluje difficulty — obě úrovně stojí na stejném místě geometricky.
     // Difficulty ovlivňuje přesnost (errAmp) a rychlost přesunu, ne výchozí pozici.
     let depth;
-    if      (distToPuck < 25)  depth = MAX_OUT * 0.28 * Math.sqrt(distToPuck / 25); // záros: ustupuje, reaktivní
-    else if (distToPuck < 100) depth = MAX_OUT * 0.90;                              // slot: max challenge (~8.5ft)
-    else if (distToPuck < 200) depth = MAX_OUT * (0.90 - 0.26 * (distToPuck - 100) / 100); // kruhy: 0.90→0.64
-    else if (distToPuck < 340) depth = MAX_OUT * (0.64 - 0.15 * (distToPuck - 200) / 140); // modrá: 0.64→0.49
-    else if (distToPuck < 520) depth = MAX_OUT * (0.49 - 0.22 * (distToPuck - 340) / 180); // neutral: 0.49→0.27
-    else                       depth = MAX_OUT * 0.20;                              // za středem: 10px vpředu
+    if      (distToPuck < 25)  depth = MAX_OUT * 0.22 * Math.sqrt(distToPuck / 25); // záros: ustupuje, reaktivní
+    else if (distToPuck < 100) depth = MAX_OUT * 0.72;                              // slot: challenge
+    else if (distToPuck < 200) depth = MAX_OUT * (0.72 - 0.22 * (distToPuck - 100) / 100); // kruhy: 0.72→0.50
+    else if (distToPuck < 340) depth = MAX_OUT * (0.50 - 0.18 * (distToPuck - 200) / 140); // modrá: 0.50→0.32
+    else if (distToPuck < 520) depth = MAX_OUT * (0.32 - 0.14 * (distToPuck - 340) / 180); // neutral: 0.32→0.18
+    else                       depth = MAX_OUT * 0.12;                              // za středem: mírně vpředu
     // Ostrý úhel → méně vpřed (golman krytý tyčkou, zaujímá near-post pozici)
     depth *= 1 - clamp(angleAbs / (Math.PI * 0.5), 0, 1) * (this.difficulty === 'competitive' ? 0.35 : 0.48);
 
@@ -173,8 +173,8 @@ export class Goalie {
     // Dobrá forma (_form→1): méně chyb. Špatná forma (_form→0): větší odchylky.
     this._errPhase = ((this._errPhase ?? 0) + dt * 0.58);
     const errZone    = clamp(1 - Math.pow((distToPuck - 100) / 105, 2), 0, 1);
-    const formFactor = 1.0 + (0.5 - this._form) * 1.2;  // špatná forma = až 2× větší chyba
-    const errAmpBase = (this.difficulty === 'competitive' ? 1.2 : 2.8) * formFactor;
+    const formFactor = 1.0 + (0.5 - this._form) * 0.8;  // špatná forma = mírnější chyby
+    const errAmpBase = (this.difficulty === 'competitive' ? 1.0 : 1.6) * formFactor;
     const errAmp     = errAmpBase * (0.08 + 0.92 * errZone);
     const errRaw     = Math.sin(this._errPhase * 0.88) * errAmp
                      + Math.cos(this._errPhase * 1.47) * errAmp * 0.52;
@@ -342,7 +342,7 @@ export class Goalie {
     }
 
     // ── Pohyb (spring-damper) ────────────────────────────────────────────
-    const speedMult      = this.difficulty === 'competitive' ? 1.22 : 0.85;
+    const speedMult      = this.difficulty === 'competitive' ? 1.22 : 1.05;
     const wrapSpeedBoost = wrapOverride ? 1.65 : 1.0;
     const retrieveBoost  = this._retrieving ? 1.8 : 1.0;
     const returnBoost    = this._returnTimer > 0 ? 1.55 : 1.0;
@@ -404,8 +404,8 @@ export class Goalie {
     // Competitive = lepší pokrytí, casual = snadněji se dostaneš ke gólu
     const screenPenalty = this.difficulty === 'competitive' ? 0.30 : 0.42;
     const sc = 1 - this._screen * screenPenalty;
-    const coverXMult = this.difficulty === 'competitive' ? 1.08 : 0.95;
-    const coverYMult = this.difficulty === 'competitive' ? 1.06 : 0.88;
+    const coverXMult = this.difficulty === 'competitive' ? 1.08 : 1.0;
+    const coverYMult = this.difficulty === 'competitive' ? 1.06 : 1.0;
 
     // Síla střely: rychlý puk = méně reakčního času = menší zone (max −25 %)
     const shotSpeed = Math.hypot(puck.vx, puck.vy);
