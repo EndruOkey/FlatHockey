@@ -1128,8 +1128,20 @@ net.onOnlineCount = ({ count }) => {
   if (lbl) lbl.textContent = count + ' online';
 };
 
-function startGame(game) { inGame = true; currentGame = game; lobby.style.display = 'none'; canvas.style.cursor = 'crosshair'; game.start(); }
-function stopGame()  { if (currentGame?.stop) currentGame.stop(); currentGame = null; inGame = false; lobby.style.display = ''; canvas.style.cursor = 'default'; }
+function startGame(game) {
+  inGame = true; currentGame = game;
+  lobby.style.display = 'none'; canvas.style.cursor = 'crosshair';
+  // SandboxGame má vlastní dock s popisy — hint překrýval dock
+  const hintEl = document.getElementById('hint');
+  if (hintEl) hintEl.style.display = game instanceof SandboxGame ? 'none' : '';
+  game.start();
+}
+function stopGame()  {
+  if (currentGame?.stop) currentGame.stop(); currentGame = null; inGame = false;
+  lobby.style.display = ''; canvas.style.cursor = 'default';
+  const hintEl = document.getElementById('hint');
+  if (hintEl) hintEl.style.display = '';
+}
 
 function _startTutorial() {
   if (!hasName()) nameInput.value = suggestName();   // guest jméno pro hru
@@ -1152,7 +1164,7 @@ const hidePause = () => pauseMenu.style.display = 'none';
 resumeBtn.addEventListener('click', hidePause);
 leaveBtn.addEventListener('click', () => { net.leaveLobby(); lastLobbyId = null; localStorage.removeItem('fh_last_lobby'); stopGame(); hidePause(); showView('main'); });
 net.onPeerLeft = () => { if (inGame) currentGame?.notify?.(t('peer_left')); };  // hra běží dál, jen upozorni
-window.addEventListener('keydown', e => { if (e.key !== 'Escape' || !inGame) return; pauseMenu.style.display === 'flex' ? hidePause() : showPause(); });
+window.addEventListener('keydown', e => { if (e.key !== 'Escape' || !inGame) return; if (currentGame?._activeTab === 'build') return; pauseMenu.style.display === 'flex' ? hidePause() : showPause(); });
 window.addEventListener('beforeunload', () => net.leaveLobby());
 
 // ── Jazyk (CS/EN) ─────────────────────────────────────────────────────

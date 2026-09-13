@@ -203,6 +203,56 @@ export const SFX = {
     }
   },
 
+  // Břevno — vyšší, kratší ping horizontálního profilu (tenčí trubka než boční tyč)
+  crossbar() {
+    const ac = _ac(), t = ac.currentTime, sr = ac.sampleRate;
+    const ib = ac.createBuffer(1, Math.ceil(sr * 0.002), sr);
+    const id = ib.getChannelData(0);
+    for (let i = 0; i < id.length; i++) id[i] = (Math.random() * 2 - 1) * Math.exp(-i * 5 / id.length);
+    const is = ac.createBufferSource(), ihp = ac.createBiquadFilter(), ig = ac.createGain();
+    is.buffer = ib; ihp.type = 'highpass'; ihp.frequency.value = 1800;
+    is.connect(ihp); ihp.connect(ig); ig.connect(_master);
+    ig.gain.setValueAtTime(0, t); ig.gain.linearRampToValueAtTime(0.16, t + 0.001);
+    ig.gain.exponentialRampToValueAtTime(0.001, t + 0.004); is.start(t);
+    for (const [f, a, d] of [
+      [1240, 0.16, 0.24],
+      [2500, 0.07, 0.14],
+      [3800, 0.025, 0.09],
+      [780,  0.05, 0.18],
+      [5200, 0.010, 0.06],
+    ]) {
+      const osc = ac.createOscillator(), g = ac.createGain();
+      osc.connect(g); g.connect(_master);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(f * 1.008, t);
+      osc.frequency.exponentialRampToValueAtTime(f, t + 0.012);
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(a, t + 0.002);
+      g.gain.exponentialRampToValueAtTime(0.001, t + d);
+      osc.start(t); osc.stop(t + d + 0.01);
+    }
+  },
+
+  // Spojnice/zadní stěna sítě — tlumený úder do trubky, krátký a temný
+  spojnice() {
+    const ac = _ac(), t = ac.currentTime;
+    for (const [f, a, d] of [
+      [310,  0.10, 0.16],
+      [620,  0.045, 0.10],
+      [170,  0.065, 0.20],
+      [980,  0.020, 0.07],
+    ]) {
+      const osc = ac.createOscillator(), g = ac.createGain();
+      osc.connect(g); g.connect(_master);
+      osc.type = 'sine';
+      osc.frequency.value = f;
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(a, t + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.001, t + d);
+      osc.start(t); osc.stop(t + d + 0.01);
+    }
+  },
+
   // Mantinel — impakt + nízké tělo + plexisklo rattle
   boards(intensity = 1) {
     const ac = _ac(), t = ac.currentTime, sr = ac.sampleRate;
@@ -376,6 +426,63 @@ export const SFX = {
     osc.frequency.setValueAtTime(105, t); osc.frequency.exponentialRampToValueAtTime(62, t + 0.075);
     og.gain.setValueAtTime(0, t); og.gain.linearRampToValueAtTime(0.15, t + 0.004);
     og.gain.exponentialRampToValueAtTime(0.001, t + 0.095); osc.start(t); osc.stop(t + 0.10);
+  },
+
+  // Hockey stop — křupavý začátek + HP sweep v pozadí (2kHz→5kHz→1.5kHz)
+  iceStop(spd = 100) {
+    const ac  = _ac(), t = ac.currentTime, sr = ac.sampleRate;
+    const f   = Math.min(1, Math.max(0, (spd - 35) / 145));
+    const dur = 0.35 + f * 0.45;
+    const vol = 0.18 + f * 0.14;   // tišší — efekt v pozadí
+
+    // Křupavý úvodní transient: 6ms HP burst na 5.5kHz = ostrý počáteční křup
+    const cb = ac.createBuffer(1, Math.ceil(sr * 0.006), sr);
+    const cd = cb.getChannelData(0);
+    for (let i = 0; i < cd.length; i++) cd[i] = (Math.random() * 2 - 1) * (1 - i / cd.length);
+    const cs = ac.createBufferSource(), chp = ac.createBiquadFilter(), cg = ac.createGain();
+    cs.buffer = cb; chp.type = 'highpass'; chp.frequency.value = 5500;
+    cs.connect(chp); chp.connect(cg); cg.connect(_master);
+    cg.gain.setValueAtTime(vol * 1.8, t);
+    cg.gain.exponentialRampToValueAtTime(0.001, t + 0.006);
+    cs.start(t); cs.stop(t + 0.008);
+
+    // Hlavní scrape: začíná hned vysoko (4500Hz) a klesá → žádný písek na začátku
+    const dur2 = 0.20 + f * 0.22;  // 200–420ms (kratší)
+    const len = Math.ceil(sr * (dur2 + 0.02));
+    const buf = ac.createBuffer(1, len, sr);
+    const dat = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) dat[i] = Math.random() * 2 - 1;
+    const src = ac.createBufferSource(), hp = ac.createBiquadFilter(), g = ac.createGain();
+    src.buffer = buf; hp.type = 'highpass';
+    hp.frequency.setValueAtTime(4500, t);                             // hned na peaku, bez 2kHz "písku"
+    hp.frequency.exponentialRampToValueAtTime(1800, t + dur2);        // klesá dolů
+    src.connect(hp); hp.connect(g); g.connect(_master);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol * 0.55, t + dur2 * 0.08);
+    g.gain.linearRampToValueAtTime(vol, t + dur2 * 0.28);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur2);
+    src.start(t); src.stop(t + dur2 + 0.02);
+  },
+
+  // Poke check — krátký plesknutí hole na hole/puk
+  poke(success = true) {
+    const ac = _ac(), t = ac.currentTime, sr = ac.sampleRate;
+    // Transient: krátký HP burst
+    const cb = ac.createBuffer(1, Math.ceil(sr * 0.004), sr);
+    const cd = cb.getChannelData(0);
+    for (let i = 0; i < cd.length; i++) cd[i] = (Math.random() * 2 - 1) * (1 - i / cd.length);
+    const cs = ac.createBufferSource(), chp = ac.createBiquadFilter(), cg = ac.createGain();
+    cs.buffer = cb; chp.type = 'bandpass'; chp.frequency.value = success ? 2200 : 1600; chp.Q.value = 1.2;
+    cs.connect(chp); chp.connect(cg); cg.connect(_master);
+    cg.gain.setValueAtTime(0, t); cg.gain.linearRampToValueAtTime(success ? 0.28 : 0.18, t + 0.001);
+    cg.gain.exponentialRampToValueAtTime(0.001, t + 0.018); cs.start(t);
+    // Tělo zvuku: krátký clack
+    const osc = ac.createOscillator(), og = ac.createGain();
+    osc.connect(og); og.connect(_master); osc.type = 'sine';
+    osc.frequency.setValueAtTime(success ? 820 : 560, t);
+    osc.frequency.exponentialRampToValueAtTime(success ? 340 : 280, t + 0.022);
+    og.gain.setValueAtTime(0, t); og.gain.linearRampToValueAtTime(success ? 0.10 : 0.065, t + 0.002);
+    og.gain.exponentialRampToValueAtTime(0.001, t + 0.028); osc.start(t); osc.stop(t + 0.03);
   },
 
   // Puck hitting boards/post (legacy alias → boards)

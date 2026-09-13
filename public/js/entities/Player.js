@@ -1,5 +1,6 @@
 import { RINK, PLAYER, PUCK } from '../constants.js';
 import { clamp, lerpAngle, angleDiff } from '../utils.js';
+import { SFX } from '../sound.js';
 
 export class PlayerBase {
   constructor(id, team) {
@@ -35,6 +36,8 @@ export class PlayerBase {
     this._stickDisp      = this.aimAngle; // vyhlazený úhel hole pro vykreslení (bez teleportů)
     this._dispCharge     = 0;             // vyhlazený charge pro wind-up vizuál
     this._cradleSide     = 1;             // plynulá strana puku na čepeli (+forhend / −bekhend)
+    this._skatePhase     = Math.random() * Math.PI * 2; // fáze kroku (vizuál, náhodný start)
+    this._lastSkateT     = 0;            // timestamp posledního renderování brusle
   }
 
   // Plynulý úhel hole — dojíždí k cíli, takže přepnutí crosscheck / zrušení charge
@@ -387,8 +390,10 @@ export class PlayerBase {
       ? (hasInput ? Math.atan2(iy, ix) : this.bodyAngle)
       : this.aimAngle;
     const bodyLerpRate = crossChecking ? 9 : 14;
+    const _prevSkateAngle = this.skateAngle;
     this.skateAngle = lerpAngle(this.skateAngle, targetBodyAngle, Math.min(1, bodyLerpRate * dt));
     this.bodyAngle  = this.skateAngle;
+
 
     // Náklon do oblouku (vizuál)
     const leanTarget = hasInput
@@ -400,6 +405,17 @@ export class PlayerBase {
     // nezasekneš se a netočíš se o band (heading se příští frame srovná podél zdi).
     this.x += this.vx * dt;
     this.y += this.vy * dt;
+
+    // Pivot drift: otáčení na místě dá přímý posun (obchází decel, jinak okamžitě utlumen)
+    const _rotDelta = angleDiff(this.skateAngle, _prevSkateAngle);
+    const _absRotV  = Math.abs(_rotDelta) / dt;
+    if (sp2 < 45 && _absRotV > 2.5) {
+      const _pivotDir  = this.bodyAngle - Math.sign(_rotDelta) * Math.PI / 2;
+      const _driftSpd  = Math.min((_absRotV - 2.5) * 2.2, 26);  // max ~26 px/s
+      this.x += Math.cos(_pivotDir) * _driftSpd * dt;
+      this.y += Math.sin(_pivotDir) * _driftSpd * dt;
+    }
+
     if (this.x < PLAYER.radius)               { this.x = PLAYER.radius;         if (this.vx < 0) this.vx = 0; }
     else if (this.x > RINK.w - PLAYER.radius) { this.x = RINK.w - PLAYER.radius; if (this.vx > 0) this.vx = 0; }
     if (this.y < PLAYER.radius)               { this.y = PLAYER.radius;         if (this.vy < 0) this.vy = 0; }
@@ -558,17 +574,19 @@ function _renderPlayer(ctx, p, cam) {
 
   const tipX = ox + (gxw + windCos * wt) * s;
   const tipY = oy + (gyw + windSin * wt) * s;
+  const tipCos = windCos;
+  const tipSin = windSin;
 
-  // ── Shaft: same thickness as blade ─────────────────────────────────
+  // ── Shaft ─────────────────────────────────────────────────────────────────
   ctx.lineCap = 'round';
-  // grip wrap (first 35%, darker)
+  // Grip wrap (první ~35% — tmavší)
   ctx.beginPath();
   ctx.moveTo(gx, gy);
   ctx.lineTo(gx + windCos * windLen * 0.35 * s, gy + windSin * windLen * 0.35 * s);
   ctx.strokeStyle = _shade(stickCol, -0.55);
   ctx.lineWidth   = 2.8 * s;
   ctx.stroke();
-  // main shaft
+  // Hlavní dřík
   ctx.beginPath();
   ctx.moveTo(gx + windCos * windLen * 0.30 * s, gy + windSin * windLen * 0.30 * s);
   ctx.lineTo(tipX, tipY);
@@ -576,18 +594,31 @@ function _renderPlayer(ctx, p, cam) {
   ctx.lineWidth   = 2.8 * s;
   ctx.stroke();
 
-  // ── Blade: jemný ohyb na stranu dle ruky (levák/pravák curve opačně) ──
-  const bladeAngle = (p.handed ?? 1) * Math.PI / 6.5; // ~28° off shaft, strana dle handedness
+  // ── Blade ─────────────────────────────────────────────────────────────────
+  const bladeAngle = (p.handed ?? 1) * Math.PI / 6.5;
   const bladeL     = 12 * s;
 
-  // Blade drawn as a bezier curve from tip: starts along shaft, fixed gentle curve
-  const bStartX = tipX;
-  const bStartY = tipY;
-  const bEndX   = tipX + Math.cos(windAngle + bladeAngle) * bladeL;
-  const bEndY   = tipY + Math.sin(windAngle + bladeAngle) * bladeL;
-  // Control point pulls toward the angled end, creating a gentle arc
-  const bCtrlX  = tipX + Math.cos(windAngle) * bladeL * 0.55;
-  const bCtrlY  = tipY + Math.sin(windAngle) * bladeL * 0.55;
+  let bStartX = tipX;
+  let bStartY = tipY;
+  let bEndX   = tipX + Math.cos(windAngle + bladeAngle) * bladeL;
+  let bEndY   = tipY + Math.sin(windAngle + bladeAngle) * bladeL;
+  let bCtrlX  = tipX + windCos * bladeL * 0.55;
+  let bCtrlY  = tipY + windSin * bladeL * 0.55;
+
+  // Oříznutí čepele na zadní stěnu branky (aby čepel nepronikala sítí zezadu)
+  if (gyw > RINK.goalY && gyw < RINK.goalY + RINK.goalH) {
+    const _bwRsc = ox + (RINK.goalLineRight + RINK.goalDepth) * s;
+    const _bwLsc = ox + (RINK.goalLineLeft  - RINK.goalDepth) * s;
+    if (gxw > RINK.goalLineRight + RINK.goalDepth) {
+      // hráč za pravou sítí: čepel nesmí jít doleva za zadní stěnu
+      if (bEndX  < _bwRsc) { bEndX  = _bwRsc; }
+      if (bCtrlX < _bwRsc) { bCtrlX = _bwRsc; }
+    } else if (gxw < RINK.goalLineLeft - RINK.goalDepth) {
+      // hráč za levou sítí: čepel nesmí jít doprava za zadní stěnu
+      if (bEndX  > _bwLsc) { bEndX  = _bwLsc; }
+      if (bCtrlX > _bwLsc) { bCtrlX = _bwLsc; }
+    }
+  }
 
   // Blade shadow
   ctx.beginPath();
@@ -603,6 +634,66 @@ function _renderPlayer(ctx, p, cam) {
   _drawBlade(ctx, bStartX, bStartY, bCtrlX, bCtrlY, bEndX, bEndY, tapeCol, tapeSty, 2.8 * s);
   } // end !crossCheck stick
 
+  // ── Hockey stop: Space brake trigger + jednoduché bílé sprejové tečky ─────────
+  {
+    const _nowHS = Date.now();
+    const _dtHS  = p._lastHStopT ? Math.min(0.05, (_nowHS - p._lastHStopT) / 1000) : 0.016;
+    p._lastHStopT = _nowHS;
+
+    const _spd2 = Math.hypot(p.vx ?? 0, p.vy ?? 0);
+    if (_spd2 > 30) p._hsDir = Math.atan2(p.vy ?? 0, p.vx ?? 0);  // uložit směr dokud jedeme
+
+    const _prevS = p._prevRSpd ?? _spd2;
+    p._prevRSpd  = _spd2;
+    if ((p._stopCd ?? 0) > 0) p._stopCd -= _dtHS;
+    if ((p._stopFx ?? 0) > 0) p._stopFx -= _dtHS;
+
+    const _spaceNow  = !!(p.input?.keys?.Space);
+    const _spaceEdge = _spaceNow && !(p._prevSpace ?? false);
+    p._prevSpace = _spaceNow;
+    const _canFire = !((p._stopCd ?? 0) > 0);
+
+    if ((_spaceEdge || (_prevS - _spd2) > 8) && _spd2 > 35 && _canFire) {
+      const _dir = p._hsDir ?? Math.atan2(p.vy ?? 0, p.vx ?? 0);
+      const _spd = _prevS;
+      p._stopFx  = 0.55 + Math.min(1, (_spd - 35) / 145) * 0.35;  // 0.55–0.90s dle rychlosti
+      p._stopCd  = 1.0;
+      // Spawn 20 bílých šupinek dopředu v úzkém fanu ±45°
+      p._stopPts = [];
+      for (let i = 0; i < 20; i++) {
+        const _a = _dir + (Math.random() - 0.5) * 1.57;
+        const _v = 55 + Math.random() * _spd * 0.6;
+        p._stopPts.push({ x: p.x, y: p.y, vx: Math.cos(_a) * _v, vy: Math.sin(_a) * _v,
+                          life: 0.15 + Math.random() * 0.15, maxL: 0.30 });
+      }
+      SFX.iceStop(_spd);
+    }
+
+    if (p._stopPts?.length) {
+      for (const pt of p._stopPts) {
+        pt.x += pt.vx * _dtHS; pt.y += pt.vy * _dtHS;
+        pt.vx *= 0.88; pt.vy *= 0.88;  // vzdušný odpor
+        pt.life -= _dtHS;
+        if (pt.life <= 0) continue;
+        const _al = (pt.life / pt.maxL) * 0.85;
+        ctx.beginPath();
+        ctx.arc(ox + pt.x * s, oy + pt.y * s, Math.max(1, r * 0.30), 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255,255,255,${_al.toFixed(2)})`;
+        ctx.fill();
+      }
+      p._stopPts = p._stopPts.filter(pt => pt.life > 0);
+    }
+
+    // Smooth foot-blend přechod — uvnitř bloku kde máme _dtHS
+    const _st = (p._stopFx ?? 0) > 0 ? 1 : 0;
+    const _stRate = _st > (p._stopTSmooth ?? 0) ? 14 : 5;
+    let _stNew = Math.min(1, Math.max(0,
+      (p._stopTSmooth ?? 0) + (_st - (p._stopTSmooth ?? 0)) * Math.min(1, _stRate * _dtHS)
+    ));
+    if (_stNew < 0.03) { _stNew = 0; p._hsDir = null; } // snap na 0, vyčisti uložený směr
+    p._stopTSmooth = _stNew;
+  }
+
   // ── Hokejista (top-down) — orientovaný podle facingu (bodyAngle) ──
   const ba   = p.bodyAngle;
   const fcos = Math.cos(ba), fsin = Math.sin(ba);
@@ -612,6 +703,128 @@ function _renderPlayer(ctx, p, cam) {
   ctx.save();
   ctx.translate(sx, sy);
   ctx.rotate(ba); // lokálně: +x dopředu (facing), +y doprava
+  // Náklon těla do zatáčky — v lokálním Y (= bok hráče)
+  ctx.translate(0, (p._lean ?? 0) * r * 0.15);
+
+  // ── Brusle (animovaný krok, směr dle skutečného pohybu) ──────────────────
+  const _spd = Math.hypot(p.vx ?? 0, p.vy ?? 0);
+  const _sf  = Math.min(1, _spd / 160);
+
+  // Směr pohybu v lokálním prostoru těla (0=dopředu, π=dozadu, ±π/2=do strany)
+  const _mwAngle = _spd > 5 ? Math.atan2(p.vy ?? 0, p.vx ?? 0) : (p.bodyAngle ?? 0);
+  const _mLoc    = _mwAngle - (p.bodyAngle ?? 0);
+  const _mCos = Math.cos(_mLoc), _mSin = Math.sin(_mLoc);
+
+  const _now = Date.now();
+  if (p._lastSkateT) {
+    const _fdt = Math.min(0.05, (_now - p._lastSkateT) / 1000);
+    const _angVel = Math.abs(angleDiff(ba, p._lastBodyAngle ?? ba)) / _fdt;
+    p._lastBodyAngle = ba;
+    const _rotSf  = Math.min(1, _angVel / 5.0);
+    // Rotace pohání fázi rychleji než pohyb — při 360° obratu ~3 viditelné kroky
+    const _fwdRate = _sf * 9;
+    const _rotRate = _rotSf * (1 - _sf) * 24;
+    p._skatePhase = ((p._skatePhase ?? 0) + Math.max(_fwdRate, _rotRate) * _fdt) % (Math.PI * 2);
+    p._rotSf = _rotSf;
+    // Vyhlazení ve WORLD prostoru — odstraní "kolena" při rotaci těla
+    const _vdirW = _spd > 8 ? Math.atan2(p.vy ?? 0, p.vx ?? 0) : null;
+    if (_vdirW !== null) {
+      p._footDirWorld = lerpAngle(p._footDirWorld ?? _vdirW, _vdirW, Math.min(1, 5 * _fdt));
+    } else {
+      // Při stání: nohy rychle sledují tělo, aby pivot krok vypadal přirozeně
+      p._footDirWorld = lerpAngle(p._footDirWorld ?? ba, ba, Math.min(1, 10 * _fdt));
+    }
+  } else {
+    p._lastBodyAngle = ba;
+    p._rotSf = 0;
+    p._footDirWorld = Math.atan2(p.vy ?? 0, p.vx ?? 0);
+  }
+  p._lastSkateT = _now;
+  const _footDir = (p._footDirWorld ?? ba) - ba;  // world → body-local při renderu
+
+  const _stopT = p._stopTSmooth ?? 0;
+
+  ctx.lineCap = 'round';
+  for (const side of [-1, 1]) {
+    const footPhase    = (p._skatePhase ?? 0) + (side === 1 ? 0 : Math.PI);
+    const stride       = Math.sin(footPhase);
+    const pushFraction = Math.max(0, -stride);
+
+    const _rotSfCur = p._rotSf ?? 0;
+    const _rotBoost = _rotSfCur * (1 - _sf);
+    // Pivot orbit: při rotaci noha opisuje XY elipsu kolem těla (ne lineární swing)
+    const _pivotAngle = (p._skatePhase ?? 0) + (side === 1 ? 0 : Math.PI);
+    const _orbitX =  Math.cos(_pivotAngle) * r * 0.42 * _rotBoost;  // dopředu/dozadu
+    const _orbitY =  Math.sin(_pivotAngle) * r * 0.28 * _rotBoost;  // do strany
+    // Lineární stride (pohyb vpřed) mizí při rotaci, nahrazuje ho orbit
+    const _strideAmp = r * (0.13 + 0.18 * _sf) * (1 - _rotBoost * 0.7);
+    const _fdCos = Math.cos(_footDir), _fdSin = Math.sin(_footDir);
+    const _nbx = -r * 1.00 + stride * _strideAmp * _fdCos + _orbitX
+               + pushFraction * r * 0.20 * side * (-_fdSin) * (1 - _rotBoost);
+    const _nby = side * r * 0.60 + stride * _strideAmp * _fdSin + _orbitY
+               + pushFraction * r * 0.20 * side * _fdCos * (1 - _rotBoost);
+    // Stop pozice: nohy vedle sebe, mírně za těžištěm, rozšířené
+    const _sbx = -r * 0.85;
+    const _sby =  side * r * 0.72;
+    const bx = _nbx * (1 - _stopT) + _sbx * _stopT;
+    const by = _nby * (1 - _stopT) + _sby * _stopT;
+
+    // Úhel brusle: normální dle pohybu, při rotaci tangent orbitu, při stopu kolmo
+    const _normalAngle    = _footDir + side * pushFraction * 0.35;
+    const _pivotFootAngle = _pivotAngle - Math.PI / 2;  // tangent orbitální dráhy
+    const _stopDirLocal = (p._hsDir != null ? p._hsDir - ba : _footDir);
+    const _stopAngle    = _stopDirLocal + Math.PI / 2;
+    const _baseAngle      = lerpAngle(_normalAngle, _pivotFootAngle, _rotBoost * 0.65);
+    const footAngle = lerpAngle(_baseAngle, _stopAngle, _stopT);
+
+    ctx.save();
+    ctx.translate(bx, by);
+    ctx.rotate(footAngle);
+
+    // Bota
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r * 0.58, r * 0.23, 0, 0, Math.PI * 2);
+    ctx.fillStyle = '#0c0e14';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.13)';
+    ctx.lineWidth = 0.7 * s;
+    ctx.stroke();
+
+    // Šněrování
+    ctx.strokeStyle = 'rgba(255,255,255,0.42)';
+    ctx.lineWidth = 0.55 * s;
+    for (const lx of [-r * 0.21, 0, r * 0.21]) {
+      const hw = r * 0.18;
+      ctx.beginPath();
+      ctx.moveTo(lx, -hw);
+      ctx.lineTo(lx,  hw);
+      ctx.stroke();
+    }
+
+    // Čepel
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.62, 0);
+    ctx.lineTo( r * 0.62, 0);
+    ctx.strokeStyle = '#b8c4d4';
+    ctx.lineWidth = 0.85 * s;
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  // Šortky — za bruslemi (navrch v Z), do boku od těla, animované s krokem
+  if (p.shorts) {
+    ctx.fillStyle = p.shorts;
+    ctx.strokeStyle = 'rgba(0,0,0,0.32)';
+    ctx.lineWidth = 0.7 * s;
+    for (const _leg of [-1, 1]) {
+      const _legSwing = Math.sin((p._skatePhase ?? 0) + (_leg === -1 ? Math.PI : 0)) * r * 0.15 * _sf;
+      ctx.beginPath();
+      ctx.ellipse(-r * 0.72 + _legSwing, _leg * r * 0.68, r * 0.52, r * 0.44, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
 
   // Ramena / trup — širší napříč, kratší dopředu (dres)
   ctx.beginPath();
@@ -621,7 +834,7 @@ function _renderPlayer(ctx, p, cam) {
   ctx.strokeStyle = 'rgba(0,0,0,0.35)';
   ctx.lineWidth = 1.4 * s;
   ctx.stroke();
-  // číslo/náznak zad (tmavší pruh)
+  // Záda — tmavší ovál (dres záda / stín objemu)
   ctx.fillStyle = darker;
   ctx.beginPath();
   ctx.ellipse(-r * 0.5, 0, r * 0.5, r * 0.95, 0, 0, Math.PI * 2);
@@ -651,6 +864,7 @@ function _renderPlayer(ctx, p, cam) {
 
   ctx.restore();
 
+
   // Číslo na zádech dresu — otáčí se s tělem (jako reálné číslo na dresu), vrchem k hlavě
   if (p.num !== null && p.num !== undefined) {
     const nstr = String(p.num);
@@ -673,7 +887,7 @@ function _renderPlayer(ctx, p, cam) {
   // ── Rukavice (ruce na holi) ──────────────────────────────────────────
   // Horní ruka u konce dříku (vychází z těla), dolní ruka výrazně níž → drží hůl.
   {
-    let topH, botH, hTop = r * 0.4, hBot = r * 0.34;
+    let topH, botH, hTop = r * 0.30, hBot = r * 0.26;
     if (p.crossCheck) {
       const baseDir  = p._stickDisp;
       const stickDir = baseDir + Math.PI / 2;
@@ -684,11 +898,15 @@ function _renderPlayer(ctx, p, cam) {
       topH = { x: cxW - sc * half * 0.62, y: cyW - ss * half * 0.62 };
       botH = { x: cxW + sc * half * 0.42, y: cyW + ss * half * 0.42 };
     } else {
-      const gp = p.gripPoint;
+      const gp   = p.gripPoint;
       const sdir = p._stickDisp ?? p.carryAngle ?? p.aimAngle;
       const c = Math.cos(sdir), sn = Math.sin(sdir);
-      topH = { x: gp.x + c * 0.4, y: gp.y + sn * 0.4 };   // horní ruka u konce (z těla)
-      botH = { x: gp.x + c * 8.0, y: gp.y + sn * 8.0 };   // dolní ruka výrazně níž
+      // topH: okraj těla na straně hole (r*0.90 bokem) → viditelná mimo dres
+      // botH: podél dříku od gripo → jiný úhel = ne lineární
+      const _sideA = sdir + (p.handed ?? 1) * Math.PI / 2;
+      topH = { x: p.x + Math.cos(_sideA) * PLAYER.radius * 0.90,
+               y: p.y + Math.sin(_sideA) * PLAYER.radius * 0.90 };
+      botH = { x: gp.x + c * 8.0, y: gp.y + sn * 8.0 };
     }
     for (const [h, hr] of [[botH, hBot], [topH, hTop]]) {
       const hx = ox + h.x * s, hy = oy + h.y * s;
@@ -700,8 +918,8 @@ function _renderPlayer(ctx, p, cam) {
   }
 
   // Helma (vepředu, ve směru facingu) — naznačí směr, navrch (hlava nad rukama)
-  const hx = sx + fcos * r * 0.55;
-  const hy = sy + fsin * r * 0.55;
+  const hx = sx + fcos * r * 0.68;
+  const hy = sy + fsin * r * 0.68;
   ctx.beginPath();
   ctx.arc(hx, hy, r * 0.52, 0, Math.PI * 2);
   ctx.fillStyle = p.helmet || '#eef2f8';

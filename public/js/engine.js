@@ -27,6 +27,7 @@ export class Engine {
     this.onTick      = null; // (dt, cam) => void — pre-update hook for input/network
     this.onAfterTick = null; // (dt, cam) => void — post-physics hook (read puck._ev etc.)
     this.onDraw      = null; // (ctx, cam) => void — post-draw hook for HUD overlay
+    this.cameraOverride = null; // (canvas) => cam — optional custom camera computation
     this._lastTime = null;
   }
 
@@ -44,7 +45,7 @@ export class Engine {
     const dt = Math.min((t - this._lastTime) / 1000, 0.05);
     this._lastTime = t;
 
-    const cam = computeCamera(this.canvas);
+    const cam = this.cameraOverride ? this.cameraOverride(this.canvas) : computeCamera(this.canvas);
     const ctx = this.canvas.getContext('2d');
 
     this.onTick?.(dt, cam);

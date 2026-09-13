@@ -72,14 +72,45 @@ export class Puck {
   _cradleTo(owner) {
     const stickAng   = owner._stickDisp ?? owner.carryAngle ?? owner.aimAngle;
     const dispCharge = owner._dispCharge ?? 0;
-    const reach      = (owner._dispReach ?? PLAYER.stickLen) * (1 - dispCharge * 0.30);
+    let   reach      = (owner._dispReach ?? PLAYER.stickLen) * (1 - dispCharge * 0.30);
     const grip       = owner.gripPoint ? owner.gripPoint : { x: owner.x, y: owner.y };
-    const heelX = grip.x + Math.cos(stickAng) * reach;
-    const heelY = grip.y + Math.sin(stickAng) * reach;
+
+    // Oříznutí reach na zadní stěnu branky (stejná logika jako stickTip getter a rendering)
+    const _sCos = Math.cos(stickAng), _sSin = Math.sin(stickAng);
+    const _gy1  = RINK.goalY, _gy2 = RINK.goalY + RINK.goalH, _gd = RINK.goalDepth;
+    if (grip.y > _gy1 && grip.y < _gy2) {
+      const _bwR = RINK.goalLineRight + _gd;  // zadní stěna pravé branky (x=1010)
+      const _bwL = RINK.goalLineLeft  - _gd;  // zadní stěna levé branky  (x=70)
+      if (owner.x > _bwR && _sCos < 0) {
+        const _t = (_bwR - grip.x) / _sCos;
+        if (_t >= 0) reach = Math.min(reach, _t);
+      }
+      if (owner.x < _bwL && _sCos > 0) {
+        const _t = (_bwL - grip.x) / _sCos;
+        if (_t >= 0) reach = Math.min(reach, _t);
+      }
+    }
+
+    const heelX = grip.x + _sCos * reach;
+    const heelY = grip.y + _sSin * reach;
     const bladeAngle = (owner.handed ?? 1) * Math.PI / 6.5;
     const bladeDir   = stickAng + bladeAngle;
-    const along      = (0.5 - dispCharge * 0.18) * 12;
-    const bx = heelX + Math.cos(bladeDir) * along;
+    const _bCos = Math.cos(bladeDir);
+
+    // Oříznutí along: čepel nesmí přejít zadní stěnou do sítě
+    let along = (0.5 - dispCharge * 0.18) * 12;
+    if (grip.y > _gy1 && grip.y < _gy2) {
+      const _bwR = RINK.goalLineRight + _gd;
+      const _bwL = RINK.goalLineLeft  - _gd;
+      if (owner.x > _bwR && _bCos < 0) {
+        along = Math.min(along, Math.max(0, (heelX - _bwR) / (-_bCos)));
+      }
+      if (owner.x < _bwL && _bCos > 0) {
+        along = Math.min(along, Math.max(0, (_bwL - heelX) / _bCos));
+      }
+    }
+
+    const bx = heelX + _bCos * along;
     const by = heelY + Math.sin(bladeDir) * along;
     // Spojitá strana puku na čepeli → plynulé míchání forhend↔bekhend (dribling)
     const bladeSide = owner._cradleSide ?? (owner.forehand !== false ? 1 : -1);
@@ -124,14 +155,29 @@ export class Puck {
       }
       this._cradleTo(owner);
       this.ownerId = owner.id;
-      // Hokejka se zastaví na okraji branky — puk zůstane v držení, jen se ořízne na čáru.
-      if (_insideCage(this.x, this.y)) {
-        if (this.x > RINK.goalLineRight) this.x = RINK.goalLineRight - PUCK.radius - 1;
-        else                             this.x = RINK.goalLineLeft  + PUCK.radius + 1;
-        this.vx = 0; this.vy = 0;
-      } else if (_insideCage(owner.x, owner.y)) {
-        owner.hasPuck = false; this.ownerId = null;
+      const _gy1 = RINK.goalY, _gy2 = RINK.goalY + RINK.goalH;
+      const _gd  = RINK.goalDepth;
+      if (this.y > _gy1 && this.y < _gy2) {
+        // Pravá branka
+        if (owner.x > RINK.goalLineRight + _gd) {
+          // Hráč za sítí zezadu: puk nesmí přejít přes ÚSTÍ branky (dovoleno uvnitř sítě od zadu)
+          if (this.x < RINK.goalLineRight + PUCK.radius + 1) {
+            this.x = RINK.goalLineRight + PUCK.radius + 1; this.vx = 0; this.vy = 0;
+          }
+        } else if (this.x > RINK.goalLineRight && this.x < RINK.goalLineRight + _gd) {
+          // Hráč zepředu, puk uvnitř cage → carry-in fix (zadrž před ústím)
+          this.x = RINK.goalLineRight - PUCK.radius - 1; this.vx = 0; this.vy = 0;
+        }
+        // Levá branka (symetricky)
+        if (owner.x < RINK.goalLineLeft - _gd) {
+          if (this.x > RINK.goalLineLeft - PUCK.radius - 1) {
+            this.x = RINK.goalLineLeft - PUCK.radius - 1; this.vx = 0; this.vy = 0;
+          }
+        } else if (this.x < RINK.goalLineLeft && this.x > RINK.goalLineLeft - _gd) {
+          this.x = RINK.goalLineLeft + PUCK.radius + 1; this.vx = 0; this.vy = 0;
+        }
       }
+      if (_insideCage(owner.x, owner.y)) { owner.hasPuck = false; this.ownerId = null; }
       return;
     }
 
@@ -176,6 +222,7 @@ export class Puck {
     if (!this.isAirborne) {
       for (const p of world.players) {
         if (p.hasPuck) continue;
+        if (p.isDefender && !p.isPassive) continue; // aktivní defender neblokuje puk tělem
         const dx = this.x - p.x, dy = this.y - p.y;
         const dist = Math.hypot(dx, dy);
         const minD = (p.radius ?? PLAYER.radius) + PUCK.radius;
@@ -194,13 +241,9 @@ export class Puck {
     }
 
     // Pevné stěny sítě (vršek/spodek/záda) — puk projde dovnitř JEN ústím zepředu
-    const _preNetSpd = Math.hypot(this.vx, this.vy);
     _resolveNetWalls(this);
-    if (_preNetSpd > 40 && Math.hypot(this.vx, this.vy) < _preNetSpd * 0.95) this._ev |= 1;
     // Jednotná branková mechanika: tyčky+břevno → detekce → udržení v síti
-    const _preGoalSpd = Math.hypot(this.vx, this.vy);
     this.goalScored = _resolveGoals(this);
-    if (_preGoalSpd > 40 && Math.hypot(this.vx, this.vy) < _preGoalSpd * 0.9) this._ev |= 2; // post hit
   }
 
   draw(ctx, cam) {
@@ -280,6 +323,9 @@ function _alpha(col, a) {
 // Realističtější odrazy: max 0.82 (rychlý puk 80%), min 0.45 (extrémní nárazy)
 function _reb(sp) { return Math.max(0.45, 0.82 - Math.abs(sp) / 1800); }
 
+const POST_R      = 2.0; // kolizní rádius tyčky (px) — menší = méně phantom bounces
+const GOAL_Y_MARG = 1.2; // y-okraj pro detekci gólu — musí být menší než POST_R+PUCK.radius=5
+
 function _insideCage(x, y) {
   const gy1 = RINK.goalY, gy2 = RINK.goalY + RINK.goalH;
   if (y <= gy1 || y >= gy2) return false;
@@ -308,17 +354,17 @@ function _resolveNetWalls(puck) {
     // Vrchní mantinel — blokuj puk přicházející ZESHORA (py < gy1)
     if (inX && py < gy1 && puck.y >= gy1 - r) {
       puck.y = gy1 - r;
-      if (puck.vy > 0) puck.vy = -Math.abs(puck.vy) * _reb(puck.vy);
+      if (puck.vy > 0) { const sp = Math.abs(puck.vy); puck.vy = -sp * _reb(puck.vy); if (sp > 35) puck._ev |= 16; }
     }
     // Spodní mantinel — blokuj zdola (py > gy2)
     if (inX && py > gy2 && puck.y <= gy2 + r) {
       puck.y = gy2 + r;
-      if (puck.vy < 0) puck.vy = Math.abs(puck.vy) * _reb(puck.vy);
+      if (puck.vy < 0) { const sp = Math.abs(puck.vy); puck.vy =  sp * _reb(puck.vy); if (sp > 35) puck._ev |= 16; }
     }
     // Zadní stěna — blokuj z vnějšku (za brankou)
     if (inY) {
-      if (dir > 0 && px > hi && puck.x <= hi + r) { puck.x = hi + r; if (puck.vx < 0) puck.vx =  Math.abs(puck.vx) * _reb(puck.vx); }
-      if (dir < 0 && px < lo && puck.x >= lo - r) { puck.x = lo - r; if (puck.vx > 0) puck.vx = -Math.abs(puck.vx) * _reb(puck.vx); }
+      if (dir > 0 && px > hi && puck.x <= hi + r) { puck.x = hi + r; if (puck.vx < 0) { const sp = Math.abs(puck.vx); puck.vx =  sp * _reb(puck.vx); if (sp > 35) puck._ev |= 16; } }
+      if (dir < 0 && px < lo && puck.x >= lo - r) { puck.x = lo - r; if (puck.vx > 0) { const sp = Math.abs(puck.vx); puck.vx = -sp * _reb(puck.vx); if (sp > 35) puck._ev |= 16; } }
     }
   }
 }
@@ -329,7 +375,6 @@ function _carryGoalCheck(puck) {
   const gy1 = RINK.goalY, gy2 = RINK.goalY + RINK.goalH;
   const cbar = PUCK.crossbarHeight;
   const prevX = puck.prevX ?? puck.x, prevY = puck.prevY ?? puck.y;
-  const POST_R = 2.5;
   for (const [lineX, dir, result] of [
     [RINK.goalLineRight, +1, 'goal-home'],
     [RINK.goalLineLeft,  -1, 'goal-away'],
@@ -340,7 +385,8 @@ function _carryGoalCheck(puck) {
     const dxm = puck.x - prevX;
     const t   = Math.abs(dxm) > 1e-9 ? (lineX - prevX) / dxm : 0;
     const yAt = prevY + (puck.y - prevY) * t;
-    if (yAt > gy1 + POST_R && yAt < gy2 - POST_R && puck.z <= cbar) {
+    if (yAt > gy1 + GOAL_Y_MARG && yAt < gy2 - GOAL_Y_MARG && puck.z <= cbar) {
+      puck._goalEntryY = yAt;
       puck._inNet = true;
       puck._netLo = dir > 0 ? lineX : lineX - RINK.goalDepth;
       puck._netHi = dir > 0 ? lineX + RINK.goalDepth : lineX;
@@ -353,8 +399,7 @@ function _carryGoalCheck(puck) {
 // ── Jednotná branková mechanika ──────────────────────────────────────────
 // Jeden průchod per gól, jedna geometrie: (1) tyčky + břevno odrazí, (2) detekce
 // gólu při průletu čárou mezi tyčkami pod břevnem, (3) síť puk udrží uvnitř.
-const POST_R      = 3.5; // kolizní rádius tyčky (px)
-const GOAL_Y_MARG = 1.5; // y-okraj pro detekci gólu — odděleno od POST_R
+// (POST_R a GOAL_Y_MARG jsou definovány výše, před _carryGoalCheck)
 
 function _resolveGoals(puck) {
   const d = RINK.goalDepth;
@@ -380,14 +425,18 @@ function _resolveOneGoal(puck, lineX, backX, dir, result) {
 
     let shouldHit = dist > 0 && dist < minD;
     if (!shouldHit) {
-      // Swept: nejbližší bod trajektorie k tyčce (pro rychlé puky)
+      // Swept: proper segment-circle intersection — zachytí průlety, ne jen přiblížení
       const px0 = puck.prevX ?? puck.x, py0 = puck.prevY ?? puck.y;
       const sdx = puck.x - px0, sdy = puck.y - py0;
       const len2 = sdx * sdx + sdy * sdy;
       if (len2 > 0.5) {
-        const t = Math.max(0, Math.min(1, -((px0 - lineX) * sdx + (py0 - py) * sdy) / len2));
-        if (t > 0 && Math.hypot(px0 + t * sdx - lineX, py0 + t * sdy - py) < minD) {
-          shouldHit = true;
+        const ox = px0 - lineX, oy = py0 - py;
+        const b2 = ox * sdx + oy * sdy;
+        const c  = ox * ox + oy * oy - minD * minD;
+        const disc = b2 * b2 - len2 * c;
+        if (disc >= 0) {
+          const tHit = (-b2 - Math.sqrt(disc)) / len2;
+          if (tHit >= 0 && tHit <= 1) shouldHit = true;
         }
       }
     }
@@ -401,6 +450,8 @@ function _resolveOneGoal(puck, lineX, backX, dir, result) {
         const e = _reb(dot);
         puck.vx = (puck.vx - 2 * dot * nx) * e;
         puck.vy = (puck.vy - 2 * dot * ny) * e;
+        if (puck.vz === 0) puck.vz = Math.abs(dot) * 0.12; // mírný zvednutí po zásahu tyče
+        puck._ev |= 2; // boční tyč
       }
     }
   }
@@ -418,6 +469,7 @@ function _resolveOneGoal(puck, lineX, backX, dir, result) {
     if (yAt > gy1 + GOAL_Y_MARG && yAt < gy2 - GOAL_Y_MARG) {
       if (zAt <= cbar) {
         goal = true;
+        puck._goalEntryY = yAt;                   // přesná Y pro zone detection
         puck._inNet = true;                       // od teď puk tvrdě držíme v boxu sítě
         puck._netLo = Math.min(lineX, backX);
         puck._netHi = Math.max(lineX, backX);
@@ -427,6 +479,7 @@ function _resolveOneGoal(puck, lineX, backX, dir, result) {
         puck.vx = -dir * Math.abs(puck.vx) * _reb(puck.vx);
         puck.z  = cbar;
         puck.vz = -Math.abs(puck.vz) * 0.4;
+        puck._ev |= 8; // břevno
       }
     }
   }

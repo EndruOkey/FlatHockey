@@ -37,7 +37,7 @@ export const PUCK = {
   minShotSpeed: 150,   // „žabička" — malá měkká rána (lehký tap), umístěná, ne silová
   passSpeed: 320,
   maxPassSpeed: 370,
-  maxShotVz: 158,   // max vertical speed on full-charge shot
+  maxShotVz: 130,   // max vertical speed — peak height ~14.6px, pod břevnem (21px)
   gravity: 580,     // px/s² downward
   gloveHeight: 4,   // z above which glove/blocker applies
   crossbarHeight: 21,  // břevno ~4 ft

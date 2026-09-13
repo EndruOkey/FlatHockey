@@ -346,7 +346,7 @@ function buildPlayer(lobby, sid, m) {
   const ts = lobby.settings.teams[m.team] || {};
   p.color  = ts.color || null;
   p.jersey = ts.style || 'solid';
-  p.helmet = m.helmet; p.gloves = m.gloves; p.tape = m.tape; p.trail = m.trail;
+  p.helmet = m.helmet; p.shorts = m.shorts; p.gloves = m.gloves; p.tape = m.tape; p.trail = m.trail;
   p.stick = m.stick; p.tapeStyle = m.tapeStyle; p.helmetType = m.helmetType; p.visor = m.visor;
   return p;
 }
@@ -545,7 +545,7 @@ function broadcast(match) {
       fh: p.forehand ? 1 : 0, hp: p.hasPuck ? 1 : 0, ch: r2(p.charge),
       hd: p.handed, cc: p.crossCheck ? 1 : 0, ln: r2(p._lean),
       col: p.color || null, num: p.num, js: p.jersey || 'solid',
-      hc: p.helmet || null, gc: p.gloves || null, tc: p.tape || null,
+      hc: p.helmet || null, sh: p.shorts || null, gc: p.gloves || null, tc: p.tape || null,
       sk: p.stick || null, ty: p.tapeStyle || 'full', hy: p.helmetType || 'visor', vc: p.visor || null,
     });
   }
@@ -570,6 +570,8 @@ const r3 = n => Math.round((n || 0) * 1000) / 1000;
 
 // ── Lobby systém ───────────────────────────────────────────────────────────
 const lobbies = new Map();  // id -> lobby
+// Pending reconnects: key = 'u:{userId}' or 't:{reconToken}', 15s grace window
+const pendingReconnects = new Map();
 
 function genId() {
   let id; do { id = Math.random().toString(36).slice(2, 7).toUpperCase(); } while (lobbies.has(id));
@@ -612,6 +614,7 @@ function makeMember(profile, team) {
     handed: (profile.handed === -1 || profile.handed === 1) ? profile.handed : 1,
     number: Number.isInteger(profile.number) ? Math.max(0, Math.min(99, profile.number)) : null,
     helmet: hex(profile.helmet, '#eef2f8'),  // osobní doplňky (helma/rukavice/páska)
+    shorts: hex(profile.shorts, '#df2626'),
     gloves: hex(profile.gloves, '#242c38'),
     tape:   hex(profile.tape,   '#111111'),
     trail:  hex(profile.trail,  '#9aa3b2'),
@@ -642,7 +645,7 @@ function lobbySummary(l) {
 function lobbyState(l) {
   return {
     id: l.id, hostId: l.hostId, state: l.state, settings: l.settings,
-    players: [...l.members.entries()].map(([id, m]) => ({ id, name: m.name, team: m.team, number: m.number })),
+    players: [...l.members.entries()].map(([id, m]) => ({ id, name: m.name, team: m.team, number: m.number, dc: m.disconnected || false })),
   };
 }
 function sendLobbyList(socket) {
@@ -651,33 +654,113 @@ function sendLobbyList(socket) {
 }
 const broadcastLobby = (l) => io.to('lobby:' + l.id).emit('lobby:state', lobbyState(l));
 
-function leaveCurrentLobby(socket) {
-  const id = socket.data.lobbyId;
-  if (!id) return;
-  socket.data.lobbyId = null;
-  socket.leave('lobby:' + id);
-  const l = lobbies.get(id);
+function _removeFromLobby(lobbyId, socketId) {
+  const l = lobbies.get(lobbyId);
   if (!l) return;
-  l.members.delete(socket.id);
-  if (l.match) { l.match.players.delete(socket.id); l.match.inputs.delete(socket.id); rebuildEntities(l.match); }
-  socket.to('lobby:' + id).emit('peer-left');
+  l.members.delete(socketId);
+  if (l.match) { l.match.players.delete(socketId); l.match.inputs.delete(socketId); rebuildEntities(l.match); }
+  io.to('lobby:' + lobbyId).emit('peer-left');
   if (l.members.size === 0) {
     if (l.match) { clearInterval(l.match.loop); clearTimeout(l.match.rematchTimer); }
-    lobbies.delete(id);
+    lobbies.delete(lobbyId);
   } else {
-    if (l.hostId === socket.id) l.hostId = l.members.keys().next().value; // předej hostování
+    if (l.hostId === socketId) l.hostId = l.members.keys().next().value;
     broadcastLobby(l);
   }
   sendLobbyList();
 }
 
+function leaveCurrentLobby(socket) {
+  const id = socket.data.lobbyId;
+  if (!id) return;
+  socket.data.lobbyId = null;
+  socket.leave('lobby:' + id);
+  _removeFromLobby(id, socket.id);
+}
+
+function disconnectWithGrace(socket) {
+  const lobbyId = socket.data.lobbyId;
+  if (!lobbyId) return;
+  const l = lobbies.get(lobbyId);
+  if (!l || !l.match || l.match.ended) { leaveCurrentLobby(socket); return; }
+  const member = l.members.get(socket.id);
+  if (!member) { leaveCurrentLobby(socket); return; }
+
+  member.disconnected = true;
+  socket.leave('lobby:' + lobbyId);
+  socket.data.lobbyId = null;
+
+  // Freeze input so disconnected player doesn't drift
+  const inp = l.match.inputs.get(socket.id);
+  if (inp) { inp.dx = 0; inp.dy = 0; inp.lmb = false; inp.rmb = false; }
+
+  broadcastLobby(l);
+
+  const key = socket.data.userId ? `u:${socket.data.userId}`
+    : (socket.data.reconnectToken ? `t:${socket.data.reconnectToken}` : null);
+
+  if (key) {
+    const timer = setTimeout(() => {
+      pendingReconnects.delete(key);
+      _removeFromLobby(lobbyId, socket.id);
+    }, 15_000);
+    pendingReconnects.set(key, { lobbyId, oldSid: socket.id, timer });
+  } else {
+    _removeFromLobby(lobbyId, socket.id);
+  }
+}
+
+const broadcastOnline = () => io.emit('online_count', { count: connCount });
+
 io.on('connection', (socket) => {
   if (connCount >= MAX_CONN) { socket.disconnect(true); return; }
   connCount++;
+  broadcastOnline();
   // Přečti JWT cookie a ulož userId pro tracking statistik
   const rawCookie = socket.handshake.headers.cookie || '';
   const cm = rawCookie.match(/(?:^|;\s*)fh_session=([^;]+)/);
   socket.data.userId = cm ? verifySession(decodeURIComponent(cm[1])) : null;
+  socket.data.reconnectToken = typeof socket.handshake.auth?.rt === 'string'
+    ? socket.handshake.auth.rt.slice(0, 64) : null;
+
+  // Reconnect: obnov hráče v lobby pokud má platný pending slot
+  const rKey = socket.data.userId ? `u:${socket.data.userId}`
+    : (socket.data.reconnectToken ? `t:${socket.data.reconnectToken}` : null);
+  if (rKey && pendingReconnects.has(rKey)) {
+    const pend = pendingReconnects.get(rKey);
+    clearTimeout(pend.timer);
+    pendingReconnects.delete(rKey);
+    const l = lobbies.get(pend.lobbyId);
+    if (l) {
+      const member = l.members.get(pend.oldSid);
+      if (member) {
+        member.disconnected = false;
+        l.members.delete(pend.oldSid);
+        l.members.set(socket.id, member);
+        if (l.hostId === pend.oldSid) l.hostId = socket.id;
+        if (l.match) {
+          const player = l.match.players.get(pend.oldSid);
+          if (player) {
+            l.match.players.delete(pend.oldSid); l.match.inputs.delete(pend.oldSid);
+            const newInp = makeInput();
+            l.match.players.set(socket.id, player);
+            l.match.inputs.set(socket.id, newInp);
+            player.input = newInp;
+            rebuildEntities(l.match);
+          }
+        }
+        socket.join('lobby:' + l.id);
+        socket.data.lobbyId = l.id;
+        if (l.match && !l.match.ended) {
+          socket.emit('lobby:start', { settings: l.settings, reconnected: true });
+        } else {
+          socket.emit('lobby:joined', lobbyState(l));
+          broadcastLobby(l);
+        }
+        sendLobbyList();
+      }
+    }
+  }
 
   socket.on('lobby:list', () => { if (rateOk(socket, 'list', 500)) sendLobbyList(socket); });
 
@@ -753,7 +836,7 @@ io.on('connection', (socket) => {
     sendLobbyList();
   });
 
-  socket.on('lobby:leave', () => leaveCurrentLobby(socket));
+  socket.on('lobby:leave', () => { socket.data._voluntaryLeave = true; leaveCurrentLobby(socket); });
 
   socket.on('input', (msg) => {
     // Strop ~150 vstupů/s na socket (legitimní je ~60) → blokuje záplavu vstupů
@@ -767,7 +850,15 @@ io.on('connection', (socket) => {
     if (inp) applyClientInput(inp, msg);
   });
 
-  socket.on('disconnect', () => { connCount--; leaveCurrentLobby(socket); });
+  socket.on('disconnect', () => {
+    connCount--;
+    broadcastOnline();
+    if (socket.data._voluntaryLeave || !socket.data.lobbyId) {
+      leaveCurrentLobby(socket);
+    } else {
+      disconnectWithGrace(socket);
+    }
+  });
 });
 
 // ── API: Leaderboard ──────────────────────────────────────────────────────────
