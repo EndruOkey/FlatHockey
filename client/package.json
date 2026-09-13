@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@flathockey/shared": "workspace:*",
-    "phaser": "^3.80.1"
+    "pixi.js": "^8.0.0"
   },
   "devDependencies": {
     "typescript": "^5.6.3",

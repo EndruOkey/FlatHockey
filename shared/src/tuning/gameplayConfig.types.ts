@@ -4,6 +4,16 @@ export type GameplayConfig = {
   playerAcceleration?: number;
   playerPassiveDeceleration?: number;
   playerStopDeceleration?: number;
+  playerStopMinSpeed?: number;
+  playerStopEntryAngleThreshold?: number;
+  playerStopDuration?: number;
+  playerStopRecoveryDuration?: number;
+  playerStopLateralSlideFactor?: number;
+  playerStopBodyLean?: number;
+  playerStopShoulderOpen?: number;
+  playerStopStickStability?: number;
+  playerStopSprayDuration?: number;
+  playerStopSprayStrength?: number;
   playerTraction?: number;
   playerRotationSpeed?: number;
   playerLowSpeedRotationSpeed?: number;
@@ -56,6 +66,17 @@ export type GameplayConfig = {
   puckDrawMagnetRadius?: boolean;
   puckDrawState?: boolean;
   puckDrawVelocity?: boolean;
+
+  crosscheckWindupSec?: number;
+  crosscheckActiveSec?: number;
+  crosscheckRecoverySec?: number;
+  crosscheckForwardOffset?: number;
+  crosscheckHalfWidth?: number;
+  crosscheckHitRadius?: number;
+  crosscheckShoveSpeed?: number;
+  crosscheckDummyShoveMultiplier?: number;
+  crosscheckSeparationPadding?: number;
+  dummyAutoResetSec?: number;
 };
 
 export type GameplayTuning = GameplayConfig & {

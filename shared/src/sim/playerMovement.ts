@@ -1,6 +1,6 @@
 import { GAMEPLAY_DEFAULTS } from '../tuning/gameplay.defaults';
 import type { GameplayConfig } from '../tuning/gameplayConfig.types';
-import { applyHockeyStop, shouldTriggerHockeyStop } from './hockeyStop';
+import { advanceHockeyStopState, applyHockeyStop } from './hockeyStop';
 import { resolveForwardHeadingTarget, resolveForwardTravelAlignment } from './reorientation';
 import { advanceSteeringTarget, computeBodyTurn, computeDesiredHeading, computeTravelSteering, shortestAngleDelta, wrapAngle } from './turning';
 import type {
@@ -15,6 +15,7 @@ import type {
 } from './movementTypes';
 
 const MAX_CARVE_BONUS = 0.092;
+const STOP_SETTLE_FACTOR = 0.45;
 const SMALL_SPEED_EPSILON = 5;
 const LOW_SPEED_ACCEL_BURST_THRESHOLD_RATIO = 0.42;
 const LOW_SPEED_ACCEL_BURST_MULTIPLIER = 1.5;
@@ -22,6 +23,8 @@ const ACTIVE_INPUT_DRAG_MULTIPLIER = 0.6;
 const LOW_SPEED_REORIENTATION_MULTIPLIER = 1.8;
 const LATERAL_CORRECTION_BOOST = 1.2;
 const INTENT_BOOST_DURATION = 0.12;
+const GLIDE_PROP_DRAG = 0.65;    // speed-proportional drag per second — icy coasting at high speed
+const GLIDE_CONST_FACTOR = 0.45; // fraction of passiveDeceleration used as constant floor
 const INTENT_BOOST_DIRECTION_CHANGE_THRESHOLD = (40 * Math.PI) / 180;
 const INTENT_BOOST_LOW_SPEED_THRESHOLD_RATIO = 0.35;
 const INTENT_BOOST_ACCEL_STRENGTH = 0.35;
@@ -56,6 +59,23 @@ export function resolvePlayerMovementConfig(config: Partial<GameplayConfig>): Re
     stopDeceleration: Math.max(
       1,
       config.playerStopDeceleration ?? GAMEPLAY_DEFAULTS.playerStopDeceleration ?? 980
+    ),
+    stopMinSpeed: Math.max(1, config.playerStopMinSpeed ?? GAMEPLAY_DEFAULTS.playerStopMinSpeed ?? 148),
+    stopEntryAngleThreshold: clamp(
+      config.playerStopEntryAngleThreshold ?? GAMEPLAY_DEFAULTS.playerStopEntryAngleThreshold ?? 2.18,
+      Math.PI * 0.25,
+      Math.PI
+    ),
+    stopDuration: clamp(config.playerStopDuration ?? GAMEPLAY_DEFAULTS.playerStopDuration ?? 0.24, 0.08, 0.6),
+    stopRecoveryDuration: clamp(
+      config.playerStopRecoveryDuration ?? GAMEPLAY_DEFAULTS.playerStopRecoveryDuration ?? 0.18,
+      0.05,
+      0.5
+    ),
+    stopLateralSlideFactor: clamp(
+      config.playerStopLateralSlideFactor ?? GAMEPLAY_DEFAULTS.playerStopLateralSlideFactor ?? 0.12,
+      0,
+      Math.PI * 0.22
     ),
     traction: Math.max(0.1, config.playerTraction ?? GAMEPLAY_DEFAULTS.playerTraction ?? 8.5),
     rotationSpeed: Math.max(0.1, config.playerRotationSpeed ?? GAMEPLAY_DEFAULTS.playerRotationSpeed ?? legacyRotationSpeed),
@@ -146,16 +166,44 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
     speed: currentSpeed,
     moveSpeed: config.moveSpeed
   });
-  const stopRequested = shouldTriggerHockeyStop(isPressed(input.stop));
-  const stop = applyHockeyStop(currentSpeed, dt, config.stopDeceleration, stopRequested.stopRequested);
+  const wasInStop = state.stopSide !== 0 || (state.stopBlend ?? 0) > 0.001;
+  const stopEdge = isPressed(input.stop) && !isPressed(state.prevStopInput ?? 0);
+  const stopState = advanceHockeyStopState({
+    speed: currentSpeed,
+    dt,
+    hasMovement,
+    explicitStop: stopEdge,
+    desiredHeading: rawDesiredHeading,
+    aimHeading: resolveHeading(input.aimAngle, state.aimAngle),
+    bodyHeading: currentHeading,
+    travelHeading: currentTravelHeading,
+    stopTimerSec: state.stopTimerSec ?? 0,
+    stopRecoveryTimerSec: state.stopRecoveryTimerSec ?? 0,
+    stopCooldownSec: state.stopCooldownSec ?? 0,
+    stopBlend: state.stopBlend ?? 0,
+    stopSide: state.stopSide ?? 0,
+    stopTravelHeading: state.stopTravelHeading ?? currentTravelHeading,
+    minSpeed: config.stopMinSpeed,
+    durationSec: config.stopDuration,
+    recoveryDurationSec: config.stopRecoveryDuration,
+    lateralSlideFactor: config.stopLateralSlideFactor
+  });
+  const stopJustExited = wasInStop && stopState.stopSide === 0 && stopState.stopBlend <= 0.001;
+  const stop = applyHockeyStop(currentSpeed, dt, config.stopDeceleration, stopState.active, stopState.stopBlend);
   const headingTarget = resolveForwardHeadingTarget({
     hasMovement,
     currentHeading,
     desiredTravelHeading: steeringHeading
   });
+  const stopBodyTarget = wrapAngle(stopState.stopTravelHeading + stopState.stopSide * Math.PI * 0.5);
+  const stopOrientBlend = stopState.stopBlend;
+  const effectiveNormalHeading = stopState.active ? headingTarget.desiredBodyHeading : currentTravelHeading;
+  const effectiveDesiredBodyHeading = stopOrientBlend > 0.001
+    ? wrapAngle(effectiveNormalHeading + shortestAngleDelta(effectiveNormalHeading, stopBodyTarget) * stopOrientBlend)
+    : headingTarget.desiredBodyHeading;
   const bodyTurn = computeBodyTurn({
     currentHeading,
-    desiredHeading: headingTarget.desiredBodyHeading,
+    desiredHeading: effectiveDesiredBodyHeading,
     speed: currentSpeed,
     maxSpeed: config.moveSpeed,
     dt,
@@ -178,7 +226,7 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
     turnCommitment: resolvedTurnContext.turnCommitment,
     activeCarve: resolvedTurnContext.activeCarve,
     traction: config.traction * stop.tractionMultiplier * intentBoost.steeringMultiplier,
-    stopActive: stopRequested.stopRequested,
+    stopActive: stopState.active,
     turnPenalty: config.turnPenalty
   });
   const forwardAlignment = resolveForwardTravelAlignment({
@@ -197,7 +245,7 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
       currentTravelHeading,
       steeringHeading,
       hasMovement,
-      stopRequested.stopRequested,
+      stopState.active,
       currentSpeed,
       config.moveSpeed
     ),
@@ -211,7 +259,7 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
     currentTravelHeading,
     desiredTravelHeading: steeringHeading,
     bodyHeading: bodyTurn.heading,
-    stopActive: stopRequested.stopRequested
+    stopActive: stopState.active
   });
   const bodyDriveFactor = computeBodyDriveFactor(bodyTurn.remainingAngle, currentSpeed, config.moveSpeed);
   const intentFlipDriveFactor = computeIntentFlipDriveFactor(
@@ -236,7 +284,7 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
     config.acceleration *
     lerp(0.28, 1.02, driveScale) *
     (1 + accelerationResponse.accelerationBoost) *
-    computeAccelerationBurstMultiplier(currentSpeed, config.moveSpeed, hasMovement, stopRequested.stopRequested) *
+    computeAccelerationBurstMultiplier(currentSpeed, config.moveSpeed, hasMovement, stopState.active) *
     intentBoost.accelerationMultiplier;
   const carveBonus = computeCarveBonus(
     steering,
@@ -246,8 +294,11 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
     currentSpeed,
     config
   );
+  const stopSettleFactor = !stopState.active && stopState.stopBlend > 0.001
+    ? 1 - stopState.stopBlend * STOP_SETTLE_FACTOR
+    : 1;
   const driveTargetSpeed =
-    targetSpeed * lerp(0.78, 1, responsePenalty) * (1 + carveBonus + accelerationResponse.driveTargetBoost);
+    targetSpeed * lerp(0.78, 1, responsePenalty) * (1 + carveBonus + accelerationResponse.driveTargetBoost) * stopSettleFactor;
   const driveDeceleration =
     (config.passiveDeceleration + config.moveSpeed * (1 - responsePenalty) * 0.05) *
     lerp(1, 0.84, resolvedTurnContext.activeCarve) *
@@ -260,10 +311,13 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
     moveSpeed: config.moveSpeed,
     turnContext: resolvedTurnContext
   });
-  const drivenVelocity = stopRequested.stopRequested
-    ? setVelocityMagnitude(state.vx, state.vy, stop.speed, currentTravelHeading)
+  const drivenVelocity = stopState.active
+    ? setVelocityMagnitude(state.vx, state.vy, stop.speed, stopState.velocityHeading)
     : !hasMovement
-      ? dampVelocityMagnitude(state.vx, state.vy, config.passiveDeceleration * Math.max(0, dt))
+      ? dampVelocityMagnitude(
+          state.vx, state.vy,
+          (currentSpeed * GLIDE_PROP_DRAG + config.passiveDeceleration * GLIDE_CONST_FACTOR) * Math.max(0, dt)
+        )
       : applyDirectionalDrive({
           vx: state.vx,
           vy: state.vy,
@@ -275,10 +329,14 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
           dt
         });
   const drivenSpeed = Math.hypot(drivenVelocity.x, drivenVelocity.y);
-  const drivenTravelHeading = drivenSpeed > SMALL_SPEED_EPSILON ? Math.atan2(drivenVelocity.y, drivenVelocity.x) : currentTravelHeading;
+  const drivenTravelHeading = drivenSpeed > SMALL_SPEED_EPSILON
+    ? stopState.active
+      ? stopState.velocityHeading
+      : Math.atan2(drivenVelocity.y, drivenVelocity.x)
+    : currentTravelHeading;
   const drivenBodyTravelMismatch = Math.abs(shortestAngleDelta(drivenTravelHeading, bodyTurn.heading));
-  const lateralDecay = stopRequested.stopRequested
-    ? config.stopDeceleration * 0.82
+  const lateralDecay = stopState.active
+    ? config.stopDeceleration * lerp(0.82, 0.96, stopState.stopBlend)
     : computeLateralDecay({
         speed: drivenSpeed,
         moveSpeed: config.moveSpeed,
@@ -289,10 +347,10 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
         bodyTravelMismatch: drivenBodyTravelMismatch,
         turnContext: resolvedTurnContext
       }) * computeLateralCorrectionBoost(drivenTravelHeading, steeringHeading, drivenSpeed, config.moveSpeed);
-  const alignedVelocity = stopRequested.stopRequested || !hasMovement
+  const alignedVelocity = stopState.active || !hasMovement
     ? drivenVelocity
     : dampVelocityLateralComponent(drivenVelocity.x, drivenVelocity.y, forwardAlignment.travelHeading, lateralDecay, dt);
-  const turnDrag = stopRequested.stopRequested
+  const turnDrag = stopState.active
     ? 0
     : config.moveSpeed *
         (1 - responsePenalty) *
@@ -303,7 +361,7 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
         lerp(1, 0.84, resolvedTurnContext.activeCarve);
   const draggedVelocity = turnDrag > 0 ? dampVelocityMagnitude(alignedVelocity.x, alignedVelocity.y, turnDrag) : alignedVelocity;
   const speedCap =
-    stopRequested.stopRequested || !hasMovement
+    stopState.active || !hasMovement
       ? null
       : Math.max(currentSpeed, config.moveSpeed * (1 + carveBonus * 0.7));
   const cappedVelocity = speedCap === null ? draggedVelocity : clampVelocityMagnitude(draggedVelocity.x, draggedVelocity.y, speedCap);
@@ -333,13 +391,20 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
   state.vy = nextVelocityY;
   state.angle = wrapAngle(bodyTurn.heading);
   state.travelHeading = nextTravelHeading;
-  state.steeringHeading = hasMovement ? wrapAngle(steeringHeading) : currentHeading;
+  state.prevStopInput = input.stop ?? 0;
+  state.steeringHeading = stopJustExited ? wrapAngle(nextTravelHeading) : (hasMovement ? wrapAngle(steeringHeading) : currentHeading);
   state.inputHeading = hasMovement ? wrapAngle(rawDesiredHeading) : currentHeading;
   state.desiredHeading = wrapAngle(steeringHeading);
+  state.stopTimerSec = stopState.stopTimerSec;
+  state.stopRecoveryTimerSec = stopState.stopRecoveryTimerSec;
+  state.stopCooldownSec = stopState.stopCooldownSec;
+  state.stopBlend = stopState.stopBlend;
+  state.stopSide = stopState.stopSide;
+  state.stopTravelHeading = stopState.stopTravelHeading;
   state.locomotionState = resolveLocomotionState({
     hasMovement,
     speed: nextSpeed,
-    stopActive: stop.active || stopRequested.stopRequested
+    stopActive: stop.active || stopState.active
   });
 
   return {
@@ -354,7 +419,9 @@ export function stepPlayerMovement<T extends PlayerMovementState>(
     desiredHeading: state.desiredHeading,
     travelHeading: state.travelHeading,
     locomotionState: state.locomotionState,
-    stopActive: state.locomotionState === 'stopping'
+    stopActive: state.locomotionState === 'stopping',
+    stopBlend: state.stopBlend,
+    stopSide: state.stopSide
   };
 }
 
@@ -362,7 +429,7 @@ export function getPlayerMovementDebugState(
   state: PlayerMovementState,
   step?: Pick<
     PlayerMovementStepResult,
-    'vx' | 'vy' | 'speed' | 'heading' | 'desiredHeading' | 'travelHeading' | 'locomotionState' | 'stopActive'
+    'vx' | 'vy' | 'speed' | 'heading' | 'desiredHeading' | 'travelHeading' | 'locomotionState' | 'stopActive' | 'stopBlend' | 'stopSide'
   >
 ): PlayerMovementDebugState {
   const velocityX = step?.vx ?? state.vx;
@@ -383,7 +450,9 @@ export function getPlayerMovementDebugState(
     desiredHeading,
     travelHeading,
     locomotionState,
-    stopActive: step?.stopActive ?? locomotionState === 'stopping'
+    stopActive: step?.stopActive ?? locomotionState === 'stopping',
+    stopBlend: step?.stopBlend ?? state.stopBlend,
+    stopSide: step?.stopSide ?? state.stopSide
   };
 }
 
@@ -444,7 +513,10 @@ function computeBodyDriveFactor(remainingAngle: number, speed: number, moveSpeed
   const easing = lerp(1.6, 1.05, speedRatio);
   const strength = lerp(0.88, 0.32, speedRatio);
   const floor = lerp(0.04, 0.62, speedRatio);
-  return clamp(1 - strength * Math.pow(normalized, easing), floor, 1);
+  // Pivot floor: near-reversal (>130°) raises minimum drive so player isn't stalled mid-turn
+  const pivotFactor = clamp((normalized - 0.72) / 0.28, 0, 1);
+  const pivotFloor = lerp(floor, lerp(0.36, 0.48, speedRatio), pivotFactor);
+  return clamp(1 - strength * Math.pow(normalized, easing), Math.max(floor, pivotFloor), 1);
 }
 
 function computeIntentFlipDriveFactor(

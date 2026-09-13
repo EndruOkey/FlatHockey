@@ -1,622 +1,158 @@
-import Phaser from 'phaser';
-import { DEFAULTS, getTuning } from '../tuning/gameplayConfig';
-import { computeSemiPhysicalStickPose, type SemiPhysicalStickPose, type StickState } from '@flathockey/shared';
-import {
-  createPlayerCosmeticSlots,
-  derivePlayerBodyRig,
-  type Handedness,
-  type HandSocketSide,
-  type PlayerBodyRig,
-  type PlayerCosmeticSlots
-} from './playerBodyRig';
-import {
-  clearPlayerBodyLayers,
-  renderPlayerBody,
-  type PlayerBodyRenderLayers,
-  type PlayerBodyRenderOptions
-} from '../render/playerBodyRenderer';
-import { renderStick } from '../render/stickRenderer';
-
-const DEBUG_COLORS = {
-  ring: 0xff6bd6,
-  body: 0x4fd6ff,
-  facing: 0xffffff,
-  chest: 0xffbc52,
-  head: 0x82f5ff,
-  lowerBody: 0x8fa8ff,
-  shoulder: 0x7dfc96,
-  hand: 0xfff07a,
-  nameTag: 0xd89cff
-} as const;
-
-type PlayerViewOptions = {
-  handedness?: Handedness;
-  displayName?: string;
-};
-
-type GripPresentationState = 'neutral' | 'carry' | 'poke' | 'pass' | 'shoot';
-
-type GripLayout = {
-  state: GripPresentationState;
-  leftHand: { x: number; y: number };
-  rightHand: { x: number; y: number };
-};
-
-const GRIP_LAYOUT_PROFILES: Record<GripPresentationState, { top: number; bottom: number; minGap: number }> = {
-  neutral: { top: 0.12, bottom: 0.3, minGap: 0.12 },
-  carry: { top: 0.15, bottom: 0.45, minGap: 0.16 },
-  poke: { top: 0.1, bottom: 0.28, minGap: 0.1 },
-  pass: { top: 0.18, bottom: 0.5, minGap: 0.16 },
-  shoot: { top: 0.22, bottom: 0.56, minGap: 0.18 }
-};
+import { Container, Graphics, Text } from 'pixi.js';
+import { PLAYER, COLORS } from '../../config/constants';
+import type { PlayerStateMsg } from '@flathockey/shared';
 
 export class PlayerView {
-  private root: Phaser.GameObjects.Container;
-  private shadow: Phaser.GameObjects.Graphics;
-  private hitboxRing: Phaser.GameObjects.Graphics;
-  private lowerBody: Phaser.GameObjects.Graphics;
-  private stickUnder: Phaser.GameObjects.Graphics;
-  private torso: Phaser.GameObjects.Graphics;
-  private shoulders: Phaser.GameObjects.Graphics;
-  private stickOver: Phaser.GameObjects.Graphics;
-  private hands: Phaser.GameObjects.Graphics;
-  private head: Phaser.GameObjects.Graphics;
-  private nameTag: Phaser.GameObjects.Text;
-  private debugGfx: Phaser.GameObjects.Graphics;
-  private bodyLayers: PlayerBodyRenderLayers;
-  private debugDrawEnabled = false;
-  private bodyRig: PlayerBodyRig | null = null;
-  private stickPose: SemiPhysicalStickPose | null = null;
-  private handedness: Handedness;
-  private displayName: string;
-  private readonly cosmeticSlots: PlayerCosmeticSlots;
-  private stickState: StickState = 'neutral';
-  private stickTimer = 0;
-  private shotCharge = 0;
-  private hasPuck = false;
-  private isLocalPlayer = false;
-  private renderScale = 1;
+  readonly container   = new Container();
+  private shadow       = new Graphics();
+  private bodyGfx      = new Graphics();
+  private bodyContainer = new Container();
+  private stickGfx     = new Graphics();
+  private stickContainer = new Container();
+  private nameTag = new Text({
+    text: '',
+    style: { fontSize: 11, fill: COLORS.nameplate, fontFamily: 'monospace', fontWeight: 'bold' },
+  });
 
-  x = 0;
-  y = 0;
-  worldX = 0;
-  worldY = 0;
-  rot = 0;
-  aimRot = 0;
+  private isLocal: boolean;
+  private teamColor: number = COLORS.teamA;
 
-  constructor(scene: Phaser.Scene, options: PlayerViewOptions = {}) {
-    this.handedness = options.handedness ?? 'right';
-    this.displayName = options.displayName ?? '';
-    this.cosmeticSlots = createPlayerCosmeticSlots();
+  // Cached state — only redraw when these change
+  private cachedHasPuck: boolean | undefined    = undefined;
+  private cachedTeamColor: number | undefined   = undefined;
+  private cachedHandedness: string | undefined  = undefined;
 
-    this.root = scene.add.container(0, 0);
-    this.shadow = scene.add.graphics();
-    this.hitboxRing = scene.add.graphics();
-    this.lowerBody = scene.add.graphics();
-    this.stickUnder = scene.add.graphics();
-    this.torso = scene.add.graphics();
-    this.shoulders = scene.add.graphics();
-    this.stickOver = scene.add.graphics();
-    this.hands = scene.add.graphics();
-    this.head = scene.add.graphics();
-    this.nameTag = scene.add
-      .text(0, 0, this.displayName, {
-        fontFamily: 'monospace',
-        fontSize: '11px',
-        color: '#dcefff',
-        stroke: '#091218',
-        strokeThickness: 2
-      })
-      .setOrigin(0.5, 1)
-      .setVisible(this.displayName.length > 0);
-    this.debugGfx = scene.add.graphics();
-    this.bodyLayers = {
-      shadow: this.shadow,
-      ring: this.hitboxRing,
-      lowerBody: this.lowerBody,
-      torso: this.torso,
-      shoulders: this.shoulders,
-      hands: this.hands,
-      head: this.head,
-      nameTag: this.nameTag
-    };
-    this.root.add([
-      this.shadow,
-      this.hitboxRing,
-      this.lowerBody,
-      this.stickUnder,
-      this.torso,
-      this.shoulders,
-      this.stickOver,
-      this.hands,
-      this.head,
-      this.nameTag,
-      this.debugGfx
-    ]);
+  constructor(isLocal: boolean, teamColor: number = COLORS.teamA) {
+    this.isLocal   = isLocal;
+    this.teamColor = teamColor;
+
+    this.nameTag.anchor.set(0.5, 1);
+    this.nameTag.position.set(0, -PLAYER.radius - 10);
+    this.nameTag.resolution = 2;
+
+    this.bodyContainer.addChild(this.bodyGfx);
+    this.stickContainer.addChild(this.stickGfx);
+
+    // z-order: shadow → body → stick → nametag
+    this.container.addChild(this.shadow, this.bodyContainer, this.stickContainer, this.nameTag);
+
+    // Shadow never changes — draw once
+    this.shadow.ellipse(2, 3, PLAYER.radius * 0.85, PLAYER.radius * 0.6)
+      .fill({ color: 0x000000, alpha: 0.18 });
   }
 
-  setState(x: number, y: number, worldX: number, worldY: number, rot: number, aimRot?: number) {
-    this.x = x;
-    this.y = y;
-    this.worldX = worldX;
-    this.worldY = worldY;
-    this.rot = rot;
-    this.aimRot = typeof aimRot === 'number' ? aimRot : rot;
-    this.bodyRig = null;
-    this.stickPose = null;
+  setTeamColor(color: number) {
+    this.teamColor = color;
   }
 
-  setDebugDrawEnabled(enabled: boolean) {
-    this.debugDrawEnabled = enabled;
-  }
+  update(p: PlayerStateMsg) {
+    // Position and rotation via containers — no graphics rebuild needed for movement
+    this.container.position.set(p.x, p.y);
+    this.bodyContainer.rotation  = p.angle;
+    this.stickContainer.rotation = p.aimAngle ?? p.angle;
 
-  setRenderScale(renderScale: number) {
-    const nextScale = Math.max(0.75, renderScale);
-    if (Math.abs(this.renderScale - nextScale) < 0.0001) return;
-    this.renderScale = nextScale;
-    this.bodyRig = null;
-    this.stickPose = null;
-  }
+    const bodyDirty  = p.hasPuck !== this.cachedHasPuck || this.teamColor !== this.cachedTeamColor;
+    const stickDirty = p.hasPuck !== this.cachedHasPuck || p.handedness !== this.cachedHandedness;
 
-  setStickVisualState(state: StickState | undefined, shotCharge = 0, stickTimer = 0, hasPuck = false) {
-    this.stickState = state ?? (hasPuck ? 'control' : 'neutral');
-    this.shotCharge = Math.max(0, shotCharge);
-    this.stickTimer = Math.max(0, stickTimer);
-    this.hasPuck = hasPuck;
-    this.stickPose = null;
-  }
-
-  setPresentationState(isLocalPlayer: boolean, hasPuck: boolean) {
-    this.isLocalPlayer = isLocalPlayer;
-    this.hasPuck = hasPuck;
-  }
-
-  setHandedness(handedness: Handedness) {
-    if (this.handedness === handedness) return;
-    this.handedness = handedness;
-    this.bodyRig = null;
-    this.stickPose = null;
-  }
-
-  getHandedness() {
-    return this.handedness;
-  }
-
-  setDisplayName(displayName: string) {
-    this.displayName = displayName;
-    this.nameTag.setText(displayName);
-    this.nameTag.setVisible(displayName.length > 0);
-  }
-
-  getCosmeticSlots() {
-    return this.cosmeticSlots;
-  }
-
-  getBodyRig() {
-    return this.resolveBodyRig();
-  }
-
-  getCarryAnchorWorld() {
-    const pose = this.resolveStickPose();
-    if (pose) {
-      // pose is computed in world space — bladeCenterX/Y are world coords
-      return {
-        x: pose.bladeCenterX,
-        y: pose.bladeCenterY
-      };
+    if (bodyDirty) {
+      this.drawBody(p.hasPuck ?? false);
+      this.cachedTeamColor = this.teamColor;
     }
-    // fallback: player world center (bodyCenter offset is zero in body space)
-    return {
-      x: this.worldX,
-      y: this.worldY
-    };
-  }
-
-  getHandSocketWorld(side: HandSocketSide) {
-    const rig = this.resolveBodyRig();
-    const socket = side === 'left' ? rig.leftHandSocket : rig.rightHandSocket;
-    return {
-      x: this.worldX + socket.x / Math.max(0.001, this.renderScale),
-      y: this.worldY + socket.y / Math.max(0.001, this.renderScale)
-    };
-  }
-
-  getStickPose() {
-    return this.resolveStickPose();
-  }
-
-  getStickBladeWorld() {
-    const pose = this.resolveStickPose();
-    if (!pose) return this.getCarryAnchorWorld();
-    return {
-      x: pose.bladeTipX,
-      y: pose.bladeTipY
-    };
-  }
-
-  getStickReachWorld() {
-    const pose = this.resolveStickPose();
-    if (!pose) return this.getCarryAnchorWorld();
-    return {
-      x: pose.assistX,
-      y: pose.assistY
-    };
-  }
-
-  getStickBaseWorld(_aimRot?: number, _stickOffsetX?: number, _stickOffsetY?: number) {
-    const pose = this.resolveStickPose();
-    if (!pose) return this.getCarryAnchorWorld();
-    return {
-      x: pose.shaftAnchorX,
-      y: pose.shaftAnchorY
-    };
-  }
-
-  draw(_dtSec = 1 / 60) {
-    this.root.setPosition(this.x, this.y);
-    const baseRig = this.createBodyRig(this.rot);
-    this.stickPose = this.createStickPose(baseRig, this.rot);
-    this.bodyRig = this.createPresentationRig(baseRig, this.stickPose);
-    clearPlayerBodyLayers(this.bodyLayers);
-    const renderOptions: PlayerBodyRenderOptions = {
-      isLocalPlayer: this.isLocalPlayer,
-      hasPuck: this.hasPuck
-    };
-    renderPlayerBody(this.bodyLayers, this.bodyRig, this.displayName, renderOptions);
-    this.stickUnder.clear();
-    this.stickOver.clear();
-    if (this.stickPose) {
-      renderStick({ back: this.stickUnder, front: this.stickOver }, this.stickPose, this.bodyRig, this.worldX, this.worldY, this.renderScale, {
-        hasPuck: this.hasPuck
-      });
+    if (stickDirty) {
+      this.drawStick(p.hasPuck ?? false, p.handedness);
+      this.cachedHandedness = p.handedness;
+    }
+    if (bodyDirty || stickDirty) {
+      this.cachedHasPuck = p.hasPuck;
     }
 
-    if (!this.debugDrawEnabled) {
-      this.debugGfx.clear();
-      return;
+    this.updateName(p);
+  }
+
+  // Drawn at angle=0 (facing right). bodyContainer.rotation handles direction.
+  private drawBody(hasPuck: boolean) {
+    const g  = this.bodyGfx;
+    g.clear();
+
+    const r  = PLAYER.radius;
+    const tc = this.teamColor;
+
+    if (this.isLocal) {
+      g.circle(0, 0, r + 6).stroke({ color: COLORS.ownIndicator, width: 1.5, alpha: 0.22 });
     }
 
-    this.renderDebug(this.bodyRig);
-  }
-
-  destroy() {
-    this.root.destroy();
-  }
-
-  private resolveBodyRig() {
-    if (!this.bodyRig) {
-      const baseRig = this.createBodyRig(this.rot);
-      this.stickPose = this.stickPose ?? this.createStickPose(baseRig, this.rot);
-      this.bodyRig = this.createPresentationRig(baseRig, this.stickPose);
-    }
-    return this.bodyRig;
-  }
-
-  private resolveStickPose() {
-    if (!this.stickPose) {
-      const baseRig = this.bodyRig ?? this.createBodyRig(this.rot);
-      this.stickPose = this.createStickPose(baseRig, this.rot);
-      if (!this.bodyRig) {
-        this.bodyRig = this.createPresentationRig(baseRig, this.stickPose);
-      }
-    }
-    return this.stickPose;
-  }
-
-  private createBodyRig(facingAngle: number) {
-    const tuning = getTuning();
-    const ringRadius = Math.max(12, (tuning.playerRadius ?? DEFAULTS.playerRadius ?? 18) * this.renderScale);
-    return derivePlayerBodyRig({
-      facingAngle,
-      handedness: this.handedness,
-      ringRadius
-    });
-  }
-
-  private createStickPose(bodyRig: PlayerBodyRig, facingAngle: number) {
-    const resolvedState =
-      !this.hasPuck && (this.stickState === 'control' || this.stickState === 'turning' || this.stickState === 'charge')
-        ? 'neutral'
-        : this.stickState;
-
-    // Compute pose in world space so all distances are world units.
-    // renderStick converts to container-local via (worldPoint - worldPlayer) * renderScale.
-    const worldRadius = bodyRig.ringRadius / Math.max(0.001, this.renderScale);
-    return computeSemiPhysicalStickPose({
-      playerX: this.worldX,
-      playerY: this.worldY,
-      bodyAngle: facingAngle,
-      aimAngle: this.aimRot,
-      playerRadius: worldRadius,
-      handedness: this.handedness,
-      state: resolvedState,
-      shotCharge: this.shotCharge,
-      stateTimerSec: this.stickTimer
-    });
-  }
-
-  private createPresentationRig(baseRig: PlayerBodyRig, pose: SemiPhysicalStickPose | null) {
-    if (!pose) return baseRig;
-    const gripLayout = this.createGripLayout(baseRig, pose);
-    return {
-      ...baseRig,
-      leftHandSocket: gripLayout.leftHand,
-      rightHandSocket: gripLayout.rightHand
-    };
-  }
-
-  private createGripLayout(baseRig: PlayerBodyRig, pose: SemiPhysicalStickPose): GripLayout {
-    const gripState = this.resolveGripPresentationState();
-    const profile = GRIP_LAYOUT_PROFILES[gripState];
-    const shaftAnchor = this.toLocalStickPoint(pose.shaftAnchorX, pose.shaftAnchorY);
-    const bladeBase = this.toLocalStickPoint(pose.bladeBaseX, pose.bladeBaseY);
-    const shaftDx = bladeBase.x - shaftAnchor.x;
-    const shaftDy = bladeBase.y - shaftAnchor.y;
-    const shaftLength = Math.hypot(shaftDx, shaftDy);
-
-    if (shaftLength <= 0.0001) {
-      return {
-        state: gripState,
-        leftHand: baseRig.leftHandSocket,
-        rightHand: baseRig.rightHandSocket
-      };
+    if (hasPuck) {
+      g.circle(0, 0, r + 5).stroke({ color: tc, width: 2.5, alpha: 0.55 });
     }
 
-    const shaftDir = {
-      x: shaftDx / shaftLength,
-      y: shaftDy / shaftLength
-    };
-    const topDistance = clamp(shaftLength * profile.top, shaftLength * 0.06, shaftLength * 0.72);
-    const minGap = shaftLength * profile.minGap;
-    const bottomDistance = clamp(
-      Math.max(shaftLength * profile.bottom, topDistance + minGap),
-      topDistance + minGap,
-      shaftLength * 0.9
-    );
-    const topHand = {
-      x: shaftAnchor.x + shaftDir.x * topDistance,
-      y: shaftAnchor.y + shaftDir.y * topDistance
-    };
-    const bottomHand = {
-      x: shaftAnchor.x + shaftDir.x * bottomDistance,
-      y: shaftAnchor.y + shaftDir.y * bottomDistance
-    };
+    // Pants (full circle, darker)
+    g.circle(0, 0, r).fill({ color: darken(tc, 0.6) });
 
-    return this.handedness === 'right'
-      ? {
-          state: gripState,
-          leftHand: topHand,
-          rightHand: bottomHand
-        }
-      : {
-          state: gripState,
-          leftHand: bottomHand,
-          rightHand: topHand
-        };
+    // Jersey wedge — facing right at angle=0: arc from -0.6π to +0.6π
+    g.moveTo(0, 0)
+      .arc(0, 0, r, -Math.PI * 0.6, Math.PI * 0.6)
+      .closePath()
+      .fill(tc);
+
+    // Helmet — at (r*0.22, 0) when facing right
+    const helmetR = r * 0.52;
+    const hx = r * 0.22;
+    g.circle(hx, 0, helmetR).fill(0x1a1a2e);
+
+    // Helmet stripe — perpendicular to forward (vertical when facing right)
+    g.moveTo(hx, -helmetR * 0.7)
+      .lineTo(hx,  helmetR * 0.7)
+      .stroke({ color: tc, width: 3, alpha: 0.9 });
+
+    // Visor glint — at angle=0: bx=1, by=0
+    g.circle(hx + helmetR * 0.3, helmetR * 0.2, helmetR * 0.18)
+      .fill({ color: 0xaaddff, alpha: 0.35 });
+
+    // Body border
+    g.circle(0, 0, r).stroke({ color: darken(tc, 0.4), width: 1.2, alpha: 0.6 });
   }
 
-  private resolveGripPresentationState(): GripPresentationState {
-    if (this.stickState === 'charge' || this.stickState === 'release') {
-      return 'shoot';
-    }
-    if (this.stickState === 'pass') {
-      return 'pass';
-    }
-    if (this.stickState === 'poke') {
-      return 'poke';
-    }
-    return this.hasPuck ? 'carry' : 'neutral';
+  // Drawn at aim=0 (pointing right). stickContainer.rotation handles direction.
+  private drawStick(hasPuck: boolean, handedness: string | undefined) {
+    const g    = this.stickGfx;
+    g.clear();
+
+    const r    = PLAYER.radius;
+    const hand = handedness === 'left' ? -1 : 1;
+
+    // At aim=0: perpX=0, perpY=hand
+    const sx       = r * 0.8;
+    const sy       = hand * r * 0.35;
+    const shaftLen = r * 2.6;
+    const ex       = sx + shaftLen;
+    const ey       = sy;
+
+    g.moveTo(sx, sy).lineTo(ex, ey)
+      .stroke({ color: 0x6b3a1f, width: 2.8 });
+
+    const bladeLen = r * 1.1;
+    g.moveTo(ex, ey - hand * bladeLen * 0.2)
+      .lineTo(ex, ey + hand * bladeLen * 0.8)
+      .stroke({ color: hasPuck ? 0xffe080 : 0xc0c0c0, width: 3.5 });
+
+    g.moveTo(ex, ey)
+      .lineTo(ex, ey + hand * bladeLen * 0.5)
+      .stroke({ color: 0x333333, width: 3.6 });
   }
 
-  private toLocalStickPoint(worldX: number, worldY: number) {
-    return {
-      x: (worldX - this.worldX) * this.renderScale,
-      y: (worldY - this.worldY) * this.renderScale
-    };
-  }
+  private updateName(p: PlayerStateMsg) {
+    const name = p.name ?? p.id.slice(0, 8);
+    if (this.nameTag.text !== name) this.nameTag.text = name;
 
-  private renderDebug(rig: PlayerBodyRig) {
-    this.debugGfx.clear();
-    this.drawDebugMasses(rig);
-    this.drawDebugCircle(rig.ringCenter, rig.ringRadius, DEBUG_COLORS.ring, 0.72, 1.15);
-    this.drawDebugLine(rig.ringCenter, this.offsetAnchor(rig.ringCenter, rig.right, rig.ringRadius), DEBUG_COLORS.ring, 0.66, 1);
-    this.drawDebugOrientedEllipse(rig.bodyCenter, rig.right, rig.forward, rig.bodyWidth, rig.bodyHeight, DEBUG_COLORS.body, 0.68, 1.15);
-    this.drawDebugLine(rig.leftShoulderAnchor, rig.rightShoulderAnchor, DEBUG_COLORS.shoulder, 0.82, 1.5);
-    this.drawDebugLine(rig.chestAnchor, rig.headAnchor, DEBUG_COLORS.chest, 0.82, 1.4);
-    this.drawDebugLine(rig.chestAnchor, rig.leftHandSocket, DEBUG_COLORS.hand, 0.74, 1.2);
-    this.drawDebugLine(rig.chestAnchor, rig.rightHandSocket, DEBUG_COLORS.hand, 0.74, 1.2);
-    this.drawDebugArrow(rig.bodyCenter, rig.forward, rig.ringRadius + 13, DEBUG_COLORS.facing, 0.88, 1.6);
-
-    this.drawDebugCross(rig.ringCenter, DEBUG_COLORS.ring, 4);
-    this.drawDebugAnchor(rig.bodyCenter, DEBUG_COLORS.body, 2.8);
-    this.drawDebugAnchor(rig.chestAnchor, DEBUG_COLORS.chest, 2.8);
-    this.drawDebugAnchor(rig.headAnchor, DEBUG_COLORS.head, 2.7);
-    this.drawDebugAnchor(rig.lowerBodyAnchor, DEBUG_COLORS.lowerBody, 2.6);
-    this.drawDebugAnchor(rig.leftShoulderAnchor, DEBUG_COLORS.shoulder, 2.5);
-    this.drawDebugAnchor(rig.rightShoulderAnchor, DEBUG_COLORS.shoulder, 2.5);
-    this.drawDebugAnchor(rig.leftHandSocket, DEBUG_COLORS.hand, 2.5);
-    this.drawDebugAnchor(rig.rightHandSocket, DEBUG_COLORS.hand, 2.5);
-    this.drawDebugAnchor(rig.nameTagAnchor, DEBUG_COLORS.nameTag, 2.3);
-  }
-
-  private drawDebugMasses(rig: PlayerBodyRig) {
-    const shoulderCenter = {
-      x: (rig.leftShoulderAnchor.x + rig.rightShoulderAnchor.x) * 0.5,
-      y: (rig.leftShoulderAnchor.y + rig.rightShoulderAnchor.y) * 0.5
-    };
-
-    this.drawDebugFilledOrientedEllipse(
-      rig.lowerBodyAnchor,
-      rig.right,
-      rig.forward,
-      rig.lowerBodyWidth,
-      rig.lowerBodyHeight,
-      DEBUG_COLORS.lowerBody,
-      0.16,
-      0.44
-    );
-    this.drawDebugFilledOrientedEllipse(
-      rig.chestAnchor,
-      rig.right,
-      rig.forward,
-      rig.torsoWidth,
-      rig.torsoHeight,
-      DEBUG_COLORS.chest,
-      0.14,
-      0.48
-    );
-    this.drawDebugFilledOrientedEllipse(
-      shoulderCenter,
-      rig.right,
-      rig.forward,
-      rig.shoulderWidth,
-      rig.shoulderHeight,
-      DEBUG_COLORS.shoulder,
-      0.18,
-      0.54
-    );
-    this.drawDebugFilledCircle(rig.headAnchor, rig.headRadius, DEBUG_COLORS.head, 0.22, 0.58);
-  }
-
-  private drawDebugAnchor(anchor: { x: number; y: number }, color: number, radius: number) {
-    this.debugGfx.lineStyle(1, 0x071017, 0.92);
-    this.debugGfx.fillStyle(color, 0.96);
-    this.debugGfx.fillCircle(anchor.x, anchor.y, radius);
-    this.debugGfx.strokeCircle(anchor.x, anchor.y, radius + 0.7);
-  }
-
-  private drawDebugCross(anchor: { x: number; y: number }, color: number, halfSize: number) {
-    this.debugGfx.lineStyle(1.4, color, 0.92);
-    this.debugGfx.lineBetween(anchor.x - halfSize, anchor.y, anchor.x + halfSize, anchor.y);
-    this.debugGfx.lineBetween(anchor.x, anchor.y - halfSize, anchor.x, anchor.y + halfSize);
-  }
-
-  private drawDebugCircle(anchor: { x: number; y: number }, radius: number, color: number, alpha: number, lineWidth: number) {
-    this.debugGfx.lineStyle(lineWidth, color, alpha);
-    this.debugGfx.strokeCircle(anchor.x, anchor.y, radius);
-  }
-
-  private drawDebugFilledCircle(
-    anchor: { x: number; y: number },
-    radius: number,
-    color: number,
-    fillAlpha: number,
-    strokeAlpha: number
-  ) {
-    this.debugGfx.fillStyle(color, fillAlpha);
-    this.debugGfx.fillCircle(anchor.x, anchor.y, radius);
-    this.debugGfx.lineStyle(1.1, color, strokeAlpha);
-    this.debugGfx.strokeCircle(anchor.x, anchor.y, radius);
-  }
-
-  private drawDebugLine(
-    start: { x: number; y: number },
-    end: { x: number; y: number },
-    color: number,
-    alpha: number,
-    lineWidth: number
-  ) {
-    this.debugGfx.lineStyle(lineWidth, color, alpha);
-    this.debugGfx.lineBetween(start.x, start.y, end.x, end.y);
-  }
-
-  private drawDebugArrow(
-    origin: { x: number; y: number },
-    direction: { x: number; y: number },
-    length: number,
-    color: number,
-    alpha: number,
-    lineWidth: number
-  ) {
-    const end = this.offsetAnchor(origin, direction, length);
-    const normal = { x: -direction.y, y: direction.x };
-    const headLength = Math.max(4, length * 0.18);
-    const headWidth = Math.max(3, headLength * 0.55);
-    const leftHead = {
-      x: end.x - direction.x * headLength + normal.x * headWidth,
-      y: end.y - direction.y * headLength + normal.y * headWidth
-    };
-    const rightHead = {
-      x: end.x - direction.x * headLength - normal.x * headWidth,
-      y: end.y - direction.y * headLength - normal.y * headWidth
-    };
-
-    this.drawDebugLine(origin, end, color, alpha, lineWidth);
-    this.drawDebugLine(end, leftHead, color, alpha, lineWidth);
-    this.drawDebugLine(end, rightHead, color, alpha, lineWidth);
-  }
-
-  private drawDebugOrientedEllipse(
-    center: { x: number; y: number },
-    right: { x: number; y: number },
-    forward: { x: number; y: number },
-    width: number,
-    height: number,
-    color: number,
-    alpha: number,
-    lineWidth: number
-  ) {
-    const rx = width * 0.5;
-    const ry = height * 0.5;
-    const segments = 24;
-
-    this.debugGfx.lineStyle(lineWidth, color, alpha);
-    this.debugGfx.beginPath();
-    for (let i = 0; i <= segments; i += 1) {
-      const t = (i / segments) * Math.PI * 2;
-      const cosT = Math.cos(t);
-      const sinT = Math.sin(t);
-      const x = center.x + right.x * cosT * rx + forward.x * sinT * ry;
-      const y = center.y + right.y * cosT * rx + forward.y * sinT * ry;
-      if (i === 0) {
-        this.debugGfx.moveTo(x, y);
-      } else {
-        this.debugGfx.lineTo(x, y);
-      }
-    }
-    this.debugGfx.strokePath();
-  }
-
-  private drawDebugFilledOrientedEllipse(
-    center: { x: number; y: number },
-    right: { x: number; y: number },
-    forward: { x: number; y: number },
-    width: number,
-    height: number,
-    color: number,
-    fillAlpha: number,
-    strokeAlpha: number
-  ) {
-    const rx = width * 0.5;
-    const ry = height * 0.5;
-    const segments = 24;
-
-    this.debugGfx.fillStyle(color, fillAlpha);
-    this.debugGfx.beginPath();
-    for (let i = 0; i <= segments; i += 1) {
-      const t = (i / segments) * Math.PI * 2;
-      const cosT = Math.cos(t);
-      const sinT = Math.sin(t);
-      const x = center.x + right.x * cosT * rx + forward.x * sinT * ry;
-      const y = center.y + right.y * cosT * rx + forward.y * sinT * ry;
-      if (i === 0) {
-        this.debugGfx.moveTo(x, y);
-      } else {
-        this.debugGfx.lineTo(x, y);
-      }
-    }
-    this.debugGfx.fillPath();
-    this.drawDebugOrientedEllipse(center, right, forward, width, height, color, strokeAlpha, 1.05);
-  }
-
-  private offsetAnchor(anchor: { x: number; y: number }, axis: { x: number; y: number }, amount: number) {
-    return {
-      x: anchor.x + axis.x * amount,
-      y: anchor.y + axis.y * amount
-    };
+    this.nameTag.style.fontWeight = p.hasPuck ? 'bold' : 'normal';
+    this.nameTag.alpha = p.hasPuck ? 1 : 0.75;
+    this.nameTag.style.fill = this.teamColor;
   }
 }
 
-function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
+function darken(color: number, factor: number): number {
+  const r = ((color >> 16) & 0xff) * factor;
+  const g = ((color >>  8) & 0xff) * factor;
+  const b = ((color      ) & 0xff) * factor;
+  return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(b);
 }

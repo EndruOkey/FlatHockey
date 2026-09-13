@@ -16,6 +16,9 @@
     "ship:dev": "npm run itch:zip && git push origin dev",
     "start": "npm run start -w server"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
+  },
   "devDependencies": {
     "archiver": "^7.0.1",
     "concurrently": "^9.0.1",

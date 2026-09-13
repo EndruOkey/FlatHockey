@@ -77,6 +77,11 @@ export function advanceSteeringTarget(input: {
   const subtleBoost = input.smallCorrection * lerp(0.16, 0.05, speedRatio);
   const holdBoost = input.inputHold * mismatchRatio * 0.08;
   slewRate *= lerp(1, 1.18, mismatchRatio) * (1 + subtleBoost + holdBoost) * Math.max(0.1, input.responseMultiplier ?? 1);
+  // Fine-convergence boost: small remaining deltas converge faster, removing micro-correction lag on WASD key changes
+  const FINE_CONVERGE_THRESHOLD = Math.PI * 0.16; // ~29°
+  if (Math.abs(delta) < FINE_CONVERGE_THRESHOLD) {
+    slewRate *= lerp(2.6, 1.0, Math.abs(delta) / FINE_CONVERGE_THRESHOLD);
+  }
   const maxStep = Math.max(0, slewRate * Math.max(0, input.dt));
   return wrapAngle(input.steeringHeading + clamp(delta, -maxStep, maxStep));
 }
@@ -92,7 +97,11 @@ export function computeBodyTurn(input: BodyTurnInput): BodyTurnResult {
   const subtleCorrectionBoost = input.smallCorrection * lerp(0.16, 0.05, speedRatio);
   const committedRedirectBoost = input.turnMagnitude * input.inputHold * lerp(0.08, 0.12, speedRatio);
   const phaseBoost = input.turnMagnitude * input.turnDevelopment * input.inputHold * lerp(0.02, 0.06, speedRatio);
-  const contextualBoost = 1 + subtleCorrectionBoost + committedRedirectBoost + phaseBoost;
+  // Reversal boost: near-180° mismatch (>130°) ramps up rotation rate so pivots feel snappy.
+  // Peaks at 180°; tapers at full speed to preserve carving feel during high-speed arcs.
+  const reversalFactor = clamp((mismatchRatio - 0.72) / 0.28, 0, 1);
+  const reversalBoost = reversalFactor * lerp(0.62, 0.22, speedRatio);
+  const contextualBoost = 1 + subtleCorrectionBoost + committedRedirectBoost + phaseBoost + reversalBoost;
   turnRate *= lerp(1, contextualBoost, mismatchRatio);
   const maxStep = Math.max(0, turnRate * Math.max(0, input.dt));
   const appliedDelta = clamp(delta, -maxStep, maxStep);

@@ -1,0 +1,24 @@
+You are a FlatHockey code auditor. Your task: do a COMPLETE audit of how the hockey stick is held, positioned, and rendered.
+
+Project path: /mnt/c/Games/flathockey-move-rework
+
+Read and analyze these files thoroughly:
+- shared/src/stick/canonicalStickRig.ts
+- client/src/game/entities/playerBodyRig.ts
+- client/src/game/render/stickRenderer.ts
+- client/src/game/entities/playerView.ts
+- shared/src/sim/playerMovement.ts (stick state: charge/control/turning)
+- shared/src/tuning/gameplay.defaults.ts (stick-related tuning)
+- shared/src/tuning/gameplayConfig.types.ts
+
+For EACH area, report:
+1. canonicalStickRig - how grip point, blade position are computed for each stick state (control/charge/turning/charge_break)
+2. How handedness (left/right) affects grip
+3. playerBodyRig - how anchors are derived (frontChest, sideChest, etc.)
+4. stickRenderer - how the stick is drawn (grip line, blade line, arc)
+5. What data flows from server->client for stick state
+6. How stick state transitions happen
+7. What "stickState" values exist and what each means visually
+8. Any bugs, visual glitches, inconsistencies, or TODOs
+
+Output a structured markdown report. Be thorough and include actual code references (file:line).

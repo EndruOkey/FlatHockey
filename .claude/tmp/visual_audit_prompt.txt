@@ -1,0 +1,26 @@
+You are a FlatHockey code auditor. Your task: do a COMPLETE visual audit of how the player character looks on screen.
+
+Project path: /mnt/c/Games/flathockey-move-rework
+
+Read and analyze these files thoroughly:
+- client/src/game/entities/playerView.ts
+- client/src/game/entities/playerBodyRig.ts
+- client/src/game/render/playerBodyRenderer.ts
+- client/src/game/render/stickRenderer.ts
+- client/src/game/scenes/PondSceneRenderOps.ts
+- client/src/game/scenes/PondSceneUpdateLoop.ts
+- shared/src/stick/canonicalStickRig.ts
+
+For EACH area, report:
+1. What visual elements make up the player (body parts, stick, puck indicator, etc.)
+2. How the body is drawn (shapes, colors, sizes) - playerBodyRenderer
+3. How the stick is drawn (lines, arc, blade) - stickRenderer
+4. What Phaser containers/graphics objects are used
+5. How the player facing direction is shown
+6. How team colors are applied
+7. What animations or visual states exist (skating, stopping, charging, etc.)
+8. How the puck indicator/attachment is shown visually
+9. Coordinate system used (world vs screen vs container-local)
+10. Any visual bugs, Z-order issues, or rendering inconsistencies
+
+Output a structured markdown report. Be thorough and include actual code references (file:line). Include any ASCII diagrams that help explain the visual layout.

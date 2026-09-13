@@ -1,21 +1,16 @@
-import { createPhaserGame } from './game/phaserGame';
+import { Application } from 'pixi.js';
+import { Game } from './game/Game';
 
-const app = document.getElementById('app');
-if (!app) throw new Error('Missing #app');
+const app = new Application();
 
-console.info('[FH_CLIENT_STARTUP] ENTRY', {
-  ts: new Date().toISOString(),
-  href: window.location.href,
-  pathname: window.location.pathname
+await app.init({
+  resizeTo:        window,
+  backgroundColor: 0x0a1929,
+  antialias:       true,
+  resolution:      Math.min(window.devicePixelRatio ?? 1, 2),
+  autoDensity:     true,
 });
 
-try {
-  createPhaserGame(app);
-} catch (error) {
-  console.error('[FH_CLIENT_STARTUP] FATAL', {
-    ts: new Date().toISOString(),
-    error: error instanceof Error ? error.stack ?? error.message : String(error)
-  });
-  app.textContent = 'FlatHockey failed to start.';
-  throw error;
-}
+document.getElementById('app')!.appendChild(app.canvas);
+
+new Game(app);

@@ -1,0 +1,125 @@
+<task id="worker/task/workflow" name="Worker shell workflow">
+  <objective>Execute worker workflow using direct tmux via bash: generate a prompt file, spawn a tmux session, monitor log and state files, and optionally chain to a follow-up command. When native tmux is unavailable in the current Bash tool environment, bridge into WSL with `wsl.exe -d Ubuntu -- ...`. tmux-cli MCP is optional and never required.</objective>
+
+  <parameters>
+    <param name="PROJECT_DIR" required="false">Project directory passed to helper scripts. Default: current working directory.</param>
+    <param name="COMMAND_NAME" required="false">Logical worker or slash command name. Used as prompt context and as the default worker name when no window name is provided.</param>
+    <param name="ARGUMENT" required="false">Argument or task description to include in the prompt. NULL means no extra argument.</param>
+    <param name="WINDOW_NAME" required="false">Worker and tmux session name. If not provided, derive it from COMMAND_NAME or fall back to worker.</param>
+    <param name="MESSAGE" required="false">Multi-line instructions to include in the prompt file.</param>
+    <param name="PERMISSIONS" required="false">Behavioral constraints prepended to the prompt.</param>
+    <param name="POST_COMPLETION" required="false">A follow-up command to execute after successful completion.</param>
+  </parameters>
+
+  <requirements critical="true">
+    <runtime>Primary runtime: direct tmux via bash</runtime>
+    <runtime>Secondary runtime: WSL bridge via `wsl.exe -d Ubuntu -- ...` plus `wslpath` path conversion</runtime>
+    <runtime>Optional transport: tmux-cli MCP only if explicitly available and proven working</runtime>
+    <note>Do not gate worker execution on `claude mcp list`, MCP health status, or "Failed to connect" false negatives.</note>
+    <note>Consumers must provide enough context to build a worker prompt.</note>
+  </requirements>
+
+  <llm critical="true">
+    <mandate>Execute steps one by one in exact order unless a failure requires fallback.</mandate>
+    <mandate>Create a TODO list for tracking all work.</mandate>
+    <mandate>Use direct shell actions and helper scripts as the primary execution path.</mandate>
+    <mandate>Fallback mode is allowed only when neither native nor WSL bridge tmux runtime is available, or tmux session creation fails.</mandate>
+    <mandate>Do not require tmux-cli MCP tools for worker execution.</mandate>
+  </llm>
+
+  <flow>
+    <step n="1" title="Resolve runtime prerequisites">
+      <action>Set PROJECT_DIR to the consumer-supplied value or the current working directory.</action>
+      <action>Run `command -v tmux >/dev/null 2>&1`.</action>
+      <action>Run `command -v claude >/dev/null 2>&1`.</action>
+      <check condition="native tmux and native claude are available">
+        <action>Select native tmux worker mode.</action>
+      </check>
+      <check condition="native tools are unavailable">
+        <action>Run `wsl.exe -d Ubuntu -- bash -lc 'command -v tmux >/dev/null 2>&1 && command -v claude >/dev/null 2>&1'`.</action>
+      </check>
+      <check condition="WSL tmux and WSL claude are available">
+        <action>Select WSL bridge tmux worker mode.</action>
+        <action>Convert Windows paths to WSL paths with `wslpath` before calling helper scripts.</action>
+      </check>
+      <check condition="neither native nor WSL bridge tmux runtime is available">
+        <action>Select fallback mode and report that tmux runtime is unavailable in both environments.</action>
+      </check>
+      <critical>Do not run `claude mcp list` here. MCP status is not a gate.</critical>
+    </step>
+
+    <step n="2" title="Prepare worker identity and prompt file" condition="tmux worker mode selected">
+      <action>Choose WORKER_NAME from WINDOW_NAME when provided. Otherwise derive it from COMMAND_NAME or use worker.</action>
+      <action>Create `.claude/tmp/` if it does not exist.</action>
+      <action>Create a prompt file at `.claude/tmp/${WORKER_NAME}-prompt.txt`.</action>
+      <action>Compose the prompt from PERMISSIONS, scope guard, COMMAND_NAME, ARGUMENT, and MESSAGE.</action>
+      <action>When WSL bridge mode is selected, convert PROJECT_DIR and prompt file paths with `wslpath` before invoking runtime helpers.</action>
+      <note>If COMMAND_NAME is provided, treat it as logical task context for the worker prompt. Do not require interactive slash command loading.</note>
+    </step>
+
+    <step n="3" title="Spawn tmux worker" condition="tmux worker mode selected">
+      <action>Execute `.claude/scripts/worker-spawn.sh "$PROJECT_DIR" "$WORKER_NAME" "$PROMPT_FILE"`.</action>
+      <action>Record the returned session name.</action>
+      <check condition="spawn succeeds">
+        <action>Continue in tmux worker mode.</action>
+      </check>
+      <check condition="spawn fails">
+        <action>Select fallback mode and report that tmux session creation failed.</action>
+      </check>
+    </step>
+
+    <step n="4" title="Monitor progress" condition="tmux worker mode selected">
+      <action>Use `.claude/scripts/worker-status.sh "$PROJECT_DIR" "$WORKER_NAME"` as the status source of truth.</action>
+      <action>Use `.claude/scripts/worker-tail.sh "$PROJECT_DIR" "$WORKER_NAME"` to inspect recent output when needed.</action>
+      <action>Use the worker log file, done marker, and exit code file as the completion source of truth.</action>
+      <note>Optional follow-up input may be sent with direct `tmux send-keys` to the running session if absolutely necessary.</note>
+      <note>Do not use `windows-create`, `windows-send`, or `windows-message`.</note>
+    </step>
+
+    <step n="5" title="Determine result" condition="tmux worker mode selected">
+      <check condition="status is done:0 or equivalent success">
+        <action>Collect the final output from the log file and continue.</action>
+      </check>
+      <check condition="status is done with a non-zero exit code">
+        <action>Inspect the log file, summarize the failure, and decide whether to retry, fallback, or ask the user.</action>
+      </check>
+      <check condition="status is missing after a failed spawn or crashed session">
+        <action>Treat this as a tmux runtime failure and enter fallback mode.</action>
+      </check>
+    </step>
+
+    <step n="6" title="Fallback mode" condition="fallback mode selected">
+      <action>Use a non-tmux fallback only because neither native nor WSL bridge tmux runtime is available, or tmux session creation failed.</action>
+      <action>State explicitly why fallback was selected.</action>
+      <critical>Do not blame MCP health status or `claude mcp list` for entering fallback mode.</critical>
+    </step>
+
+    <step n="7" title="Post-completion" condition="POST_COMPLETION is provided and the worker completed successfully">
+      <action>Execute the chained command: POST_COMPLETION.</action>
+      <note>The next worker should use the same direct tmux decision tree.</note>
+    </step>
+  </flow>
+
+  <execution-rules>
+    <rule>Prefer direct tmux orchestration.</rule>
+    <rule>Optional MCP integration may be used only if explicitly validated.</rule>
+    <rule>Worker execution must remain functional without MCP.</rule>
+    <rule>Prompt file generation plus `.claude/scripts/worker-spawn.sh` is the primary way to start workers.</rule>
+    <rule>If native tmux is unavailable in the current Bash tool environment, helper scripts must bridge through `wsl.exe -d Ubuntu -- ...` and convert Windows paths with `wslpath`.</rule>
+    <rule>Use `.claude/scripts/worker-status.sh` and `.claude/scripts/worker-tail.sh` to monitor workers.</rule>
+    <rule>Source of truth: `.claude/logs/*.log`, `.claude/worker-state/*.done`, `.claude/worker-state/*.exit`, and optional `tmux capture-pane`.</rule>
+  </execution-rules>
+
+  <llm final="true">
+    <critical-rules>
+      - This is a worker task that coordinates with real tmux sessions, not MCP-only tooling.
+      - If native tmux and claude exist, use native tmux worker mode.
+      - Otherwise prefer WSL bridge tmux worker mode before any fallback.
+      - Do not inspect `claude mcp list` as a gating condition.
+      - Do not require tmux-cli MCP tools for worker execution.
+      - Convert Windows paths to WSL paths with `wslpath` when bridge mode is selected.
+      - Fallback only when neither native nor WSL bridge tmux runtime is available, or tmux session creation fails.
+      - Create a TODO list at the start and track the run to completion.
+    </critical-rules>
+  </llm>
+</task>

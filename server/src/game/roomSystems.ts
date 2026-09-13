@@ -1,412 +1,1019 @@
-import { DEFAULT_RINK_BOUNDS } from '@flathockey/shared/sim/playerMovement';
-import { computeSemiPhysicalStickPose, SEMI_PHYSICAL_STICK_CONFIG } from '@flathockey/shared';
-import { resolvePuckStickTuning } from '@flathockey/shared/tuning/puckStickTuning';
+import {
+  advanceLoosePuck,
+  clampAimToBodyZone,
+  computeShotRelease,
+  computePuckCombatPose,
+  evaluatePickupGate,
+  GAMEPLAY_DEFAULTS,
+  MINIMAL_STICK_CONFIG,
+  resolvePuckStickTuning,
+  STICK_GEOMETRY_CONFIG,
+  type GameplayConfig
+} from '@flathockey/shared';
+import type { Room } from './room';
+import type { BodyCollisionDebugState, PlayerState, RoomPuckState } from './room.types';
+import {
+  computeChargedShotPose,
+  computeOwnedPuckContact,
+  createServerShotInstance,
+  sampleServerReleasingPuck
+} from './puck2/serverPuck2';
 
-function clamp(v: number, lo: number, hi: number): number {
-  return Math.max(lo, Math.min(hi, v));
-}
-
-type Vec2 = { x: number; y: number };
-
-type PickupCandidate = {
-  playerId: string;
-  priority: number;
-  distance: number;
-  target: Vec2;
-  pose: ReturnType<typeof computeSemiPhysicalStickPose>;
+export type CrosscheckConfig = {
+  windupSec: number;
+  activeSec: number;
+  recoverySec: number;
+  forwardOffset: number;
+  halfWidth: number;
+  hitRadius: number;
+  shoveSpeed: number;
+  dummyShoveMultiplier: number;
+  separationPadding: number;
+  dummyAutoResetSec: number;
 };
 
-const BODY_FALLBACK_CAPTURE_SCALE = 0.58;
+type CrosscheckImpact = {
+  targetId: string;
+  targetIsDummy: boolean;
+  contactX: number;
+  contactY: number;
+  dirX: number;
+  dirY: number;
+  barDirX: number;
+  barDirY: number;
+  separationPx: number;
+  stripped: boolean;
+  separated: boolean;
+};
 
-function stickPose(room: any, player: any, overrideState?: any) {
-  const playerRadius = Math.max(12, Number(room.gameplayConfig.playerRadius ?? 18));
-  return computeSemiPhysicalStickPose({
+export function resolveCrosscheckConfig(config: Partial<GameplayConfig>): CrosscheckConfig {
+  return {
+    windupSec: Math.max(0.01, config.crosscheckWindupSec ?? GAMEPLAY_DEFAULTS.crosscheckWindupSec ?? 0.08),
+    activeSec: Math.max(0.01, config.crosscheckActiveSec ?? GAMEPLAY_DEFAULTS.crosscheckActiveSec ?? 0.1),
+    recoverySec: Math.max(0.01, config.crosscheckRecoverySec ?? GAMEPLAY_DEFAULTS.crosscheckRecoverySec ?? 0.22),
+    forwardOffset: Math.max(1, config.crosscheckForwardOffset ?? GAMEPLAY_DEFAULTS.crosscheckForwardOffset ?? 24),
+    halfWidth: Math.max(1, config.crosscheckHalfWidth ?? GAMEPLAY_DEFAULTS.crosscheckHalfWidth ?? 18),
+    hitRadius: Math.max(1, config.crosscheckHitRadius ?? GAMEPLAY_DEFAULTS.crosscheckHitRadius ?? 10),
+    shoveSpeed: Math.max(1, config.crosscheckShoveSpeed ?? GAMEPLAY_DEFAULTS.crosscheckShoveSpeed ?? 86),
+    dummyShoveMultiplier: Math.max(1, config.crosscheckDummyShoveMultiplier ?? GAMEPLAY_DEFAULTS.crosscheckDummyShoveMultiplier ?? 1.18),
+    separationPadding: Math.max(0, config.crosscheckSeparationPadding ?? GAMEPLAY_DEFAULTS.crosscheckSeparationPadding ?? 4),
+    dummyAutoResetSec: Math.max(0.2, config.dummyAutoResetSec ?? GAMEPLAY_DEFAULTS.dummyAutoResetSec ?? 1.25)
+  };
+}
+
+export function createInitialPuckState(radius: number): RoomPuckState {
+  return {
+    kind: 'loose',
+    x: 0,
+    y: 0,
+    vx: 0,
+    vy: 0,
+    spin: 0,
+    radius,
+    ownerId: null,
+    possessionId: 0,
+    shot: null,
+    releaseSerial: 0,
+    releaseOwnerId: null,
+    releaseKind: 'reset'
+  };
+}
+
+export function ensureTrainingDummy(room: Room) {
+  const existing = findTrainingDummy(room);
+  if (existing) return existing;
+
+  const reference = [...room.players.values()].find((player) => !player.isTrainingDummy);
+  if (!reference) return null;
+
+  const dummyId = `${room.id}-dummy`;
+  const dummyX = reference.x + 92;
+  const dummyY = reference.y - 18;
+  const dummy: PlayerState = {
+    id: dummyId,
+    name: 'DUMMY',
+    isTrainingDummy: true,
+    handedness: 'right',
+    x: dummyX,
+    y: dummyY,
+    vx: 0,
+    vy: 0,
+    angle: Math.PI,
+    travelHeading: Math.PI,
+    steeringHeading: Math.PI,
+    inputHeading: Math.PI,
+    intentBoostTimer: 0,
+    lastIntentAngle: null,
+    aimAngle: Math.PI,
+    desiredHeading: Math.PI,
+    locomotionState: 'idle',
+    stopTimerSec: 0,
+    stopRecoveryTimerSec: 0,
+    stopBlend: 0,
+    stopSide: 0,
+    stopTravelHeading: Math.PI,
+    prevStopInput: 0,
+    angularVelocity: 0,
+    lastProcessedSeq: 0,
+    lastInputState: { moveX: 0, moveY: 0, aimAngle: Math.PI, shoot: 0, pass: 0, drop: 0, stop: 0 },
+    inputBuffer: [],
+    inputGapTicks: 0,
+    bodyCollisionStaggerTimerSec: 0,
+    bodyCollisionDebug: null,
+    hasPuck: false,
+    crosscheckPhase: 'idle',
+    crosscheckTimerSec: 0,
+    crosscheckConsumed: false,
+    crosscheckResult: 'idle',
+    crosscheckImpactTimerSec: 0,
+    crosscheckImpactSerial: 0,
+    crosscheckImpactContactX: 0,
+    crosscheckImpactContactY: 0,
+    crosscheckImpactDirX: 0,
+    crosscheckImpactDirY: 0,
+    crosscheckImpactBarDirX: 0,
+    crosscheckImpactBarDirY: 0,
+    crosscheckImpactMagnitude: 0,
+    crosscheckImpactStripped: false,
+    crosscheckImpactSeparated: false,
+    crosscheckImpactTargetId: null,
+    crosscheckImpactTargetIsDummy: false,
+    puckPickupLockTimerSec: 0,
+    shotChargeTimerSec: 0,
+    shotChargeStartRelativeAngle: null,
+    prevShootInput: 0,
+    prevPassInput: 0,
+    prevDropInput: 0,
+    dummyResetTimerSec: 0
+  };
+
+  room.players.set(dummyId, dummy);
+  room.puck.ownerId = null;
+  room.puck.kind = 'loose';
+  room.puck.shot = null;
+  room.puck.x = 0;
+  room.puck.y = 0;
+  room.puck.vx = 0;
+  room.puck.vy = 0;
+  room.puck.releaseOwnerId = null;
+  room.puck.releaseKind = 'reset';
+  return dummy;
+}
+
+export function stepRoomGameplay(room: Room, dt: number, config: CrosscheckConfig) {
+  ensureTrainingDummy(room);
+  const puckTuning = resolvePuckStickTuning(room.gameplayConfig);
+
+  for (const player of room.players.values()) {
+    tickCrosscheckImpact(player, dt);
+    tickBodyCollisionStagger(player, dt);
+    tickBodyCollisionDebug(player, dt);
+    tickPickupLock(player, dt);
+
+    if (player.isTrainingDummy) {
+      integratePassiveBodyMotion(player, dt);
+      player.aimAngle = resolveDummyAimAngle(room, player);
+      player.travelHeading = player.angle;
+      player.desiredHeading = player.angle;
+      player.crosscheckResult = 'idle';
+      continue;
+    }
+
+    const passPressed = player.lastInputState.pass === 1;
+    const passJustPressed = passPressed && player.prevPassInput === 0;
+    player.prevPassInput = player.lastInputState.pass;
+    player.prevDropInput = player.lastInputState.drop;
+    if (passJustPressed && !player.hasPuck && player.crosscheckPhase === 'idle') {
+      startCrosscheck(player, config);
+      console.info(`[CROSSCHECK] start room=${room.id} player=${player.id}`);
+    }
+  }
+
+  for (const player of room.players.values()) {
+    tickCrosscheckPhase(room, player, dt, config);
+  }
+
+  resolvePlayerBodyCollisions(room);
+
+  for (const player of room.players.values()) {
+    if (player.isTrainingDummy) {
+      applyPassiveBodyDamping(player, dt);
+    }
+  }
+
+  for (const player of room.players.values()) {
+    if (player.isTrainingDummy) continue;
+    stepPlayerShot(room, player, dt, puckTuning);
+  }
+
+  if (room.puck.kind === 'loose' && !room.puck.ownerId) {
+    tryPickupLoosePuck(room, puckTuning.pickupRadius, puckTuning.pickupMaxRelativeSpeed, puckTuning.pickupMaxPuckSpeed);
+  }
+
+  for (const player of room.players.values()) {
+    if (!player.isTrainingDummy || player.hasPuck || player.dummyResetTimerSec <= 0) continue;
+    player.dummyResetTimerSec = Math.max(0, player.dummyResetTimerSec - dt);
+    if (player.dummyResetTimerSec <= 0 && !room.puck.ownerId) {
+      assignPuckOwner(room, player);
+      syncOwnedPuck(room, player);
+      console.info(`[DUMMY] reset room=${room.id} player=${player.id}`);
+    }
+  }
+
+  enforceSinglePuckOwner(room);
+
+  const owner = room.puck.kind === 'owned' && room.puck.ownerId ? room.players.get(room.puck.ownerId) ?? null : null;
+  if (owner && owner.hasPuck) {
+    syncOwnedPuck(room, owner);
+  } else if (room.puck.kind === 'releasing' && room.puck.shot) {
+    const elapsedSec = Math.max(0, (room.serverTick - room.puck.shot.startTick) * dt);
+    if (elapsedSec >= room.puck.shot.clipDurationSec) {
+      room.puck.kind = 'loose';
+      room.puck.shot = null;
+      room.puck.x = room.puck.x;
+      room.puck.y = room.puck.y;
+      room.puck.vx = room.puck.vx;
+      room.puck.vy = room.puck.vy;
+      room.puck.spin = room.puck.spin;
+    } else {
+      const clip = sampleServerReleasingPuck(room.puck, elapsedSec);
+      room.puck.x = clip.x;
+      room.puck.y = clip.y;
+    }
+  } else {
+    room.puck.kind = 'loose';
+    room.puck.ownerId = null;
+    const next = advanceLoosePuck(
+      {
+        x: room.puck.x,
+        y: room.puck.y,
+        vx: room.puck.vx,
+        vy: room.puck.vy,
+        angularVelocity: room.puck.spin
+      },
+      dt,
+      puckTuning.linearDamping,
+      puckTuning.surfaceDrag,
+      puckTuning.maxSpeed,
+      puckTuning.restitution
+    );
+    room.puck.x = next.x;
+    room.puck.y = next.y;
+    room.puck.vx = next.vx;
+    room.puck.vy = next.vy;
+    room.puck.spin = next.angularVelocity;
+  }
+}
+
+function tryPickupLoosePuck(
+  room: Room,
+  pickupRadius: number,
+  pickupMaxRelativeSpeed: number,
+  pickupMaxPuckSpeed: number
+) {
+  const puckSpeed = Math.hypot(room.puck.vx, room.puck.vy);
+  if (puckSpeed > pickupMaxPuckSpeed) return;
+
+  let best: {
+    player: PlayerState;
+    quality: number;
+    distance: number;
+  } | null = null;
+
+  for (const player of room.players.values()) {
+    if (player.hasPuck || player.crosscheckPhase !== 'idle') continue;
+    if ((player.puckPickupLockTimerSec ?? 0) > 0) continue;
+    if (player.isTrainingDummy && player.dummyResetTimerSec > 0) continue;
+
+    const pose = getPickupBladeZone(room, player);
+    const evalResult = evaluatePickupGate(
+      room.puck.x,
+      room.puck.y,
+      room.puck.vx,
+      room.puck.vy,
+      room.puck.spin,
+      player.vx,
+      player.vy,
+      pose,
+      room.puck.radius,
+      pickupRadius,
+      pickupMaxRelativeSpeed,
+      !!player.isTrainingDummy
+    );
+
+    if (!evalResult) continue;
+
+    const distance = Math.hypot(room.puck.x - pose.bladeContactX, room.puck.y - pose.bladeContactY);
+    if (
+      !best ||
+      evalResult.quality > best.quality + 0.001 ||
+      (Math.abs(evalResult.quality - best.quality) <= 0.001 && distance < best.distance)
+    ) {
+      best = { player, quality: evalResult.quality, distance };
+    }
+  }
+
+  if (!best) return;
+
+  assignPuckOwner(room, best.player);
+  room.puck.vx = best.player.vx;
+  room.puck.vy = best.player.vy;
+  syncOwnedPuck(room, best.player);
+}
+
+function stepPlayerShot(room: Room, player: PlayerState, dt: number, puckTuning: ReturnType<typeof resolvePuckStickTuning>) {
+  if (player.crosscheckPhase !== 'idle') {
+    player.shotChargeTimerSec = 0;
+    player.shotChargeStartRelativeAngle = null;
+    player.prevShootInput = player.lastInputState.shoot ?? 0;
+    return;
+  }
+
+  const shootPressed = player.lastInputState.shoot === 1;
+  const shootJustReleased = !shootPressed && player.prevShootInput === 1;
+  player.prevShootInput = shootPressed ? 1 : 0;
+
+  if (!player.hasPuck || room.puck.ownerId !== player.id) {
+    player.shotChargeTimerSec = 0;
+    player.shotChargeStartRelativeAngle = null;
+    return;
+  }
+
+  const dropPressed = player.lastInputState.drop === 1;
+  const passCancels = player.lastInputState.pass === 1;
+  if (dropPressed || passCancels) {
+    player.shotChargeTimerSec = 0;
+    player.shotChargeStartRelativeAngle = null;
+    player.prevShootInput = 0;
+    return;
+  }
+
+  if (shootPressed) {
+    if (player.prevShootInput === 0) {
+      const resolvedAim = clampAimToBodyZone(
+        player.angle,
+        player.aimAngle,
+        STICK_GEOMETRY_CONFIG.maxAimOffsetRad,
+        player.angle
+      );
+      player.shotChargeStartRelativeAngle = normalizeAngle(resolvedAim - player.angle);
+    }
+    player.shotChargeTimerSec = Math.min(1.5, player.shotChargeTimerSec + dt);
+    return;
+  }
+
+  if (!shootJustReleased) {
+    player.shotChargeTimerSec = 0;
+    player.shotChargeStartRelativeAngle = null;
+    return;
+  }
+
+  releaseChargedShot(room, player, puckTuning);
+}
+
+function resolveDummyAimAngle(room: Room, player: PlayerState) {
+  if (player.hasPuck || room.puck.ownerId === player.id) {
+    return player.angle;
+  }
+  if (player.dummyResetTimerSec > 0) {
+    return player.angle;
+  }
+  const dx = room.puck.x - player.x;
+  const dy = room.puck.y - player.y;
+  if (Math.hypot(dx, dy) <= 0.001) {
+    return player.angle;
+  }
+  return Math.atan2(dy, dx);
+}
+
+function releaseChargedShot(room: Room, player: PlayerState, puckTuning: ReturnType<typeof resolvePuckStickTuning>) {
+  const minHoldSec = Math.max(0, puckTuning.shotMinHoldMs) / 1000;
+  const chargeRate = Math.max(0.01, puckTuning.shotChargeRate);
+  const fullChargeSec = Math.max(0.12, 1 / chargeRate);
+  const heldSec = player.shotChargeTimerSec;
+  const charge01 = Math.max(0, Math.min(1, heldSec / fullChargeSec));
+  const chargeStartRelativeAngle = player.shotChargeStartRelativeAngle;
+  player.shotChargeTimerSec = 0;
+  player.shotChargeStartRelativeAngle = null;
+
+  if (heldSec <= 0.001 || player.crosscheckPhase !== 'idle') return;
+
+  const pose = computeShotPose(room, player, charge01, chargeStartRelativeAngle);
+  const easedCharge01 = smoothstep01(charge01);
+  const minImpulse = Math.max(70, puckTuning.shotBaseImpulse);
+  const maxImpulse = Math.min(
+    puckTuning.shotMaxImpulse,
+    puckTuning.shotBaseImpulse + puckTuning.shotChargeMult
+  );
+  const holdGate = minHoldSec > 0 ? Math.max(0.18, Math.min(1, heldSec / minHoldSec)) : 1;
+  const finalImpulse = lerp(minImpulse, maxImpulse, easedCharge01) * holdGate;
+
+  player.hasPuck = false;
+  applyPickupLock(player, puckTuning.pickupCooldownMs);
+  const release = computeShotRelease(
+    player.vx,
+    player.vy,
+    pose.dirX,
+    pose.dirY,
+    finalImpulse,
+    0,
+    puckTuning.maxSpeed,
+    player.angularVelocity
+  );
+
+  room.puck.kind = 'releasing';
+  room.puck.ownerId = null;
+  room.puck.shot = createServerShotInstance({
+    shotId: room.puck.releaseSerial + 1,
+    ownerId: player.id,
+    startTick: room.serverTick,
+    startX: pose.originX,
+    startY: pose.originY,
+    dirX: pose.dirX,
+    dirY: pose.dirY,
+    vx: release.vx,
+    vy: release.vy,
+    speed: Math.hypot(release.vx, release.vy),
+    spin: release.angularVelocity + easedCharge01 * 1.8,
+    charge01,
+    radius: room.puck.radius,
+    clipDurationSec: 0.075
+  });
+  room.puck.x = pose.originX;
+  room.puck.y = pose.originY;
+  room.puck.vx = release.vx;
+  room.puck.vy = release.vy;
+  room.puck.spin = release.angularVelocity + easedCharge01 * 1.8;
+  markPuckRelease(room, player.id, 'shot');
+  room.queueServerMessage({
+    type: 'shot:start',
+    serverTick: room.serverTick,
+    shot: room.puck.shot
+  });
+}
+
+function computeShotPose(room: Room, player: PlayerState, charge01: number, chargeStartRelativeAngle: number | null) {
+  const gameplayPose = computeChargedShotPose(player, room.playerRadius, charge01, chargeStartRelativeAngle);
+  return {
+    originX: gameplayPose.contactX,
+    originY: gameplayPose.contactY,
+    dirX: gameplayPose.forwardX,
+    dirY: gameplayPose.forwardY
+  };
+}
+
+function startCrosscheck(player: PlayerState, config: CrosscheckConfig) {
+  player.crosscheckPhase = 'windup';
+  player.crosscheckTimerSec = config.windupSec;
+  player.crosscheckConsumed = false;
+  player.crosscheckResult = 'idle';
+}
+
+function tickCrosscheckPhase(room: Room, player: PlayerState, dt: number, config: CrosscheckConfig) {
+  if (player.crosscheckPhase === 'idle') return;
+
+  player.crosscheckTimerSec = Math.max(0, player.crosscheckTimerSec - dt);
+
+  if (player.crosscheckPhase === 'windup') {
+    if (player.crosscheckTimerSec <= 0) {
+      player.crosscheckPhase = 'active';
+      player.crosscheckTimerSec = config.activeSec;
+      console.info(`[CROSSCHECK] active room=${room.id} player=${player.id}`);
+    }
+    return;
+  }
+
+  if (player.crosscheckPhase === 'active') {
+    if (!player.crosscheckConsumed) {
+      const impact = tryConsumeCrosscheck(room, player, config);
+      if (impact) {
+        player.crosscheckConsumed = true;
+        player.crosscheckResult = 'hit';
+        player.crosscheckPhase = 'recovery';
+        player.crosscheckTimerSec = config.recoverySec;
+        applyCrosscheckImpact(player, impact);
+        console.info(
+          `[CROSSCHECK] hit room=${room.id} player=${player.id} target=${impact.targetId} separated=${impact.separated ? 1 : 0} stripped=${impact.stripped ? 1 : 0}`
+        );
+        return;
+      }
+    }
+
+    if (player.crosscheckTimerSec <= 0) {
+      player.crosscheckResult = 'miss';
+      player.crosscheckPhase = 'recovery';
+      player.crosscheckTimerSec = config.recoverySec;
+      console.info(`[CROSSCHECK] miss room=${room.id} player=${player.id}`);
+    }
+    return;
+  }
+
+  if (player.crosscheckPhase === 'recovery' && player.crosscheckTimerSec <= 0) {
+    player.crosscheckPhase = 'idle';
+    player.crosscheckTimerSec = 0;
+    player.crosscheckConsumed = false;
+    player.crosscheckResult = 'idle';
+  }
+}
+
+function tryConsumeCrosscheck(room: Room, attacker: PlayerState, config: CrosscheckConfig) {
+  const pose = computePuckCombatPose({
+    playerX: attacker.x,
+    playerY: attacker.y,
+    bodyAngle: attacker.angle,
+    aimAngle: attacker.angle,
+    playerRadius: room.playerRadius,
+    handedness: attacker.handedness,
+    state: 'crosscheck'
+  });
+  let bestTarget: {
+    player: PlayerState;
+    point: { x: number; y: number; distance: number };
+  } | null = null;
+
+  for (const target of room.players.values()) {
+    if (target.id === attacker.id) continue;
+
+    const targetPoint = getCrosscheckTargetPoint(room, target, pose);
+    const dist = targetPoint.distance;
+
+    if (dist > config.hitRadius) continue;
+    if (!bestTarget || dist < bestTarget.point.distance) {
+      bestTarget = { player: target, point: targetPoint };
+    }
+  }
+
+  if (!bestTarget) return null;
+
+  const target = bestTarget.player;
+  const targetPoint = bestTarget.point;
+  const contactNormal = resolveImpactDirection(attacker, target);
+  const barDir = {
+    x: Math.cos(attacker.angle),
+    y: Math.sin(attacker.angle)
+  };
+  const contact = closestPointOnSegment(
+    targetPoint.x,
+    targetPoint.y,
+    pose.bladeBaseX,
+    pose.bladeBaseY,
+    pose.bladeTipX,
+    pose.bladeTipY
+  );
+  const contactResolve = resolveCrosscheckBarContact(attacker, target, room.playerRadius, config, contactNormal, barDir);
+
+  let stripped = false;
+  if (target.hasPuck) {
+    target.hasPuck = false;
+    applyPickupLock(target, resolvePuckStickTuning(room.gameplayConfig).pickupCooldownMs);
+    stripped = true;
+    if (target.isTrainingDummy) {
+      target.dummyResetTimerSec = config.dummyAutoResetSec;
+    }
+    room.puck.ownerId = null;
+    room.puck.x = targetPoint.x;
+    room.puck.y = targetPoint.y;
+    room.puck.vx = barDir.x * 110;
+    room.puck.vy = barDir.y * 110;
+    markPuckRelease(room, attacker.id, 'strip');
+  }
+
+  return {
+    targetId: target.id,
+    targetIsDummy: !!target.isTrainingDummy,
+    contactX: contact.x,
+    contactY: contact.y,
+    dirX: contactNormal.x,
+    dirY: contactNormal.y,
+    barDirX: barDir.x,
+    barDirY: barDir.y,
+    separationPx: contactResolve.separationPx,
+    stripped,
+    separated: contactResolve.separated
+  };
+}
+
+function getCarryPoint(room: Room, player: PlayerState) {
+  const pose = computeOwnedPuckContact(player, room.playerRadius);
+  return { x: pose.contactX, y: pose.contactY };
+}
+
+function getPickupBladeZone(room: Room, player: PlayerState) {
+  const pose = computeOwnedPuckContact(player, room.playerRadius);
+  return {
+    bladeContactX: pose.contactX,
+    bladeContactY: pose.contactY,
+    bladeForwardX: pose.forwardX,
+    bladeForwardY: pose.forwardY,
+    bladeZoneRadius: MINIMAL_STICK_CONFIG.bladeZoneRadius
+  };
+}
+
+function getUnifiedStickPose(
+  room: Room,
+  player: PlayerState,
+  state: 'carry' | 'charge' = 'carry',
+  chargePose01 = 0,
+  chargeStartRelativeAngle: number | null = null
+) {
+  return computePuckCombatPose({
     playerX: player.x,
     playerY: player.y,
     bodyAngle: player.angle,
     aimAngle: player.aimAngle,
-    playerRadius,
     handedness: player.handedness,
-    state: overrideState ?? player.stickState,
-    shotCharge: player.shotCharge,
-    stateTimerSec: player.stickTimer,
-    angularVelocity: player.angularVelocity
+    playerRadius: room.playerRadius,
+    state,
+    chargeStartRelativeAngle: state === 'charge' ? chargeStartRelativeAngle : undefined,
+    charge01: state === 'charge' ? chargePose01 : 0
   });
 }
 
-function releasePuck(room: any, player: any, pose: ReturnType<typeof computeSemiPhysicalStickPose>, impulse: number, cooldownMs: number) {
-  room.puck.state = 'FREE';
-  room.puck.ownerId = null;
-  room.puck.x = pose.bladeCenterX;
-  room.puck.y = pose.bladeCenterY;
-  room.puck.vx = (player.vx ?? 0) * 0.35 + pose.bladeForwardX * impulse;
-  room.puck.vy = (player.vy ?? 0) * 0.35 + pose.bladeForwardY * impulse;
-  room.puck.pickupCooldownMs = Math.max(room.puck.pickupCooldownMs, cooldownMs);
+function getCarrierControlPoint(room: Room, player: PlayerState) {
+  const forwardX = Math.cos(player.angle);
+  const forwardY = Math.sin(player.angle);
+  return {
+    x: player.x + forwardX * room.playerRadius * 0.55,
+    y: player.y + forwardY * room.playerRadius * 0.55
+  };
 }
 
-function dropPuckAtBlade(room: any, player: any, pose: ReturnType<typeof computeSemiPhysicalStickPose>, cooldownMs: number) {
-  room.puck.state = 'FREE';
-  room.puck.ownerId = null;
-  room.puck.x = pose.bladeCenterX;
-  room.puck.y = pose.bladeCenterY;
-  room.puck.vx = (player.vx ?? 0) * 0.35;
-  room.puck.vy = (player.vy ?? 0) * 0.35;
-  room.puck.pickupCooldownMs = Math.max(room.puck.pickupCooldownMs, cooldownMs);
-}
-
-function evaluateCaptureCandidate(
-  puckX: number,
-  puckY: number,
-  pose: ReturnType<typeof computeSemiPhysicalStickPose>,
-  pickupRadius: number,
-  assistRadius: number,
-  puckRadius: number
+function getCrosscheckTargetPoint(
+  room: Room,
+  player: PlayerState,
+  crosscheckPose: ReturnType<typeof computePuckCombatPose>
 ) {
-  const bladeRadius = Math.min(pickupRadius, pose.bladeZoneRadius) + puckRadius;
-  const bladeDist = Math.hypot(puckX - pose.bladeCenterX, puckY - pose.bladeCenterY);
-  if (bladeDist <= bladeRadius) {
-    return {
-      priority: 0,
-      distance: bladeDist,
-      target: { x: pose.bladeCenterX, y: pose.bladeCenterY }
-    };
-  }
+  const puckPoint = player.hasPuck
+    ? room.puck.ownerId === player.id
+      ? { x: room.puck.x, y: room.puck.y }
+      : getCarryPoint(room, player)
+    : null;
+  const controlPoint = getCarrierControlPoint(room, player);
 
-  const cappedAssistRadius = Math.min(assistRadius, pose.assistZoneRadius) + puckRadius;
-  const assistDist = Math.hypot(puckX - pose.assistX, puckY - pose.assistY);
-  if (assistDist <= cappedAssistRadius) {
-    return {
-      priority: 1,
-      distance: assistDist,
-      target: { x: pose.assistX, y: pose.assistY }
-    };
-  }
-
-  const bodyRadius = Math.min(pickupRadius * BODY_FALLBACK_CAPTURE_SCALE, pose.bodyZoneRadius) + puckRadius;
-  const bodyDist = Math.hypot(puckX - pose.bodyX, puckY - pose.bodyY);
-  if (bodyDist <= bodyRadius) {
-    return {
-      priority: 2,
-      distance: bodyDist,
-      target: { x: pose.bodyX, y: pose.bodyY }
-    };
-  }
-
-  return null;
-}
-
-function tryResolveFreePoke(room: any, pokeImpulse: number, puckRadius: number) {
-  let bestPlayer: any = null;
-  let bestPose: ReturnType<typeof computeSemiPhysicalStickPose> | null = null;
-  let bestDist = Infinity;
-
-  for (const player of room.players.values()) {
-    if (player.stickState !== 'poke') continue;
-    const pose = stickPose(room, player);
-    const dist = Math.hypot(room.puck.x - pose.bladeCenterX, room.puck.y - pose.bladeCenterY);
-    if (dist <= pose.bladeZoneRadius + puckRadius && dist < bestDist) {
-      bestDist = dist;
-      bestPlayer = player;
-      bestPose = pose;
-    }
-  }
-
-  if (!bestPlayer || !bestPose) return false;
-
-  room.puck.vx = (bestPlayer.vx ?? 0) * 0.25 + bestPose.bladeForwardX * pokeImpulse;
-  room.puck.vy = (bestPlayer.vy ?? 0) * 0.25 + bestPose.bladeForwardY * pokeImpulse;
-  room.puck.pickupCooldownMs = Math.max(room.puck.pickupCooldownMs, 140);
-  bestPlayer.stickState = 'release';
-  bestPlayer.stickTimer = SEMI_PHYSICAL_STICK_CONFIG.pokeRecoverySec;
-  return true;
-}
-
-function tryResolveHeldPoke(room: any, owner: any, pokeImpulse: number, puckRadius: number) {
-  let bestPlayer: any = null;
-  let bestPose: ReturnType<typeof computeSemiPhysicalStickPose> | null = null;
-  let bestDist = Infinity;
-
-  for (const player of room.players.values()) {
-    if (player.id === owner.id || player.stickState !== 'poke') continue;
-    const pose = stickPose(room, player);
-    const dist = Math.hypot(room.puck.x - pose.bladeCenterX, room.puck.y - pose.bladeCenterY);
-    if (dist <= pose.bladeZoneRadius + puckRadius && dist < bestDist) {
-      bestDist = dist;
-      bestPlayer = player;
-      bestPose = pose;
-    }
-  }
-
-  if (!bestPlayer || !bestPose) return false;
-
-  dropPuckFrom(room, owner.id);
-  room.puck.x = bestPose.bladeCenterX;
-  room.puck.y = bestPose.bladeCenterY;
-  room.puck.vx = (bestPlayer.vx ?? 0) * 0.25 + bestPose.bladeForwardX * pokeImpulse;
-  room.puck.vy = (bestPlayer.vy ?? 0) * 0.25 + bestPose.bladeForwardY * pokeImpulse;
-  room.puck.pickupCooldownMs = Math.max(room.puck.pickupCooldownMs, 140);
-  owner.shotCharge = 0;
-  bestPlayer.stickState = 'release';
-  bestPlayer.stickTimer = SEMI_PHYSICAL_STICK_CONFIG.pokeRecoverySec;
-  return true;
-}
-
-export function dropPuckFrom(room: any, playerId: string | null) {
-  if (!playerId) return;
-  if (room.puck.state !== 'HELD' || room.puck.ownerId !== playerId) return;
-  room.puck.state = 'FREE';
-  room.puck.ownerId = null;
-  room.puck.pickupCooldownMs = Math.max(room.puck.pickupCooldownMs, 180);
-}
-
-export function updatePuck(room: any, dt: number) {
-  const puckStick = resolvePuckStickTuning(room.gameplayConfig);
-  const pickupRadius = puckStick.pickupRadius;
-  const pickupMaxSpeed = puckStick.pickupMaxPuckSpeed;
-  const pickupMaxRelativeSpeed = puckStick.pickupMaxRelativeSpeed;
-  const assistRadius = Math.min(puckStick.magnetRadius, SEMI_PHYSICAL_STICK_CONFIG.assistZoneRadius);
-  const magnetStrength = puckStick.magnetStrength;
-  const magnetMaxForce = puckStick.magnetMaxForce;
-  const holdSpringK = puckStick.holdSpringK;
-  const holdDampingC = puckStick.holdDampingC;
-  const holdMaxError = puckStick.holdMaxError;
-  const pickupCooldownMs = puckStick.pickupCooldownMs;
-  const shotBaseImpulse = puckStick.shotBaseImpulse;
-  const shotChargeRate = puckStick.shotChargeRate;
-  const shotChargeMult = puckStick.shotChargeMult;
-  const shotMaxImpulse = puckStick.shotMaxImpulse;
-  const shotMinHoldMs = puckStick.shotMinHoldMs;
-  const oneTimerGraceMs = Math.max(0, puckStick.oneTimerGraceMs);
-  const passImpulse = clamp(
-    Math.max(SEMI_PHYSICAL_STICK_CONFIG.passImpulse, shotBaseImpulse * 0.78),
-    0,
-    shotMaxImpulse * 0.82
+  const puckDist = puckPoint
+    ? pointToSegmentDistance(
+        puckPoint.x,
+        puckPoint.y,
+        crosscheckPose.bladeBaseX,
+        crosscheckPose.bladeBaseY,
+        crosscheckPose.bladeTipX,
+        crosscheckPose.bladeTipY
+      )
+    : Number.POSITIVE_INFINITY;
+  const controlDist = pointToSegmentDistance(
+    controlPoint.x,
+    controlPoint.y,
+    crosscheckPose.bladeBaseX,
+    crosscheckPose.bladeBaseY,
+    crosscheckPose.bladeTipX,
+    crosscheckPose.bladeTipY
   );
-  const pokeImpulse = SEMI_PHYSICAL_STICK_CONFIG.pokeImpulse;
-  const maxSpeed = puckStick.maxSpeed;
-  const linearDamping = puckStick.linearDamping;
-  const restitution = puckStick.restitution;
-  const surfaceDrag = puckStick.surfaceDrag;
-  const puckRadius = puckStick.puckRadius;
 
-  room.puck.pickupCooldownMs = Math.max(0, room.puck.pickupCooldownMs - dt * 1000);
+  if (player.isTrainingDummy || controlDist < puckDist) {
+    return { x: controlPoint.x, y: controlPoint.y, distance: controlDist };
+  }
+
+  return puckPoint
+    ? { x: puckPoint.x, y: puckPoint.y, distance: puckDist }
+    : { x: controlPoint.x, y: controlPoint.y, distance: controlDist };
+}
+
+function syncOwnedPuck(room: Room, owner: PlayerState) {
+  const point = getCarryPoint(room, owner);
+  room.puck.kind = 'owned';
+  room.puck.shot = null;
+  room.puck.x = point.x;
+  room.puck.y = point.y;
+  room.puck.vx = owner.vx;
+  room.puck.vy = owner.vy;
+}
+
+function tickCrosscheckImpact(player: PlayerState, dt: number) {
+  if (player.crosscheckImpactTimerSec <= 0) return;
+  player.crosscheckImpactTimerSec = Math.max(0, player.crosscheckImpactTimerSec - dt);
+  if (player.crosscheckImpactTimerSec > 0) return;
+  player.crosscheckImpactMagnitude = 0;
+  player.crosscheckImpactStripped = false;
+  player.crosscheckImpactSeparated = false;
+  player.crosscheckImpactTargetId = null;
+  player.crosscheckImpactTargetIsDummy = false;
+  player.crosscheckImpactBarDirX = 0;
+  player.crosscheckImpactBarDirY = 0;
+}
+
+function tickBodyCollisionStagger(player: PlayerState, dt: number) {
+  if (player.bodyCollisionStaggerTimerSec <= 0) return;
+  player.bodyCollisionStaggerTimerSec = Math.max(0, player.bodyCollisionStaggerTimerSec - dt);
+}
+
+function tickBodyCollisionDebug(player: PlayerState, dt: number) {
+  if (!player.bodyCollisionDebug) return;
+  player.bodyCollisionDebug.timerSec = Math.max(0, player.bodyCollisionDebug.timerSec - dt);
+  if (player.bodyCollisionDebug.timerSec <= 0) {
+    player.bodyCollisionDebug = null;
+  }
+}
+
+function tickPickupLock(player: PlayerState, dt: number) {
+  if ((player.puckPickupLockTimerSec ?? 0) <= 0) return;
+  player.puckPickupLockTimerSec = Math.max(0, player.puckPickupLockTimerSec - dt);
+}
+
+function applyCrosscheckImpact(player: PlayerState, impact: CrosscheckImpact) {
+  player.crosscheckImpactTimerSec = 0.18;
+  player.crosscheckImpactSerial += 1;
+  player.crosscheckImpactContactX = impact.contactX;
+  player.crosscheckImpactContactY = impact.contactY;
+  player.crosscheckImpactDirX = impact.dirX;
+  player.crosscheckImpactDirY = impact.dirY;
+  player.crosscheckImpactBarDirX = impact.barDirX;
+  player.crosscheckImpactBarDirY = impact.barDirY;
+  player.crosscheckImpactMagnitude = impact.separationPx;
+  player.crosscheckImpactStripped = impact.stripped;
+  player.crosscheckImpactSeparated = impact.separated;
+  player.crosscheckImpactTargetId = impact.targetId;
+  player.crosscheckImpactTargetIsDummy = impact.targetIsDummy;
+}
+
+function resolveImpactDirection(attacker: PlayerState, target: PlayerState) {
+  const dx = target.x - attacker.x;
+  const dy = target.y - attacker.y;
+  const length = Math.hypot(dx, dy);
+  if (length > 0.0001) {
+    return { x: dx / length, y: dy / length };
+  }
+  return {
+    x: Math.cos(attacker.angle),
+    y: Math.sin(attacker.angle)
+  };
+}
+
+function resolveCrosscheckBarContact(
+  attacker: PlayerState,
+  target: PlayerState,
+  playerRadius: number,
+  config: CrosscheckConfig,
+  contactNormal: { x: number; y: number },
+  barDir: { x: number; y: number }
+) {
+  const microGap = Math.max(1.5, config.separationPadding + (target.isTrainingDummy ? 1.5 : 0));
+  const minDistance = playerRadius * 2 + microGap;
+  const dx = target.x - attacker.x;
+  const dy = target.y - attacker.y;
+  const distance = Math.hypot(dx, dy);
+  const overlapPush = Math.max(0, minDistance - distance);
+  const microHelper = Math.min(1.25, Math.max(0.4, config.shoveSpeed * 0.01));
+  const dummyBias = target.isTrainingDummy ? Math.max(1, config.dummyShoveMultiplier) : 1;
+  const baselinePush = ((target.isTrainingDummy ? 1.2 : 0.8) + microHelper) * dummyBias;
+  const separationPx = overlapPush > 0 ? overlapPush : baselinePush;
+  target.x += contactNormal.x * separationPx * 0.82;
+  target.y += contactNormal.y * separationPx * 0.82;
+  attacker.x -= contactNormal.x * separationPx * 0.18;
+  attacker.y -= contactNormal.y * separationPx * 0.18;
+
+  const intoBar = Math.max(0, -(target.vx * barDir.x + target.vy * barDir.y));
+  if (intoBar > 0) {
+    target.vx += barDir.x * intoBar;
+    target.vy += barDir.y * intoBar;
+  }
+
+  const attackerIntoTarget = Math.max(0, attacker.vx * barDir.x + attacker.vy * barDir.y);
+  if (attackerIntoTarget > 0) {
+    attacker.vx -= barDir.x * attackerIntoTarget * 0.35;
+    attacker.vy -= barDir.y * attackerIntoTarget * 0.35;
+  }
+
+  return {
+    separated: overlapPush > 0 || baselinePush > 0,
+    separationPx
+  };
+}
+
+function findTrainingDummy(room: Room) {
+  return [...room.players.values()].find((player) => player.isTrainingDummy) ?? null;
+}
+
+function applyPickupLock(player: PlayerState, pickupCooldownMs: number) {
+  const cooldownSec = Math.max(0, pickupCooldownMs) / 1000;
+  if (cooldownSec <= 0) return;
+  player.puckPickupLockTimerSec = Math.max(player.puckPickupLockTimerSec ?? 0, cooldownSec);
+}
+
+function assignPuckOwner(room: Room, owner: PlayerState | null) {
   for (const player of room.players.values()) {
-    player.stickTimer = Math.max(0, player.stickTimer - dt);
-    player.oneTimerGraceMsRemaining = Math.max(0, (player.oneTimerGraceMsRemaining ?? 0) - dt * 1000);
-    const hasPuck = room.puck.state === 'HELD' && room.puck.ownerId === player.id;
-    const justPressedPoke = !!player.lastInputState.poke && !player.prevPoke;
-    if (!hasPuck && justPressedPoke && player.stickState !== 'poke' && player.stickTimer <= 0) {
-      player.stickState = 'poke';
-      player.stickTimer = SEMI_PHYSICAL_STICK_CONFIG.pokeDurationSec;
-    }
+    player.hasPuck = owner ? player.id === owner.id : false;
   }
-
-  if (room.puck.state === 'HELD' && room.puck.ownerId) {
-    const owner = room.players.get(room.puck.ownerId);
-    if (!owner) {
-      room.puck.state = 'FREE';
-      room.puck.ownerId = null;
-    } else {
-      const shooting = !!owner.lastInputState.shoot;
-      const passing = !!owner.lastInputState.pass;
-      const dropping = !!owner.lastInputState.drop;
-      const justPressedShoot = shooting && !owner.prevShoot;
-      const justReleasedShoot = !shooting && owner.prevShoot;
-      const justPressedPass = passing && !owner.prevPass;
-      const justPressedDrop = dropping && !owner.prevDrop;
-
-      if (justPressedShoot) owner.shotCharge = 0;
-      if (shooting) owner.shotCharge = clamp(owner.shotCharge + shotChargeRate * dt, 0, 1);
-
-      if (justPressedDrop) {
-        const dropPose = stickPose(room, owner, shooting ? 'charge' : 'control');
-        dropPuckAtBlade(room, owner, dropPose, Math.max(100, pickupCooldownMs * 0.7));
-        owner.stickState = 'release';
-        owner.stickTimer = SEMI_PHYSICAL_STICK_CONFIG.releaseDurationSec;
-        owner.shotCharge = 0;
-        owner.oneTimerGraceMsRemaining = 0;
-      } else if (justPressedPass) {
-        owner.stickState = 'pass';
-        owner.stickTimer = SEMI_PHYSICAL_STICK_CONFIG.passDurationSec;
-        const passPose = stickPose(room, owner, 'pass');
-        releasePuck(room, owner, passPose, passImpulse, Math.max(80, pickupCooldownMs * 0.8));
-        owner.shotCharge = 0;
-        owner.oneTimerGraceMsRemaining = 0;
-      } else {
-        owner.stickState = shooting
-          ? 'charge'
-          : Math.abs(owner.angularVelocity) > SEMI_PHYSICAL_STICK_CONFIG.turningPenaltyAngularSpeed
-            ? 'turning'
-            : 'control';
-        const targetPose = stickPose(room, owner);
-        const stability = targetPose.controlStability;
-        const springK = holdSpringK * clamp(0.72 + stability * 0.28, 0.72, 1);
-        const dampingC = holdDampingC * clamp(0.78 + stability * 0.22, 0.78, 1);
-        const dx = targetPose.bladeCenterX - room.puck.x;
-        const dy = targetPose.bladeCenterY - room.puck.y;
-        const fx = dx * springK - room.puck.vx * dampingC;
-        const fy = dy * springK - room.puck.vy * dampingC;
-        room.puck.vx += fx * dt;
-        room.puck.vy += fy * dt;
-        room.puck.x += room.puck.vx * dt;
-        room.puck.y += room.puck.vy * dt;
-
-        const err = Math.hypot(dx, dy);
-        if (err > holdMaxError * clamp(1.15 + (1 - stability) * 0.35, 1.15, 1.5)) {
-          room.puck.state = 'FREE';
-          room.puck.ownerId = null;
-          room.puck.pickupCooldownMs = Math.max(room.puck.pickupCooldownMs, 80);
-          owner.shotCharge = 0;
-          owner.oneTimerGraceMsRemaining = 0;
-        } else if (!tryResolveHeldPoke(room, owner, pokeImpulse, puckRadius) && justReleasedShoot) {
-          const canUseOneTimerGrace = owner.oneTimerGraceMsRemaining > 0;
-          if (owner.shotCharge * 1000 >= shotMinHoldMs || canUseOneTimerGrace) {
-            const shotPose = stickPose(room, owner, 'charge');
-            const impulse = clamp(shotBaseImpulse + owner.shotCharge * shotChargeMult, 0, shotMaxImpulse);
-            releasePuck(room, owner, shotPose, impulse, pickupCooldownMs);
-            owner.stickState = 'release';
-            owner.stickTimer = SEMI_PHYSICAL_STICK_CONFIG.releaseDurationSec;
-          }
-          owner.shotCharge = 0;
-          owner.oneTimerGraceMsRemaining = 0;
-        }
-      }
-    }
+  room.puck.ownerId = owner?.id ?? null;
+  if (owner) {
+    room.puck.kind = 'owned';
+    room.puck.shot = null;
+    room.puck.possessionId += 1;
+    room.puck.releaseOwnerId = null;
+  } else if (room.puck.kind === 'owned') {
+    room.puck.kind = 'loose';
   }
+}
 
-  if (room.puck.state === 'FREE') {
-    tryResolveFreePoke(room, pokeImpulse, puckRadius);
-
-    if (room.puck.pickupCooldownMs <= 0 && assistRadius > 0 && magnetStrength > 0) {
-      let bestTarget: Vec2 | null = null;
-      let bestDist = Infinity;
-      for (const player of room.players.values()) {
-        if (player.stickState === 'poke') continue;
-        const pose = stickPose(room, player);
-        const bladeDist = Math.hypot(room.puck.x - pose.bladeCenterX, room.puck.y - pose.bladeCenterY);
-        const assistDist = Math.hypot(room.puck.x - pose.assistX, room.puck.y - pose.assistY);
-        if (bladeDist < Math.min(pickupRadius, pose.bladeZoneRadius) && bladeDist < bestDist) {
-          bestDist = bladeDist;
-          bestTarget = { x: pose.bladeCenterX, y: pose.bladeCenterY };
-        } else if (assistDist < assistRadius && assistDist < bestDist) {
-          bestDist = assistDist;
-          bestTarget = { x: pose.assistX, y: pose.assistY };
-        }
-      }
-      if (bestTarget) {
-        const dx = bestTarget.x - room.puck.x;
-        const dy = bestTarget.y - room.puck.y;
-        const dist = Math.max(0.0001, Math.hypot(dx, dy));
-        const falloff = 1 - clamp(dist / assistRadius, 0, 1);
-        const force = Math.min(magnetMaxForce, magnetStrength * falloff);
-        room.puck.vx += (dx / dist) * force * dt;
-        room.puck.vy += (dy / dist) * force * dt;
-      }
+function enforceSinglePuckOwner(room: Room) {
+  const owner = room.puck.ownerId ? room.players.get(room.puck.ownerId) ?? null : null;
+  if (!owner) {
+    for (const player of room.players.values()) {
+      player.hasPuck = false;
     }
-
-    const damp = Math.exp(-linearDamping * dt);
-    room.puck.vx *= damp;
-    room.puck.vy *= damp;
-    room.puck.vx *= 1 - clamp(surfaceDrag, 0, 0.95) * dt * 60;
-    room.puck.vy *= 1 - clamp(surfaceDrag, 0, 0.95) * dt * 60;
-
-    const speed = Math.hypot(room.puck.vx, room.puck.vy);
-    if (speed > maxSpeed) {
-      const k = maxSpeed / Math.max(1, speed);
-      room.puck.vx *= k;
-      room.puck.vy *= k;
-    }
-
-    room.puck.x += room.puck.vx * dt;
-    room.puck.y += room.puck.vy * dt;
-
-    if (room.puck.x < DEFAULT_RINK_BOUNDS.left) {
-      room.puck.x = DEFAULT_RINK_BOUNDS.left;
-      room.puck.vx = Math.abs(room.puck.vx) * restitution;
-    } else if (room.puck.x > DEFAULT_RINK_BOUNDS.right) {
-      room.puck.x = DEFAULT_RINK_BOUNDS.right;
-      room.puck.vx = -Math.abs(room.puck.vx) * restitution;
-    }
-    if (room.puck.y < DEFAULT_RINK_BOUNDS.top) {
-      room.puck.y = DEFAULT_RINK_BOUNDS.top;
-      room.puck.vy = Math.abs(room.puck.vy) * restitution;
-    } else if (room.puck.y > DEFAULT_RINK_BOUNDS.bottom) {
-      room.puck.y = DEFAULT_RINK_BOUNDS.bottom;
-      room.puck.vy = -Math.abs(room.puck.vy) * restitution;
-    }
-
-    if (room.puck.pickupCooldownMs <= 0) {
-      const bestCandidate = (() => {
-        let best: PickupCandidate | null = null;
-        for (const player of room.players.values()) {
-          if (player.stickState === 'poke') continue;
-          const relativeSpeed = Math.hypot(room.puck.vx - (player.vx ?? 0), room.puck.vy - (player.vy ?? 0));
-          const canCapture = speed <= pickupMaxSpeed && relativeSpeed <= pickupMaxRelativeSpeed;
-          if (!canCapture) continue;
-          const pose = stickPose(room, player);
-          const candidate = evaluateCaptureCandidate(room.puck.x, room.puck.y, pose, pickupRadius, assistRadius, puckRadius);
-          if (!candidate) continue;
-          if (
-            !best ||
-            candidate.priority < best.priority ||
-            (candidate.priority === best.priority && candidate.distance < best.distance)
-          ) {
-            best = {
-              playerId: player.id,
-              priority: candidate.priority,
-              distance: candidate.distance,
-              target: candidate.target,
-              pose
-            };
-          }
-        }
-        return best;
-      })();
-
-      if (bestCandidate) {
-        room.puck.state = 'HELD';
-        room.puck.ownerId = bestCandidate.playerId;
-        room.puck.x = bestCandidate.pose.bladeCenterX;
-        room.puck.y = bestCandidate.pose.bladeCenterY;
-        room.puck.vx = 0;
-        room.puck.vy = 0;
-        const owner = room.players.get(bestCandidate.playerId);
-        if (owner) {
-          owner.shotCharge = 0;
-          owner.oneTimerGraceMsRemaining = owner.lastInputState.shoot ? oneTimerGraceMs : 0;
-          owner.prevShoot = !!owner.lastInputState.shoot;
-          owner.prevPass = !!owner.lastInputState.pass;
-          owner.prevDrop = !!owner.lastInputState.drop;
-          owner.stickState = 'control';
-          owner.stickTimer = 0;
-        }
-      }
-    }
+    room.puck.ownerId = null;
+    return;
   }
 
   for (const player of room.players.values()) {
-    const hasPuck = room.puck.state === 'HELD' && room.puck.ownerId === player.id;
-    if (!hasPuck) {
-      if (player.stickState === 'poke' && player.stickTimer <= 0) {
-        player.stickState = 'release';
-        player.stickTimer = SEMI_PHYSICAL_STICK_CONFIG.pokeRecoverySec;
-      } else if (player.stickState === 'pass' && player.stickTimer <= 0) {
-        player.stickState = 'release';
-        player.stickTimer = SEMI_PHYSICAL_STICK_CONFIG.releaseDurationSec;
-      } else if (player.stickState === 'release' && player.stickTimer <= 0) {
-        player.stickState = 'neutral';
-      } else if (player.stickState !== 'poke' && player.stickState !== 'pass' && player.stickState !== 'release') {
-        player.stickState = 'neutral';
-      }
-      if (player.stickState !== 'charge') {
-        player.shotCharge = 0;
-      }
-      player.oneTimerGraceMsRemaining = 0;
-    }
-
-    player.prevShoot = !!player.lastInputState.shoot;
-    player.prevPass = !!player.lastInputState.pass;
-    player.prevDrop = !!player.lastInputState.drop;
-    player.prevPoke = !!player.lastInputState.poke;
+    player.hasPuck = player.id === owner.id;
   }
+}
+
+function markPuckRelease(room: Room, ownerId: string | null, kind: 'shot' | 'strip' | 'reset') {
+  room.puck.releaseSerial += 1;
+  room.puck.releaseOwnerId = ownerId;
+  room.puck.releaseKind = kind;
+}
+
+function integratePassiveBodyMotion(player: PlayerState, dt: number) {
+  player.x += player.vx * dt;
+  player.y += player.vy * dt;
+}
+
+function applyPassiveBodyDamping(player: PlayerState, dt: number) {
+  const damping = Math.exp(-4.75 * Math.max(0, dt));
+  player.vx *= damping;
+  player.vy *= damping;
+  let zeroed = false;
+  if (Math.hypot(player.vx, player.vy) <= 1.2) {
+    player.vx = 0;
+    player.vy = 0;
+    zeroed = true;
+  }
+  if (player.bodyCollisionDebug) {
+    player.bodyCollisionDebug.postDampingVx = player.vx;
+    player.bodyCollisionDebug.postDampingVy = player.vy;
+    player.bodyCollisionDebug.zeroed = zeroed;
+  }
+}
+
+function resolvePlayerBodyCollisions(room: Room) {
+  const players = [...room.players.values()];
+  if (players.length < 2) return;
+
+  const minDistance = room.playerRadius * 2;
+  for (let pass = 0; pass < 2; pass += 1) {
+    for (let i = 0; i < players.length; i += 1) {
+      const a = players[i];
+      for (let j = i + 1; j < players.length; j += 1) {
+        const b = players[j];
+        resolveBodyPairCollision(a, b, minDistance);
+      }
+    }
+  }
+}
+
+function resolveBodyPairCollision(a: PlayerState, b: PlayerState, minDistance: number) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const distance = Math.hypot(dx, dy);
+  if (distance >= minDistance) return;
+
+  const normal = distance > 0.0001
+    ? { x: dx / distance, y: dy / distance }
+    : { x: 1, y: 0 };
+  const overlap = minDistance - distance;
+  const relativeNormalSpeed = (b.vx - a.vx) * normal.x + (b.vy - a.vy) * normal.y;
+  const impactSpeed = Math.max(0, -relativeNormalSpeed);
+  const clearance = Math.min(3.2, 0.8 + impactSpeed * 0.02);
+  const solveDistance = minDistance + clearance;
+  const solvePush = Math.max(0, solveDistance - distance);
+  const preA = { vx: a.vx, vy: a.vy };
+  const preB = { vx: b.vx, vy: b.vy };
+
+  const aWeight = 0.5;
+  const bWeight = 0.5;
+
+  a.x -= normal.x * solvePush * aWeight;
+  a.y -= normal.y * solvePush * aWeight;
+  b.x += normal.x * solvePush * bWeight;
+  b.y += normal.y * solvePush * bWeight;
+
+  const responseA = applyCollisionResponse(a, normal.x, normal.y, -1, overlap, impactSpeed);
+  const responseB = applyCollisionResponse(b, normal.x, normal.y, 1, overlap, impactSpeed);
+  recordBodyCollisionDebug(a, b, preA, preB, responseA);
+  recordBodyCollisionDebug(b, a, preB, preA, responseB);
+
+  const staggerSec = Math.min(0.16, 0.05 + impactSpeed / 420);
+  if (staggerSec > 0.051) {
+    a.bodyCollisionStaggerTimerSec = Math.max(a.bodyCollisionStaggerTimerSec, staggerSec);
+    b.bodyCollisionStaggerTimerSec = Math.max(b.bodyCollisionStaggerTimerSec, staggerSec);
+  }
+}
+
+function applyCollisionResponse(
+  player: PlayerState,
+  nx: number,
+  ny: number,
+  outwardSign: 1 | -1,
+  overlap: number,
+  impactSpeed: number
+) {
+  const normalSpeed = player.vx * nx + player.vy * ny;
+  const inward = Math.max(0, -normalSpeed * outwardSign);
+  if (inward > 0) {
+    player.vx += nx * inward * outwardSign;
+    player.vy += ny * inward * outwardSign;
+  }
+
+  const tangentX = -ny;
+  const tangentY = nx;
+  const tangentSpeed = player.vx * tangentX + player.vy * tangentY;
+  player.vx -= tangentX * tangentSpeed * 0.04;
+  player.vy -= tangentY * tangentSpeed * 0.04;
+
+  const reboundFloor = Math.min(6, overlap * 1.1);
+  const reboundFromImpact = impactSpeed * 0.32;
+  const reboundSpeed = Math.min(36, reboundFloor + reboundFromImpact);
+  player.vx += nx * reboundSpeed * outwardSign;
+  player.vy += ny * reboundSpeed * outwardSign;
+
+  return {
+    removedInward: inward,
+    reboundSpeed
+  };
+}
+
+function recordBodyCollisionDebug(
+  player: PlayerState,
+  other: PlayerState,
+  pre: { vx: number; vy: number },
+  otherPre: { vx: number; vy: number },
+  selfResponse: { removedInward: number; reboundSpeed: number }
+) {
+  player.bodyCollisionDebug = {
+    timerSec: 0.18,
+    otherId: other.id,
+    otherIsDummy: !!other.isTrainingDummy,
+    preVx: pre.vx,
+    preVy: pre.vy,
+    otherPreVx: otherPre.vx,
+    otherPreVy: otherPre.vy,
+    removedInward: selfResponse.removedInward,
+    reboundSpeed: selfResponse.reboundSpeed,
+    postVx: player.vx,
+    postVy: player.vy,
+    otherPostVx: other.vx,
+    otherPostVy: other.vy,
+    postDampingVx: player.vx,
+    postDampingVy: player.vy,
+    otherPostDampingVx: other.vx,
+    otherPostDampingVy: other.vy,
+    zeroed: false,
+    otherZeroed: false
+  };
+  if (other.bodyCollisionDebug) {
+    other.bodyCollisionDebug.otherPostDampingVx = player.vx;
+    other.bodyCollisionDebug.otherPostDampingVy = player.vy;
+    other.bodyCollisionDebug.otherZeroed = false;
+  }
+  if (!player.isTrainingDummy) {
+    player.bodyCollisionDebug.zeroed = false;
+  }
+  if (!other.isTrainingDummy) {
+    player.bodyCollisionDebug.otherZeroed = false;
+  }
+}
+
+function pointToSegmentDistance(px: number, py: number, ax: number, ay: number, bx: number, by: number) {
+  const closest = closestPointOnSegment(px, py, ax, ay, bx, by);
+  return Math.hypot(px - closest.x, py - closest.y);
+}
+
+function closestPointOnSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number) {
+  const abx = bx - ax;
+  const aby = by - ay;
+  const abLenSq = abx * abx + aby * aby;
+  if (abLenSq <= 0.0001) return { x: ax, y: ay };
+  const t = Math.max(0, Math.min(1, ((px - ax) * abx + (py - ay) * aby) / abLenSq));
+  return {
+    x: ax + abx * t,
+    y: ay + aby * t
+  };
+}
+
+function lerp(a: number, b: number, t: number) {
+  return a + (b - a) * t;
+}
+
+function smoothstep01(value: number) {
+  const t = Math.max(0, Math.min(1, value));
+  return t * t * (3 - 2 * t);
+}
+
+function normalizeAngle(angle: number) {
+  let value = angle;
+  while (value <= -Math.PI) value += Math.PI * 2;
+  while (value > Math.PI) value -= Math.PI * 2;
+  return value;
 }

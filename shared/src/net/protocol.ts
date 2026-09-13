@@ -1,14 +1,13 @@
-export const NET_PROTOCOL_VERSION = 6;
+export const NET_PROTOCOL_VERSION = 7;
 
 export const SERVER_FEATURES = [
-  'player-state-v5',
-  'locomotion-v3',
-  'puck-state-v1'
+  'player-state-v6',
+  'locomotion-v4'
 ] as const;
 
 export const REQUIRED_SERVER_FEATURES = [
-  'player-state-v5',
-  'locomotion-v3'
+  'player-state-v6',
+  'locomotion-v4'
 ] as const;
 
 export type ServerFeature = (typeof SERVER_FEATURES)[number];

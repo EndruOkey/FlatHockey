@@ -1,0 +1,30 @@
+You are a FlatHockey code auditor. Your task: do a COMPLETE audit of puck holding (stick grip), puck pickup, and puck physics/behavior.
+
+Project path: /mnt/c/Games/flathockey-move-rework
+
+Read and analyze these files thoroughly:
+- shared/src/sim/puckPossession.ts
+- shared/src/sim/puckPickup.ts
+- shared/src/sim/puckInertia.ts
+- shared/src/stick/canonicalStickRig.ts
+- shared/src/sim/playerMovement.ts (possession-related sections)
+- server/src/game/roomSystems.ts (puck-related sections)
+- server/src/game/room.ts (puck state)
+- server/src/game/room.types.ts
+- shared/src/net/messages.ts (PuckStateMsg)
+- client/src/game/scenes/PondSceneNetOps.ts (puck render)
+- client/src/game/scenes/PondSceneUpdateLoop.ts (puck update)
+- client/src/game/scenes/PondSceneRenderOps.ts (puck draw)
+
+For EACH area, report:
+1. How puck possession states work (FREE/HELD/PROTECTED_OWNED/OWNED)
+2. Pickup gate logic (angles, radii, conditions)
+3. Hard-attach mechanics (how puck sticks to blade)
+4. Puck release mechanics (shot, pass, force-break, drop)
+5. Velocity inheritance on release
+6. Spin mechanics
+7. One-timer system
+8. Instability meter
+9. Any bugs, inconsistencies, or TODOs found in the code
+
+Output a structured markdown report. Be thorough and include actual code references (file:line).

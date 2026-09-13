@@ -31,6 +31,7 @@ type ClientInputV2 = {
   moveX?: -1 | 0 | 1;
   moveY?: -1 | 0 | 1;
   aimAngle?: number;
+  aimDistance?: number;
   shoot?: boolean;
   pass?: boolean;
   drop?: boolean;
@@ -108,7 +109,7 @@ const DEFAULT_CONFIG: V2Config = {
   protocolVersion: NET_PROTOCOL_VERSION,
   runtimeEnv: sanitizeRuntimeEnvironment(process.env.RUNTIME_ENV),
   serverBuild: process.env.BUILD_VERSION ?? process.env.GITHUB_SHA ?? 'unknown',
-  features: ['player-state-v5', 'locomotion-v3', 'puck-state-v1']
+  features: ['player-state-v6', 'locomotion-v4']
 };
 
 let nextClientId = 1;
@@ -129,6 +130,14 @@ function isObject(v: unknown): v is Record<string, unknown> {
 
 function bool(v: unknown): boolean {
   return v === true;
+}
+
+/** Accept boolean OR numeric 0/1 for action input flags. Falls back to a key-based default. */
+function boolInput(v: unknown, fallback: boolean): boolean {
+  if (typeof v === 'boolean') return v;
+  if (v === 1) return true;
+  if (v === 0) return false;
+  return fallback;
 }
 
 function keyAxis(negative: boolean, positive: boolean): -1 | 0 | 1 {
@@ -194,17 +203,22 @@ function parseV2Message(obj: JsonRecord): ClientMessageV2 | null {
         : typeof pointer?.aim === 'number' && Number.isFinite(pointer.aim)
           ? pointer.aim
           : undefined;
-    const shoot = typeof obj.shoot === 'boolean' ? obj.shoot : bool(keys?.e);
-    const pass = typeof obj.pass === 'boolean' ? obj.pass : bool(keys?.mouse0);
-    const drop = typeof obj.drop === 'boolean' ? obj.drop : bool(keys?.mouse1);
-    const poke = typeof obj.poke === 'boolean' ? obj.poke : bool(keys?.mouse2);
-    const stop = typeof obj.stop === 'boolean' ? obj.stop : bool(keys?.space);
+    const aimDistance =
+      typeof obj.aimDistance === 'number' && Number.isFinite(obj.aimDistance) && obj.aimDistance >= 0
+        ? obj.aimDistance
+        : undefined;
+    const shoot = boolInput(obj.shoot, bool(keys?.e));
+    const pass = boolInput(obj.pass, bool(keys?.mouse0));
+    const drop = boolInput(obj.drop, bool(keys?.mouse1));
+    const poke = boolInput(obj.poke, bool(keys?.mouse2));
+    const stop = boolInput(obj.stop, bool(keys?.space));
     return {
       type,
       seq: Math.max(0, Math.floor(obj.seq)),
       moveX,
       moveY,
       aimAngle,
+      aimDistance,
       shoot,
       pass,
       drop,
@@ -234,11 +248,9 @@ function toInputMsg(clientId: string, msg: ClientInputV2, fallbackAim: number): 
     seq: msg.seq,
     moveX: msg.moveX ?? 0,
     moveY: msg.moveY ?? 0,
-    shoot: msg.shoot ? 1 : 0,
-    pass: msg.pass ? 1 : 0,
-    drop: msg.drop ? 1 : 0,
-    poke: msg.poke ? 1 : 0,
     aimAngle: typeof msg.aimAngle === 'number' ? msg.aimAngle : fallbackAim,
+    shoot: msg.shoot ? 1 : 0,
+    drop: msg.drop ? 1 : 0,
     stop: msg.stop ? 1 : 0
   };
 }

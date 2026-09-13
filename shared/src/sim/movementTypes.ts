@@ -1,6 +1,7 @@
 export type MovementAxis = -1 | 0 | 1;
 export type MovementButton = 0 | 1;
 export type LocomotionState = 'idle' | 'skating' | 'gliding' | 'stopping';
+export type HockeyStopSide = -1 | 0 | 1;
 
 export type PlayerMovementInput = {
   moveX?: number;
@@ -23,6 +24,13 @@ export type PlayerMovementState = {
   aimAngle: number;
   desiredHeading: number;
   locomotionState: LocomotionState;
+  stopTimerSec?: number;
+  stopRecoveryTimerSec?: number;
+  stopCooldownSec?: number;
+  stopBlend: number;
+  stopSide: HockeyStopSide;
+  stopTravelHeading?: number;
+  prevStopInput?: number;
 };
 
 export type RinkBounds = {
@@ -38,6 +46,11 @@ export type ResolvedPlayerMovementConfig = {
   acceleration: number;
   passiveDeceleration: number;
   stopDeceleration: number;
+  stopMinSpeed: number;
+  stopEntryAngleThreshold: number;
+  stopDuration: number;
+  stopRecoveryDuration: number;
+  stopLateralSlideFactor: number;
   traction: number;
   rotationSpeed: number;
   lowSpeedRotationSpeed: number;
@@ -59,6 +72,8 @@ export type PlayerMovementStepResult = {
   travelHeading: number;
   locomotionState: LocomotionState;
   stopActive: boolean;
+  stopBlend: number;
+  stopSide: HockeyStopSide;
 };
 
 export type PlayerMovementDebugState = {
@@ -70,4 +85,6 @@ export type PlayerMovementDebugState = {
   travelHeading: number;
   locomotionState: LocomotionState;
   stopActive: boolean;
+  stopBlend: number;
+  stopSide: HockeyStopSide;
 };
