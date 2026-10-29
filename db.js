@@ -4,7 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const db = new Database(path.join(__dirname, 'flathockey.db'));
+const db = new Database(process.env.DB_PATH || path.join(__dirname, 'flathockey.db'));
 
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
@@ -314,6 +314,30 @@ export function buyItem(user_id, item_id) {
   }
 
   return { ok: true, new_balance: credits - item.price };
+}
+
+// ── Anonymní metrika (bez IP, bez cookies): pid = náhodné id z localStorage ──
+db.exec(`
+  CREATE TABLE IF NOT EXISTS metric_events (
+    id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts     INTEGER NOT NULL,          -- epoch sekundy
+    day    TEXT    NOT NULL,          -- 'YYYY-MM-DD' UTC
+    pid    TEXT    NOT NULL,
+    type   TEXT    NOT NULL,          -- visit | match_start | match_end | source
+    detail TEXT                       -- source: host / ref
+  );
+  CREATE INDEX IF NOT EXISTS idx_metric_type_day ON metric_events (type, day);
+  CREATE INDEX IF NOT EXISTS idx_metric_pid ON metric_events (pid, type);
+`);
+const stmtMetric = db.prepare('INSERT INTO metric_events (ts, day, pid, type, detail) VALUES (?, ?, ?, ?, ?)');
+const stmtVisitToday = db.prepare("SELECT 1 FROM metric_events WHERE type = 'visit' AND pid = ? AND day = ?");
+export function logMetric(pid, type, detail = null) {
+  if (typeof pid !== 'string' || pid.length > 64 || !/^[A-Za-z0-9_-]+$/.test(pid)) return;
+  const ts = Math.floor(Date.now() / 1000);
+  const day = new Date(ts * 1000).toISOString().slice(0, 10);
+  if (type === 'visit' && stmtVisitToday.get(pid, day)) return;
+  if (detail != null) detail = String(detail).replace(/[^\w.\-]/g, '').slice(0, 40) || null;
+  stmtMetric.run(ts, day, pid, type, detail);
 }
 
 export function getActiveSeason() {

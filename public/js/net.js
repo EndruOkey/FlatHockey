@@ -10,7 +10,12 @@ export class Net {
       localStorage.setItem('fh_recon_token', rt);
     }
 
-    this.socket = window.io({ auth: { rt } });
+    // Zdroj návštěvy (anonymní metrika): ?ref= nebo host z document.referrer
+    let ref = '';
+    try {
+      ref = new URLSearchParams(location.search).get('ref') || new URL(document.referrer).hostname || '';
+    } catch {}
+    this.socket = window.io({ auth: { rt, ref: ref.slice(0, 40) } });
     this.id = this.socket.id || null;
     this._connected = false;
 

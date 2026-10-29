@@ -4,6 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FlatHockey</title>
+  <script>
+    // Vloženo v iframe (itch.io / CrazyGames) → cookie přihlášení nefunguje, Discord login skryjeme
+    try { if (window.self !== window.top) document.documentElement.classList.add('embedded'); }
+    catch { document.documentElement.classList.add('embedded'); }
+  </script>
+  <style>
+    html.embedded #discord-login-btn, html.embedded #splash-discord-btn,
+    html.embedded #profile-discord-btn, html.embedded .splash-or { display: none !important; }
+  </style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,700;0,900;1,700;1,900&family=JetBrains+Mono:wght@400;500;700;800&family=Anybody:ital,wght@0,400;0,700;0,800;1,400;1,700;1,800;1,900&family=Hanken+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">

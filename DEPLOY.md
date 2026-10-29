@@ -1,14 +1,22 @@
 # Nasazení na Oracle Cloud VPS
 
-FlatHockey je Node.js server (Express servíruje `public/` + socket.io dělá WebRTC
-signaling). Hra běží P2P mezi prohlížeči; server jen spojí dva hráče do místnosti.
+FlatHockey je Node.js server (Express servíruje `public/` + socket.io). Server je
+autoritativní: simuluje zápas 60× za s a posílá stav hráčům (P2P/WebRTC verze byla
+v červnu 2026 opuštěna kvůli rozjíždění puku mezi hráči). Prázdná místa v týmu
+doplní bot (`bot.js`).
+
+Produkce běží z větve `gameplay-movement-rework` (ne z `main`).
+
+Užitečné příkazy:
+- `npm run test:bot` — smoke test botů (spustí server na portu 3998)
+- `npm run metrics` — anonymní metrika: hráči, zápasy, návrat D1/D7, zdroje (`?ref=`)
+- `release/itch`, `release/crazygames` — obal pro herní portály (iframe na flathockey.fun)
 
 ## Co potřebuješ
 - Oracle Cloud VM (Ubuntu) s veřejnou IP a SSH přístupem.
 - Otevřený port v **OBOU** firewallech (viz krok 3 — to je nejčastější chyba).
-- (Doporučeno) doménu pro HTTPS. WebRTC v prohlížečích spolehlivě jede jen v
-  „secure contextu" (HTTPS). Přes čisté `http://IP:3000` to může fungovat pro
-  testování, ale kamarádům to nemusí navázat spojení.
+- Doménu pro HTTPS (nutné: přihlašovací cookie má `secure`, a herní portály
+  vkládají hru jen přes HTTPS).
 
 ---
 

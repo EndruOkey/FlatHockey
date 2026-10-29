@@ -1,0 +1,27 @@
+diff --git a/public/js/entities/Goalie.js b/public/js/entities/Goalie.js
+index f94a81f..179c38d 100644
+--- a/public/js/entities/Goalie.js
++++ b/public/js/entities/Goalie.js
+@@ -191,7 +191,10 @@ export class Goalie {
+     const errAmp     = errAmpBase * (0.08 + 0.92 * errZone);
+     const errRaw     = Math.sin(this._errPhase * 0.88) * errAmp
+                      + Math.cos(this._errPhase * 1.47) * errAmp * 0.52;
+-    this._errY = ((this._errY ?? 0) + (errRaw - (this._errY ?? 0)) * Math.min(1, 0.9 * dt));
++    // Zrcadlová symetrie: chyba se násobí znaménkem strany puku (hladce přes ±10 px od osy),
++    // jinak by sin/cos šum měl stejné znaménko nad i pod osou → ~1–3 px posun jedním směrem.
++    const errSide = clamp(dyN / 10, -1, 1);
++    this._errY = ((this._errY ?? 0) + (errRaw * errSide - (this._errY ?? 0)) * Math.min(1, 0.9 * dt));
+     targetY    = clamp(targetY + this._errY, RINK.goalY + margin * 0.35, RINK.goalY + RINK.goalH - margin * 0.35);
+ 
+     // ── Wraparound: hráč s pukem za brankou ─────────────────────────────
+@@ -484,7 +487,9 @@ export class Goalie {
+       const dropping    = puck.z > 5 && puck.vz < -20;
+       // Horní růžek: musí být SKUTEČNĚ těsně pod břevno — padáček středního oblouku nestačí
+       const chBase      = this.difficulty === 'competitive' ? 0.72 : 0.78; // frakce (glove+cross)
+-      const cornerHigh  = puck.z > (PUCK.gloveHeight + PUCK.crossbarHeight) * chBase;
++      // Práh relativně k dosažitelnému vrcholu střely (maxShotVz²/2g ≈ 14.6 px), ne k výšce břevna (21 px, nedosažitelné).
++      const PEAK_Z      = PUCK.maxShotVz ** 2 / (2 * PUCK.gravity);
++      const cornerHigh  = puck.z > PEAK_Z * chBase;
+       // Corner window = horní TOP_EDGE px z aktuálního reachY (závisí na rychlosti/formě)
+       const cornerEdge  = reachY - TOP_EDGE - (dropping ? 2.0 : 0);
+       if (cornerHigh && absY > cornerEdge) return false;

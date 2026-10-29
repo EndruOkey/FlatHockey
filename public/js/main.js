@@ -894,7 +894,8 @@ async function _loadStats() {
     footerRank.textContent             = pos ? `#${pos}` : '#—';
     $('vm-footer-games').textContent   = gp;
     $('vm-footer-credits').textContent = `⊙ ${cred}`;
-    $('vm-wr-val').textContent         = wr;
+    const wrVal = $('vm-wr-val');   // win rate zmizel z patičky při redesignu
+    if (wrVal) wrVal.textContent = wr;
   }
 
   // Stats screen (v-stats)
@@ -907,7 +908,8 @@ async function _loadStats() {
     $('vs-losses').textContent   = stats?.losses  ?? 0;
     $('vs-goals').textContent    = stats?.goals   ?? 0;
     $('vs-assists').textContent  = stats?.assists  ?? 0;
-    $('vs-plusminus').textContent = stats?.plus_minus ?? 0;
+    const vsPm = $('vs-plusminus');   // +/- zatím na stats obrazovce není
+    if (vsPm) vsPm.textContent = stats?.plus_minus ?? 0;
     $('vs-credits').textContent  = `⊙ ${cred}`;
     $('vs-saves').textContent    = stats?.saves   ?? 0;
     $('vs-winrate').textContent  = wr;

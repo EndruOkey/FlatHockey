@@ -15,8 +15,8 @@ import cookieParser from 'cookie-parser';
 import { Server } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import authRouter, { verifySession } from './auth.js';
-import { updateStats, updateRankAndCredits, getRankPosition, getLeaderboard, getStoreItems, getUserUnlocks, buyItem, getPuckCredits, getActiveSeason } from './db.js';
+import authRouter, { verifySession, requireAuth } from './auth.js';
+import { updateStats, updateRankAndCredits, getRankPosition, getLeaderboard, getStoreItems, getUserUnlocks, buyItem, getPuckCredits, getActiveSeason, logMetric } from './db.js';
 
 import { World } from './public/js/world.js';
 import { Player } from './public/js/entities/Player.js';
@@ -25,6 +25,7 @@ import { Goalie } from './public/js/entities/Goalie.js';
 import { Rink } from './public/js/entities/Rink.js';
 import { RINK, PUCK } from './public/js/constants.js';
 import { lerpAngle, clamp } from './public/js/utils.js';
+import { botThink, makeBotBrain, hashSeed } from './bot.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -44,7 +45,8 @@ app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders: (res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-Frame-Options', 'DENY');
+    // Vložení jen z vlastního webu a herních portálů (itch.io hostuje HTML hry na itch.zone)
+    res.setHeader('Content-Security-Policy', "frame-ancestors 'self' https://*.itch.io https://*.itch.zone https://*.crazygames.com");
     res.setHeader('Referrer-Policy', 'no-referrer');
   },
 }));
@@ -330,10 +332,16 @@ function createMatch(lobbyId) {
     io.to(match.room).emit('goal', { text: result === 'goal-away' ? 'GOAL! 🔴' : 'GOAL! 🔵' });
     match._goalAt = Date.now();
   };
+  // Pevný krok s doháněním: setInterval je nepřesný (Windows volá ~37×/s místo 60 — změřeno) →
+  // dorovnej podle skutečně uplynulého času, ať hra běží 60 ticků/s všude. Strop 250 ms = po zaseknutí nedohání donekonečna.
+  const STEP_MS = 1000 / TICK_HZ;
+  let last = performance.now(), acc = 0;
   match.loop = setInterval(() => {
-    try { stepMatch(match); }
-    catch (e) { console.error('stepMatch error (lobby ' + lobbyId + '):', e); }
-  }, 1000 / TICK_HZ);
+    const now = performance.now();
+    acc += Math.min(now - last, 250); last = now;
+    try { while (acc >= STEP_MS) { stepMatch(match); acc -= STEP_MS; } }
+    catch (e) { acc = 0; console.error('stepMatch error (lobby ' + lobbyId + '):', e); }
+  }, STEP_MS);
   return match;
 }
 
@@ -349,6 +357,31 @@ function buildPlayer(lobby, sid, m) {
   p.helmet = m.helmet; p.shorts = m.shorts; p.gloves = m.gloves; p.tape = m.tape; p.trail = m.trail;
   p.stick = m.stick; p.tapeStyle = m.tapeStyle; p.helmetType = m.helmetType; p.visor = m.visor;
   return p;
+}
+
+// Boti doplní prázdná místa: menší tým dorovná na velikost většího (min. 1 hráč na tým).
+// Žijí jen v zápase (ne v lobby.members) → nepočítají se do statistik ani do kapacity lobby.
+function syncBots(lobby, match) {
+  const humans = { home: 0, away: 0 };
+  for (const m of lobby.members.values()) humans[m.team]++;
+  const target = Math.max(1, humans.home, humans.away);
+  for (const team of ['home', 'away']) {
+    const bots = [...match.players.values()].filter(p => p.isBot && p.team === team);
+    const need = target - humans[team];
+    while (bots.length > need) {
+      const b = bots.pop();
+      match.players.delete(b.id); match.inputs.delete(b.id);
+    }
+    while (bots.length < need) {
+      const id = `bot:${team}:${match._botSeq = (match._botSeq || 0) + 1}`;
+      const p = buildPlayer(lobby, id, makeMember({ name: 'BOT' }, team));
+      p.isBot = true;
+      p.brain = makeBotBrain(hashSeed(lobby.id + id));
+      match.players.set(id, p); match.inputs.set(id, p.input);
+      bots.push(p);
+    }
+  }
+  rebuildEntities(match);
 }
 
 // Sestav zápas z členů lobby (týmy + dresy z nastavení, číslo z profilu)
@@ -382,6 +415,7 @@ function startMatch(lobby) {
     match.players.set(sid, p);
     match.inputs.set(sid, p.input);
   }
+  syncBots(lobby, match);
   // Gólmani v barvě svého týmu (levá branka = home, pravá = away)
   match.goalieL.color = lobby.settings.teams.home.color;
   match.goalieR.color = lobby.settings.teams.away.color;
@@ -406,6 +440,7 @@ function startMatch(lobby) {
   faceoff(match);
   lobby.match  = match;
   lobby.state  = 'playing';
+  for (const sid of lobby.members.keys()) logMetric(io.sockets.sockets.get(sid)?.data?.reconnectToken, 'match_start');
 }
 
 function stepMatch(match) {
@@ -460,6 +495,7 @@ function stepMatch(match) {
         // Aktualizuj statistiky přihlášených hráčů
         const endLobby = lobbies.get(lobbyId);
         if (endLobby) {
+          for (const sid of endLobby.members.keys()) logMetric(io.sockets.sockets.get(sid)?.data?.reconnectToken, 'match_end');
           const winTeam = match.score.home > match.score.away ? 'home' :
                           match.score.away > match.score.home ? 'away' : null;
 
@@ -515,6 +551,7 @@ function stepMatch(match) {
   for (const [id, p] of match.players) {
     const inp = match.inputs.get(id);
     if (!inp) continue;
+    if (p.isBot) botThink(p, inp, match);
     computeEdges(inp);
     if (!match.world._goalLock) playerActions(p, inp, DT, match);
   }
@@ -658,7 +695,10 @@ function _removeFromLobby(lobbyId, socketId) {
   const l = lobbies.get(lobbyId);
   if (!l) return;
   l.members.delete(socketId);
-  if (l.match) { l.match.players.delete(socketId); l.match.inputs.delete(socketId); rebuildEntities(l.match); }
+  if (l.match) {
+    l.match.players.delete(socketId); l.match.inputs.delete(socketId);
+    if (l.members.size > 0) syncBots(l, l.match); else rebuildEntities(l.match);   // odešel člověk → doplní bot
+  }
   io.to('lobby:' + lobbyId).emit('peer-left');
   if (l.members.size === 0) {
     if (l.match) { clearInterval(l.match.loop); clearTimeout(l.match.rematchTimer); }
@@ -722,6 +762,9 @@ io.on('connection', (socket) => {
   socket.data.userId = cm ? verifySession(decodeURIComponent(cm[1])) : null;
   socket.data.reconnectToken = typeof socket.handshake.auth?.rt === 'string'
     ? socket.handshake.auth.rt.slice(0, 64) : null;
+  // Anonymní metrika: pid = reconnect token (perzistentní v localStorage)
+  { const pid = socket.data.reconnectToken, ref = socket.handshake.auth?.ref;
+    if (pid) { logMetric(pid, 'visit'); if (typeof ref === 'string' && ref) logMetric(pid, 'source', ref); } }
 
   // Reconnect: obnov hráče v lobby pokud má platný pending slot
   const rKey = socket.data.userId ? `u:${socket.data.userId}`
@@ -802,7 +845,7 @@ io.on('connection', (socket) => {
       p.y = RINK.h / 2;
       l.match.players.set(socket.id, p);
       l.match.inputs.set(socket.id, p.input);
-      rebuildEntities(l.match);
+      syncBots(l, l.match);   // přišel člověk → bot uvolní místo
       socket.emit('lobby:start', { settings: l.settings });
     } else {
       socket.emit('lobby:joined', lobbyState(l));
@@ -874,33 +917,33 @@ app.get('/api/season', (_req, res) => {
 });
 
 // ── API: Rank pozice přihlášeného hráče ──────────────────────────────────────
-app.get('/api/me/rank', verifySession, (req, res) => {
-  try { res.json(getRankPosition(req.user.id) ?? { rank_points: 1000, position: null }); }
+app.get('/api/me/rank', requireAuth, (req, res) => {
+  try { res.json(getRankPosition(req.userId) ?? { rank_points: 1000, position: null }); }
   catch { res.status(500).json({ error: 'db_error' }); }
 });
 
 // ── API: Puck Credits ─────────────────────────────────────────────────────────
-app.get('/api/me/credits', verifySession, (req, res) => {
-  try { res.json({ puck_credits: getPuckCredits(req.user.id) }); }
+app.get('/api/me/credits', requireAuth, (req, res) => {
+  try { res.json({ puck_credits: getPuckCredits(req.userId) }); }
   catch { res.status(500).json({ error: 'db_error' }); }
 });
 
 // ── API: Store items + co hráč vlastní ───────────────────────────────────────
-app.get('/api/store', verifySession, (req, res) => {
+app.get('/api/store', requireAuth, (req, res) => {
   try {
     const items = getStoreItems();
-    const owned = getUserUnlocks(req.user.id);
-    const credits = getPuckCredits(req.user.id);
+    const owned = getUserUnlocks(req.userId);
+    const credits = getPuckCredits(req.userId);
     res.json({ items, owned, puck_credits: credits });
   } catch { res.status(500).json({ error: 'db_error' }); }
 });
 
 // ── API: Nákup položky ────────────────────────────────────────────────────────
-app.post('/api/store/buy', verifySession, (req, res) => {
+app.post('/api/store/buy', requireAuth, (req, res) => {
   const item_id = parseInt(req.body?.item_id, 10);
   if (!item_id) return res.status(400).json({ error: 'missing_item_id' });
   try {
-    const result = buyItem(req.user.id, item_id);
+    const result = buyItem(req.userId, item_id);
     if (!result.ok) return res.status(400).json(result);
     res.json(result);
   } catch { res.status(500).json({ error: 'db_error' }); }
