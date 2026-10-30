@@ -2097,6 +2097,107 @@
     /* Save button — hidden in locker room (auto-save), visible in nav bar only */
     #v-profile .lk-save-btn { display: none !important; }
 
+    /* ── Feature 4: live mini-rink card (bottom-right of stage) ── */
+    .lk-minirink-card {
+      position: absolute; right: 10px; bottom: 10px; z-index: 3;
+      width: 150px; padding: 5px 5px 4px;
+      background: rgba(8,12,22,0.82); border: 1px solid rgba(182,196,255,0.18);
+      border-radius: 9px; backdrop-filter: blur(4px); pointer-events: none;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+    .lk-minirink-lbl {
+      display: block; font-family: 'JetBrains Mono', monospace; font-size: 0.44rem; font-weight: 700;
+      letter-spacing: 0.22em; color: rgba(182,196,255,0.55); text-transform: uppercase;
+      padding: 1px 2px 4px;
+    }
+    #lk-minirink { display: block; width: 100%; height: auto; border-radius: 5px; }
+
+    /* ── Features 2+3: creative studio bar ── */
+    .lk-studio {
+      display: flex; flex-direction: column; gap: 12px;
+      padding: 12px 12px 14px; margin-bottom: 10px;
+      background: rgba(182,196,255,0.045); border: 1px solid rgba(182,196,255,0.14);
+      border-top: 2px solid rgba(255,173,226,0.3); border-radius: 10px;
+    }
+    .lk-studio-top { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+    .lk-dice-btn {
+      width: auto; margin: 0;
+      display: flex; align-items: center; gap: 7px; flex-shrink: 0;
+      background: rgba(58,159,255,0.14); border: 1px solid rgba(58,159,255,0.45); color: #cfe4ff;
+      font-family: 'Barlow Condensed', system-ui; font-style: italic; font-weight: 900;
+      font-size: 0.95rem; letter-spacing: 0.04em; text-transform: uppercase;
+      padding: 9px 14px; border-radius: 7px; cursor: pointer;
+      transition: background .15s, box-shadow .15s;
+    }
+    .lk-dice-btn:hover { background: rgba(58,159,255,0.24); box-shadow: 0 0 0 1px rgba(58,159,255,0.5), 0 0 14px rgba(58,159,255,0.35); }
+    .lk-dice-btn:active { transform: translateY(1px); }
+    .lk-code-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 180px; }
+    .lk-code-lbl {
+      font-family: 'JetBrains Mono', monospace; font-size: 0.5rem; font-weight: 700;
+      letter-spacing: 0.18em; color: rgba(255,173,226,0.6); text-transform: uppercase;
+    }
+    .lk-code-row { display: flex; gap: 6px; }
+    #lk-code-in {
+      flex: 1; min-width: 0; background: rgba(0,0,0,0.28); border: 1px solid rgba(182,196,255,0.2);
+      color: #e2e2eb; border-radius: 6px; padding: 7px 10px;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.74rem; font-weight: 700;
+      letter-spacing: 0.1em; text-transform: uppercase; outline: none;
+    }
+    #lk-code-in:focus { border-color: #b6c4ff; }
+    #lk-code-apply, .lk-code-copy {
+      width: auto; margin: 0;
+      flex-shrink: 0; background: rgba(182,196,255,0.1); border: 1px solid rgba(182,196,255,0.3); color: #b6c4ff;
+      font-family: 'Barlow Condensed', system-ui; font-style: italic; font-weight: 900;
+      font-size: 0.85rem; letter-spacing: 0.06em; text-transform: uppercase;
+      padding: 0 12px; border-radius: 6px; cursor: pointer; transition: background .15s;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .lk-code-copy { padding: 0 9px; }
+    #lk-code-apply:hover, .lk-code-copy:hover { background: rgba(182,196,255,0.2); }
+    .lk-fits { display: flex; align-items: center; gap: 10px; }
+    .lk-fits-lbl {
+      font-family: 'JetBrains Mono', monospace; font-size: 0.5rem; font-weight: 700;
+      letter-spacing: 0.18em; color: rgba(182,196,255,0.45); text-transform: uppercase;
+      writing-mode: horizontal-tb; flex-shrink: 0; width: 54px; line-height: 1.3;
+    }
+    .lk-fit-slots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; flex: 1; }
+    .lk-fit { position: relative; display: flex; flex-direction: column; gap: 4px; }
+    .lk-fit-equip {
+      display: flex; align-items: center; gap: 7px; width: 100%;
+      background: rgba(0,0,0,0.25); border: 1px solid rgba(182,196,255,0.16); border-radius: 7px;
+      padding: 7px 9px; cursor: pointer; transition: border-color .15s, background .15s;
+    }
+    .lk-fit-equip:hover { border-color: rgba(58,159,255,0.5); background: rgba(58,159,255,0.08); }
+    .lk-fit.is-empty .lk-fit-equip { cursor: default; opacity: 0.55; }
+    .lk-fit.is-empty .lk-fit-equip:hover { border-color: rgba(182,196,255,0.16); background: rgba(0,0,0,0.25); }
+    .lk-fit-chip { width: 20px; height: 20px; border-radius: 5px; flex-shrink: 0; background: rgba(182,196,255,0.12); border: 1px solid rgba(255,255,255,0.18); }
+    .lk-fit-name {
+      font-family: 'Barlow Condensed', system-ui; font-style: italic; font-weight: 900;
+      font-size: 0.9rem; letter-spacing: 0.02em; color: #cdd6ea; text-transform: uppercase;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .lk-fit-save {
+      background: transparent; border: 1px dashed rgba(182,196,255,0.22); color: rgba(182,196,255,0.55);
+      font-family: 'JetBrains Mono', monospace; font-size: 0.46rem; font-weight: 700;
+      letter-spacing: 0.1em; text-transform: uppercase; padding: 4px 2px; border-radius: 5px; cursor: pointer;
+      transition: color .15s, border-color .15s;
+    }
+    .lk-fit-save:hover { color: #b6c4ff; border-color: rgba(182,196,255,0.45); }
+
+    /* Feature 1: flash the panel row when a figure part is clicked */
+    @keyframes lk-row-flash {
+      0% { background: rgba(58,159,255,0.0); }
+      18% { background: rgba(58,159,255,0.28); }
+      100% { background: rgba(58,159,255,0.0); }
+    }
+    .lk-row.lk-row--flash { animation: lk-row-flash 1.1s ease; border-radius: 6px; }
+
+    @media (max-width: 859px) {
+      .lk-studio-top { flex-direction: column; align-items: stretch; }
+      .lk-dice-btn { justify-content: center; }
+      .lk-minirink-card { width: 120px; right: 8px; bottom: 8px; }
+    }
+
     /* Hero popup */
     #hero-popup {
       position: fixed; z-index: 9999;
@@ -2507,9 +2608,41 @@
           <div class="lk-grid">
             <div class="lk-stage">
               <div id="hero-stage"></div>
+              <!-- Feature 4: live top-down mini-rink preview -->
+              <div class="lk-minirink-card">
+                <span class="lk-minirink-lbl" data-i18n="lk_minirink">In game</span>
+                <canvas id="lk-minirink" width="260" height="180"></canvas>
+              </div>
             </div>
 
             <div class="lk-panel">
+              <!-- Features 2+3: dice / appearance code / saved fits -->
+              <div class="lk-studio">
+                <div class="lk-studio-top">
+                  <button type="button" id="lk-dice" class="lk-dice-btn">
+                    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.3" fill="currentColor" stroke="none"/><circle cx="16" cy="8" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="8" cy="16" r="1.3" fill="currentColor" stroke="none"/><circle cx="16" cy="16" r="1.3" fill="currentColor" stroke="none"/></svg>
+                    <span data-i18n="lk_randomize">Randomize</span>
+                  </button>
+                  <div class="lk-code-field">
+                    <span class="lk-code-lbl" data-i18n="lk_code_label">Appearance code</span>
+                    <div class="lk-code-row">
+                      <input id="lk-code-in" type="text" maxlength="16" autocomplete="off" spellcheck="false" placeholder="TREBIC" />
+                      <button type="button" id="lk-code-apply" data-i18n="lk_code_apply">Apply</button>
+                      <button type="button" id="lk-code-copy" class="lk-code-copy" data-i18n-title="lk_code_copy" aria-label="Copy">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div class="lk-fits">
+                  <span class="lk-fits-lbl" data-i18n="lk_fits">Saved fits</span>
+                  <div class="lk-fit-slots">
+                    <div class="lk-fit" data-slot="1"><button type="button" class="lk-fit-equip" data-slot="1"><span class="lk-fit-chip"></span><span class="lk-fit-name">1</span></button><button type="button" class="lk-fit-save" data-slot="1" data-i18n="lk_fit_save">Save here</button></div>
+                    <div class="lk-fit" data-slot="2"><button type="button" class="lk-fit-equip" data-slot="2"><span class="lk-fit-chip"></span><span class="lk-fit-name">2</span></button><button type="button" class="lk-fit-save" data-slot="2" data-i18n="lk_fit_save">Save here</button></div>
+                    <div class="lk-fit" data-slot="3"><button type="button" class="lk-fit-equip" data-slot="3"><span class="lk-fit-chip"></span><span class="lk-fit-name">3</span></button><button type="button" class="lk-fit-save" data-slot="3" data-i18n="lk_fit_save">Save here</button></div>
+                  </div>
+                </div>
+              </div>
               <div class="lk-ident">
                 <label class="lk-field lk-f-name">
                   <span class="lk-field-lbl" data-i18n="lk_p_name">NAME</span>

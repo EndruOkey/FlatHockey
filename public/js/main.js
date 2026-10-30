@@ -6,6 +6,8 @@ import { PLAYER, RINK } from './constants.js';
 import { t, applyI18n, toggleLang, setOnChange } from './i18n.js';
 import { setVolume, getVolume } from './sound.js';
 import { loadSession, onAuthChange, loginWithDiscord, logout, handleOAuthRedirect, getUser, loadServerStats, saveServerProfile, loadRankAndCredits, getKind, requestLinkCode, redeemLinkCode } from './auth.js';
+import { makeRng, hashSeed } from './rng.js';
+import { initLockerPreview } from './locker-preview.js';
 
 const $ = id => document.getElementById(id);
 const canvas = $('canvas');
@@ -352,14 +354,14 @@ async function loadHeroSVG() {
 
 // ── Hero SVG hover-click contextual picker ────────────────────────────
 const HERO_PARTS = [
-  { ids: ['HELMA_COLOR'],                       label: 'HELMET',  sw: () => [swHelmet] },
-  { ids: ['Plexi'],                             label: 'VISOR',   sw: () => [swVisor]  },
+  { ids: ['HELMA_COLOR'],                       label: 'HELMET',  sw: () => [swHelmet], row: 'sw-helmet' },
+  { ids: ['Plexi'],                             label: 'VISOR',   sw: () => [swVisor],  row: 'sw-visor' },
   { ids: ['DRES-BARVA','STULPNY_COLOR'],        label: 'JERSEY',  sw: () => [swJersey] },
   { ids: ['KRATASY-COLOR','KRATASY_podkolenky_COLOR'], label: 'SHORTS', sw: () => [swShorts] },
-  { ids: ['RUKAVICE_R_COLOR','RUKAVICE_L_COLOR'], label: 'GLOVES', sw: () => [swGloves] },
-  { ids: ['HOCKEY--STICK-BODY'],                label: 'STICK',   sw: () => [swStick] },
+  { ids: ['RUKAVICE_R_COLOR','RUKAVICE_L_COLOR'], label: 'GLOVES', sw: () => [swGloves], row: 'sw-gloves' },
+  { ids: ['HOCKEY--STICK-BODY'],                label: 'STICK',   sw: () => [swStick], row: 'sw-stick' },
   { ids: ['TAPING-STYLE-1_COLOR','TAPING-STYLE-2_COLOR','TAPING-STYLE-3_COLOR','TAPING-STYLE-4_COLOR'],
-                                                label: 'TAPE',    sw: () => [swTape], ch: () => [chTapeStyle] },
+                                                label: 'TAPE',    sw: () => [swTape], ch: () => [chTapeStyle], row: 'sw-tape' },
   { ids: ['BRUSLE_L_TKANICKY_COLOR','BRUSLE_R_TKANICKY_COLOR','BRUSLE_L_TKANICKY2_COLOR','BRUSLE_R_TKANICKY2_COLOR'], label: 'LACES', sw: () => [swLaces] },
   { ids: ['BRUSLE_L_Prouzek_COLOR','BRUSLE_R_Prouzek_COLOR'], label: 'STRIPE', sw: () => [swStripe] },
 ];
@@ -416,7 +418,11 @@ function _wireHeroInteraction(svgEl) {
       el.addEventListener('click', (e) => {
         _hoverLabel.style.display = 'none';
         e.stopPropagation();
-        _showHeroPopup(popup, part, svgEl, el, e);
+        // Feature 1: if this part has a visible panel row, scroll to + flash it (direct manipulation);
+        // parts without a visible row (jersey/shorts/laces/stripe) fall back to the inline popup.
+        const rowEl = part.row ? document.getElementById(part.row)?.closest('.lk-row') : null;
+        if (rowEl) { _hideHeroPopup(popup, svgEl); _highlightPanelRow(rowEl); }
+        else _showHeroPopup(popup, part, svgEl, el, e);
       });
     });
   });
@@ -433,6 +439,15 @@ function _hideHeroPopup(popup, svgEl) {
     delete el.dataset.popupOpen;
     el.style.filter = 'drop-shadow(0 0 3px rgba(182,196,255,0.18))';
   });
+}
+
+// Feature 1: scroll the matching gear row into view and flash it.
+function _highlightPanelRow(rowEl) {
+  try { rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch { rowEl.scrollIntoView(); }
+  rowEl.classList.remove('lk-row--flash');
+  void rowEl.offsetWidth;                 // restart animation
+  rowEl.classList.add('lk-row--flash');
+  setTimeout(() => rowEl.classList.remove('lk-row--flash'), 1200);
 }
 
 // Compute viewBox tight around the tape/blade area only (no shaft)
@@ -635,7 +650,9 @@ function _drawRinkBg(ctx, w, h) {
   for (let y = 0; y < h; y += 6) { ctx.fillRect(0, y, w, 1); }
 }
 
+let _suspendPreview = false;   // potlač mezikroky při hromadném applyKit → jeden překreslení
 function drawPreview() {
+  if (_suspendPreview) return;
   const c = prevCanvas, ctx = prevCtx;
   if (!c || !ctx) return;
   _drawRinkBg(ctx, c.width, c.height);
@@ -657,7 +674,178 @@ function drawPreview() {
   p.draw(ctx, cam);
   if (lobby.classList.contains('on-profile')) loadHeroSVG();
   if (lobby.classList.contains('on-profile')) _triggerAutoSave();
+  _afterLockerChange?.();
 }
+
+// ══════════════════════════════════════════════════════════════════════
+//  LOCKER CREATIVE LAYERS — randomize / saved fits / appearance code / mini-rink
+// ══════════════════════════════════════════════════════════════════════
+const COLOR_SETTERS = {
+  helmet: swHelmet, jersey: swJersey, shorts: swShorts, stripe: swStripe, laces: swLaces,
+  gloves: swGloves, stick: swStick, tape: swTape, visor: swVisor, trail: swTrail,
+};
+const CHIP_SETTERS = { tapeStyle: chTapeStyle, helmetType: chHelmetType };
+const TS_VALS = ['full', 'toe', 'heel', 'candy'];
+const HT_VALS = ['visor', 'none', 'shield', 'cage'];
+
+function getCurrentKit() {
+  const k = {};
+  for (const key in COLOR_SETTERS) k[key] = COLOR_SETTERS[key].get();
+  k.tapeStyle = chTapeStyle.get();
+  k.helmetType = chHelmetType.get();
+  k.hand = chosenHand;
+  k.num = numInput.value;
+  return k;
+}
+
+// Apply a (partial) kit via the existing swatch/chip setters, then one redraw.
+function applyKit(kit, opts = {}) {
+  if (!kit) return;
+  _suspendPreview = true;
+  try {
+    for (const key in COLOR_SETTERS) if (kit[key] != null) COLOR_SETTERS[key].set(kit[key]);
+    for (const key in CHIP_SETTERS) if (kit[key] != null) CHIP_SETTERS[key].set(kit[key]);
+    if (opts.withHandNum) {
+      if (kit.hand != null) { chosenHand = kit.hand === -1 ? -1 : 1; localStorage.setItem(HAND_KEY, String(chosenHand)); refreshHand(); }
+      if (kit.num != null) { numInput.value = kit.num; localStorage.setItem(NUM_KEY, numInput.value); }
+    }
+  } finally { _suspendPreview = false; }
+  drawPreview();
+}
+
+// ── Feature 2: deterministic dice over 12 curated harmonious kits ──
+const CURATED_KITS = [
+  { jersey:'#df2626', helmet:'#f4f7fb', gloves:'#1a1f29', stick:'#1a1f29', tape:'#f4f7fb', visor:'#bfe0ff', shorts:'#1a1f29', stripe:'#df2626', laces:'#f4f7fb', tapeStyle:'full',  helmetType:'visor'  },
+  { jersey:'#1b4fd1', helmet:'#f4f7fb', gloves:'#ffcf3a', stick:'#ffcf3a', tape:'#1a1f29', visor:'#4f8fd6', shorts:'#1b4fd1', stripe:'#ffcf3a', laces:'#f4f7fb', tapeStyle:'toe',   helmetType:'visor'  },
+  { jersey:'#19c37d', helmet:'#1a1f29', gloves:'#f4f7fb', stick:'#f4f7fb', tape:'#1a1f29', visor:'#cfe7f2', shorts:'#0c7a4a', stripe:'#f4f7fb', laces:'#1a1f29', tapeStyle:'candy', helmetType:'cage'   },
+  { jersey:'#ffcf3a', helmet:'#1a1f29', gloves:'#1a1f29', stick:'#7a5015', tape:'#1a1f29', visor:'#e2b25a', shorts:'#1a1f29', stripe:'#ffcf3a', laces:'#1a1f29', tapeStyle:'heel',  helmetType:'visor'  },
+  { jersey:'#9b5cff', helmet:'#f4f7fb', gloves:'#9b5cff', stick:'#f4f7fb', tape:'#9aa3b2', visor:'#cfe7f2', shorts:'#1a1f29', stripe:'#9b5cff', laces:'#f4f7fb', tapeStyle:'full',  helmetType:'shield' },
+  { jersey:'#ff5bd0', helmet:'#1a1f29', gloves:'#f4f7fb', stick:'#b81d3a', tape:'#f4f7fb', visor:'#bfe0ff', shorts:'#1a1f29', stripe:'#ff5bd0', laces:'#f4f7fb', tapeStyle:'candy', helmetType:'visor'  },
+  { jersey:'#ff8a1e', helmet:'#1a1f29', gloves:'#1a1f29', stick:'#1a1f29', tape:'#ffcf3a', visor:'#e2b25a', shorts:'#1a1f29', stripe:'#ff8a1e', laces:'#ffcf3a', tapeStyle:'toe',   helmetType:'cage'   },
+  { jersey:'#1a1f29', helmet:'#df2626', gloves:'#df2626', stick:'#b81d3a', tape:'#f4f7fb', visor:'#39414e', shorts:'#1a1f29', stripe:'#df2626', laces:'#df2626', tapeStyle:'full',  helmetType:'visor'  },
+  { jersey:'#0c7a4a', helmet:'#ffcf3a', gloves:'#ffcf3a', stick:'#7a5015', tape:'#1a1f29', visor:'#cfe7f2', shorts:'#0c7a4a', stripe:'#ffcf3a', laces:'#ffcf3a', tapeStyle:'heel',  helmetType:'cage'   },
+  { jersey:'#b81d3a', helmet:'#1a1f29', gloves:'#f4f7fb', stick:'#1a1f29', tape:'#9aa3b2', visor:'#39414e', shorts:'#1a1f29', stripe:'#b81d3a', laces:'#f4f7fb', tapeStyle:'full',  helmetType:'shield' },
+  { jersey:'#3a9fff', helmet:'#1a1f29', gloves:'#1a1f29', stick:'#1b4fd1', tape:'#f4f7fb', visor:'#4f8fd6', shorts:'#1b4fd1', stripe:'#3a9fff', laces:'#f4f7fb', tapeStyle:'toe',   helmetType:'visor'  },
+  { jersey:'#f4f7fb', helmet:'#1b4fd1', gloves:'#1b4fd1', stick:'#1b4fd1', tape:'#1a1f29', visor:'#bfe0ff', shorts:'#1b4fd1', stripe:'#1b4fd1', laces:'#1b4fd1', tapeStyle:'candy', helmetType:'cage'   },
+];
+let _diceCounter = 0, _lastDiceIdx = -1;
+function rollDice(seed) {
+  // deterministic: same seed → same kit; bez seedu (klik) nikdy nepadni na stejný dres jako teď
+  let idx;
+  if (seed != null) {
+    idx = Math.floor(makeRng(seed >>> 0).next() * CURATED_KITS.length);
+  } else {
+    do { idx = Math.floor(makeRng(hashSeed('dice' + (_diceCounter++))).next() * CURATED_KITS.length); }
+    while (idx === _lastDiceIdx && CURATED_KITS.length > 1);
+  }
+  _lastDiceIdx = idx;
+  const kit = CURATED_KITS[idx];
+  applyKit(kit, { withHandNum: false });
+  return kit;
+}
+
+// ── Feature 3: shareable appearance code ──
+const CODE_ORDER = [
+  ['helmet', PALETTE], ['jersey', PALETTE], ['shorts', PALETTE], ['stripe', PALETTE],
+  ['laces', PALETTE], ['gloves', PALETTE], ['stick', STICK_PALETTE], ['tape', PALETTE],
+  ['visor', VISOR_PALETTE],
+];
+function encodeLook() {
+  let s = '';
+  for (const [key, pal] of CODE_ORDER) s += Math.max(0, pal.indexOf(COLOR_SETTERS[key].get())).toString(36).toUpperCase();
+  s += Math.max(0, TS_VALS.indexOf(chTapeStyle.get())).toString(36).toUpperCase();
+  s += Math.max(0, HT_VALS.indexOf(chHelmetType.get())).toString(36).toUpperCase();
+  s += (chosenHand === -1 ? '0' : '1');
+  return 'FH' + s;
+}
+function decodeLook(code) {
+  const body = code.slice(2);
+  if (body.length !== CODE_ORDER.length + 3) return null;
+  const kit = {}; let k = 0;
+  for (const [key, pal] of CODE_ORDER) { const i = parseInt(body[k++], 36); if (i >= 0 && i < pal.length) kit[key] = pal[i]; }
+  const ts = parseInt(body[k++], 36); if (ts >= 0 && ts < TS_VALS.length) kit.tapeStyle = TS_VALS[ts];
+  const ht = parseInt(body[k++], 36); if (ht >= 0 && ht < HT_VALS.length) kit.helmetType = HT_VALS[ht];
+  kit.hand = body[k] === '0' ? -1 : 1;
+  return kit;
+}
+// Any free-text seed → full deterministic kit (hash → mulberry32 → pick per part).
+function kitFromSeed(str) {
+  const rng = makeRng(hashSeed(String(str)));
+  const pick = arr => arr[Math.floor(rng.next() * arr.length)];
+  return {
+    jersey: pick(PALETTE), helmet: pick(PALETTE), shorts: pick(PALETTE), stripe: pick(PALETTE),
+    laces: pick(PALETTE), gloves: pick(PALETTE), stick: pick(STICK_PALETTE), tape: pick(PALETTE),
+    visor: pick(VISOR_PALETTE), tapeStyle: pick(TS_VALS), helmetType: pick(HT_VALS),
+  };
+}
+function applyCode(raw) {
+  const up = String(raw || '').trim().toUpperCase();
+  if (!up) return;
+  let kit = null;
+  if (/^FH[0-9A-Z]+$/.test(up)) kit = decodeLook(up);
+  if (kit) applyKit(kit, { withHandNum: true });
+  else applyKit(kitFromSeed(up), { withHandNum: false });
+  _updateLockerCode();
+}
+const _codeIn = $('lk-code-in');
+function _updateLockerCode() {
+  if (_codeIn && document.activeElement !== _codeIn) _codeIn.value = encodeLook();
+}
+
+// ── Feature 2b: 3 saved fit slots (localStorage fh_fit_1..3) ──
+const FIT_KEYS = ['fh_fit_1', 'fh_fit_2', 'fh_fit_3'];
+function _loadFit(slot) { try { return JSON.parse(localStorage.getItem(FIT_KEYS[slot - 1]) || 'null'); } catch { return null; } }
+function _saveFit(slot) {
+  localStorage.setItem(FIT_KEYS[slot - 1], JSON.stringify(getCurrentKit()));
+  _refreshFitSlots();
+  setStatus(t('lk_saved_fit'), '#6ee0a0');
+}
+function _equipFit(slot) {
+  const kit = _loadFit(slot);
+  if (!kit) return;
+  applyKit(kit, { withHandNum: true });
+  setStatus(t('lk_equipped'), '#6ee0a0');
+}
+function _refreshFitSlots() {
+  document.querySelectorAll('.lk-fit').forEach(el => {
+    const slot = +el.dataset.slot;
+    const kit = _loadFit(slot);
+    const chip = el.querySelector('.lk-fit-chip');
+    const nameEl = el.querySelector('.lk-fit-name');
+    el.classList.toggle('is-empty', !kit);
+    if (kit) { chip.style.background = kit.jersey || '#3a9fff'; nameEl.textContent = (kit.num ? '#' + kit.num : String(slot)); }
+    else { chip.style.background = ''; nameEl.textContent = t('lk_fit_empty'); }
+  });
+}
+
+// Wire locker studio controls
+$('lk-dice')?.addEventListener('click', () => rollDice());
+$('lk-code-apply')?.addEventListener('click', () => applyCode(_codeIn.value));
+_codeIn?.addEventListener('keydown', e => { if (e.key === 'Enter') applyCode(_codeIn.value); });
+_codeIn?.addEventListener('focus', () => _codeIn.select());
+$('lk-code-copy')?.addEventListener('click', () => {
+  const code = encodeLook();
+  if (_codeIn) _codeIn.value = code;
+  navigator.clipboard?.writeText(code).catch(() => {});
+  setStatus(t('lk_code_copied'), '#6ee0a0');
+});
+document.querySelectorAll('.lk-fit-save').forEach(b => b.addEventListener('click', () => _saveFit(+b.dataset.slot)));
+document.querySelectorAll('.lk-fit-equip').forEach(b => b.addEventListener('click', () => _equipFit(+b.dataset.slot)));
+
+// ── Feature 4: live mini-rink preview (own rAF loop) ──
+const lockerPreview = initLockerPreview('lk-minirink', getCurrentKit);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) lockerPreview.stop();
+  else if (lobby.classList.contains('on-profile')) lockerPreview.start();
+});
+
+// Called at the end of every locker redraw (after any gear change)
+function _afterLockerChange() {
+  _updateLockerCode();
+}
+
+// Lightweight hook for deterministic verification / sharing from console.
+window._fhLocker = { rollDice, applyCode, kitFromSeed, getCurrentKit, encodeLook };
 
 // ── Create form (týmy = dlaždice) ─────────────────────────────────────
 const swHome = makeSwatches($('sw-home'), '#3a9fff');
@@ -694,6 +882,8 @@ function showView(name) {
   lobby.classList.toggle('on-main',    name === 'main');
   lobby.classList.toggle('on-browse',  name === 'browse');
   lobby.classList.toggle('on-profile', name === 'profile');
+  if (name === 'profile') { _refreshFitSlots(); _updateLockerCode(); lockerPreview.start(); }
+  else lockerPreview.stop();
   lobby.classList.toggle('on-create',  name === 'create');
   lobby.classList.toggle('on-wait',    name === 'wait');
   lobby.classList.toggle('on-stats',   name === 'stats');
