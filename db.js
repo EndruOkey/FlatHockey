@@ -478,25 +478,28 @@ export function getUserUnlocks(user_id) {
   `).all(user_id).map(r => r.item_id);
 }
 
-export function buyItem(user_id, item_id) {
+// Celý nákup v jedné transakci: čtení i odečet atomicky → dva souběžné požadavky
+// nekoupí dvě věci za jedny kredity. Odečet proběhne jen když zůstatek stačí (podmínka v UPDATE).
+const _buyTxn = db.transaction((user_id, item_id) => {
   const item = db.prepare('SELECT * FROM store_items WHERE id = ? AND is_active = 1').get(item_id);
   if (!item) return { ok: false, error: 'item_not_found' };
 
   const alreadyOwns = db.prepare('SELECT 1 FROM user_unlocks WHERE user_id = ? AND item_id = ?').get(user_id, item_id);
   if (alreadyOwns) return { ok: false, error: 'already_owned' };
 
-  const credits = getPuckCredits(user_id);
-  if (credits < item.price) return { ok: false, error: 'insufficient_credits' };
+  const upd = db.prepare('UPDATE stats SET puck_credits = puck_credits - ? WHERE user_id = ? AND puck_credits >= ?')
+    .run(item.price, user_id, item.price);
+  if (upd.changes === 0) return { ok: false, error: 'insufficient_credits' };
 
-  db.prepare('UPDATE stats SET puck_credits = puck_credits - ? WHERE user_id = ?').run(item.price, user_id);
   db.prepare('INSERT INTO user_unlocks (user_id, item_id) VALUES (?, ?)').run(user_id, item_id);
-
-  // Pokud je to titul — rovnou nastav do profilu
   if (item.item_type === 'title') {
     db.prepare('UPDATE profiles SET title = ? WHERE user_id = ?').run(item.item_value, user_id);
   }
+  return { ok: true, new_balance: getPuckCredits(user_id) };
+});
 
-  return { ok: true, new_balance: credits - item.price };
+export function buyItem(user_id, item_id) {
+  return _buyTxn(user_id, item_id);
 }
 
 // ── Anonymní metrika (bez IP, bez cookies): pid = náhodné id z localStorage ──

@@ -832,6 +832,13 @@ io.on('connection', (socket) => {
   if (connCount >= MAX_CONN) { socket.disconnect(true); return; }
   connCount++;
   broadcastOnline();
+  // Bezpečné handlery: vadná zpráva od klienta (chybná data) smí shodit jen svůj handler, NE celý server.
+  // (socket.io chyby v listeneru nechytá → bez tohoto by `emit('lobby:create')` bez dat spadl proces.)
+  const rawOn = socket.on.bind(socket);
+  socket.on = (ev, fn) => rawOn(ev, (...args) => {
+    try { return fn(...args); }
+    catch (e) { console.error(`handler ${ev} selhal (socket ${socket.id}):`, e?.message); }
+  });
   // Přečti JWT cookie a ulož userId pro tracking statistik
   const rawCookie = socket.handshake.headers.cookie || '';
   const cm = rawCookie.match(/(?:^|;\s*)fh_session=([^;]+)/);
