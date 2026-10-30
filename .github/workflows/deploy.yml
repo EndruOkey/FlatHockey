@@ -25,6 +25,8 @@ jobs:
       - run: npm run test:puck
       - run: npm run test:determinism
       - run: npm run test:server
+      - run: npm run test:accounts
+      - run: npm run test:cg
       - run: npm run test:bot
 
   deploy:
@@ -44,6 +46,10 @@ jobs:
           set -e
           cd ~/FlatHockey
           old=$(git rev-parse HEAD)
+          # Záloha DB před nasazením (migrace schématu běží při startu); drží posledních 20
+          mkdir -p ~/backups
+          sqlite3 flathockey.db ".backup '$HOME/backups/flathockey-$(date +%F-%H%M%S).db'" 2>/dev/null || cp flathockey.db ~/backups/flathockey-$(date +%F-%H%M%S).db
+          ls -1t ~/backups/flathockey-*.db | tail -n +21 | xargs -r rm --
           git fetch -q origin main
           git checkout -q main 2>/dev/null || git checkout -q -b main origin/main
           git merge -q --ff-only origin/main

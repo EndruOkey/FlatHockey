@@ -10,7 +10,81 @@
   </style>
 </head>
 <body>
-  <!-- Hra běží na vlastním serveru; ?ref= rozliší zdroj v metrice (npm run metrics) -->
-  <iframe src="https://flathockey.fun/?ref=crazygames" allow="autoplay; fullscreen; gamepad" allowfullscreen></iframe>
+  <!-- Hra běží na vlastním serveru (iframe). SDK funguje jen na doménách CrazyGames, proto ho načítá tento obal
+       a se hrou mluví přes postMessage (viz public/js/cg-bridge.js). ?ref= rozliší zdroj v metrice. -->
+  <iframe id="game" allow="autoplay; fullscreen; gamepad" allowfullscreen></iframe>
+  <script>
+  (function () {
+    var q = new URLSearchParams(location.search);
+    var local = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+    // Test: ?mockSdk=1&child=http://localhost:PORT&mockToken=...  (jen na localhostu)
+    var mock = local && q.get('mockSdk') === '1';
+    var CHILD = (mock && /^http:\/\/localhost:\d+$/.test(q.get('child') || '')) ? q.get('child') : 'https://flathockey.fun';
+    var frame = document.getElementById('game');
+    frame.src = CHILD + '/?ref=crazygames';
+
+    function loadSdk() {
+      if (mock) {
+        var listeners = [];
+        window.CrazyGames = { SDK: {
+          init: function () { return Promise.resolve(); },
+          environment: 'local',
+          user: {
+            isUserAccountAvailable: q.get('mockAvailable') !== '0',
+            getUser: function () { return Promise.resolve(q.get('mockToken') ? { username: q.get('mockName') || 'Mock' } : null); },
+            getUserToken: function () { return Promise.resolve(q.get('mockToken') || ''); },
+            addAuthListener: function (fn) { listeners.push(fn); }
+          },
+          game: {
+            gameplayStart: function () { (window.__cgLog = window.__cgLog || []).push('start'); },
+            gameplayStop: function () { (window.__cgLog = window.__cgLog || []).push('stop'); },
+            happytime: function () { (window.__cgLog = window.__cgLog || []).push('happy'); }
+          }
+        } };
+        return Promise.resolve();
+      }
+      return new Promise(function (res, rej) {
+        var s = document.createElement('script');
+        s.src = 'https://sdk.crazygames.com/crazygames-sdk-v3.js';
+        s.onload = res; s.onerror = rej;
+        document.head.appendChild(s);
+      });
+    }
+
+    var sdk = null, ready = false, wantUser = false;
+    function child(msg) { try { frame.contentWindow.postMessage(msg, CHILD); } catch (e) {} }
+    async function sendUser() {
+      if (!sdk) return child({ type: 'cg:user', token: null, username: null, available: false });
+      var u = null, token = null, available = false;
+      try {
+        available = !!sdk.user.isUserAccountAvailable;
+        if (available) {
+          u = await sdk.user.getUser();
+          if (u) token = await sdk.user.getUserToken();   // JWT na 1 h, neukládáme
+        }
+      } catch (e) { token = null; }
+      child({ type: 'cg:user', token: token || null, username: u && u.username || null, available: available });
+    }
+
+    loadSdk().then(function () { return window.CrazyGames.SDK.init(); }).then(function () {
+      sdk = window.CrazyGames.SDK;
+      try { sdk.user.addAuthListener(function () { sendUser(); }); } catch (e) {}   // po přihlášení v CG
+    }).catch(function () { sdk = null; }).then(function () {
+      ready = true; if (wantUser) sendUser();
+    });
+
+    window.addEventListener('message', function (ev) {
+      if (ev.origin !== CHILD || ev.source !== frame.contentWindow) return;   // jen naše hra
+      var t = ev.data && ev.data.type;
+      if (t === 'cg:hello' || t === 'cg:requestToken') { if (ready) sendUser(); else wantUser = true; }
+      else if (!sdk) return;
+      else try {
+        if (t === 'cg:gameplayStart') sdk.game.gameplayStart();
+        else if (t === 'cg:gameplayStop') sdk.game.gameplayStop();
+        else if (t === 'cg:happytime') sdk.game.happytime();
+      } catch (e) {}
+    });
+  })();
+  </script>
 </body>
 </html>

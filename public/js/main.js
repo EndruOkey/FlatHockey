@@ -1,10 +1,11 @@
 import { Net } from './net.js';
+import { initCgBridge, gameplay as cgGameplay, happytime as cgHappy, isCrazyGames } from './cg-bridge.js';
 import { NetGame, SandboxGame, TutorialGame } from './game.js';
 import { Player } from './entities/Player.js';
 import { PLAYER, RINK } from './constants.js';
 import { t, applyI18n, toggleLang, setOnChange } from './i18n.js';
 import { setVolume, getVolume } from './sound.js';
-import { loadSession, onAuthChange, loginWithDiscord, logout, handleOAuthRedirect, getUser, loadServerStats, saveServerProfile, loadRankAndCredits } from './auth.js';
+import { loadSession, onAuthChange, loginWithDiscord, logout, handleOAuthRedirect, getUser, loadServerStats, saveServerProfile, loadRankAndCredits, getKind, requestLinkCode, redeemLinkCode } from './auth.js';
 
 const $ = id => document.getElementById(id);
 const canvas = $('canvas');
@@ -763,8 +764,9 @@ const suggestName = () => t('guest_name') + Math.floor(100 + Math.random() * 900
 function commitProfile() {
   if (!hasName()) { setStatus(t('name_required'), '#ffcf3a'); nameInput.focus(); return false; }
   const p = profile();       // ulož jméno + výbavu do localStorage
-  if (getUser()) {
-    saveServerProfile({      // synchronizuj na server pro přihlášené hráče
+  if (getUser() || getKind() === 'guest' || document.documentElement.classList.contains('embedded')) {
+    saveServerProfile({      // synchronizuj na server pro přihlášené hráče i hosty (účet zařízení)
+      display_name: p.name,
       helmet: p.helmet, gloves: p.gloves, tape: p.tape, trail: p.trail, stick: p.stick,
       tape_style: p.tapeStyle, helmet_type: p.helmetType, visor: p.visor,
       handed: p.handed, number: p.number,
@@ -1104,6 +1106,7 @@ function showMatchResult(rewards, game) {
   $('mr-credits').textContent = '+' + cred + ' ⊙';
   $('mr-mvp-badge').style.display = rewards.isMVP ? '' : 'none';
   $('match-result').style.display = 'flex';
+  if (rewards.isWin) cgHappy();
 }
 
 $('mr-close-btn').addEventListener('click', () => {
@@ -1137,12 +1140,14 @@ function startGame(game) {
   const hintEl = document.getElementById('hint');
   if (hintEl) hintEl.style.display = game instanceof SandboxGame ? 'none' : '';
   game.start();
+  cgGameplay(true);
 }
 function stopGame()  {
   if (currentGame?.stop) currentGame.stop(); currentGame = null; inGame = false;
   lobby.style.display = ''; canvas.style.cursor = 'default';
   const hintEl = document.getElementById('hint');
   if (hintEl) hintEl.style.display = '';
+  cgGameplay(false);
 }
 
 function _startTutorial() {
@@ -1161,8 +1166,8 @@ function _startTutorial() {
 
 // ── Esc menu / odpojení ───────────────────────────────────────────────
 const pauseMenu = $('pause-menu'), pauseTitle = $('pause-title'), resumeBtn = $('resume-btn'), leaveBtn = $('leave-btn');
-function showPause(title=t('pause'), disc=false) { currentGame?.input?.clear(); pauseTitle.textContent = title; resumeBtn.style.display = disc ? 'none' : ''; pauseMenu.style.display = 'flex'; }
-const hidePause = () => pauseMenu.style.display = 'none';
+function showPause(title=t('pause'), disc=false) { currentGame?.input?.clear(); pauseTitle.textContent = title; resumeBtn.style.display = disc ? 'none' : ''; pauseMenu.style.display = 'flex'; cgGameplay(false); }
+const hidePause = () => { pauseMenu.style.display = 'none'; if (inGame) cgGameplay(true); };
 resumeBtn.addEventListener('click', hidePause);
 leaveBtn.addEventListener('click', () => { net.leaveLobby(); lastLobbyId = null; localStorage.removeItem('fh_last_lobby'); stopGame(); hidePause(); showView('main'); });
 net.onPeerLeft = () => { if (inGame) currentGame?.notify?.(t('peer_left')); };  // hra běží dál, jen upozorni
@@ -1205,7 +1210,32 @@ function updateAuthUI(user) {
   // Zobraz/skryj Discord login banner + stats sekci v profilu
   $('profile-guest-login').style.display = user ? 'none' : '';
   $('profile-stats').style.display = 'none'; // stats se načítají lazy při otevření profilu
+  updateLinkUI();
 }
+
+// ── Propojení účtů (link kód) ─────────────────────────────────────────
+const _embedded = document.documentElement.classList.contains('embedded');
+function updateLinkUI() {
+  const kind = getKind();
+  const showIssue  = _embedded && !isCrazyGames && kind !== 'account';
+  const showRedeem = !_embedded && kind === 'account';
+  $('link-issue').style.display  = showIssue  ? '' : 'none';
+  $('link-redeem').style.display = showRedeem ? '' : 'none';
+  $('profile-link').style.display = (showIssue || showRedeem) ? '' : 'none';
+}
+const linkMsg = (txt, ok) => { const m = $('link-msg'); m.textContent = txt; m.style.color = ok ? '#6ee0a0' : '#ff7a85'; };
+$('link-show-btn').addEventListener('click', async () => {
+  linkMsg('');
+  const r = await requestLinkCode();
+  if (!r.code) { linkMsg(t('link_err_' + (r.error || 'failed')), false); return; }
+  $('link-code').textContent = r.code;
+  $('link-code-out').style.display = '';
+});
+$('link-redeem-btn').addEventListener('click', async () => {
+  const r = await redeemLinkCode($('link-code-in').value);
+  if (r.ok) { linkMsg(t('link_ok'), true); $('link-code-in').value = ''; _loadStats(); }
+  else linkMsg(t('link_err_' + (r.error === 'invalid_code' || r.error === 'rate_limited' ? r.error : 'failed')), false);
+});
 
 // Otevření/zavření dropdownu
 authBtn.addEventListener('click', () => {
@@ -1262,6 +1292,10 @@ $('discord-login-btn').addEventListener('click', loginWithDiscord);
 
 
 onAuthChange(updateAuthUI);
+initCgBridge({
+  busy: () => inGame,
+  onSwap: async () => { net.socket.disconnect(); net.socket.connect(); await loadSession(); },
+});
 
 // init
 applyI18n();

@@ -1,9 +1,22 @@
 // Auth state — null = guest, object = přihlášený uživatel
 let _user = null;
+let _kind = null;          // 'account' (Discord) | 'guest' (účet zařízení) | null
+const TOKEN_KEY = 'fh_device_token';
 const _listeners = new Set();
 
 export function getUser() { return _user; }
 export function isGuest() { return _user === null; }
+export function getKind() { return _kind; }
+
+// Token zařízení (hostující účet): funguje i v iframe třetích stran, kde cookies nejdou
+export function getDeviceToken() { try { return localStorage.getItem(TOKEN_KEY); } catch { return null; } }
+export function setDeviceToken(tok) { try { tok ? localStorage.setItem(TOKEN_KEY, tok) : localStorage.removeItem(TOKEN_KEY); } catch {} }
+export function authFetch(url, opts = {}) {
+  const tok = getDeviceToken();
+  const headers = { ...(opts.headers || {}) };
+  if (tok) headers.Authorization = 'Bearer ' + tok;
+  return fetch(url, { credentials: 'same-origin', ...opts, headers });
+}
 export function isSponsor() { return _user?.is_sponsor === true; }
 
 export function onAuthChange(fn) {
@@ -19,11 +32,13 @@ function notify() {
 // 401 = určitě nepřihlášen; 5xx/síťová chyba = zachovej předchozí stav
 export async function loadSession() {
   try {
-    const res = await fetch('/auth/me', { credentials: 'same-origin' });
+    const res = await authFetch('/auth/me');
     if (res.ok) {
-      _user = await res.json();
+      const u = await res.json();
+      _kind = u.kind || 'account';
+      _user = _kind === 'account' ? u : null;   // host zůstává „nepřihlášený“ pro UI (jen se mu ukládají statistiky)
     } else if (res.status === 401) {
-      _user = null;
+      _user = null; _kind = null;
     }
     // 5xx — stav nezměníme, server je dočasně nedostupný
   } catch {
@@ -35,7 +50,7 @@ export async function loadSession() {
 export async function loadServerStats() {
   if (!_user) return null;
   try {
-    const res = await fetch('/auth/stats', { credentials: 'same-origin' });
+    const res = await authFetch('/auth/stats');
     if (res.ok) return await res.json();
   } catch {}
   return null;
@@ -45,8 +60,8 @@ export async function loadRankAndCredits() {
   if (!_user) return null;
   try {
     const [rankRes, credRes] = await Promise.all([
-      fetch('/api/me/rank',    { credentials: 'same-origin' }),
-      fetch('/api/me/credits', { credentials: 'same-origin' }),
+      authFetch('/api/me/rank'),
+      authFetch('/api/me/credits'),
     ]);
     const rank    = rankRes.ok    ? await rankRes.json()    : null;
     const credits = credRes.ok    ? await credRes.json()    : null;
@@ -60,11 +75,10 @@ export async function loadRankAndCredits() {
 }
 
 export async function saveServerProfile(data) {
-  if (!_user) return;
+  if (!_user && !getDeviceToken()) return;
   try {
-    await fetch('/auth/profile', {
+    await authFetch('/auth/profile', {
       method: 'POST',
-      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
@@ -72,12 +86,14 @@ export async function saveServerProfile(data) {
 }
 
 export function loginWithDiscord() {
-  window.location.href = '/auth/discord';
+  const tok = getDeviceToken();   // server z něj ověří hosta a po přihlášení slije jeho statistiky do Discord účtu
+  window.location.href = '/auth/discord' + (tok ? '?dt=' + encodeURIComponent(tok) : '');
 }
 
 export async function logout() {
-  await fetch('/auth/logout', { method: 'POST', credentials: 'same-origin' });
-  _user = null;
+  await authFetch('/auth/logout', { method: 'POST' });
+  setDeviceToken(null);     // token po slučení ukazuje na Discord účet → po odhlášení ho zahoď (nový host)
+  _user = null; _kind = null;
   notify();
 }
 
@@ -94,4 +110,21 @@ export function handleOAuthRedirect() {
     return { error: err };
   }
   return null;
+}
+
+// ── Propojení účtů (link kód) ────────────────────────────────────────────────
+export async function requestLinkCode() {
+  try {
+    const res = await authFetch('/api/link/code', { method: 'POST' });
+    return res.ok ? await res.json() : { error: res.status === 429 ? 'rate_limited' : 'failed' };
+  } catch { return { error: 'failed' }; }
+}
+export async function redeemLinkCode(code) {
+  try {
+    const res = await authFetch('/api/link/redeem', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }),
+    });
+    const j = await res.json().catch(() => ({}));
+    return res.ok ? { ok: true } : { error: j.error || 'failed' };
+  } catch { return { error: 'failed' }; }
 }

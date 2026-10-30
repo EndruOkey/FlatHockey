@@ -15,7 +15,7 @@ import cookieParser from 'cookie-parser';
 import { Server } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import authRouter, { verifySession, requireAuth } from './auth.js';
+import authRouter, { linkRouter, verifySession, requireAuth, bearerToken, createGuestAccount } from './auth.js';
 import { updateStats, updateRankAndCredits, getRankPosition, getLeaderboard, getStoreItems, getUserUnlocks, buyItem, getPuckCredits, getActiveSeason, logMetric } from './db.js';
 
 import { World } from './public/js/world.js';
@@ -53,6 +53,9 @@ setInterval(() => { const now = Date.now(); for (const [k, h] of rlHits) if (h.r
 // ── CSRF: stavové POSTy jen ze stejného originu (Origin, jinak Referer) ───
 const ALLOWED_HOSTS = new Set(['flathockey.fun', 'www.flathockey.fun', 'localhost', '127.0.0.1']);
 function sameOrigin(req, res, next) {
+  // Bearer auth: CSRF se netýká (prohlížeč Authorization hlavičku cizí stránce sám nepřidá) → jen platný token obejde kontrolu
+  const bt = bearerToken(req);
+  if (bt && verifySession(bt)) return next();
   const src = req.get('origin') || req.get('referer');
   let host = null;
   try { if (src) host = new URL(src).host; } catch { /* neplatné → zamítnout */ }
@@ -60,16 +63,31 @@ function sameOrigin(req, res, next) {
   if (!ok) return res.status(403).json({ error: 'bad_origin' });
   next();
 }
-app.post(['/auth/*splat', '/api/store/buy'], sameOrigin);
+// CORS pro klienty hostované na itch.io / CrazyGames (bez cookies → jen Bearer; wrappery dnes iframují flathockey.fun, tedy same-origin)
+const EMBED_ORIGIN_RE = /^https:\/\/([a-z0-9-]+\.)*(itch\.zone|itch\.io|crazygames\.com)$/;
+app.use(['/api', '/auth'], (req, res, next) => {
+  const o = req.get('origin');
+  if (o && EMBED_ORIGIN_RE.test(o)) {
+    res.set({ 'Access-Control-Allow-Origin': o, 'Vary': 'Origin',
+      'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' });
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+  }
+  next();
+});
+app.post(['/auth/*splat', '/api/store/buy', '/api/link/*splat'], sameOrigin);
 
 app.use(express.json());
 app.use(cookieParser());
 app.use('/auth', rateLimit('auth', 20), authRouter);
+app.use('/api/link/code', rateLimit('linkcode', 5));
+app.use('/api/link/redeem', rateLimit('linkredeem', 10));
+app.use('/api/link', linkRouter);
 app.use('/api/me', rateLimit('read', 120));
 app.use('/api/leaderboard', rateLimit('read', 120));
 app.use('/api/store/buy', rateLimit('buy', 10));
 const server = http.createServer(app);
 const io = new Server(server, {
+  cors: { origin: EMBED_ORIGIN_RE },
   maxHttpBufferSize: 8 * 1024,   // vstupy jsou drobné → obří payloady rovnou zahodíme
   pingTimeout: 20000,
   connectTimeout: 10000,
@@ -80,7 +98,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     // Vložení jen z vlastního webu a herních portálů (itch.io hostuje HTML hry na itch.zone)
-    res.setHeader('Content-Security-Policy', "frame-ancestors 'self' https://*.itch.io https://*.itch.zone https://*.crazygames.com");
+    res.setHeader('Content-Security-Policy', "frame-ancestors 'self' https://*.itch.io https://*.itch.zone https://*.crazygames.com https://app.crazygames.com capacitor://app.crazygames.com" + (process.env.ALLOW_LOCAL_EMBED ? ' http://localhost:*' : ''));
     res.setHeader('Referrer-Policy', 'no-referrer');
   },
 }));
@@ -792,6 +810,24 @@ function disconnectWithGrace(socket) {
 
 const broadcastOnline = () => io.emit('online_count', { count: connCount });
 
+// Limit zakládání hostů na IP (ochrana proti zaplevelení DB); za Caddy je remote loopback → poslední X-Forwarded-For
+const guestHits = new Map();
+function socketIp(socket) {
+  const a = socket.handshake.address || '';
+  if (a === '127.0.0.1' || a === '::1' || a === '::ffff:127.0.0.1') {
+    const xff = String(socket.handshake.headers['x-forwarded-for'] || '').split(',').pop().trim();
+    if (xff) return xff;
+  }
+  return a;
+}
+function guestQuotaOk(ip, max = 60, windowMs = 3_600_000) {
+  const now = Date.now();
+  let h = guestHits.get(ip);
+  if (!h || h.reset <= now) { h = { n: 0, reset: now + windowMs }; guestHits.set(ip, h); }
+  return ++h.n <= max;
+}
+setInterval(() => { const now = Date.now(); for (const [k, h] of guestHits) if (h.reset <= now) guestHits.delete(k); }, 60_000).unref();
+
 io.on('connection', (socket) => {
   if (connCount >= MAX_CONN) { socket.disconnect(true); return; }
   connCount++;
@@ -799,7 +835,16 @@ io.on('connection', (socket) => {
   // Přečti JWT cookie a ulož userId pro tracking statistik
   const rawCookie = socket.handshake.headers.cookie || '';
   const cm = rawCookie.match(/(?:^|;\s*)fh_session=([^;]+)/);
-  socket.data.userId = cm ? verifySession(decodeURIComponent(cm[1])) : null;
+  // Token (handshake.auth.token) má přednost jako u API; jinak cookie; jinak vytvoř hosta a pošli klientovi nový token
+  socket.data.userId = verifySession(socket.handshake.auth?.token)
+    ?? (cm ? verifySession(decodeURIComponent(cm[1])) : null);
+  if (!socket.data.userId && guestQuotaOk(socketIp(socket))) {
+    try {
+      const g = createGuestAccount();
+      socket.data.userId = g.userId;
+      socket.emit('device_token', { token: g.token });
+    } catch (err) { console.error('guest create failed', err); }
+  }
   // rt vybírá klient (náhodné UUID z localStorage) → jen formát [A-Za-z0-9_-]{8,64}, jinak null.
   // Neuhodnutelnost 128bit náhodného tokenu je jediná ochrana slotu; přihlášený hráč se páruje přes userId (u:...).
   { const rt = socket.handshake.auth?.rt;

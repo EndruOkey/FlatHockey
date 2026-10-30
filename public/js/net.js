@@ -1,3 +1,4 @@
+import { getDeviceToken, setDeviceToken } from './auth.js';
 // Tenký klient k server-authoritative simulaci + lobby systému (socket.io).
 export class Net {
   constructor() {
@@ -15,7 +16,9 @@ export class Net {
     try {
       ref = new URLSearchParams(location.search).get('ref') || new URL(document.referrer).hostname || '';
     } catch {}
-    this.socket = window.io({ auth: { rt, ref: ref.slice(0, 40) } });
+    // auth jako funkce → při každém (re)connectu se znovu přečte aktuální token zařízení
+    this.socket = window.io({ auth: (cb) => cb({ rt, ref: ref.slice(0, 40), token: getDeviceToken() || undefined }) });
+    this.socket.on('device_token', ({ token }) => { if (typeof token === 'string') setDeviceToken(token); });
     this.id = this.socket.id || null;
     this._connected = false;
 

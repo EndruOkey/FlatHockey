@@ -8,10 +8,14 @@
     // Vloženo v iframe (itch.io / CrazyGames) → cookie přihlášení nefunguje, Discord login skryjeme
     try { if (window.self !== window.top) document.documentElement.classList.add('embedded'); }
     catch { document.documentElement.classList.add('embedded'); }
+    // Na CrazyGames žádná jiná přihlášení (Discord ani link kód) – jen CG účet
+    try { if (new URLSearchParams(location.search).get('ref') === 'crazygames') document.documentElement.classList.add('cg'); } catch {}
   </script>
   <style>
     html.embedded #discord-login-btn, html.embedded #splash-discord-btn,
     html.embedded #profile-discord-btn, html.embedded .splash-or { display: none !important; }
+    html.cg #discord-login-btn, html.cg #splash-discord-btn, html.cg #profile-discord-btn, html.cg .splash-or,
+    html.cg #footer-signin-btn, html.cg #dd-logout, html.cg #profile-guest-login, html.cg #profile-link { display: none !important; }
   </style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1968,6 +1972,18 @@
       width: 100%; margin-top: 12px;
     }
     #profile-stats { width: 100%; margin-top: 12px; }
+    #profile-link { width: 100%; margin-top: 12px; }
+    .link-btn {
+      background: transparent; border: 2px solid rgba(182,196,255,0.45); color: #fff; border-radius: 0; cursor: pointer;
+      padding: 9px 16px; font-family: 'Barlow Condensed', system-ui; font-style: italic; font-weight: 900;
+      font-size: .9rem; letter-spacing: 0.04em; text-transform: uppercase;
+    }
+    .link-btn:hover { background: rgba(182,196,255,0.1); }
+    #link-code { font-family: 'Barlow Condensed', system-ui; font-weight: 900; font-size: 2rem; letter-spacing: .18em; margin: 10px 0 4px; }
+    .link-help { font-size: .8rem; opacity: .75; line-height: 1.35; margin: 6px 0; }
+    .link-row { display: flex; gap: 8px; }
+    #link-code-in { flex: 1; min-width: 0; text-transform: uppercase; letter-spacing: .18em; text-align: center; }
+    #link-msg { font-size: .8rem; margin-top: 6px; min-height: 1em; }
 
     /* Save button — hidden in locker room (auto-save), visible in nav bar only */
     #v-profile .lk-save-btn { display: none !important; }
@@ -2409,6 +2425,25 @@
               <span data-i18n="profile_discord_cta">SIGN IN WITH DISCORD</span>
               <span style="margin-left:auto">→</span>
             </button>
+          </div>
+
+          <!-- Propojení účtů (link kód): iframe host ukáže kód, Discord účet ho zadá -->
+          <div id="profile-link" style="display:none">
+            <div id="link-issue" style="display:none">
+              <button id="link-show-btn" class="link-btn" data-i18n="link_btn">LINK ACCOUNT</button>
+              <div id="link-code-out" style="display:none">
+                <div id="link-code">---</div>
+                <div class="link-help" data-i18n="link_help">On flathockey.fun sign in with Discord, open Profile and enter this code. Valid for 10 minutes.</div>
+              </div>
+            </div>
+            <div id="link-redeem" style="display:none">
+              <div class="link-help" data-i18n="link_redeem_h">Have a code from a game on itch.io / CrazyGames? Enter it to merge that progress into this account.</div>
+              <div class="link-row">
+                <input id="link-code-in" maxlength="7" autocomplete="off" spellcheck="false" placeholder="XXX-XXX">
+                <button id="link-redeem-btn" class="link-btn" data-i18n="link_redeem_btn">LINK</button>
+              </div>
+            </div>
+            <div id="link-msg"></div>
           </div>
 
           <!-- Rank row (logged-in) -->

@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { randomBytes } from 'crypto';
+import { randomBytes, randomInt, randomUUID } from 'crypto';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -102,6 +102,32 @@ for (const [table, col, def] of [
   if (!exists) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
 }
 
+// ── Identity vrstva: jeden interní účet, více identit (discord / device / email) ──
+// users.discord_id zůstává kvůli zpětné kompatibilitě (nullable); zdroj pravdy je identities.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS identities (
+    provider    TEXT    NOT NULL,
+    provider_id TEXT    NOT NULL,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at  INTEGER NOT NULL DEFAULT (unixepoch()),
+    PRIMARY KEY (provider, provider_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_identities_user ON identities (user_id);
+
+  CREATE TABLE IF NOT EXISTS link_codes (
+    code       TEXT PRIMARY KEY,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at INTEGER NOT NULL,
+    used       INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS idx_link_codes_user ON link_codes (user_id);
+
+  INSERT OR IGNORE INTO identities (provider, provider_id, user_id, created_at)
+    SELECT 'discord', discord_id, id, created_at FROM users WHERE discord_id IS NOT NULL;
+  INSERT OR IGNORE INTO identities (provider, provider_id, user_id, created_at)
+    SELECT 'email', email, id, created_at FROM users WHERE email IS NOT NULL;
+`);
+
 // ── Alpha Season 1 seed (jen pokud neexistuje) ───────────────────────────────
 const seasonExists = db.prepare("SELECT id FROM seasons WHERE slug = 'alpha-1'").get();
 if (!seasonExists) {
@@ -182,6 +208,7 @@ export function upsertDiscordUser({ discord_id, display_name, avatar_url, is_spo
     `).run(display_name, avatar_url, is_sponsor ? 1 : 0, discord_id);
     ensureProfile(existing.id);
     ensureStats(existing.id);
+    stmtAddIdentity.run('discord', discord_id, existing.id);
     return existing.id;
   }
   const info = db.prepare(`
@@ -190,8 +217,163 @@ export function upsertDiscordUser({ discord_id, display_name, avatar_url, is_spo
   `).run(discord_id, display_name, avatar_url, is_sponsor ? 1 : 0);
   ensureProfile(info.lastInsertRowid);
   ensureStats(info.lastInsertRowid);
-  return info.lastInsertRowid;
+  stmtAddIdentity.run('discord', discord_id, info.lastInsertRowid);
+  return Number(info.lastInsertRowid);
 }
+
+// ── Identity / guest / merge ─────────────────────────────────────────────────
+const stmtAddIdentity = db.prepare('INSERT OR IGNORE INTO identities (provider, provider_id, user_id) VALUES (?, ?, ?)');
+
+export function getUserIdByIdentity(provider, provider_id) {
+  return db.prepare('SELECT user_id FROM identities WHERE provider = ? AND provider_id = ?').get(provider, String(provider_id))?.user_id ?? null;
+}
+export function userHasIdentity(user_id, provider) {
+  return !!db.prepare('SELECT 1 FROM identities WHERE user_id = ? AND provider = ?').get(user_id, provider);
+}
+/** Host = existující účet bez discord identity (jen zařízení). */
+export function isGuestUser(user_id) {
+  return !!getUserById(user_id) && !userHasIdentity(user_id, 'discord') && !userHasIdentity(user_id, 'crazygames');
+}
+
+/** Nový hostující účet vázaný na identitu zařízení (provider 'device', provider_id = did). */
+export const createGuestUser = db.transaction((did, display_name = 'Guest') => {
+  const info = db.prepare('INSERT INTO users (display_name) VALUES (?)').run(display_name);
+  const id = Number(info.lastInsertRowid);
+  ensureProfile(id);
+  ensureStats(id);
+  stmtAddIdentity.run('device', did, id);
+  return id;
+});
+
+export function setGuestName(user_id, name) {
+  const n = String(name || '').trim().slice(0, 16);
+  if (!n || !isGuestUser(user_id)) return;
+  db.prepare('UPDATE users SET display_name = ? WHERE id = ?').run(n, user_id);
+}
+
+/**
+ * Sloučí účet src do dst (deterministická pravidla), vše v jedné transakci:
+ * statistiky sečteny, rank_points = max, kredity sečteny, odemčení sjednocena,
+ * profil zůstává dst (title ze src jen když dst žádný nemá), identity přepojeny, src smazán.
+ * Odmítne: src === dst, neexistující účet, src s Discord identitou (slučují se jen hosté).
+ */
+export const mergeUsers = db.transaction((srcId, dstId) => {
+  srcId = Number(srcId); dstId = Number(dstId);
+  if (!srcId || !dstId || srcId === dstId) return { ok: false, error: 'same_or_invalid' };
+  if (!getUserById(srcId) || !getUserById(dstId)) return { ok: false, error: 'not_found' };
+  if (userHasIdentity(srcId, 'discord') || userHasIdentity(srcId, 'crazygames')) return { ok: false, error: 'source_not_guest' };
+  ensureStats(srcId); ensureStats(dstId); ensureProfile(dstId);
+  db.prepare(`
+    UPDATE stats SET
+      goals        = stats.goals        + s.goals,
+      assists      = stats.assists      + s.assists,
+      saves        = stats.saves        + s.saves,
+      games_played = stats.games_played + s.games_played,
+      wins         = stats.wins         + s.wins,
+      losses       = stats.losses       + s.losses,
+      plus_minus   = stats.plus_minus   + s.plus_minus,
+      puck_credits = stats.puck_credits + s.puck_credits,
+      rank_points  = MAX(stats.rank_points, s.rank_points)
+    FROM (SELECT * FROM stats WHERE user_id = ?) AS s
+    WHERE stats.user_id = ?
+  `).run(srcId, dstId);
+  db.prepare(`INSERT OR IGNORE INTO user_unlocks (user_id, item_id, purchased_at)
+              SELECT ?, item_id, purchased_at FROM user_unlocks WHERE user_id = ?`).run(dstId, srcId);
+  db.prepare(`UPDATE profiles SET title = (SELECT title FROM profiles WHERE user_id = ?) WHERE user_id = ? AND title IS NULL`).run(srcId, dstId);
+  db.prepare(`INSERT OR IGNORE INTO friends (user_id, friend_id, created_at)
+              SELECT ?, friend_id, created_at FROM friends WHERE user_id = ? AND friend_id != ?`).run(dstId, srcId, dstId);
+  db.prepare(`INSERT OR IGNORE INTO friends (user_id, friend_id, created_at)
+              SELECT user_id, ?, created_at FROM friends WHERE friend_id = ? AND user_id != ?`).run(dstId, srcId, dstId);
+  db.prepare('UPDATE identities SET user_id = ? WHERE user_id = ?').run(dstId, srcId);
+  db.prepare('UPDATE users SET is_sponsor = MAX(is_sponsor, (SELECT is_sponsor FROM users WHERE id = ?)) WHERE id = ?').run(srcId, dstId);
+  db.prepare('DELETE FROM users WHERE id = ?').run(srcId);   // CASCADE: stats, profil, odemčení, friends, link_codes
+  return { ok: true, user_id: dstId };
+});
+
+/**
+ * Discord přihlášení. guestId (ověřené serverem) = hostující účet z tohoto zařízení.
+ * - Discord účet už existuje → aktualizuj a slouč do něj hosta.
+ * - Discord účet nový + je host → přidej hostovi Discord identitu (bez merge).
+ * - Jinak vytvoř nový účet.
+ */
+export const loginDiscordUser = db.transaction((info, guestId = null) => {
+  const { discord_id, display_name, avatar_url, is_sponsor } = info;
+  const existingId = getUserIdByIdentity('discord', discord_id);
+  const guestOk = guestId && isGuestUser(guestId);
+  if (existingId) {
+    const uid = upsertDiscordUser(info);
+    if (guestOk && Number(guestId) !== uid) mergeUsers(guestId, uid);
+    return uid;
+  }
+  if (guestOk) {
+    db.prepare('UPDATE users SET discord_id = ?, display_name = ?, avatar_url = ?, is_sponsor = MAX(is_sponsor, ?) WHERE id = ?')
+      .run(discord_id, display_name, avatar_url, is_sponsor ? 1 : 0, guestId);
+    stmtAddIdentity.run('discord', discord_id, guestId);
+    return Number(guestId);
+  }
+  return upsertDiscordUser(info);
+});
+
+/**
+ * CrazyGames přihlášení (cgId = ověřené userId z JWT). Pravidla CG:
+ * - účet s touto CG identitou existuje → ten vyhrává (nic se nesluče);
+ * - jinak host z tohoto zařízení s 0 odehranými hrami → dostane CG identitu (nic neztrácí);
+ * - jinak nový účet (host s hrami zůstává nedotčený, nesluče se).
+ * Vrací { userId, created } a zajistí, že účet má aspoň jednu device identitu (did) pro token.
+ */
+export const loginCrazyGamesUser = db.transaction((cgId, display_name, avatar_url = null, guestId = null) => {
+  cgId = String(cgId);
+  const name = String(display_name || '').trim().slice(0, 16) || 'Player';
+  const avatar = typeof avatar_url === 'string' && /^https:\/\//.test(avatar_url) && avatar_url.length < 300 ? avatar_url : null;
+  let uid = getUserIdByIdentity('crazygames', cgId), created = false;
+  if (uid) {
+    db.prepare('UPDATE users SET display_name = ?, avatar_url = ? WHERE id = ?').run(name, avatar, uid);
+  } else {
+    const gp = guestId && isGuestUser(guestId) ? (getStats(guestId)?.games_played ?? 0) : -1;
+    if (gp === 0) {
+      uid = Number(guestId);
+      db.prepare('UPDATE users SET display_name = ?, avatar_url = ? WHERE id = ?').run(name, avatar, uid);
+    } else {
+      uid = Number(db.prepare('INSERT INTO users (display_name, avatar_url) VALUES (?, ?)').run(name, avatar).lastInsertRowid);
+      ensureProfile(uid); ensureStats(uid);
+      created = true;
+    }
+    stmtAddIdentity.run('crazygames', cgId, uid);
+  }
+  let did = db.prepare("SELECT provider_id FROM identities WHERE user_id = ? AND provider = 'device' ORDER BY created_at, rowid LIMIT 1").get(uid)?.provider_id;
+  if (!did) { did = randomUUID(); stmtAddIdentity.run('device', did, uid); }
+  return { userId: uid, did, created };
+});
+
+// ── Link kód (propojení hosta v iframe s Discord účtem) ──────────────────────
+const LINK_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';   // bez I L O 0 1
+export const LINK_TTL = 600;
+export function normalizeLinkCode(raw) {
+  const c = String(raw || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return c.length === 6 && [...c].every(ch => LINK_ALPHABET.includes(ch)) ? c.slice(0, 3) + '-' + c.slice(3) : null;
+}
+export const createLinkCode = db.transaction((user_id, now = Math.floor(Date.now() / 1000)) => {
+  db.prepare('DELETE FROM link_codes WHERE user_id = ? OR expires_at < ? OR used = 1').run(user_id, now);
+  for (;;) {
+    let c = '';
+    for (let i = 0; i < 6; i++) c += LINK_ALPHABET[randomInt(LINK_ALPHABET.length)];
+    c = c.slice(0, 3) + '-' + c.slice(3);
+    if (db.prepare('SELECT 1 FROM link_codes WHERE code = ?').get(c)) continue;
+    db.prepare('INSERT INTO link_codes (code, user_id, expires_at) VALUES (?, ?, ?)').run(c, user_id, now + LINK_TTL);
+    return { code: c, expires_at: now + LINK_TTL };
+  }
+});
+/** Kód → slouč jeho účet do targetUserId (musí mít Discord identitu). Jednorázový. */
+export const redeemLinkCode = db.transaction((raw, targetUserId, now = Math.floor(Date.now() / 1000)) => {
+  const code = normalizeLinkCode(raw);
+  if (!code) return { ok: false, error: 'invalid_code' };
+  const row = db.prepare('SELECT * FROM link_codes WHERE code = ? AND used = 0 AND expires_at > ?').get(code, now);
+  if (!row) return { ok: false, error: 'invalid_code' };
+  if (!userHasIdentity(targetUserId, 'discord')) return { ok: false, error: 'discord_required' };
+  db.prepare('UPDATE link_codes SET used = 1 WHERE code = ?').run(code);
+  const r = mergeUsers(row.user_id, targetUserId);
+  return r.ok ? { ok: true } : { ok: false, error: r.error === 'same_or_invalid' ? 'same_account' : r.error };
+});
 
 export function upsertEmailUser(email, display_name) {
   const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
@@ -270,6 +452,7 @@ export function getLeaderboard(limit = 50) {
     SELECT u.display_name, u.avatar_url, s.rank_points, s.goals, s.assists,
            s.wins, s.losses, s.games_played, s.plus_minus
     FROM stats s JOIN users u ON u.id = s.user_id
+    WHERE s.games_played > 0
     ORDER BY s.rank_points DESC
     LIMIT ?
   `).all(limit);

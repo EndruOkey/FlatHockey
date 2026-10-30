@@ -31,6 +31,13 @@ Hra nebyla nikdy propagovaná. Plán: vydat na itch.io + CrazyGames, po 14 dnech
 - Tutoriál/trénink: 5 oprav (menu, spin, puk na ledě, nahrávka), pojistka u kroku „Dej gól“ (po 3 zákrocích lehký gólman, po 6 splněno); `python test/training-smoke.py <url>`.
 - Náhledy: `node release/thumb/thumbs.mjs` (směry A „Logo v ledu“, B „Detail střely“ — vybrat), video+snímky `node release/make-assets.mjs`.
 
+## Účty (30. 10.)
+- Host má účet od 1. hry (token `fh_device_token` v localStorage → funguje i v iframe portálů); statistiky se ukládají.
+- Discord přihlášení sloučí hostovský účet (součet statistik a kreditů, rank = max, unlocky sjednocení).
+- Kód propojení XXX-XXX (10 min, 1×) — jen itch.io/flathockey.fun, NE na CrazyGames.
+- CrazyGames: obal `release/crazygames/index.html` = most k SDK (postMessage) → `POST /auth/crazygames` ověří RS256 token (JWKS CG). Po nahrání nastavit na serveru `CG_GAME_ID`. Ověřit v CG náhledu.
+- Testy: `npm run test:accounts`, `npm run test:cg`. Před každým nasazením záloha DB do ~/backups (20 posledních).
+
 ## Zbývá
 - Vybrat náhled (A/B) a podle něj první snímek videa.
 - (hotovo) Vlna 2: simulace je deterministická — `world.rng` (public/js/rng.js), časovače v ticích; `npm run test:determinism`.

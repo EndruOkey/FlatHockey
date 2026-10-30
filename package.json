@@ -9,6 +9,8 @@
     "test:bot": "node test/bot-smoke.mjs",
     "test:puck": "node test/puck-goalmouth.test.mjs",
     "test:server": "node test/server-hardening.test.mjs",
+    "test:cg": "node test/crazygames.test.mjs",
+    "test:accounts": "node test/accounts.test.mjs",
     "test:botq": "node test/bot-quality.test.mjs",
     "test:determinism": "node test/determinism.test.mjs",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -24,6 +26,7 @@
     "better-sqlite3": "^12.10.0",
     "cookie-parser": "^1.4.7",
     "express": "^5.2.1",
+    "jose": "^5.9.6",
     "jsonwebtoken": "^9.0.3",
     "socket.io": "^4.8.3"
   },
