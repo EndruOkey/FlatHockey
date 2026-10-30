@@ -403,7 +403,8 @@ export function getProfile(user_id) {
 
 export function saveProfile(user_id, fields) {
   const allowed = ['helmet','gloves','tape','trail','stick','tape_style','helmet_type','visor','handed','number'];
-  const cols = Object.keys(fields).filter(k => allowed.includes(k));
+  // Přeskoč prázdné hodnoty — number je NOT NULL, zápis null by shodil uložení (500) i otevření šatny
+  const cols = Object.keys(fields).filter(k => allowed.includes(k) && fields[k] != null);
   if (!cols.length) return;
   const set = cols.map(c => `${c} = ?`).join(', ');
   db.prepare(`UPDATE profiles SET ${set} WHERE user_id = ?`).run(...cols.map(c => fields[c]), user_id);
