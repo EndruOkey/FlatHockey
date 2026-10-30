@@ -24,14 +24,23 @@ Hra nebyla nikdy propagovaná. Plán: vydat na itch.io + CrazyGames, po 14 dnech
 | hodně zápasů, málo návratů | ladit zábavu, test zopakovat |
 | málo zápasů | uzavřít / zkusit hru bez online soupeřů |
 
-## Rozpracované
-- (hotovo 30. 10.) Brankář: horní roh trefitelný (práh vůči max. výšce puku), postavení souměrné.
+## Hotovo 30. 10.
+- Brankář: horní roh trefitelný, postavení souměrné.
+- Puk u brány: jedno pravidlo pro obě strany (`Puck.js` `_carryKeepOut`), test `npm run test:puck` (64 kontrol).
+- Server: limity požadavků, CSRF u POST, pád = restart, kontrola tokenu; `npm run test:server`.
+- Tutoriál/trénink: 5 oprav (menu, spin, puk na ledě, nahrávka), pojistka u kroku „Dej gól“ (po 3 zákrocích lehký gólman, po 6 splněno); `python test/training-smoke.py <url>`.
+- Náhledy: `node release/thumb/thumbs.mjs` (směry A „Logo v ledu“, B „Detail střely“ — vybrat), video+snímky `node release/make-assets.mjs`.
+
+## Zbývá
+- Vybrat náhled (A/B) a podle něj první snímek videa.
+- Vlna 2: náhoda v simulaci (Math.random 26×, Date.now časovače) → seed a ticky.
+- Vlna 3: GitHub Action pro nasazení (nový klíč do Secrets), main = produkce, úklid větve dev (.claude/), zastaralé workflow míří na starý server.
+- Bot strká do stojícího hráče (pokus o vyhýbání to zhoršil 2,4× → zahozen).
 
 ## Další kroky
 1. Texty pro portály: `release/LISTING.md` (projít).
-2. Assety: itch cover 630×500 + 3–5 screenshotů; CrazyGames covery 1920×1080, 800×1200, 800×800 + tiché video 15–20 s.
-3. Nahrát obaly na itch.io a CrazyGames (Basic Launch), spustit test.
-4. Ručně projít tréninkový režim (WIP z 13. 9. je teď poprvé na produkci).
+2. Nahrát obaly na itch.io a CrazyGames (Basic Launch), spustit test.
+3. Ručně zkusit pocit z tutoriálu (automatický test prošel).
 
 ## Nasazení
 Z PC: `ssh ubuntu@flathockey.fun` → `cd ~/FlatHockey && git pull --ff-only && sudo systemctl restart hockey`

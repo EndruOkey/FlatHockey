@@ -3,3 +3,7 @@ node_modules/
 flathockey.db
 flathockey.db-shm
 flathockey.db-wal
+
+# Generované obrázky a video (znovu: node release/thumb/thumbs.mjs, node release/make-assets.mjs)
+release/thumb/out/
+release/assets/

@@ -529,6 +529,7 @@ export class SandboxGame {
   }
 
   start() {
+    if (globalThis.location?.search.includes('fhtest')) globalThis.__fhGame = this;   // test hook (test/training-smoke.py)
     this._reset();
     // Camera: leave room for the always-visible training dock at the bottom
     this.engine.cameraOverride = (canvas) => {
@@ -3079,10 +3080,7 @@ const _TUT = [
     keys:  ['LMB'],
     setup(g) {
       g._goalLock = false; g.world._goalLock = false; g.goalFlash = 0;
-      if (!g.local.hasPuck) {
-        g.puck.reset(); g.puck.x = g.local.x + 15; g.puck.y = g.local.y;
-        g.puck.vx = g.puck.vy = 0; g.puck.z = g.puck.vz = 0; g.puck.faceoffTimer = 0;
-      }
+      if (!g.local.hasPuck) g._tutGivePuck();
       g.passer.active = false;
       g._tutShot = false; g._tutShotHadPuck = g.local.hasPuck;
     },
@@ -3097,10 +3095,7 @@ const _TUT = [
     keys:  ['LMB'],
     setup(g) {
       g._goalLock = false; g.world._goalLock = false; g.goalFlash = 0;
-      if (!g.local.hasPuck) {
-        g.puck.reset(); g.puck.x = g.local.x + 15; g.puck.y = g.local.y;
-        g.puck.vx = g.puck.vy = 0; g.puck.z = g.puck.vz = 0; g.puck.faceoffTimer = 0;
-      }
+      if (!g.local.hasPuck) g._tutGivePuck();
       // Passer appears to player's left (toward center ice) — no teleport needed
       g.passer.active = true;
       g.passer.x = Math.max(80, g.local.x - 180);
@@ -3206,10 +3201,9 @@ const _TUT = [
     keys:  ['LMB'],
     setup(g) {
       g._goalLock = false; g.world._goalLock = false; g.goalFlash = 0;
-      g.local.hasPuck = false; g.passer.active = false;
-      g.puck.reset(); g.puck.x = g.local.x + 15; g.puck.y = g.local.y;
-      g.puck.vx = g.puck.vy = 0; g.puck.z = g.puck.vz = 0; g.puck.faceoffTimer = 0;
-      g._tutGoalRespawn = 0; g._tutGoalDone = false;
+      g.passer.active = false;
+      g._tutGivePuck();
+      g._tutGoalRespawn = 0; g._tutGoalDone = false; g._tutSaves = 0; g._tutSaveSeen = false;
     },
     check: g => g._tutGoalDone,
     hl:    g => ({ type: 'arrow', tx: RINK.goalLineRight, ty: RINK.h / 2 }),
@@ -3264,6 +3258,15 @@ export class TutorialGame extends SandboxGame {
     this.engine.onDraw = (ctx, cam) => {
       this._drawTut(ctx, cam ?? this._tutCam);
     };
+  }
+
+  // Dá hráči puk na hůl. Puk "na ledě 15 px od těla" se nesebral, když hůl mířila na bránu (pickup je jen čepelí).
+  _tutGivePuck() {
+    this.local.hasPuck = true;
+    this.puck.reset();
+    this.puck.x = this.local.x; this.puck.y = this.local.y;
+    this.puck.vx = this.puck.vy = 0; this.puck.z = this.puck.vz = 0; this.puck.faceoffTimer = 0;
+    this._goalLock = false; this.world._goalLock = false;
   }
 
   _handleGoal(result) {
@@ -3334,6 +3337,17 @@ export class TutorialGame extends SandboxGame {
 
     // Krok 'spin': kruh myší 270°+ zatímco má hráč puk
     if (step.id === 'spin') {
+      // Anti-helikoptéra (Player.js) shodí puk při rychlém šermování → bez zpětného dání by krok nešel dokončit
+      if (!this.local.hasPuck) {
+        this._tutSpinNoPuckT = (this._tutSpinNoPuckT ?? 0) + dt;
+        if (this._tutSpinNoPuckT > 1.2) {
+          this._tutSpinNoPuckT = 0;
+          this.local.hasPuck = true;
+          this.puck.x = this.local.x; this.puck.y = this.local.y;
+          this.puck.vx = this.puck.vy = 0; this.puck.z = this.puck.vz = 0; this.puck.faceoffTimer = 0;
+          this._tutSpinLastAngle = null;
+        }
+      } else this._tutSpinNoPuckT = 0;
       if (this.local.hasPuck) {
         const ang = this.local.aimAngle;
         if (this._tutSpinLastAngle !== null) {
@@ -3351,6 +3365,21 @@ export class TutorialGame extends SandboxGame {
       const nowHas = this.local.hasPuck;
       if (this._tutShotHadPuck && !nowHas && !this.passer.hasPuck) this._tutShot = true;
       this._tutShotHadPuck = nowHas;
+    }
+
+    // Krok 'pass': mimo-přihrávka nechá puk ležet někde na ledě → po 2 s ho vrať hráči (jinak se krok nedá dokončit)
+    if (step.id === 'pass') {
+      const lost = !this.local.hasPuck && !this.passer.hasPuck && Math.hypot(this.puck.vx, this.puck.vy) < 40;
+      this._tutPassLostT = lost ? (this._tutPassLostT ?? 0) + dt : 0;
+      // Slabá přihrávka zastaví puk kousek před nahrávačem → počítej ji (nahrávač si puk přibere), místo aby hráč bloudil pro puk
+      const dPasser = Math.hypot(this.puck.x - this.passer.x, this.puck.y - this.passer.y);
+      const dMe     = Math.hypot(this.puck.x - this.local.x, this.puck.y - this.local.y);
+      if (this._tutPassLostT > 0.6 && dPasser < 130 && dPasser < dMe && this.passer.active) {
+        this._tutPassLostT = 0;
+        this.passer.hasPuck = true; this.passer._returnTimer = 1.3; this.passer._shouldReturn = false;
+        this.puck.x = this.passer.x; this.puck.y = this.passer.y; this.puck.vx = this.puck.vy = 0;
+      }
+      if (this._tutPassLostT > 2.0) { this._tutPassLostT = 0; this._tutGivePuck(); }
     }
 
     // Krok 'bodycheck': detekuj knockback passera (byl sražen)
@@ -3384,19 +3413,24 @@ export class TutorialGame extends SandboxGame {
 
     // Auto-respawn puck on miss/save during goal step
     if (step.id === 'goal' && !this._tutGoalDone && this.goalFlash <= 0) {
+      // Pojistka pro začátečníka: po 3 chycených střelách lehký gólman + ukázat slabá místa,
+      // po 6 střelách na bránu krok splněn (cílem je naučit střelu, ne porazit gólmana)
+      const saving = this.goalie._saveFlash > 0;
+      if (saving && !this._tutSaveSeen) {
+        this._tutSaves = (this._tutSaves ?? 0) + 1;
+        if (this._tutSaves === 3) { this.goalie.difficulty = 'easy'; this.goalie.showWeakSpots = true; }
+        if (this._tutSaves >= 6) this._tutGoalDone = true;
+      }
+      this._tutSaveSeen = saving;
       if (this.local.hasPuck) {
         this._tutGoalRespawn = 0;
       } else {
         const dist = Math.hypot(this.puck.x - this.local.x, this.puck.y - this.local.y);
-        if (!this._tutGoalRespawn && dist > 100) this._tutGoalRespawn = 1.8;
+        if (!this._tutGoalRespawn && (dist > 100 || Math.hypot(this.puck.vx, this.puck.vy) < 30)) this._tutGoalRespawn = 1.8;   // i stojící puk poblíž (nesebraný čepelí) = respawn
         if (this._tutGoalRespawn > 0) {
           this._tutGoalRespawn = Math.max(0, this._tutGoalRespawn - dt);
           if (this._tutGoalRespawn === 0) {
-            this.puck.reset();
-            this.puck.x = this.local.x + 15; this.puck.y = this.local.y;
-            this.puck.vx = this.puck.vy = 0; this.puck.z = this.puck.vz = 0;
-            this.puck.faceoffTimer = 0;
-            this._goalLock = false; this.world._goalLock = false;
+            this._tutGivePuck();
           }
         }
       }

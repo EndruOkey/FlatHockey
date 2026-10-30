@@ -109,23 +109,23 @@
 
 - [x] **F1** `window.prompt/confirm/alert` → `_showInputDialog` + `_showConfirmDialog` HTML overlay (iOS-safe, paste funguje)
 - [ ] **F2** Duplicate detection — pokud stejný kód existuje, zeptat se
-- [ ] **F4** Reset scénáře bez reloadu — tlačítko "↺ RESET" v train dock
+- [x] **F4** Reset scénáře bez reloadu — tlačítko v docku `game.js:2148` (+ `_loadScenarioCode` `:2322`)
 
 ### BATCH 4 — Bot Intelligence (~3h)
 > Zastaví odchod hráčů po 30 min (cheese route problém)
 
-- [ ] **C1** Runtime variance — v každém `_tick` aplikuj malý random drift na gap (±2px/frame noise)
-- [ ] **C3** Wrong read — každých 8–12s šance 15% že defender jde špatným směrem na 0.4s
-- [ ] **C4** Passive preset — nový preset `passive`: stojí na homeX/Y, nepohybuje se, nepokuje
-- [ ] **C5** Gap variance — gap = `sc.gap + situational * dynamic_factor` místo fixní hodnoty
+- [x] **C1** Runtime variance — gap noise (random walk ±5px, krok 0.3 s) — `Defender.js:142-146`, použito `:196` (Math.random, ne seedované)
+- [x] **C3** Wrong read — každých 8–12s šance 15 %, 0.4 s — `Defender.js:150-162`, efekt `:309` (offset ±38 px)
+- [x] **C4** Passive preset — `Defender.js:47` (PRESET), `:96` (isPassive), `:453` (bez pokeu), `:548`; tlačítko `game.js:1533`
+- [x] **C5** Gap variance — rushing +5 / pomalý −3 / bokem +3 — `Defender.js:187-196`
 
 ### BATCH 5 — Goalie & Passer Polish (~2h)
 > Zvyšuje skill ceiling a autenticitu
 
-- [ ] **D1** Weak spot vizualizace — na easy obtížnosti jemné highlight zón (průhledné, discoverable)
-- [ ] **D2** One-timer ověření + případná oprava goalie lag při one-timer
-- [ ] **E3** Delay variance — `RETURN_DELAY = 1.0 + Math.random() * 0.6` místo fixního 1.3
-- [ ] **E2** Passer position hint — po 3 gólech ze stejného místa lehce pohne anchor
+- [x] **D1** Weak spot vizualizace — `Goalie.js:743` (overlay), zapnuto `game.js:642` (jen easy, ne v tutoriálu)
+- [~] **D2** One-timer ověření — goalie lag je implementován (`Goalie.js:430` `_oneTimerHint`, nastavuje `game.js:641`); feel neověřen člověkem
+- [x] **E3** Delay variance — `Passer.js:5-6,47` (0.9–1.7 s)
+- [x] **E2** Passer position hint — `game.js:2839-2852` (po 3 gólech z podobného y posune `_anchorY`)
 
 ### BATCH 6 — Velké Features (design first)
 > Před implementací domluvit design
@@ -153,3 +153,8 @@ Batch 4 (bot variance) — nezávislé, lze kdykoli
 Batch 5 (goalie/passer) — nezávislé, lze kdykoli
 Batch 6 — design discussion first
 ```
+
+
+## Smoke test (2026-10-30)
+`python test/training-smoke.py http://localhost:4200` — tutoriál (12 kroků), drilly x obtížnost, presety defendera, build tab. Hook `window.__fhGame` jen s `?fhtest`.
+Opraveno: spin krok nešel dokončit po shození puku (`game.js` `_tutSpinNoPuckT`); hlavní menu pro hosta: TUTORIAL / SOLO TRAINING překryté patičkou na 720 px (`index.html` `#vm-hero-section`, `#v-main`).

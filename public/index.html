@@ -560,7 +560,7 @@
       position: absolute; inset: 64px 0 0 0;
       display: flex !important;
       flex-direction: column;
-      overflow: hidden;
+      overflow-x: hidden; overflow-y: auto;   /* krátké okno (720px): obsah se rolují, nepřekrývá patičku */
     }
 
     /* ═══════════════════════════════════════════════════════════════
@@ -602,7 +602,7 @@
       align-items: center;
       position: relative;
       z-index: 1;
-      min-height: 0;
+      flex: 1 0 auto;   /* nezmenšovat pod obsah, jinak TUTORIAL/SOLO TRAINING leží pod patičkou */
       max-width: 1400px;
       margin: 0 auto;
       width: 100%;

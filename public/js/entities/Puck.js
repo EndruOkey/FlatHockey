@@ -155,29 +155,12 @@ export class Puck {
       }
       this._cradleTo(owner);
       this.ownerId = owner.id;
-      const _gy1 = RINK.goalY, _gy2 = RINK.goalY + RINK.goalH;
-      const _gd  = RINK.goalDepth;
-      if (this.y > _gy1 && this.y < _gy2) {
-        // Pravá branka
-        if (owner.x > RINK.goalLineRight + _gd) {
-          // Hráč za sítí zezadu: puk nesmí přejít přes ÚSTÍ branky (dovoleno uvnitř sítě od zadu)
-          if (this.x < RINK.goalLineRight + PUCK.radius + 1) {
-            this.x = RINK.goalLineRight + PUCK.radius + 1; this.vx = 0; this.vy = 0;
-          }
-        } else if (this.x > RINK.goalLineRight && this.x < RINK.goalLineRight + _gd) {
-          // Hráč zepředu, puk uvnitř cage → carry-in fix (zadrž před ústím)
-          this.x = RINK.goalLineRight - PUCK.radius - 1; this.vx = 0; this.vy = 0;
-        }
-        // Levá branka (symetricky)
-        if (owner.x < RINK.goalLineLeft - _gd) {
-          if (this.x > RINK.goalLineLeft - PUCK.radius - 1) {
-            this.x = RINK.goalLineLeft - PUCK.radius - 1; this.vx = 0; this.vy = 0;
-          }
-        } else if (this.x < RINK.goalLineLeft && this.x > RINK.goalLineLeft - _gd) {
-          this.x = RINK.goalLineLeft + PUCK.radius + 1; this.vx = 0; this.vy = 0;
-        }
+      _carryKeepOut(this, owner);
+      // Tělo hráče uvnitř klece → odhoď puk; složku rychlosti DO branky vynuluj (žádný gól dojezdem)
+      if (_insideCage(owner.x, owner.y)) {
+        owner.hasPuck = false; this.ownerId = null;
+        for (const [lineX, s] of GOAL_SIDES) if (this.y > RINK.goalY && this.y < RINK.goalY + RINK.goalH && s * (this.x - lineX) > -PUCK.radius - 2 && s * this.vx > 0) this.vx = 0;
       }
-      if (_insideCage(owner.x, owner.y)) { owner.hasPuck = false; this.ownerId = null; }
       return;
     }
 
@@ -325,6 +308,23 @@ function _reb(sp) { return Math.max(0.45, 0.82 - Math.abs(sp) / 1800); }
 
 const POST_R      = 2.0; // kolizní rádius tyčky (px) — menší = méně phantom bounces
 const GOAL_Y_MARG = 1.2; // y-okraj pro detekci gólu — musí být menší než POST_R+PUCK.radius=5
+
+// Branky jako [čára, směr do branky] — jedno pravidlo pro obě strany (zrcadlí znaménko s)
+const GOAL_SIDES = [[RINK.goalLineRight, +1], [RINK.goalLineLeft, -1]];
+
+// Nesený puk: mezi tyčkami nikdy neprojde brankovou čárou do klece (žádný gól nesením).
+// Hráč před/v kleci → puk drží před čárou; hráč za sítí → puk drží za zadní stěnou (obejetí).
+// Jen posun polohy — rychlost zůstává hráčova, takže puk se u ústí nezasekne.
+function _carryKeepOut(puck, owner) {
+  if (!(puck.y > RINK.goalY && puck.y < RINK.goalY + RINK.goalH)) return;
+  const d = RINK.goalDepth, m = PUCK.radius + 1;
+  for (const [lineX, s] of GOAL_SIDES) {
+    const up = s * (puck.x - lineX);          // hloubka puku do branky (<0 = před čárou)
+    const uo = s * (owner.x - lineX);         // hloubka hráče
+    if (uo > d) { if (up < d + m) puck.x = lineX + s * (d + m); }   // za sítí
+    else if (up > -m && up < d + m) puck.x = lineX - s * m;         // před sítí
+  }
+}
 
 function _insideCage(x, y) {
   const gy1 = RINK.goalY, gy2 = RINK.goalY + RINK.goalH;

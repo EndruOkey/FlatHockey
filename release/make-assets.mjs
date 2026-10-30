@@ -9,9 +9,10 @@
  *   env PORT=4120               local server port
  *   env KEEP_TMP=1              keep temp files in <os tmp>/fh-assets
  *
- * Needs: Node >= 18, `npm i` (playwright devDependency + its chromium). ffmpeg is optional:
- * if `ffmpeg` is not on PATH the ffmpeg bundled with Playwright (ms-playwright/ffmpeg-*) is used
- * (it has crop/scale/libvpx-vp9 -> .webm only, no mp4/h264).
+ * Needs: Node >= 18, `npm i` (playwright devDependency + its chromium). ffmpeg is needed for the
+ * videos (must decode vp8 + have libx264): `ffmpeg` on PATH, env FFMPEG=path, or `pip install imageio-ffmpeg`.
+ * Playwright's bundled ffmpeg cannot decode vp8, so it does not work. Without ffmpeg only the raw
+ * 16:9 .webm recording is delivered (untrimmed).
  *
  * How it works: a real browser plays a real match vs the server bot (guest, create lobby, start).
  * An autopilot reads the server snapshots (socket 'snap') and drives the player ONLY through
@@ -21,7 +22,7 @@
  * Output -> release/assets/
  *   itch/cover-630x500.png, itch/screenshot-1..4-*.png (1280x720)
  *   crazygames/cover-1920x1080.png, cover-800x1200.png, cover-800x800.png
- *   crazygames/preview-16x9-1920x1080.webm, preview-2x3-1080x1620.webm  (15-20 s, silent)
+ *   crazygames/preview-16x9-1920x1080.mp4, preview-2x3-1080x1620.mp4  (H.264, 18 s, silent)
  *   contact-sheet.png (QA overview), report.txt (measured sizes/durations)
  */
 import { chromium } from 'playwright';
@@ -42,6 +43,7 @@ const log = (...a) => { const s = a.join(' '); console.log(s); report.push(s); }
 fs.mkdirSync(path.join(OUT, 'itch'), { recursive: true });
 fs.mkdirSync(path.join(OUT, 'crazygames'), { recursive: true });
 fs.mkdirSync(TMP, { recursive: true });
+for (const d of ['itch', 'crazygames']) for (const f of fs.readdirSync(path.join(OUT, d))) fs.rmSync(path.join(OUT, d, f)); // no stale files
 
 // ---------- seeded RNG (mulberry32) ----------
 let _seed = 20261030;
@@ -67,16 +69,13 @@ async function startServer() {
 
 // ---------- ffmpeg ----------
 function findFfmpeg() {
-  if (spawnSync('ffmpeg', ['-version']).status === 0) return 'ffmpeg';
-  const dirs = [path.join(process.env.LOCALAPPDATA || '', 'ms-playwright'), path.join(os.homedir(), '.cache', 'ms-playwright'),
-    path.join(os.homedir(), 'Library', 'Caches', 'ms-playwright')];
-  for (const d of dirs) {
-    if (!fs.existsSync(d)) continue;
-    for (const e of fs.readdirSync(d).filter(n => n.startsWith('ffmpeg')).sort().reverse()) {
-      for (const f of ['ffmpeg-win64.exe', 'ffmpeg-linux', 'ffmpeg-mac']) {
-        const p = path.join(d, e, f); if (fs.existsSync(p)) return p;
-      }
-    }
+  // Must DECODE vp8 (Playwright's recording) and encode h264: Playwright's bundled ffmpeg cannot, so it is not used.
+  const cands = [process.env.FFMPEG, 'ffmpeg'];
+  const py = spawnSync('python', ['-c', 'import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe())'], { encoding: 'utf8' });
+  if (py.status === 0) cands.push(py.stdout.trim());
+  for (const c of cands.filter(Boolean)) {
+    const r = spawnSync(c, ['-hide_banner', '-decoders'], { encoding: 'utf8' });
+    if (r.status === 0 && / vp8 /.test(r.stdout)) { const e = spawnSync(c, ['-hide_banner', '-encoders'], { encoding: 'utf8' }).stdout; if (/libx264/.test(e)) return c; }
   }
   return null;
 }
@@ -117,10 +116,10 @@ async function pilot(page, hooks, maxMs) {
     for (const k of [...held]) if (!want.has(k)) { await page.keyboard.up(k); held.delete(k); }
     for (const k of want) if (!held.has(k)) { await page.keyboard.down(k); held.add(k); }
   };
-  let lmb = false, lmbSince = 0, lastLock = 0, jit = 0, shotsFired = 0;
+  let lmb = false, lmbSince = 0, lastGoals = 0, jit = 0, shotsFired = 0;
   const start = Date.now();
   while (Date.now() - start < maxMs) {
-    const st = await page.evaluate(() => ({ s: window.__snap, id: window.__sock && window.__sock.id, cw: innerWidth, ch: innerHeight }));
+    const st = await page.evaluate(() => ({ s: window.__snap, g: window.__goals || 0, id: window.__sock && window.__sock.id, cw: innerWidth, ch: innerHeight }));
     const s = st.s; const me = s && s.players.find(p => p.id === st.id);
     if (!me) { await sleep(60); continue; }
     // same camera as engine.computeCamera (pad 48)
@@ -150,8 +149,7 @@ async function pilot(page, hooks, maxMs) {
     if (tx - me.x > 10) want.add('KeyD'); if (tx - me.x < -10) want.add('KeyA');
     if (ty - me.y > 10) want.add('KeyS'); if (ty - me.y < -10) want.add('KeyW');
     await setKeys(want);
-    if (s.lock && !lastLock) await hooks.onGoal?.({ page, me, s, toS });
-    lastLock = s.lock;
+    if (st.g > lastGoals) { lastGoals = st.g; await hooks.onGoal?.({ page, me, s, toS }); }
     if (await hooks.onTick?.({ page, me, s, toS, hasPuck, shotsFired }) === 'stop') break;
     await sleep(40);
   }
@@ -168,7 +166,8 @@ async function runItch(browser, base) {
   const got = { play: 0, shot: 0, goal: 0, goal2: 0 };
   await pilot(page, {
     async onTick({ page, hasPuck, me }) {
-      if (!got.play && hasPuck && me.x > 300 && Date.now() - matchStart > 4000) { await page.screenshot({ path: P('screenshot-2-gameplay.png') }); got.play = 1; }
+      const el = Date.now() - matchStart;
+      if (!got.play && ((hasPuck && me.x > 300 && el > 12000) || el > 30000)) { await page.screenshot({ path: P('screenshot-2-gameplay.png') }); got.play = 1; }
       return got.shot && got.goal ? 'stop' : undefined;
     },
     async onShot({ page }) { if (!got.shot) { await sleep(110); await page.screenshot({ path: P('screenshot-3-shot.png') }); got.shot = 1; } },
@@ -186,31 +185,43 @@ async function runVideo(browser, base) {
   await ctx.addInitScript(INIT);
   const { page, t0, matchStart } = await openMatch(ctx, base, null, null);
   const mStart = (matchStart - t0) / 1000;
-  const track = []; let goalT = null; let shotFrame = null;
-  const src = { play: path.join(TMP, 'src-play.png'), shot: path.join(TMP, 'src-shot.png'), goal: path.join(TMP, 'src-goal.png') };
-  const got = {};
+  const track = []; let goalT = null;
   await pilot(page, {
-    async onTick({ s, toS, hasPuck, me, page }) {
+    async onTick({ s, toS }) {
       const t = (Date.now() - t0) / 1000;
       const p = toS(s.puck.x, s.puck.y); track.push([t, p.x]);
-      if (!got.play && hasPuck && me.x > 300 && t - mStart > 3) { await page.screenshot({ path: src.play }); got.play = toS(me.x, me.y); }
       // stop 4 s after a goal, or after 100 s without one
       if (goalT && t - goalT > 4) return 'stop';
       if (!goalT && t - mStart > 100) return 'stop';
     },
-    async onShot({ page, me, toS }) { await sleep(110); if (!got.shot) { await page.screenshot({ path: src.shot }); got.shot = toS(me.x, me.y); } },
-    async onGoal({ page, me, toS }) { goalT = (Date.now() - t0) / 1000; await sleep(450); await page.screenshot({ path: src.goal }); got.goal = toS(me.x, me.y); },
+    async onGoal() { goalT = (Date.now() - t0) / 1000; },
   }, 130000);
   const vpath = await page.video().path();
   await ctx.close();
-  log(`video run: matchStart=${mStart.toFixed(1)}s goalT=${goalT?.toFixed(1) ?? 'none'}s got=${Object.keys(got)}`);
-  return { vpath, mStart, goalT, track, got, src };
+  log(`video run: matchStart=${mStart.toFixed(1)}s goalT=${goalT?.toFixed(1) ?? 'none'}s`);
+  return { vpath, mStart, goalT, track };
+}
+
+// ---------- RUN C: 3840x2160 still for the covers (sharp when cropped/zoomed) ----------
+async function runCoverSource(browser, base) {
+  const ctx = await browser.newContext({ viewport: { width: 3840, height: 2160 }, reducedMotion: 'no-preference' });
+  await ctx.addInitScript(INIT);
+  const { page, matchStart } = await openMatch(ctx, base, null, null);
+  const file = path.join(TMP, 'cover-src-4k.png'); let focus = null;
+  await pilot(page, {
+    async onShot({ page, me, toS }) { await sleep(110); await page.screenshot({ path: file }); focus = toS(me.x, me.y); },
+    onTick({ page }) { if (Date.now() - matchStart > 90000) return 'stop'; return focus ? 'stop' : undefined; },
+  }, 100000);
+  await ctx.close();
+  if (!focus) throw new Error('no 4K cover frame captured (no shot fired)');
+  log('cover source: 4K shot frame, focus', Math.round(focus.x) + ',' + Math.round(focus.y));
+  return { file, focus };
 }
 
 // ---------- covers (HTML + CSS rendered by Playwright) ----------
-async function composeCover(browser, { img, W, H, zoom, fx, fy, file, titleSize, align }) {
-  // image is 1920x1080; scale by `zoom`, keep focus (fx,fy in image px) centred, clamp to image bounds
-  const iw = 1920 * zoom, ih = 1080 * zoom;
+async function composeCover(browser, { img, W, H, zoom, fx, fy, file, titleSize, titleW, align }) {
+  // image is 3840x2160; scale by `zoom`, keep focus (fx,fy in image px) centred, clamp to image bounds
+  const iw = 3840 * zoom, ih = 2160 * zoom;
   const left = -Math.min(Math.max(fx * zoom - W / 2, 0), iw - W);
   const top = -Math.min(Math.max(fy * zoom - H / 2, 0), ih - H);
   const html = `<!doctype html><meta charset=utf-8>
@@ -222,18 +233,22 @@ html,body{margin:0;background:#0b0e16}
 #g{position:absolute;inset:0;background:
   linear-gradient(to top,rgba(8,10,20,.96) 0%,rgba(8,10,20,.78) 28%,rgba(8,10,20,0) 62%),
   linear-gradient(to bottom,rgba(8,10,20,.55) 0%,rgba(8,10,20,0) 22%)}
-#t{position:absolute;left:0;right:0;bottom:${Math.round(H * 0.07)}px;text-align:${align || 'center'};padding:0 ${Math.round(W * 0.05)}px;
+#t{position:absolute;left:${Math.round(W * 0.05)}px;bottom:${Math.round(H * 0.07)}px;text-align:${align || 'center'};
   font:italic 900 ${titleSize}px/0.9 'Barlow Condensed','Arial Narrow',Impact,sans-serif;letter-spacing:.01em;color:#fff;text-transform:uppercase;
   text-shadow:0 4px 24px rgba(0,0,0,.6)}
+#w{display:inline-block;white-space:nowrap}
 #t b{color:#3a9fff;font-weight:900}
 #t i{color:#ff4455;font-style:italic}
-#bar{height:${Math.max(4, Math.round(titleSize * 0.06))}px;margin:${Math.round(titleSize * 0.12)}px ${align === 'left' ? '0' : 'auto'} 0;width:${Math.round(titleSize * 2.2)}px;background:linear-gradient(90deg,#3a9fff 50%,#ff4455 50%)}
+#bar{height:${Math.max(4, Math.round(titleSize * 0.06))}px;margin:${Math.round(titleSize * 0.12)}px 0 0;width:100%;background:linear-gradient(90deg,#3a9fff 50%,#ff4455 50%)}
 </style>
-<div id=c><img src="${pathToFileURL(img).href}"><div id=g></div><div id=t>FLAT<b>HOCKEY</b><div id=bar></div></div></div>`;
+<div id=c><img src="${pathToFileURL(img).href}"><div id=g></div><div id=t><span id=w>FLAT<b>HOCKEY</b></span><div id=bar></div></div></div>`;
   const hp = path.join(TMP, 'cover.html'); fs.writeFileSync(hp, html);
   const pg = await browser.newPage({ viewport: { width: W, height: H } });
   await pg.goto(pathToFileURL(hp).href);
   await pg.evaluate(() => document.fonts.load("italic 900 100px 'Barlow Condensed'").then(() => document.fonts.ready)).catch(() => {});
+  await pg.evaluate(([tw, W, al]) => { const t = document.getElementById('t'), w = document.getElementById('w');
+    const k = (W * tw) / w.getBoundingClientRect().width; t.style.fontSize = (parseFloat(getComputedStyle(t).fontSize) * k) + 'px';
+    t.style.left = al === 'left' ? Math.round(W * 0.05) + 'px' : Math.round(W * (1 - tw) / 2) + 'px'; t.style.width = Math.round(W * tw) + 'px'; }, [titleW, W, align]);
   const fontOk = await pg.evaluate(() => document.fonts.check("italic 900 100px 'Barlow Condensed'"));
   if (!fontOk) log('WARN: Barlow Condensed not loaded (offline?) - fallback font used for', path.basename(file));
   await pg.screenshot({ path: file, clip: { x: 0, y: 0, width: W, height: H } });
@@ -250,7 +265,7 @@ function buildCropX(track, t0, dur, cropW) {
     knots.push(Math.round(Math.min(Math.max(x - cropW / 2, 0), 1920 - cropW)));
   }
   let e = String(knots[knots.length - 1]);
-  for (let k = knots.length - 2; k >= 0; k--) e = `if(lt(t\\,${k + 1})\\,${knots[k]}+(${knots[k + 1] - knots[k]})*(t-${k})\\,${e})`;
+  for (let k = knots.length - 2; k >= 0; k--) e = `if(lt(t\,${k + 1})\,${knots[k]}+(${knots[k + 1] - knots[k]})*(t-${k})\,${e})`;
   return e;
 }
 function probeDuration(file) {
@@ -265,12 +280,12 @@ function makeVideos(v) {
   const total = probeDuration(v.vpath);
   if (Number.isFinite(total) && start + dur > total) start = Math.max(0, total - dur);
   log(`video window: ${start.toFixed(1)}s .. ${(start + dur).toFixed(1)}s (source ${total.toFixed(1)}s)`);
-  const enc = ['-c:v', 'libvpx-vp9', '-b:v', '0', '-crf', '28', '-row-mt', '1', '-cpu-used', '4', '-deadline', 'good', '-an', '-pix_fmt', 'yuv420p'];
-  const o169 = path.join(OUT, 'crazygames', 'preview-16x9-1920x1080.webm');
-  const o23 = path.join(OUT, 'crazygames', 'preview-2x3-1080x1620.webm');
-  ff(['-ss', String(start), '-t', String(dur), '-i', v.vpath, '-vf', 'scale=1920:1080:flags=lanczos,fps=30', ...enc, o169]);
+  const enc = ['-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-r', '30', '-an', '-pix_fmt', 'yuv420p', '-movflags', '+faststart'];
+  const o169 = path.join(OUT, 'crazygames', 'preview-16x9-1920x1080.mp4');
+  const o23 = path.join(OUT, 'crazygames', 'preview-2x3-1080x1620.mp4');
+  ff(['-ss', String(start), '-t', String(dur), '-i', v.vpath, '-vf', 'scale=1920:1080:flags=lanczos', ...enc, o169]);
   const x = buildCropX(v.track, start, dur, 720);
-  ff(['-ss', String(start), '-t', String(dur), '-i', v.vpath, '-vf', `crop=720:1080:'${x}':0,scale=1080:1620:flags=lanczos,fps=30`, ...enc, o23]);
+  ff(['-ss', String(start), '-t', String(dur), '-i', v.vpath, '-vf', `crop=720:1080:'${x}':0,scale=1080:1620:flags=lanczos`, ...enc, o23]);
   ff(['-i', o169, '-frames:v', '1', path.join(TMP, 'first-frame-16x9.png')]);
   ff(['-i', o23, '-frames:v', '1', path.join(TMP, 'first-frame-2x3.png')]);
   return [o169, o23];
@@ -299,16 +314,13 @@ const main = async () => {
     await runItch(browser, base);
     const v = await runVideo(browser, base);
 
-    // cover source frames (1920x1080): prefer the shot moment, then play, then goal
-    const pick = ['shot', 'play', 'goal'].find(k => v.got[k] && fs.existsSync(v.src[k])) || null;
-    if (!pick) throw new Error('no cover source frame captured');
-    const img = v.src[pick]; const f = v.got[pick];
-    log('cover source frame:', pick);
+    const cs = await runCoverSource(browser, base);
+    const img = cs.file, f = cs.focus;
     const C = (n) => path.join(OUT, 'crazygames', n);
-    await composeCover(browser, { img, W: 1920, H: 1080, zoom: 1.0, fx: f.x, fy: f.y, file: C('cover-1920x1080.png'), titleSize: 230, align: 'left' });
-    await composeCover(browser, { img, W: 800, H: 1200, zoom: 1.35, fx: f.x, fy: f.y, file: C('cover-800x1200.png'), titleSize: 190, align: 'center' });
-    await composeCover(browser, { img, W: 800, H: 800, zoom: 1.2, fx: f.x, fy: f.y, file: C('cover-800x800.png'), titleSize: 170, align: 'center' });
-    await composeCover(browser, { img, W: 630, H: 500, zoom: 0.9, fx: f.x, fy: f.y, file: path.join(OUT, 'itch', 'cover-630x500.png'), titleSize: 120, align: 'center' });
+    await composeCover(browser, { img, W: 1920, H: 1080, zoom: 0.75, fx: f.x, fy: f.y, file: C('cover-1920x1080.png'), titleSize: 200, titleW: 0.5, align: 'left' });
+    await composeCover(browser, { img, W: 800, H: 1200, zoom: 0.8, fx: f.x, fy: f.y, file: C('cover-800x1200.png'), titleSize: 150, titleW: 0.86, align: 'center' });
+    await composeCover(browser, { img, W: 800, H: 800, zoom: 0.8, fx: f.x, fy: f.y, file: C('cover-800x800.png'), titleSize: 150, titleW: 0.86, align: 'center' });
+    await composeCover(browser, { img, W: 630, H: 500, zoom: 0.6, fx: f.x, fy: f.y, file: path.join(OUT, 'itch', 'cover-630x500.png'), titleSize: 100, titleW: 0.86, align: 'center' });
 
     let vids = [];
     if (FFMPEG) vids = makeVideos(v);

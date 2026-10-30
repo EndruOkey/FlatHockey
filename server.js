@@ -31,9 +31,42 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 app.disable('x-powered-by');
+app.set('trust proxy', 'loopback');   // za Caddy (127.0.0.1) věř X-Forwarded-For, jinak ne
+
+// ── Rate limit (fixed window, in-memory, klíč = IP + skupina) ──────────────
+const rlHits = new Map();   // klíč → { n, reset }
+function rateLimit(group, max, windowMs = 60_000) {
+  return (req, res, next) => {
+    const now = Date.now(), key = group + '|' + req.ip;
+    let h = rlHits.get(key);
+    if (!h || h.reset <= now) { h = { n: 0, reset: now + windowMs }; rlHits.set(key, h); }
+    if (++h.n > max) {
+      res.set('Retry-After', String(Math.ceil((h.reset - now) / 1000)));
+      return res.status(429).json({ error: 'rate_limited' });
+    }
+    next();
+  };
+}
+setInterval(() => { const now = Date.now(); for (const [k, h] of rlHits) if (h.reset <= now) rlHits.delete(k); }, 60_000).unref();
+
+// ── CSRF: stavové POSTy jen ze stejného originu (Origin, jinak Referer) ───
+const ALLOWED_HOSTS = new Set(['flathockey.fun', 'www.flathockey.fun', 'localhost', '127.0.0.1']);
+function sameOrigin(req, res, next) {
+  const src = req.get('origin') || req.get('referer');
+  let host = null;
+  try { if (src) host = new URL(src).host; } catch { /* neplatné → zamítnout */ }
+  const ok = host && (host === req.get('host') || ALLOWED_HOSTS.has(host.replace(/:\d+$/, '')));
+  if (!ok) return res.status(403).json({ error: 'bad_origin' });
+  next();
+}
+app.post(['/auth/*splat', '/api/store/buy'], sameOrigin);
+
 app.use(express.json());
 app.use(cookieParser());
-app.use('/auth', authRouter);
+app.use('/auth', rateLimit('auth', 20), authRouter);
+app.use('/api/me', rateLimit('read', 120));
+app.use('/api/leaderboard', rateLimit('read', 120));
+app.use('/api/store/buy', rateLimit('buy', 10));
 const server = http.createServer(app);
 const io = new Server(server, {
   maxHttpBufferSize: 8 * 1024,   // vstupy jsou drobné → obří payloady rovnou zahodíme
@@ -57,9 +90,10 @@ const MAX_MATCHES = 60;    // strop souběžných zápasů (každý = 60Hz smyč
 const MAX_CONN    = 400;   // strop souběžných spojení
 let   connCount   = 0;
 
-// Server nesmí spadnout kvůli jednomu vadnému paketu / výjimce
-process.on('uncaughtException',  (e) => console.error('uncaughtException:', e));
-process.on('unhandledRejection', (e) => console.error('unhandledRejection:', e));
+// uncaughtException = neznámý stav procesu → zaloguj a skonči; systemd (Restart=always) ho nahodí čistý.
+// Smyčka zápasu má vlastní try/catch per tick, takže běžné chyby simulace sem nedoletí.
+process.on('uncaughtException', (e) => { console.error('FATAL uncaughtException:', e); process.exit(1); });
+process.on('unhandledRejection', (reason, promise) => console.error('unhandledRejection (pokračuji):', reason, 'promise:', promise));
 
 // Jednoduchý per-socket rate limit (min. rozestup mezi akcemi daného typu)
 function rateOk(socket, key, minMs) {
@@ -760,8 +794,10 @@ io.on('connection', (socket) => {
   const rawCookie = socket.handshake.headers.cookie || '';
   const cm = rawCookie.match(/(?:^|;\s*)fh_session=([^;]+)/);
   socket.data.userId = cm ? verifySession(decodeURIComponent(cm[1])) : null;
-  socket.data.reconnectToken = typeof socket.handshake.auth?.rt === 'string'
-    ? socket.handshake.auth.rt.slice(0, 64) : null;
+  // rt vybírá klient (náhodné UUID z localStorage) → jen formát [A-Za-z0-9_-]{8,64}, jinak null.
+  // Neuhodnutelnost 128bit náhodného tokenu je jediná ochrana slotu; přihlášený hráč se páruje přes userId (u:...).
+  { const rt = socket.handshake.auth?.rt;
+    socket.data.reconnectToken = typeof rt === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(rt) ? rt : null; }
   // Anonymní metrika: pid = reconnect token (perzistentní v localStorage)
   { const pid = socket.data.reconnectToken, ref = socket.handshake.auth?.ref;
     if (pid) { logMetric(pid, 'visit'); if (typeof ref === 'string' && ref) logMetric(pid, 'source', ref); } }
