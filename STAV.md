@@ -24,13 +24,11 @@ Hra nebyla nikdy propagovaná. Plán: vydat na itch.io + CrazyGames, po 14 dnech
 | hodně zápasů, málo návratů | ladit zábavu, test zopakovat |
 | málo zápasů | uzavřít / zkusit hru bez online soupeřů |
 
-## Rozpracované (neověřené, NEnasazené)
-- Brankář: horní roh nejde trefit — `Goalie.js` ~487 chce z > 19.5 px, střela vyletí max ~14.6 px
-  (`maxShotVz² / 2·gravity`). Brankář stojí nesouměrně (−16 px dole vs +11 px nahoře).
-  Rozpracovaná oprava: `release/patches/goalie-wip.patch`, `release/patches/bot-wip.js`.
+## Rozpracované
+- (hotovo 30. 10.) Brankář: horní roh trefitelný (práh vůči max. výšce puku), postavení souměrné.
 
 ## Další kroky
-1. Dokončit opravu brankáře (měřit symetrii skriptem, pak `npm run test:bot`).
+1. Texty pro portály: `release/LISTING.md` (projít).
 2. Assety: itch cover 630×500 + 3–5 screenshotů; CrazyGames covery 1920×1080, 800×1200, 800×800 + tiché video 15–20 s.
 3. Nahrát obaly na itch.io a CrazyGames (Basic Launch), spustit test.
 4. Ručně projít tréninkový režim (WIP z 13. 9. je teď poprvé na produkci).

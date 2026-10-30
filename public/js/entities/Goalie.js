@@ -11,6 +11,8 @@ const MAX_OUT  = 28;
 const SPEED    = 170;  // sníženo ze 220 — méně robotické boční přesuny
 const MAX_SPEED_CAP = 310;  // absolutní strop efektivní rychlosti
 const PADLEN   = 9;
+// Nejvyšší dosažitelná výška puku (max. střela): vz²/(2g). Práh horního rohu se měří vůči ní, ne vůči výšce břevna.
+const PEAK_Z   = PUCK.maxShotVz ** 2 / (2 * PUCK.gravity);
 
 export class Goalie {
   constructor(side = 'right', difficulty = 'casual') {
@@ -192,7 +194,9 @@ export class Goalie {
     const errRaw     = Math.sin(this._errPhase * 0.88) * errAmp
                      + Math.cos(this._errPhase * 1.47) * errAmp * 0.52;
     this._errY = ((this._errY ?? 0) + (errRaw - (this._errY ?? 0)) * Math.min(1, 0.9 * dt));
-    targetY    = clamp(targetY + this._errY, RINK.goalY + margin * 0.35, RINK.goalY + RINK.goalH - margin * 0.35);
+    // Chyba zrcadlí stranu puku (jinak by časový šum posouval gólmana jedním směrem → asymetrie nahoře/dole)
+    const errSide = clamp(dyN / 10, -1, 1);
+    targetY    = clamp(targetY + this._errY * errSide, RINK.goalY + margin * 0.35, RINK.goalY + RINK.goalH - margin * 0.35);
 
     // ── Wraparound: hráč s pukem za brankou ─────────────────────────────
     // Reálný golman sleduje pohyb hráče podél brankové čáry (neskočí na fixní tyčku)
@@ -484,7 +488,7 @@ export class Goalie {
       const dropping    = puck.z > 5 && puck.vz < -20;
       // Horní růžek: musí být SKUTEČNĚ těsně pod břevno — padáček středního oblouku nestačí
       const chBase      = this.difficulty === 'competitive' ? 0.72 : 0.78; // frakce (glove+cross)
-      const cornerHigh  = puck.z > (PUCK.gloveHeight + PUCK.crossbarHeight) * chBase;
+      const cornerHigh  = puck.z > PEAK_Z * chBase;
       // Corner window = horní TOP_EDGE px z aktuálního reachY (závisí na rychlosti/formě)
       const cornerEdge  = reachY - TOP_EDGE - (dropping ? 2.0 : 0);
       if (cornerHigh && absY > cornerEdge) return false;
