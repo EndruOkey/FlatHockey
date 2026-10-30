@@ -29,6 +29,7 @@ jobs:
       - run: npm run test:cg
       - run: npm run test:buy
       - run: npm run test:scorehack
+      - run: npm run test:balance
       - run: npm run test:bot
 
   deploy:

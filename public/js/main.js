@@ -10,7 +10,7 @@ import { loadSession, onAuthChange, loginWithDiscord, logout, handleOAuthRedirec
 const $ = id => document.getElementById(id);
 const canvas = $('canvas');
 const lobby  = $('lobby');
-const status = $('status');
+const toastEl = $('toast');
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // Volume slidery — inicializace + sync při změně
@@ -606,7 +606,7 @@ previewPlayer.color = '#3a9fff';
 function _syncPlateDisplay() {
   const name = (nameInput.value || '').trim() || 'PLAYER';
   const num  = numInput.value || '16';
-  const hand = chosenHand === -1 ? 'LEFT HAND' : 'RIGHT HAND';
+  const hand = chosenHand === -1 ? t('hand_left') : t('hand_right');
   const ndEl = $('lk-name-display'); if (ndEl) ndEl.textContent = name;
   const nuEl = $('lk-num-display');  if (nuEl) nuEl.textContent = num;
   const hEl  = $('lk-hand-display'); if (hEl)  hEl.textContent  = hand;
@@ -620,7 +620,7 @@ function _triggerAutoSave() {
     commitProfile();
     const el = $('lk-autosave');
     if (el) {
-      el.textContent = '✓ SAVED';
+      el.textContent = t('saved');
       el.classList.add('visible');
       clearTimeout(el._hideTimer);
       el._hideTimer = setTimeout(() => el.classList.remove('visible'), 2000);
@@ -688,6 +688,7 @@ function readSettings() {
 const VIEWS = { splash:'v-splash', main:'v-main', profile:'v-profile', browse:'v-browse', create:'v-create', wait:'v-wait', stats:'v-stats', store:'v-store' };
 const _tabFor = { main: 'mn-tab-home', store: 'mn-tab-store', browse: 'mn-tab-home', create: 'mn-tab-home', wait: 'mn-tab-home', profile: 'mn-tab-locker', stats: 'mn-tab-stats' };
 function showView(name) {
+  document.documentElement.classList.remove('resume');   // splash už není skrytý (viz head skript v index.html)
   for (const [k, id] of Object.entries(VIEWS)) $(id).style.display = (k === name) ? '' : 'none';
   lobby.classList.toggle('on-splash',  name === 'splash');
   lobby.classList.toggle('on-main',    name === 'main');
@@ -737,7 +738,16 @@ let currentGame = null;
 let lastLobbyId = null;
 let _pendingJoinId = null;
 let _reconnectTimer = null;
-const setStatus = (m, c = '#888') => { status.textContent = m; status.style.color = c; };
+// Toast pod horní lištou (dřív #status schovaný pod navem). Prázdná zpráva = schovat. Barva = akcent levého proužku.
+let _toastTimer = null;
+const setStatus = (m, c = '#b6c4ff') => {
+  clearTimeout(_toastTimer);
+  if (!m) { toastEl.classList.remove('show'); return; }
+  toastEl.textContent = m;
+  toastEl.style.borderLeftColor = c;
+  toastEl.classList.add('show');
+  _toastTimer = setTimeout(() => toastEl.classList.remove('show'), 3000);
+};
 
 // ── Reconnect overlay ─────────────────────────────────────────────────
 const reconnectOverlay = $('reconnect-overlay');
@@ -798,9 +808,10 @@ function initFlow() {
     if (!tutorialDone) { _startTutorial(); return; }
     showView('main'); _loadStats();
   } else {
-    // Guest nebo nepřihlášený — ukáže splash, ale guest footer na main nastavíme hned
+    // Host s existujícím účtem zařízení a hotovým tutoriálem → rovnou do menu (bez splash a klikání na „Hrát jako host")
     _loadStats();
-    showView('splash');
+    if (tutorialDone && getKind() === 'guest') { if (hasName()) showView('main'); else requireProfile(); }
+    else showView('splash');
   }
 }
 $('profile-done').onclick = () => {
@@ -969,7 +980,7 @@ async function _renderLeaderboard(mode) {
       </div>`;
     }).join('');
   } catch {
-    list.innerHTML = '<div class="sv-lb-empty">LEADERBOARD UNAVAILABLE</div>';
+    list.innerHTML = `<div class="sv-lb-empty">${esc(t('lb_unavail'))}</div>`;
   }
 }
 
@@ -991,8 +1002,41 @@ $('go-solo').onclick     = () => {
   startGame(g);
 };
 $('go-tutorial').onclick = () => _startTutorial();
+// Hrát proti botovi: server dorovná prázdná místa boty, takže stačí vytvořit soukromé lobby a hned spustit
+let _botPending = false;
+$('go-bot').onclick = () => {
+  if (!commitProfile()) return requireProfile();
+  _botPending = true;
+  const settings = {
+    name: t('bot_name'),
+    teams: { home: { name: t('team_home_default'), color: '#3a9fff', style: 'solid' }, away: { name: t('team_away_default'), color: '#ff4455', style: 'solid' } },
+    periods: 1, minutes: 5, max: 6, rules: false,
+    password: 'bot' + Math.random().toString(36).slice(2, 8),   // soukromé: do botmatche se nikdo cizí nepřipojí
+  };
+  _lastPass = settings.password;
+  net.createLobby(settings, profile());
+};
 
 // ── Procházení ────────────────────────────────────────────────────────
+let _lastPass = null;   // heslo posledního lobby (pro odvetu)
+const pwModal = $('pw-modal'), pwInput = $('pw-input');
+let _pwResolve = null;
+function askPassword(lobbyName) {      // náhrada za prompt() (v iframe portálů je zablokovaný)
+  $('pw-lobby-name').textContent = lobbyName || '';
+  pwInput.value = '';
+  pwModal.classList.add('open');
+  setTimeout(() => { try { pwInput.focus(); } catch {} }, 30);
+  return new Promise(res => { _pwResolve = res; });
+}
+function closePwModal(val) {
+  pwModal.classList.remove('open');
+  const r = _pwResolve; _pwResolve = null;
+  if (r) r(val);
+}
+$('pw-form').addEventListener('submit', e => { e.preventDefault(); closePwModal(pwInput.value); });
+$('pw-cancel').addEventListener('click', () => closePwModal(null));
+pwModal.addEventListener('click', e => { if (e.target === pwModal) closePwModal(null); });
+
 let lastLobbyList = [];
 function renderLobbyList(list) {
   lastLobbyList = list || [];
@@ -1021,9 +1065,12 @@ function renderLobbyList(list) {
     if (full) div.classList.add('full');
     div.onclick = () => {
       if (full) { setStatus(t('err_full'), '#e66'); return; }
-      let pass;
-      if (l.hp) { pass = prompt(t('prompt_password')); if (pass == null) return; }
-      net.joinLobby(l.id, profile(), pass);
+      if (!l.hp) { _lastPass = null; net.joinLobby(l.id, profile(), undefined); return; }
+      askPassword(l.name).then(pass => {
+        if (pass == null) return;
+        _lastPass = pass;
+        net.joinLobby(l.id, profile(), pass);   // špatné heslo → toast err_password (net.onLobbyError)
+      });
     };
     el.appendChild(div);
   }
@@ -1032,7 +1079,7 @@ net.onLobbyList = renderLobbyList;
 const fmtClock = s => { s = Math.max(0, s|0); return Math.floor(s/60) + ':' + String(s%60).padStart(2,'0'); };
 $('refresh-btn').onclick = () => net.listLobbies();
 $('create-btn').onclick  = () => showView('create');
-$('create-go').onclick   = () => net.createLobby(readSettings(), profile());
+$('create-go').onclick   = () => { const st = readSettings(); _lastPass = st.password || null; net.createLobby(st, profile()); };
 const joinInput = $('join-input'), joinBtn = $('join-btn');
 joinBtn.onclick = () => {
   const code = joinInput.value.trim();
@@ -1063,9 +1110,12 @@ function renderWait(st) {
   sb.style.display = isHost ? '' : 'none';
   sb.disabled = st.players.length === 0;
 }
-net.onLobbyJoined = (st) => { lastLobbyId = st.id; localStorage.setItem('fh_last_lobby', st.id); setStatus(''); renderWait(st); };
+net.onLobbyJoined = (st) => {
+  lastLobbyId = st.id; localStorage.setItem('fh_last_lobby', st.id); setStatus(''); renderWait(st);
+  if (_botPending) { _botPending = false; net.startLobby(); }   // „Hrát proti botovi" = vytvoř + hned start
+};
 net.onLobbyState  = (st) => { if (!inGame) renderWait(st); };
-net.onLobbyError  = (code) => setStatus(t(code), '#ff4455');
+net.onLobbyError  = (code) => { _botPending = false; setStatus(t(code), '#ff4455'); };
 document.querySelectorAll('.pick-btn').forEach(b => b.addEventListener('click', () => net.setTeam(b.dataset.team)));
 $('start-btn').onclick   = () => net.startLobby();
 $('wait-leave').onclick  = () => { net.leaveLobby(); lastLobbyId = null; localStorage.removeItem('fh_last_lobby'); showView('browse'); net.listLobbies(); };
@@ -1074,7 +1124,6 @@ $('share-btn').addEventListener('click', () => {
   const url = location.origin + '/?join=' + lastLobbyId;
   navigator.clipboard?.writeText(url).then(() => {
     setStatus(t('link_copied'), '#6ee0a0');
-    setTimeout(() => setStatus(''), 3000);
   }).catch(() => setStatus(url, '#8aa'));
 });
 
@@ -1090,12 +1139,12 @@ function showMatchResult(rewards, game) {
   const cred = rewards.creditsDelta ?? 0;
   const pm = rewards.pm ?? 0;
   const titleEl = $('mr-result-title');
-  titleEl.textContent = rewards.isWin ? 'VICTORY' : rewards.isLoss ? 'DEFEAT' : 'DRAW';
+  titleEl.textContent = rewards.isWin ? t('mr_victory') : rewards.isLoss ? t('mr_defeat') : t('mr_draw');
   titleEl.className = 'mr-result-title ' + (rewards.isWin ? 'win' : rewards.isLoss ? 'loss' : 'draw');
   const scoreEl = $('mr-score');
   if (game?.score && game?.teams) {
     const { home, away } = game.score;
-    const hn = game.teams?.home?.name || 'HOME', an = game.teams?.away?.name || 'AWAY';
+    const hn = game.teams?.home?.name || t('team_home_default'), an = game.teams?.away?.name || t('team_away_default');
     scoreEl.textContent = `${hn}  ${home} : ${away}  ${an}`;
   } else { scoreEl.textContent = ''; }
   $('mr-goals').textContent = rewards.goals ?? 0;
@@ -1113,6 +1162,12 @@ function showMatchResult(rewards, game) {
 $('mr-close-btn').addEventListener('click', () => {
   $('match-result').style.display = 'none';
   _loadStats();
+});
+// Hrát znovu: vrať se do téhož lobby (běží-li další zápas, hodí tě rovnou do hry; jinak do čekárny)
+$('mr-rematch-btn').addEventListener('click', () => {
+  $('match-result').style.display = 'none';
+  if (lastLobbyId) net.joinLobby(lastLobbyId, profile(), _lastPass || undefined);
+  else { showView('browse'); net.listLobbies(); }
 });
 
 // ── Start hry ─────────────────────────────────────────────────────────
@@ -1172,6 +1227,14 @@ const hidePause = () => { pauseMenu.style.display = 'none'; if (inGame) cgGamepl
 resumeBtn.addEventListener('click', hidePause);
 leaveBtn.addEventListener('click', () => { net.leaveLobby(); lastLobbyId = null; localStorage.removeItem('fh_last_lobby'); stopGame(); hidePause(); showView('main'); });
 net.onPeerLeft = () => { if (inGame) currentGame?.notify?.(t('peer_left')); };  // hra běží dál, jen upozorni
+// Esc zavře okna a rozbalené nabídky všude (ne jen ve hře)
+window.addEventListener('keydown', e => {
+  if (e.key !== 'Escape' || inGame) return;
+  if (pwModal.classList.contains('open')) { closePwModal(null); return; }
+  if ($('auth-modal').classList.contains('open')) { $('auth-modal').classList.remove('open'); return; }
+  $('settings-dropdown').classList.remove('open');
+  $('auth-dropdown').classList.remove('open');
+});
 window.addEventListener('keydown', e => { if (e.key !== 'Escape' || !inGame) return; if (currentGame?._activeTab === 'build') return; pauseMenu.style.display === 'flex' ? hidePause() : showPause(); });
 window.addEventListener('beforeunload', () => net.leaveLobby());
 
@@ -1180,6 +1243,8 @@ $('lang-btn').onclick = () => toggleLang();
 setOnChange(() => {                 // po přepnutí jazyka přerenderuj z cache (bez probliknutí)
   if ($('v-browse').style.display !== 'none') renderLobbyList(lastLobbyList);
   if ($('v-wait').style.display !== 'none' && lastWaitState) renderWait(lastWaitState);
+  authLabel.textContent = getUser() ? getUser().display_name : t('auth_label_guest');   // popisek přihlášení podle jazyka
+  _syncPlateDisplay();
 });
 
 // ── Auth UI ───────────────────────────────────────────────────────────

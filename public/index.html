@@ -4,16 +4,40 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FlatHockey</title>
+  <meta name="description" content="FlatHockey: free online 3v3 ice hockey in your browser. Skate, shoot and play against friends or bots. No download.">
+  <meta name="theme-color" content="#111319">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="FlatHockey">
+  <meta property="og:title" content="FlatHockey - free online 3v3 hockey">
+  <meta property="og:description" content="Free online 3v3 ice hockey in your browser. Skate, shoot and play against friends or bots. No download.">
+  <meta property="og:url" content="https://flathockey.fun/">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta property="og:image" content="https://flathockey.fun/release-cover.png">
+  <meta name="twitter:image" content="https://flathockey.fun/release-cover.png">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23111319'/%3E%3Cellipse cx='16' cy='18.5' rx='10' ry='5' fill='%23b6c4ff'/%3E%3Crect x='6' y='13.5' width='20' height='5' fill='%23b6c4ff'/%3E%3Cellipse cx='16' cy='13.5' rx='10' ry='5' fill='%23ffade2'/%3E%3C/svg%3E">
   <script>
     // Vloženo v iframe (itch.io / CrazyGames) → cookie přihlášení nefunguje, Discord login skryjeme
     try { if (window.self !== window.top) document.documentElement.classList.add('embedded'); }
     catch { document.documentElement.classList.add('embedded'); }
     // Na CrazyGames žádná jiná přihlášení (Discord ani link kód) – jen CG účet
     try { if (new URLSearchParams(location.search).get('ref') === 'crazygames') document.documentElement.classList.add('cg'); } catch {}
+    // Rozložení splash se rozhoduje hned (bez čekání na JS), aby stránka při načtení neskákala:
+    // td = tutoriál hotov; resume = tutoriál hotov + existuje účet zařízení → splash se přeskočí (main.js)
+    try {
+      const td = !!localStorage.getItem('hockey_tutorial_done');
+      if (td) document.documentElement.classList.add('td');
+      if (td && localStorage.getItem('fh_device_token')) document.documentElement.classList.add('resume');
+    } catch {}
   </script>
   <style>
     html.embedded #discord-login-btn, html.embedded #splash-discord-btn,
-    html.embedded #profile-discord-btn, html.embedded .splash-or { display: none !important; }
+    html.embedded #profile-discord-btn, html.embedded .splash-or,
+    html.embedded #auth-btn, html.embedded #auth-dropdown, html.embedded #footer-signin-btn, html.embedded #vm-footer-guest,
+    html.embedded #stats-guest-cta, html.embedded #sv-lb-friends-cta, html.embedded #profile-guest-login,
+    html.embedded #dd-logout, html.embedded #auth-modal { display: none !important; }
+    /* Splash: rozložení známe předem (class td/resume z head skriptu) → žádný skok po načtení */
+    html.td #splash-first, html:not(.td) #splash-return { display: none; }
+    html.resume #v-splash { visibility: hidden; }
     html.cg #discord-login-btn, html.cg #splash-discord-btn, html.cg #profile-discord-btn, html.cg .splash-or,
     html.cg #footer-signin-btn, html.cg #dd-logout, html.cg #profile-guest-login, html.cg #profile-link { display: none !important; }
   </style>
@@ -302,7 +326,35 @@
     .set-row label.chk { flex-direction: row; align-items: center; gap: 5px; }
 
     /* ── STATUS ──────────────────────────────────────────────────── */
-    #status { color: #3E5268; font-size: 0.78rem; min-height: 18px; margin-top: 10px; letter-spacing: 0.04em; }
+    /* Toast — zpětná vazba pod horní lištou (dřív #status schovaný pod navem) */
+    #toast {
+      position: fixed; top: 76px; left: 50%; z-index: 60;
+      transform: translate(-50%, -8px); opacity: 0; pointer-events: none;
+      max-width: min(92vw, 520px); padding: 12px 20px;
+      background: #0A0C1A; border: 1px solid rgba(255,255,255,0.1); border-left: 3px solid #b6c4ff;
+      color: #EEF4FF; font-size: 0.85rem; letter-spacing: 0.04em; text-align: left;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+      transition: opacity 0.18s, transform 0.18s;
+    }
+    #toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+    /* Mobil / dotyk: hra je jen myš + klávesnice → místo rozbitého UI hláška */
+    #mobile-block {
+      display: none; position: fixed; inset: 0; z-index: 100;
+      flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+      padding: 24px; text-align: center; background: #111319;
+    }
+    #mobile-block .mb-logo { font-family: 'Barlow Condensed', system-ui; font-size: 3rem; font-weight: 900; font-style: italic;
+      text-transform: uppercase; letter-spacing: -0.01em; color: #e2e2eb; line-height: 1; }
+    #mobile-block .mb-logo span { color: #ffade2; }
+    #mobile-block .mb-title { font-family: 'Barlow Condensed', system-ui; font-size: 1.6rem; font-weight: 900;
+      letter-spacing: 0.08em; text-transform: uppercase; color: #b6c4ff; }
+    #mobile-block .mb-text { font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; line-height: 1.6;
+      letter-spacing: 0.04em; color: rgba(195,197,217,0.75); max-width: 320px; }
+    @media (max-width: 759px), (pointer: coarse) and (hover: none) {
+      #mobile-block { display: flex; }
+      #lobby, #hint, #pause-menu, #match-result, #auth-modal, #pw-modal, #toast { display: none !important; }
+    }
 
     /* ── HINT (in-game) ──────────────────────────────────────────── */
     #hint {
@@ -411,6 +463,10 @@
     }
     .mr-footer { padding: 16px 24px; display: flex; gap: 8px; }
     .mr-footer button { flex: 1; margin: 0; }
+    .mr-footer .ghost { color: #c3c5d9; }
+    /* Zpět — v sub-views (procházet / vytvořit) */
+    .sv-back { width: auto; display: inline-flex; align-items: center; gap: 6px; margin: 0 0 14px; padding: 8px 16px;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; text-align: left; }
     .mr-footer .primary { background: #b6c4ff; color: #0a0f28; font-weight: 800; }
     .mr-footer .primary:hover { filter: brightness(1.1); }
 
@@ -469,17 +525,20 @@
     .dd-item.danger:hover { background: rgba(192,64,64,0.08); color: #FF8080; }
     .dd-sep { border: none; border-top: 1px solid rgba(255,255,255,0.05); margin: 0; }
 
-    #auth-modal {
+    #auth-modal, #pw-modal {
       display: none; position: fixed; inset: 0; z-index: 40;
       align-items: center; justify-content: center;
       background: rgba(5,6,14,0.92);
     }
-    #auth-modal.open { display: flex; }
-    #auth-modal .box { min-width: 300px; max-width: 340px; }
-    #auth-modal h2 { font-size: 1rem; font-weight: 900; letter-spacing: 0.12em;
+    #auth-modal.open, #pw-modal.open { display: flex; }
+    #auth-modal .box, #pw-modal .box { min-width: 300px; max-width: 340px; }
+    #pw-modal input { margin-bottom: 12px; }
+    #pw-cancel { background: transparent; border: none; color: #2E4055; font-size: 0.75rem; margin-top: 2px; }
+    #pw-cancel:hover { color: #5A7080; }
+    #auth-modal h2, #pw-modal h2 { font-size: 1rem; font-weight: 900; letter-spacing: 0.12em;
       margin-bottom: 6px; color: #EEF4FF; text-transform: uppercase;
       border-left: 3px solid #b6c4ff; padding-left: 12px; text-align: left; }
-    #auth-modal .sub { margin-bottom: 20px; text-align: left; }
+    #auth-modal .sub, #pw-modal .sub { margin-bottom: 20px; text-align: left; }
 
     /* ═══════════════════════════════════════════════════════════════
        MAIN MENU — FIGMA ESPORTS FULLSCREEN
@@ -504,6 +563,7 @@
       height: 64px;
     }
     #lobby:not(.on-main):not(.on-browse):not(.on-profile):not(.on-create):not(.on-wait):not(.on-stats):not(.on-store) #main-nav { display: none; }
+    @media (max-width: 1100px) { #mn-inner { padding: 0 24px; } .nav-logo { margin-right: 24px; } #mn-tabs { gap: 20px; } }
 
     /* Logo */
     .nav-logo {
@@ -532,6 +592,8 @@
       transition: color 0.15s, border-color 0.15s;
     }
     .mn-tab svg { display: none; }
+    /* STORE je zatím prázdná stránka „coming soon" → záložka skrytá. Až bude obchod, odstranit toto pravidlo. */
+    #mn-tab-store { display: none; }
     .mn-tab:hover:not(:disabled) { color: #fff; filter: none; }
     .mn-tab.active { color: #b6c4ff; border-bottom-color: #b6c4ff; }
 
@@ -746,7 +808,7 @@
 
     /* Secondary action cards (tutorial / training) — above season card */
     #vm-secondary-links {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
     }
     .vm-sec-link {
       display: flex; align-items: center; gap: 10px;
@@ -1072,7 +1134,7 @@
 
     /* Centered single-column layout */
     .splash-center {
-      width: 100%; max-width: 480px;
+      width: 100%; max-width: 480px; padding: 0 24px;   /* jedna osa pro eyebrow, nadpis i tlačítko */
       display: flex; flex-direction: column;
       position: relative; z-index: 1;
     }
@@ -1152,6 +1214,8 @@
     }
     .splash-auth-inner { width: 100%; max-width: 420px; }
     .splash-auth-inner > .sv-eyebrow { margin-bottom: 20px; }
+    .splash-center > .sv-eyebrow { justify-content: center; margin-bottom: 20px; }
+    .splash-auth-desc, .splash-or { text-align: center; }
     .splash-auth-title {
       font-family: 'Barlow Condensed', system-ui;
       font-size: clamp(3.6rem, 6.5vw, 7rem);
@@ -2155,6 +2219,26 @@
 <body>
   <canvas id="canvas"></canvas>
 
+  <!-- Mobil / dotyk: hra je jen myš + klávesnice -->
+  <div id="mobile-block" role="alert">
+    <div class="mb-logo">Flat<span>Hockey</span></div>
+    <div class="mb-title" data-i18n="mobile_title">Hraj na počítači</div>
+    <div class="mb-text" data-i18n="mobile_text">Hra se ovládá myší a klávesnicí. Otevři flathockey.fun na počítači.</div>
+  </div>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <!-- Heslo lobby (náhrada za prompt(), který je v iframe portálů zablokovaný) -->
+  <div id="pw-modal">
+    <form class="box" id="pw-form" autocomplete="off">
+      <h2 data-i18n="prompt_password">Heslo lobby:</h2>
+      <p class="sub" id="pw-lobby-name"></p>
+      <input id="pw-input" type="password" maxlength="24" autocomplete="off" data-i18n-ph="pass_ph_req" placeholder="HESLO">
+      <button id="pw-submit" type="submit" class="primary" data-i18n="join_btn">PŘIPOJIT</button>
+      <button id="pw-cancel" type="button" data-i18n="cancel">Zrušit</button>
+    </form>
+  </div>
+
   <!-- Auth modal -->
   <div id="auth-modal">
     <div class="box">
@@ -2168,7 +2252,7 @@
     </div>
   </div>
 
-  <div id="lobby">
+  <div id="lobby" class="on-splash">
 
     <!-- TOP NAV — horizontal esports bar -->
     <nav id="main-nav">
@@ -2176,33 +2260,33 @@
       <div style="display:flex;align-items:center;gap:0">
         <div class="nav-logo">HOCKEY</div>
         <div id="mn-tabs">
-          <button class="mn-tab active" id="mn-tab-home">HOME</button>
-          <button class="mn-tab" id="mn-tab-locker">LOCKER ROOM</button>
-          <button class="mn-tab" id="mn-tab-store">STORE</button>
-          <button class="mn-tab" id="mn-tab-stats">STATS</button>
+          <button class="mn-tab active" id="mn-tab-home" data-i18n="nav_home">HOME</button>
+          <button class="mn-tab" id="mn-tab-locker" data-i18n="nav_locker">LOCKER ROOM</button>
+          <button class="mn-tab" id="mn-tab-store" data-i18n="nav_store">STORE</button>
+          <button class="mn-tab" id="mn-tab-stats" data-i18n="nav_stats">STATS</button>
         </div>
       </div>
       <div id="mn-right">
         <div id="nav-online-badge"><span id="nav-online-dot"></span><span>Online</span></div>
         <div id="nav-ctx-browse"></div>
-        <div id="nav-ctx-profile"><button id="profile-done">SAVE LOADOUT</button></div>
+        <div id="nav-ctx-profile"><button id="profile-done" data-i18n="save_loadout">SAVE LOADOUT</button></div>
         <div id="nav-ctx-wait">
           <button id="share-btn" class="sv-icon-btn">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-            SHARE
+            <span data-i18n="share_short">SHARE</span>
           </button>
         </div>
         <div id="settings-wrap">
-          <button id="settings-btn" title="Settings">
+          <button id="settings-btn" title="Settings" data-i18n-title="settings_title" aria-label="Settings">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           </button>
           <div id="settings-dropdown">
-            <div class="sd-label">VOLUME</div>
+            <div class="sd-label" data-i18n="vol_label">VOLUME</div>
             <div class="sd-vol-row">
               <input type="range" id="vol-slider" min="0" max="100" step="1" value="80">
               <span class="sd-vol-pct" id="vol-pct">80%</span>
             </div>
-            <div class="sd-label">LANGUAGE</div>
+            <div class="sd-label" data-i18n="language_label">LANGUAGE</div>
             <button class="sd-item" id="lang-btn" title="Language / Jazyk">
               <span class="globe">&#127760;</span><span id="lang-label">EN</span>
             </button>
@@ -2215,9 +2299,9 @@
             <span id="auth-tier"></span>
           </button>
           <div id="auth-dropdown">
-            <button class="dd-item" id="dd-profile">&#128100; Profil</button>
+            <button class="dd-item" id="dd-profile" data-i18n="dd_profile">&#128100; Profil</button>
             <hr class="dd-sep">
-            <button class="dd-item danger" id="dd-logout">Odhlasit se</button>
+            <button class="dd-item danger" id="dd-logout" data-i18n="dd_logout">Odhlásit se</button>
           </div>
         </div>
       </div>
@@ -2231,28 +2315,28 @@
       <!-- SPLASH / LOGIN GATE -->
       <div id="v-splash" class="view">
         <div class="splash-center">
-          <div class="sv-eyebrow">GET ON THE ICE</div>
+          <div class="sv-eyebrow" data-i18n="splash_eyebrow">GET ON THE ICE</div>
           <!-- First visit -->
-          <div id="splash-first" style="display:none">
-            <div class="splash-auth-title">WELCOME TO<br><span>THE ARENA</span></div>
+          <div id="splash-first">
+            <div class="splash-auth-title"><span style="color:inherit" data-i18n="splash_welcome_a">WELCOME TO</span><br><span data-i18n="splash_welcome_b">THE ARENA</span></div>
             <p class="splash-auth-desc" data-i18n="splash_first_text">
-              2-minute tutorial gets you ice-ready. Learn controls, score your first goal.
+              Welcome! Before you play, complete the quick tutorial.
             </p>
             <button id="splash-tutorial-btn" class="splash-btn-primary">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              START TUTORIAL
+              <span data-i18n="splash_tutorial">START TUTORIAL</span>
             </button>
           </div>
           <!-- Return visit -->
-          <div id="splash-return" style="display:none">
+          <div id="splash-return">
             <div class="splash-auth-title">FACE<span>OFF.</span></div>
             <button id="splash-discord-btn" class="splash-btn-discord">
               <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M19.27 5.33C17.94 4.71 16.5 4.26 15 4a.09.09 0 0 0-.07.03c-.18.33-.39.76-.53 1.09a16.09 16.09 0 0 0-4.8 0c-.14-.34-.35-.76-.54-1.09-.01-.02-.04-.03-.07-.03-1.5.26-2.93.71-4.27 1.33-.01 0-.02.01-.03.02-2.72 4.07-3.47 8.03-3.1 11.95 0 .02.01.04.03.05 1.8 1.32 3.53 2.12 5.24 2.65.03.01.06 0 .07-.02.4-.55.76-1.13 1.07-1.74.02-.04 0-.08-.04-.09-.57-.22-1.11-.48-1.64-.78-.04-.02-.04-.08-.01-.11.11-.08.22-.17.33-.25.02-.02.05-.02.07-.01 3.44 1.57 7.15 1.57 10.55 0 .02-.01.05-.01.07.01.11.09.22.17.33.26.04.03.04.09-.01.11-.52.31-1.07.56-1.64.78-.04.01-.05.06-.04.09.32.61.68 1.19 1.07 1.74.03.02.06.03.09.02 1.72-.53 3.45-1.33 5.25-2.65.02-.01.03-.03.03-.05.44-4.53-.73-8.46-3.1-11.95-.01-.01-.02-.02-.04-.02z"/></svg>
-              SIGN IN WITH DISCORD
+              <span data-i18n="splash_discord">SIGN IN WITH DISCORD</span>
             </button>
-            <div class="splash-or">OR</div>
+            <div class="splash-or" data-i18n="splash_or">OR</div>
             <button id="splash-guest-btn" class="splash-btn-ghost">
-              PLAY AS GUEST →
+              <span data-i18n="splash_guest">PLAY AS GUEST</span> →
             </button>
           </div>
         </div>
@@ -2272,29 +2356,30 @@
 
           <!-- Hero content -->
           <div id="vm-hero">
-            <div id="vm-eyebrow">READY FOR FACEOFF?<span id="vm-season-pill"></span></div>
+            <div id="vm-eyebrow"><span data-i18n="vm_eyebrow">READY FOR FACEOFF?</span><span id="vm-season-pill"></span></div>
             <div id="vm-title">
-              <div>CRUSH THE</div>
-              <div class="vm-title-blue">COMPETITION</div>
+              <div data-i18n="vm_title_a">CRUSH THE</div>
+              <div class="vm-title-blue" data-i18n="vm_title_b">COMPETITION</div>
             </div>
 
             <div id="vm-btn-row">
               <button id="go-online" class="vm-cta-primary">
                 <span class="vmcta-icon">🏒</span>
-                <div class="vmcta-title">JOIN ROOM</div>
-                <div class="vmcta-sub">QUICK MATCH • 3V3</div>
+                <div class="vmcta-title" data-i18n="browse_title">Procházet hry</div>
+                <div class="vmcta-sub" data-i18n="browse_sub">ONLINE ZÁPASY • 3V3</div>
               </button>
               <button id="vm-create-btn" class="vm-cta-ghost">
                 <span class="vmcta-icon">+</span>
-                <div class="vmcta-title">CREATE</div>
-                <div class="vmcta-sub">PRIVATE LOBBY • CUSTOM RULES</div>
+                <div class="vmcta-title" data-i18n="create_title">Vytvořit hru</div>
+                <div class="vmcta-sub" data-i18n="create_sub">SOUKROMÉ LOBBY • VLASTNÍ PRAVIDLA</div>
               </button>
             </div>
 
             <!-- secondary actions — tutorial & training above season card -->
             <div id="vm-secondary-links">
-              <button id="go-tutorial" class="vm-sec-link"><span class="sec-icon">▶</span> TUTORIAL</button>
-              <button id="go-solo" class="vm-sec-link"><span class="sec-icon">◈</span> SOLO TRAINING</button>
+              <button id="go-bot" class="vm-sec-link"><span class="sec-icon">⚔</span> <span data-i18n="play_bot">Hrát proti botovi</span></button>
+              <button id="go-solo" class="vm-sec-link"><span class="sec-icon">◈</span> <span data-i18n="training">Trénink</span></button>
+              <button id="go-tutorial" class="vm-sec-link"><span class="sec-icon">▶</span> <span data-i18n="tutorial">Tutoriál</span></button>
             </div>
 
             <div id="vm-season-card" style="display:none">
@@ -2316,25 +2401,25 @@
         <!-- Footer stats row -->
         <div id="vm-footer">
           <div class="vmsb-card">
-            <div class="vmsb-lbl">GLOBAL RANK</div>
+            <div class="vmsb-lbl" data-i18n="f_rank">GLOBAL RANK</div>
             <div class="vmsb-val" id="vm-footer-rank">#—</div>
           </div>
           <div class="vmsb-card">
-            <div class="vmsb-lbl">GAMES PLAYED</div>
+            <div class="vmsb-lbl" data-i18n="f_games">GAMES PLAYED</div>
             <div class="vmsb-val" id="vm-footer-games">0</div>
           </div>
           <div class="vmsb-card">
-            <div class="vmsb-lbl">ICE CREDITS</div>
+            <div class="vmsb-lbl" data-i18n="f_credits">ICE CREDITS</div>
             <div class="vmsb-val" id="vm-footer-credits">0</div>
           </div>
           <div class="vmsb-card">
-            <div class="vmsb-lbl">WIN RATE</div>
+            <div class="vmsb-lbl" data-i18n="f_wr">WIN RATE</div>
             <div class="vmsb-val" id="vm-footer-wr">—</div>
           </div>
           <!-- Guest sign-in bar — below the 4 cards, full row -->
           <div id="vm-footer-guest" style="display:none;grid-column:1/-1;flex-direction:column;align-items:center;justify-content:center;padding:28px 2px 8px;gap:14px">
-            <div style="font-family:'JetBrains Mono',monospace;font-size:0.7rem;letter-spacing:0.18em;color:rgba(182,196,255,0.55);text-transform:uppercase;white-space:nowrap">🔒 Sign in to unlock your rank, credits &amp; match history</div>
-            <button id="footer-signin-btn" style="font-family:'JetBrains Mono',monospace;font-size:0.72rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;padding:10px 28px;background:rgba(182,196,255,0.08);border:1px solid rgba(182,196,255,0.35);color:#b6c4ff;cursor:pointer;flex-shrink:0;white-space:nowrap;width:auto;transition:background 0.15s,border-color 0.15s,color 0.15s" onmouseover="this.style.background='rgba(182,196,255,0.16)';this.style.borderColor='rgba(182,196,255,0.7)';this.style.color='#fff'" onmouseout="this.style.background='rgba(182,196,255,0.08)';this.style.borderColor='rgba(182,196,255,0.35)';this.style.color='#b6c4ff'">SIGN IN WITH DISCORD →</button>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:0.7rem;letter-spacing:0.18em;color:rgba(182,196,255,0.55);text-transform:uppercase;text-align:center" data-i18n="guest_unlock">🔒 Sign in to unlock your rank, credits &amp; match history</div>
+            <button id="footer-signin-btn" style="font-family:'JetBrains Mono',monospace;font-size:0.72rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;padding:10px 28px;background:rgba(182,196,255,0.08);border:1px solid rgba(182,196,255,0.35);color:#b6c4ff;cursor:pointer;flex-shrink:0;white-space:nowrap;width:auto;transition:background 0.15s,border-color 0.15s,color 0.15s" onmouseover="this.style.background='rgba(182,196,255,0.16)';this.style.borderColor='rgba(182,196,255,0.7)';this.style.color='#fff'" onmouseout="this.style.background='rgba(182,196,255,0.08)';this.style.borderColor='rgba(182,196,255,0.35)';this.style.color='#b6c4ff'" data-i18n="footer_signin">SIGN IN WITH DISCORD →</button>
           </div>
         </div>
       </div>
@@ -2344,11 +2429,11 @@
       <div id="v-store" class="view" style="display:none">
         <div class="sv-store-soon">
           <div class="store-soon-inner">
-            <div class="store-soon-eyebrow">PUCK STORE</div>
-            <div class="store-soon-title">COMING<span>SOON.</span></div>
-            <div class="store-soon-sub">Trails, helmets &amp; premium skins unlock<br>with Alpha Season 1.</div>
+            <div class="store-soon-eyebrow" data-i18n="store_eyebrow">PUCK STORE</div>
+            <div class="store-soon-title"><span style="color:inherit" data-i18n="store_soon_a">COMING</span><span data-i18n="store_soon_b">SOON.</span></div>
+            <div class="store-soon-sub" data-i18n="store_sub">Trails, helmets &amp; premium skins unlock with Alpha Season 1.</div>
             <div class="store-soon-credits">
-              <div class="store-soon-credits-label">Your balance</div>
+              <div class="store-soon-credits-label" data-i18n="store_balance">Your balance</div>
               <div class="store-soon-credits-val">⊙ <span id="store-credits">0</span> <span class="store-soon-credits-unit">PC</span></div>
             </div>
           </div>
@@ -2369,8 +2454,8 @@
 
           <!-- Title block — big like main screen, above the stage -->
           <div class="lk-title-block">
-            <div class="lk-eyebrow">YOUR GEAR</div>
-            <div class="lk-title-line"><span class="lk-title-bold">LOCKER</span> <span class="lk-title-light">ROOM</span></div>
+            <div class="lk-eyebrow" data-i18n="lk_eyebrow">YOUR GEAR</div>
+            <div class="lk-title-line"><span class="lk-title-bold" data-i18n="lk_title_a">LOCKER</span> <span class="lk-title-light" data-i18n="lk_title_b">ROOM</span></div>
           </div>
 
           <!-- Player stage — fills remaining vertical space -->
@@ -2379,7 +2464,7 @@
             <!-- Subtle one-shot CTA — appears once then fades -->
             <div class="lk-stage-cta">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M7 10l5-6 5 6M7 14l5 6 5-6"/></svg>
-              TAP GEAR TO CUSTOMIZE
+              <span data-i18n="lk_cta">TAP GEAR TO CUSTOMIZE</span>
             </div>
           </div>
 
@@ -2391,7 +2476,7 @@
               <div class="lk-plate-name" id="lk-name-display">PLAYER</div>
               <div class="lk-plate-meta">
                 <span class="lk-plate-hand" id="lk-hand-display">RIGHT HAND</span>
-                <span class="lk-plate-edit" id="lk-plate-edit-btn">✎ EDIT</span>
+                <span class="lk-plate-edit" id="lk-plate-edit-btn" data-i18n="lk_edit">✎ EDIT</span>
               </div>
             </div>
 
@@ -2408,13 +2493,13 @@
                 </div>
               </div>
               <div class="lk-field">
-                <div class="lk-field-lbl">STICK GRIP</div>
+                <div class="lk-field-lbl" data-i18n="lk_grip">STICK GRIP</div>
                 <div id="hand-toggle" class="lk-hand-toggle">
                   <button class="hand-btn" data-hand="-1" data-i18n="lefty">L · LEFTY</button>
                   <button class="hand-btn active" data-hand="1" data-i18n="righty">R · RIGHTY</button>
                 </div>
               </div>
-              <button class="lk-plate-done" id="lk-plate-done">CONFIRM ✓</button>
+              <button class="lk-plate-done" id="lk-plate-done" data-i18n="lk_confirm">CONFIRM ✓</button>
             </div>
           </div>
 
@@ -2448,14 +2533,14 @@
 
           <!-- Rank row (logged-in) -->
           <div id="profile-rank-row" style="display:none">
-            <div class="rank-card green"><span class="rc-label">Global Rank</span><div class="rc-value" id="stat-position-hidden">#—</div></div>
-            <div class="rank-card"><span class="rc-label">Rating</span><div class="rc-value" id="stat-rank">1000</div></div>
-            <div class="rank-card orange"><span class="rc-label">Credits</span><div class="rc-value" id="stat-credits">0</div></div>
+            <div class="rank-card green"><span class="rc-label" data-i18n="f_rank_short">Global Rank</span><div class="rc-value" id="stat-position-hidden">#—</div></div>
+            <div class="rank-card"><span class="rc-label" data-i18n="rating">Rating</span><div class="rc-value" id="stat-rank">1000</div></div>
+            <div class="rank-card orange"><span class="rc-label" data-i18n="credits">Credits</span><div class="rc-value" id="stat-credits">0</div></div>
           </div>
 
           <!-- Stats (logged-in) -->
           <div id="profile-stats" style="display:none">
-            <div class="lk-eyebrow" style="margin-bottom:8px">SEASON STATS</div>
+            <div class="lk-eyebrow" style="margin-bottom:8px" data-i18n="season_stats">SEASON STATS</div>
             <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
               <div class="stat-cell"><span id="stat-goals">0</span><label data-i18n="stats_goals">Goals</label></div>
               <div class="stat-cell"><span id="stat-assists">0</span><label data-i18n="stats_assists">Assists</label></div>
@@ -2468,14 +2553,14 @@
 
           <!-- IN-GAME minimap preview -->
           <div class="lk-minimap">
-            <div class="lk-minimap-label">IN-GAME</div>
+            <div class="lk-minimap-label" data-i18n="lk_ingame">IN-GAME</div>
             <canvas id="prof-preview" width="320" height="100"></canvas>
           </div>
 
           <!-- Gear info note -->
           <div class="lk-gear-note">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            Gear applies to all solo &amp; pond games. In team games, your jersey takes the <strong>team color</strong>.
+            <span data-i18n="lk_gear_note">Gear applies to all solo &amp; pond games. In team games, your jersey takes the team color.</span>
           </div>
 
           <!-- Auto-save status -->
@@ -2506,24 +2591,25 @@
       <div id="v-browse" class="view" style="display:none">
         <div class="sv-body sv-body-browse">
           <div class="sv-browse-hero">
-            <div class="sv-eyebrow">QUICK MATCH</div>
-            <div class="sv-big-title">BROWSE<br>THE<br>ARENA</div>
+            <button type="button" class="ghost back sv-back" data-to="main" data-i18n="back_btn">ZPĚT</button>
+            <div class="sv-eyebrow" data-i18n="browse_eyebrow">ONLINE</div>
+            <div class="sv-big-title" data-i18n="browse_big">Procházet hry</div>
             <button id="create-btn" class="sv-create-cta">
               <span class="vmcta-icon" style="font-size:1.4rem;font-weight:300;line-height:1">+</span>
               <div>
-                <div class="vmcta-title">CREATE ROOM</div>
-                <div class="vmcta-sub">PRIVATE LOBBY · CUSTOM RULES</div>
+                <div class="vmcta-title" data-i18n="create_title">Vytvořit hru</div>
+                <div class="vmcta-sub" data-i18n="create_sub">SOUKROMÉ LOBBY • VLASTNÍ PRAVIDLA</div>
               </div>
             </button>
           </div>
           <div class="sv-browse-list">
             <div class="sv-browse-top">
-              <div class="sv-section-lbl">OPEN LOBBIES</div>
-              <button id="refresh-btn">↻ REFRESH</button>
+              <div class="sv-section-lbl" data-i18n="open_lobbies">OPEN LOBBIES</div>
+              <button id="refresh-btn" data-i18n="refresh">↻ REFRESH</button>
             </div>
             <div class="sv-join-row">
-              <input id="join-input" type="text" placeholder="JOIN BY LOBBY CODE" maxlength="20" autocomplete="off" />
-              <button id="join-btn">JOIN</button>
+              <input id="join-input" type="text" data-i18n-ph="join_code_ph" placeholder="JOIN BY LOBBY CODE" maxlength="20" autocomplete="off" />
+              <button id="join-btn" data-i18n="join_btn">JOIN</button>
             </div>
             <div id="lobby-list"></div>
           </div>
@@ -2535,7 +2621,8 @@
         <div class="sv-body sv-body-create">
           <!-- Left: Team setup -->
           <div class="sv-create-left">
-            <div class="sv-eyebrow">CONFIGURE TEAMS</div>
+            <button type="button" class="ghost back sv-back" data-to="browse" data-i18n="back_btn">ZPĚT</button>
+            <div class="sv-eyebrow" data-i18n="cfg_teams">CONFIGURE TEAMS</div>
             <div class="team-block">
               <div class="tb-head">
                 <input id="hteam-name" class="tname" type="text" data-i18n-ph="home_ph" placeholder="Domácí" maxlength="16" />
@@ -2554,7 +2641,7 @@
           </div>
           <!-- Right: Game settings -->
           <div class="sv-create-right">
-            <div class="sv-eyebrow">GAME SETTINGS</div>
+            <div class="sv-eyebrow" data-i18n="cfg_game">GAME SETTINGS</div>
             <input id="lobby-name" type="text" data-i18n-ph="lobby_name_ph" placeholder="NÁZEV LOBBY" maxlength="24" />
             <input id="lobby-pass" type="text" data-i18n-ph="pass_ph" placeholder="HESLO (nepovinné)" maxlength="24" />
             <div class="lbl" data-i18n="format">FORMÁT</div>
@@ -2570,7 +2657,7 @@
               <label><span data-i18n="minutes">Minuty</span><select id="set-minutes"><option>5</option><option selected>10</option><option>15</option></select></label>
               <label class="chk"><input id="set-rules" type="checkbox" /><span data-i18n="rules">Pravidla</span></label>
             </div>
-            <button id="create-go" class="primary" data-i18n="create">🏒 VYTVOŘIT LOBBY</button>
+            <button id="create-go" class="primary" data-i18n="create">VYTVOŘIT HRU</button>
           </div>
         </div>
       </div>
@@ -2579,7 +2666,7 @@
       <div id="v-wait" class="view" style="display:none">
         <div class="sv-wait-body">
           <div class="sv-wait-meta">
-            <div class="sv-wait-eyebrow">WAITING ROOM</div>
+            <div class="sv-wait-eyebrow" data-i18n="wait_eyebrow">WAITING ROOM</div>
             <div class="sv-wait-lobby-name" id="wait-title">LOBBY</div>
             <p id="wait-info" class="sub"></p>
           </div>
@@ -2593,15 +2680,15 @@
             </div>
             <button id="start-btn" class="primary" data-i18n="start">START</button>
           </div>
-          <button id="wait-leave" class="wait-leave-btn" data-i18n="leave">← LEAVE LOBBY</button>
+          <button id="wait-leave" class="wait-leave-btn" data-i18n="leave">ODEJÍT</button>
         </div>
       </div>
 
       <!-- STATS -->
       <div id="v-stats" class="view" style="display:none">
         <div class="sv-stats-title-area">
-          <div class="lk-eyebrow">ALPHA SEASON 1</div>
-          <div class="lk-title-line"><span class="lk-title-bold">STATS</span> <span class="lk-title-light">&amp; LEADERBOARD</span></div>
+          <div class="lk-eyebrow" data-i18n="alpha_season">ALPHA SEASON 1</div>
+          <div class="lk-title-line"><span class="lk-title-bold" data-i18n="st_a">STATS</span> <span class="lk-title-light" data-i18n="st_b">&amp; LEADERBOARD</span></div>
         </div>
         <div class="sv-body sv-body-stats">
 
@@ -2609,47 +2696,47 @@
           <div class="sv-stats-left">
             <div class="sv-stats-rank-hero">
               <div class="sv-stats-rank-num" id="vs-rank">#—</div>
-              <div class="sv-stats-rank-lbl">GLOBAL RANK · <span id="vs-elo">1000</span> ELO</div>
+              <div class="sv-stats-rank-lbl"><span data-i18n="f_rank">GLOBAL RANK</span> · <span id="vs-elo">1000</span> ELO</div>
             </div>
 
             <div class="sv-stats-personal-grid">
               <div class="sv-stat-cell cyan">
                 <div class="sv-stat-val" id="vs-wins">0</div>
-                <div class="sv-stat-lbl">WINS</div>
+                <div class="sv-stat-lbl" data-i18n="stats_wins_u">WINS</div>
               </div>
               <div class="sv-stat-cell">
                 <div class="sv-stat-val" id="vs-losses">0</div>
-                <div class="sv-stat-lbl">LOSSES</div>
+                <div class="sv-stat-lbl" data-i18n="stats_losses_u">LOSSES</div>
               </div>
               <div class="sv-stat-cell orange">
                 <div class="sv-stat-val" id="vs-goals">0</div>
-                <div class="sv-stat-lbl">GOALS</div>
+                <div class="sv-stat-lbl" data-i18n="stats_goals_u">GOALS</div>
               </div>
               <div class="sv-stat-cell">
                 <div class="sv-stat-val" id="vs-assists">0</div>
-                <div class="sv-stat-lbl">ASSISTS</div>
+                <div class="sv-stat-lbl" data-i18n="stats_assists_u">ASSISTS</div>
               </div>
               <div class="sv-stat-cell">
                 <div class="sv-stat-val" id="vs-saves">0</div>
-                <div class="sv-stat-lbl">SAVES</div>
+                <div class="sv-stat-lbl" data-i18n="stats_saves_u">SAVES</div>
               </div>
               <div class="sv-stat-cell">
                 <div class="sv-stat-val" id="vs-games">0</div>
-                <div class="sv-stat-lbl">GAMES</div>
+                <div class="sv-stat-lbl" data-i18n="stats_games_u">GAMES</div>
               </div>
             </div>
 
             <div class="sv-stat-winrate-row">
               <div class="sv-stat-wr-val" id="vs-winrate">—</div>
-              <div class="sv-stat-wr-lbl">WIN RATE</div>
+              <div class="sv-stat-wr-lbl" data-i18n="f_wr">WIN RATE</div>
             </div>
 
             <div class="sv-stat-credits-badge">
-              <div class="sv-stat-credits-lbl">PUCK CREDITS</div>
+              <div class="sv-stat-credits-lbl" data-i18n="puck_credits">PUCK CREDITS</div>
               <div class="sv-stat-credits-val" id="vs-credits">⊙ 0</div>
             </div>
 
-            <div class="sv-stats-login-cta" id="stats-guest-cta" style="display:none">
+            <div class="sv-stats-login-cta" id="stats-guest-cta" style="display:none" data-i18n="stats_guest_cta">
               Log in with Discord to track your stats across sessions.
             </div>
           </div>
@@ -2657,35 +2744,34 @@
           <!-- RIGHT: Global leaderboard -->
           <div class="sv-stats-right">
             <div class="sv-lb-header">
-              <div class="sv-eyebrow">LEADERBOARD</div>
+              <div class="sv-eyebrow" data-i18n="leaderboard">LEADERBOARD</div>
               <div class="sv-lb-toggle" id="sv-lb-toggle">
-                <button class="sv-lb-tab active" data-mode="global">ALL PLAYERS</button>
-                <button class="sv-lb-tab" data-mode="friends">FRIENDS</button>
+                <button class="sv-lb-tab active" data-mode="global" data-i18n="lb_all">ALL PLAYERS</button>
+                <button class="sv-lb-tab" data-mode="friends" data-i18n="lb_friends">FRIENDS</button>
               </div>
             </div>
 
             <div class="sv-lb-cols">
               <span class="sv-lb-col-rank">#</span>
-              <span class="sv-lb-col-name">PLAYER</span>
+              <span class="sv-lb-col-name" data-i18n="lb_player">PLAYER</span>
               <span class="sv-lb-col-elo">ELO</span>
               <span class="sv-lb-col-wr">W%</span>
               <span class="sv-lb-col-games">GP</span>
             </div>
 
             <div id="sv-lb-list" class="sv-lb-list">
-              <div class="sv-lb-empty">Loading...</div>
+              <div class="sv-lb-empty" data-i18n="loading">Loading...</div>
             </div>
 
             <div id="sv-lb-friends-cta" class="sv-lb-friends-cta" style="display:none">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-              Sign in with Discord to see friends.
+              <span data-i18n="friends_cta">Sign in with Discord to see friends.</span>
             </div>
           </div>
 
         </div>
       </div>
 
-      <div id="status"></div>
     </div>
   </div>
 
@@ -2702,22 +2788,23 @@
         <div id="mr-mvp-badge" class="mr-mvp-badge" style="display:none">⭐ MVP</div>
       </div>
       <div class="mr-stats-row">
-        <div class="mr-stat"><span id="mr-goals">0</span><label>GOALS</label></div>
-        <div class="mr-stat"><span id="mr-assists">0</span><label>ASSISTS</label></div>
+        <div class="mr-stat"><span id="mr-goals">0</span><label data-i18n="stats_goals_u">GOALS</label></div>
+        <div class="mr-stat"><span id="mr-assists">0</span><label data-i18n="stats_assists_u">ASSISTS</label></div>
         <div class="mr-stat"><span id="mr-pm">0</span><label>+/-</label></div>
       </div>
       <div class="mr-rewards">
         <div class="mr-reward-card">
           <span id="mr-elo" class="mr-reward-val elo-pos">+0</span>
-          <label>ELO RATING</label>
+          <label data-i18n="mr_elo">ELO RATING</label>
         </div>
         <div class="mr-reward-card">
           <span id="mr-credits" class="mr-reward-val credits-val">+0 ⊙</span>
-          <label>PUCK CREDITS</label>
+          <label data-i18n="puck_credits">PUCK CREDITS</label>
         </div>
       </div>
       <div class="mr-footer">
-        <button id="mr-close-btn" class="primary">BACK TO MENU</button>
+        <button id="mr-rematch-btn" class="ghost" data-i18n="rematch">HRÁT ZNOVU</button>
+        <button id="mr-close-btn" class="primary" data-i18n="back_menu">BACK TO MENU</button>
       </div>
     </div>
   </div>
@@ -2737,8 +2824,8 @@
 
   <!-- Reconnect overlay — shown on unexpected network drop while in-game -->
   <div id="reconnect-overlay" style="display:none;position:fixed;inset:0;background:rgba(10,12,18,0.92);z-index:999;flex-direction:column;align-items:center;justify-content:center;gap:16px;backdrop-filter:blur(8px)">
-    <div style="font-family:'Barlow Condensed',sans-serif;font-size:2.8rem;font-weight:900;letter-spacing:0.12em;color:#fff">RECONNECTING</div>
-    <div style="font-family:'JetBrains Mono',monospace;font-size:0.65rem;letter-spacing:0.22em;color:#b6c4ff;opacity:0.55;text-transform:uppercase">Don&#8217;t close the tab &mdash; your slot is reserved for 15s</div>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-size:2.8rem;font-weight:900;letter-spacing:0.12em;color:#fff" data-i18n="reconnecting">RECONNECTING</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:0.65rem;letter-spacing:0.22em;color:#b6c4ff;opacity:0.55;text-transform:uppercase" data-i18n="reconnect_note">Don&#8217;t close the tab &mdash; your slot is reserved for 15s</div>
     <div style="display:flex;gap:6px;margin-top:8px">
       <span style="width:8px;height:8px;background:#b6c4ff;border-radius:50%;animation:rcDot 1.2s ease-in-out infinite"></span>
       <span style="width:8px;height:8px;background:#b6c4ff;border-radius:50%;animation:rcDot 1.2s ease-in-out 0.4s infinite"></span>

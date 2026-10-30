@@ -13,6 +13,7 @@
     "test:accounts": "node test/accounts.test.mjs",
     "test:botq": "node test/bot-quality.test.mjs",
     "test:determinism": "node test/determinism.test.mjs",
+    "test:balance": "node test/balance.mjs",
     "test:buy": "node test/buy-race.test.mjs",
     "test:scorehack": "node test/score-hack.test.mjs",
     "test": "echo \"Error: no test specified\" && exit 1"

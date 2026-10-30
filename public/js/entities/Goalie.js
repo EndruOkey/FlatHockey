@@ -71,6 +71,7 @@ export class Goalie {
     const formTarget = 0.5 + 0.45 * Math.sin(this._formPhase) * Math.cos(this._formPhase * 0.61);
     this._form += (formTarget - this._form) * Math.min(1, 0.25 * dt);
 
+    if (this._noGrab > 0) this._noGrab -= dt;
     if (this._holdTimer > 0) {
       this._holdTimer -= dt;
       if (this._heldPuck) {
@@ -543,6 +544,7 @@ export class Goalie {
     if (this._holdTimer > 0 || this._heldPuck) return true;
     if (!puck || puck.isAirborne) return false;
     if (this._retrieving) return false;  // retrieve logika to řeší sama
+    if (this._noGrab > 0) return false;   // čerstvě vypuštěný puk (pas spoluhráči v brankovišti) hned nezachytávej zpět
     if (Math.hypot(puck.vx, puck.vy) > 90) return false;
     // Za brankou neber volný puk — hráč má prioritu
     const behindLine = this.inX < 0 ? puck.x > this.netX + 5 : puck.x < this.netX - 5;
@@ -612,6 +614,7 @@ export class Goalie {
     if (!this._heldPuck) return;
     const p = this._heldPuck;
     this._heldPuck = null;
+    this._noGrab = 0.6;   // bez toho pas na spoluhráče <15 px dojel pomalu (<90 px/s) a gólman ho hned znovu chytil → držel navždy
     p.x = this.x + this.inX * 16; p.y = this.y; p.z = 0; p.vz = 0;
 
     // Normální hold (po zákroku): nahraj spoluhráči, nebo měkce do hřiště

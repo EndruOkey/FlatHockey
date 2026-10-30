@@ -91,11 +91,15 @@ def drive_step(page, sid, s, n):
         release_all(page); aim(page, *GOAL)
         if n % 6 == 3: click(page)
     elif sid == 'pass':
-        release_all(page); aim(page, s['ax'], s['ay'])
-        if n % 6 == 3: click(page)
+        aim(page, s['ax'], s['ay'])            # zamiř na nahrávače
+        if s['has'] and n % 3 == 1: click(page, 'right', 100)   # RMB = přihrávka, jen když držíš puk
     elif sid == 'mmb':
-        steer(page, s, s['x'], s['y'], 9999)
-        if n % 6 == 3: click(page, 'middle', 80)
+        # call for the pass (MMB), then meet the puck with the stick like a player would
+        if s['phas']:
+            steer(page, s, s['x'], s['y'], 9999)
+            if n % 6 == 3: click(page, 'middle', 80)
+        else:
+            aim(page, s['px'], s['py']); steer(page, s, s['px'], s['py'], 6)
     elif sid == 'bodycheck':
         steer(page, s, s['ax'], s['ay'], 4);
     elif sid == 'clona':
@@ -112,7 +116,7 @@ def drive_step(page, sid, s, n):
 
 def run_tutorial(page, ctx):
     ids = page.evaluate("() => window.__fhGame ? 1 : 0")
-    names = ['move', 'brake', 'aim', 'spin', 'pickup', 'shoot', 'pass', 'mmb', 'bodycheck', 'clona', 'tece', 'goal']
+    names = ['move', 'aim', 'pickup', 'shoot', 'goal', 'brake', 'pass', 'mmb', 'spin', 'bodycheck', 'clona', 'tece']
     reached, stuck = [], []
     last_step, since, n = -1, 0, 0; t0 = time.monotonic()
     page.mouse.move(640, 360)

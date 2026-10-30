@@ -17,7 +17,12 @@ const BRAKE_V     = 25;           // px/s — nad tuhle rychlostí bot za nápř
 const CORNER_IN   = 2;            // px od horní tyčky, kam míří
 const CREASE_OUT  = 140;          // px před brankou — kam se stáhne, když gólman drží puk
 const PUCK_LEAD   = 0.25;         // s — jede tam, kam puk dojede, ne kde je
+const LEAD_MAX     = 0.7;          // s — strop předstihu při pronásledování
+const PLAYER_V     = 180;          // px/s — rychlost bruslaře (PLAYER.speed)
 const AVOID_R     = 26;           // px — puk blíž než tohle k soupeři → najeď z druhé strany
+const REACH       = 13;           // px — dosah čepele před tělem při aimDist 40
+const PICK_NEAR   = 45;           // px — od téhle vzdálenosti k puku bot zastaví tělo tak, aby čepel dosáhla
+const NET_CLEAR   = 50;           // px — za brankou: dokud je |y od středu| menší, jede se bokem ze sítě
 const STANDOFF    = 12;           // px za puk (směrem od soupeře)
 const LOOK        = 120;          // px — jak daleko dopředu hledá soupeře v cestě
 const CLEAR       = 26;           // px — boční odstup od soupeře na dráze (poloměry 7+7 + rezerva)
@@ -60,6 +65,10 @@ function isChaser(p, match) {
     if (o !== p && o.team === p.team && d(o) < mine) return false;
   return true;
 }
+
+// Soupeř drží puk staženě u těla (kurzor < TUCK px) → čepelí se k němu dostaneš jen z blízka; boti sami drží puk s aimDist ≥ 40
+const TUCK = 40;
+const tucked = (o) => o.hasPuck && (o.aimDist ?? 99) < TUCK;
 
 const clampX = (x, goalX, dir) => (dir > 0 ? Math.min(x, goalX - 90) : Math.max(x, goalX + 90));
 
@@ -159,15 +168,22 @@ export function botThink(p, inp, match) {
     tx = g.netX + g.inX * CREASE_OUT; ty = goalY;
     ax = puck.x; ay = puck.y;
   } else if (isChaser(p, match)) {
-    tx = puck.x + puck.vx * PUCK_LEAD; ty = puck.y + puck.vy * PUCK_LEAD;
+    // Předstih = doba, za kterou bot k puku dojede (max LEAD_MAX), ne pevných 0.25 s — jinak jen ocasí nosiče
+    // po kružnici (naměřeno: 65 px za ním, puk držel 98.8 % času) místo aby mu přeťal dráhu
+    const lead = Math.min(LEAD_MAX, Math.max(PUCK_LEAD, Math.hypot(puck.x - p.x, puck.y - p.y) / PLAYER_V));
+    tx = puck.x + puck.vx * lead; ty = puck.y + puck.vy * lead;
     ax = puck.x; ay = puck.y;
     // Puk těsně u soupeře (buly, scrum): najeď na něj z opačné strany, ne skrz soupeřovo tělo
     // (každý kontakt = knockback 85 px/s → stojícího člověka to odhodí o stovky px)
     const o = nearestOpp(p, match, tx, ty);
-    if (o) {
+    if (o && !tucked(o)) {          // nosiče se staženým pukem (kurzor u těla) NEobjíždí — jde se o puk bojovat, jinak ho jen ocasí
       const ox = tx - o.x, oy = ty - o.y, od = Math.hypot(ox, oy) || 1;
       if (od < AVOID_R) { tx += ox / od * STANDOFF; ty += oy / od * STANDOFF; }
     }
+    // Blízko puku se zastav tam, kde čepel (~REACH před tělem) dosáhne na puk; střed těla na puk by čepel
+    // posunul za něj a bot by puk donekonečna obíhal (puk ležel 100+ s, bot kolem něj kroužil)
+    const pdx = tx - p.x, pdy = ty - p.y, pd = Math.hypot(pdx, pdy);
+    if (pd > REACH && pd < PICK_NEAR) { const k = (pd - REACH) / pd; tx = p.x + pdx * k; ty = p.y + pdy * k; }
   } else {
     ax = puck.x; ay = puck.y;
     const mates = [];                          // spoluhráči bez puku, seřazení podle vzdálenosti k puku (shoda → id)
@@ -193,6 +209,11 @@ export function botThink(p, inp, match) {
     }
   }
 
+  // Za kteroukoli brankovou čarou, v šířce sítě: nejdřív vyjeď bokem ze sítě (rovně by narazil do sítě/brankáře
+  // a zůstal na místě navždy — naměřeno: bot s pukem i bez něj tam stál 100+ s)
+  if ((p.x < RINK.goalLineLeft + 4 || p.x > RINK.goalLineRight - 4) && Math.abs(p.y - goalY) < NET_CLEAR) {
+    tx = p.x; ty = goalY + (p.y >= goalY ? 1 : -1) * (NET_CLEAR + 25);
+  }
   // Obejdi soupeře ležícího na cestě (kontakt = knockback 85 px/s). Dívá se dopředu po přímce k cíli,
   // uhne na tu stranu, kde soupeř NENÍ; bez soupeře na dráze se cíl nemění.
   {
@@ -204,6 +225,7 @@ export function botThink(p, inp, match) {
         if (o.team === p.team) continue;
         const rx = o.x - p.x, ry = o.y - p.y;
         const along = rx * ux + ry * uy, lat = rx * nx + ry * ny;
+        if (!p.hasPuck && tucked(o)) continue;   // nosič se staženým pukem není překážka, ale cíl
         if (along > 0 && along < Math.min(m0 - 4, LOOK) && Math.abs(lat) < CLEAR && along < bestAlong) { bestAlong = along; bestLat = lat; }
       }
       if (bestAlong < Infinity) {

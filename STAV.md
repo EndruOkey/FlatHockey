@@ -54,3 +54,11 @@ Hra nebyla nikdy propagovaná. Plán: vydat na itch.io + CrazyGames, po 14 dnech
 Push do `main` → GitHub Actions (`.github/workflows/deploy.yml`): testy (puk, determinismus, server, bot) → až když projdou, pull + restart na serveru + kontrola webu.
 Funguje odkudkoli (i z claude.ai/code). Ručně: GitHub → Actions → Deploy → Run workflow.
 Klíč: GitHub Secrets `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS` (staré `SSH_PRIVATE_KEY`, `BUTLER_API_KEY` patří k březnové verzi).
+
+## Alpha opravy 30. 10. (nasazeno)
+- Bezpečnost: pád serveru vadnou zprávou (DoS), dvojí nákup, XSS v žebříčku, pád šatny (profil) — opraveno, testy.
+- Integrita skóre: gól po konci / vlastní gól / bot se nepočítá; odměna jen hráčům od startu, 1 účet 1×; zaseknutá záložka nejede. test:scorehack, test:buy.
+- Vyvážení (měřeno, test:balance + test/balance-metrics.mjs): zdržování držení puku 98→24 %, parkování v brance 100→53 %; opraven i zámrzek brankáře s pukem.
+- UI: mobil = hláška „hraj na PC"; vložená verze bez Discordu; soukromé lobby bez systémového okna; toasty; sjednocený jazyk (cs/en) a názvy; Zpět+Esc; CLS 0,41→0,017; favicon+og; obchod skryt; menu „Hrát proti botovi/Trénink/Tutoriál"; rematch.
+- Tutoriál: přihrávka učí RMB; tlačítko Přeskočit; konec tichého přeskakování; nové pořadí (gól hned po střele).
+- Plná sada testů zelená; viz ALPHA.md pro zbytek (herní vyvážení skupiny D = na výběr; prodloužení, CG_GAME_ID po nahrání).

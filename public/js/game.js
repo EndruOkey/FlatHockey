@@ -2982,11 +2982,11 @@ export class SandboxGame {
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// TutorialGame — řízený onboarding (8 kroků → profil)
+// TutorialGame — řízený onboarding (12 kroků → profil)
 // ════════════════════════════════════════════════════════════════════════
 const _TUT_ICON  = { move:'⛸️', brake:'🛑', aim:'🎯', spin:'🌀', pickup:'🏒', shoot:'💥', pass:'↗️', mmb:'📨', passer:'🤝', bodycheck:'💪', clona:'🛡️', tece:'↩️', goal:'🥅' };
 const _TUT_COLOR = { move:'#3a9fff', brake:'#22ccee', aim:'#9b5cff', spin:'#ff8a66', pickup:'#ff8a1e', shoot:'#ff4455', pass:'#19c37d', mmb:'#3a9fff', passer:'#ffcf3a', bodycheck:'#ff4455', clona:'#22ccee', tece:'#a066ff', goal:'#ffcf3a' };
-// ── Tutorial steps: 12 kroků (vše kromě přemisťování passera Tabem) ──
+// ── Tutorial steps: 12 kroků, pořadí: pohyb → míření → puk → střela → gól → brzda → přihrávka (RMB) → žádost (MMB) → spin → bodyček → clona → tečování ──
 const _TUT = [
   {
     id: 'move',
@@ -3005,60 +3005,26 @@ const _TUT = [
     hl:    g => ({ type: 'zone', x: g._tutTarget.x, y: g._tutTarget.y, r: 48 }),
   },
   {
-    id: 'brake',
-    title: { cs: 'Hokejová brzda', en: 'Hockey stop' },
-    desc:  { cs: 'Rozjeď se a přibrzdí — drž mezerník', en: 'Skate around, then brake — hold Space' },
-    sub:   { cs: 'Space rychle snižuje rychlost · skvělé před bránou nebo při změně směru', en: 'Space brakes fast · great near goal or when changing direction' },
-    keys:  ['Space'],
-    hidePuck: true,
-    setup(g) {
-      g._goalLock = false; g.world._goalLock = false; g.goalFlash = 0;
-      g.local.hasPuck = false;
-      g.puck.x = 30; g.puck.y = RINK.h - 30; g.puck.vx = g.puck.vy = 0; g.puck.faceoffTimer = 1;
-      g._tutBrakeTimer = 0;
-    },
-    check: g => g._tutBrakeTimer >= 0.4,
-    hl:    null,
-  },
-  {
     id: 'aim',
     title: { cs: 'Hokejka a mušička', en: 'Stick & aiming' },
-    desc:  { cs: 'Myš míří hokejkou — vzdálenost od hráče = vysunutí hole', en: 'Mouse aims the stick — distance from player = stick reach' },
-    sub:   { cs: 'Blízko těla = stažená hůl · daleko = plné natažení · hůl jde za myší, ne za tělem', en: 'Close = tucked stick · far = full extension · stick follows mouse, not body' },
+    desc:  { cs: 'Veď hokejku myší — namiř ji doleva, doprava i nahoru', en: 'Sweep the stick with the mouse — aim left, right and up' },
+    sub:   { cs: 'Blízko těla = stažená hokejka · daleko = plné natažení', en: 'Close = tucked stick · far = full extension' },
     keys:  { cs: ['pohyb myší'], en: ['mouse move'] },
     hidePuck: true,
     setup(g) {
       g._goalLock = false; g.world._goalLock = false; g.goalFlash = 0;
       g.local.hasPuck = false;
       g.puck.x = 30; g.puck.y = RINK.h - 30; g.puck.vx = g.puck.vy = 0; g.puck.faceoffTimer = 1;
-      g._tutAimTimer = 0; g._tutAimLastAngle = null;
+      g._tutAimTimer = 0; g._tutAimLastAngle = null; g._tutAimRel = 0; g._tutAimMin = 0; g._tutAimMax = 0;
     },
-    check: g => g._tutAimTimer >= 2.0,
-    hl:    null,
-  },
-  {
-    id: 'spin',
-    title: { cs: 'Objížďka a spin', en: 'Spin move' },
-    desc:  { cs: 'Drž puk a obkroužíš hůlí celý kruh', en: 'Carry the puck and sweep the stick in a full circle' },
-    sub:   { cs: 'Rychlé krouživé gesto myší — nejlepší manévr pro obejití bránícího hráče', en: 'Fast circular mouse gesture — the best move to get past a defender' },
-    keys:  ['LMB hold'],
-    setup(g) {
-      g._goalLock = false; g.world._goalLock = false; g.goalFlash = 0;
-      // Give player puck at current position — no teleport
-      g.local.hasPuck = true;
-      g.puck.x = g.local.x; g.puck.y = g.local.y;
-      g.puck.vx = g.puck.vy = 0; g.puck.faceoffTimer = 0;
-      g.passer.active = false;
-      g._tutSpinDelta = 0; g._tutSpinLastAngle = null;
-    },
-    check: g => (g._tutSpinDelta ?? 0) >= Math.PI * 1.5,
+    check: g => (g._tutAimMax - g._tutAimMin) >= 1.4,   // rozsah zamíření ≥ ~80° (drobné cukání nestačí)
     hl:    null,
   },
   {
     id: 'pickup',
     title: { cs: 'Zvedni puk', en: 'Pick up the puck' },
-    desc:  { cs: 'Přibruslí k puku — zvedne se automaticky', en: 'Skate close to the puck — it picks up automatically' },
-    sub:   { cs: 'Puk leží na ledě, jen k němu přijeď', en: 'The puck is on the ice, just skate to it' },
+    desc:  { cs: 'Dojeď k puku — zvedne se sám', en: 'Skate close to the puck — it picks up automatically' },
+    sub:   { cs: 'Puk leží na ledě, stačí k němu dojet', en: 'The puck is on the ice, just skate to it' },
     keys:  [],
     setup(g) {
       g._goalLock = false; g.world._goalLock = false; g.goalFlash = 0;
@@ -3075,8 +3041,8 @@ const _TUT = [
   {
     id: 'shoot',
     title: { cs: 'Střela', en: 'Shooting' },
-    desc:  { cs: 'Miř myší na bránu a stiskni levé tlačítko', en: 'Aim cursor at the goal and press left mouse button' },
-    sub:   { cs: 'Tap = žabička · drž déle = silnější slap shot', en: 'Tap = flick · hold longer = powerful slapshot' },
+    desc:  { cs: 'Namiř hokejku na bránu a stiskni LMB', en: 'Aim the stick at the goal and press LMB' },
+    sub:   { cs: 'Krátký klik = žabička · drž déle = silnější slapshot', en: 'Quick click = flick · hold longer = powerful slapshot' },
     keys:  ['LMB'],
     setup(g) {
       g._goalLock = false; g.world._goalLock = false; g.goalFlash = 0;
@@ -3088,11 +3054,42 @@ const _TUT = [
     hl:    g => ({ type: 'arrow', tx: RINK.goalLineRight, ty: RINK.h / 2 }),
   },
   {
+    id: 'goal',
+    title: { cs: 'Dej gól!', en: 'Score a goal!' },
+    desc:  { cs: 'Vyber si roh brány, namiř hokejku a vystřel (LMB)', en: 'Pick a corner, aim your stick and shoot (LMB)' },
+    sub:   { cs: 'Puk se vrátí po každé zachycené střele · drž LMB pro silnější střelu', en: 'Puck respawns after every save · hold LMB for a harder shot' },
+    keys:  ['LMB'],
+    setup(g) {
+      g._goalLock = false; g.world._goalLock = false; g.goalFlash = 0;
+      g.passer.active = false;
+      g._tutGivePuck();
+      g._tutGoalRespawn = 0; g._tutGoalDone = false; g._tutSaves = 0; g._tutSaveSeen = false;
+    },
+    check: g => g._tutGoalDone,
+    hl:    g => ({ type: 'arrow', tx: RINK.goalLineRight, ty: RINK.h / 2 }),
+  },
+  {
+    id: 'brake',
+    title: { cs: 'Hokejová brzda', en: 'Hockey stop' },
+    desc:  { cs: 'Rozjeď se a zabrzdi — drž mezerník', en: 'Skate around, then brake — hold Space' },
+    sub:   { cs: 'Space rychle snižuje rychlost · skvělé před bránou nebo při změně směru', en: 'Space brakes fast · great near goal or when changing direction' },
+    keys:  ['Space'],
+    hidePuck: true,
+    setup(g) {
+      g._goalLock = false; g.world._goalLock = false; g.goalFlash = 0;
+      g.local.hasPuck = false;
+      g.puck.x = 30; g.puck.y = RINK.h - 30; g.puck.vx = g.puck.vy = 0; g.puck.faceoffTimer = 1;
+      g._tutBrakeTimer = 0;
+    },
+    check: g => g._tutBrakeTimer >= 0.4,
+    hl:    null,
+  },
+  {
     id: 'pass',
     title: { cs: 'Přihrávka nahrávači', en: 'Pass to teammate' },
-    desc:  { cs: 'Namiř hokejku na nahrávače a vystřel (LMB)', en: 'Aim at the teammate and shoot (LMB)' },
-    sub:   { cs: 'Krátká přihrávka = žabička k nahrávači · puk doletí ke spoluhráči a chytí ho', en: 'Short pass = tap toward teammate · puck flies to teammate and they catch it' },
-    keys:  ['LMB'],
+    desc:  { cs: 'Stiskni pravé tlačítko myši (RMB) — puk poletí nahrávači', en: 'Press the right mouse button (RMB) — the puck flies to the teammate' },
+    sub:   { cs: 'RMB = přihrávka nejbližšímu spoluhráči · LMB je střela, ne přihrávka', en: 'RMB = pass to the nearest teammate · LMB is a shot, not a pass' },
+    keys:  ['RMB'],
     setup(g) {
       g._goalLock = false; g.world._goalLock = false; g.goalFlash = 0;
       if (!g.local.hasPuck) g._tutGivePuck();
@@ -3102,15 +3099,16 @@ const _TUT = [
       g.passer.y = g.local.y + 30;
       g.passer.vx = 0; g.passer.vy = 0;
       g.passer.hasPuck = false; g.passer._returnTimer = 0; g.passer._receiveCooldown = 0.3;
+      g._tutPassSent = false; g._tutPassWrongT = 0; g._tutPassLostT = 0;
     },
-    check: g => g.passer.hasPuck,
+    check: g => g._tutPassSent && g.passer.hasPuck,   // jen přihrávka přes RMB
     hl:    g => ({ type: 'target', x: g.passer.x, y: g.passer.y }),
   },
   {
     id: 'mmb',
     title: { cs: 'Přihraj zpátky!', en: 'Call for the pass!' },
-    desc:  { cs: 'Nahrávač má puk — stiskni střední tlačítko myši (kolečko)', en: 'Teammate has the puck — press middle mouse button (scroll wheel click)' },
-    sub:   { cs: 'MMB = žádost o přihrávku · nahrávač pošle puk zpět ke mně', en: 'MMB = request pass · teammate sends puck back to you' },
+    desc:  { cs: 'Nahrávač má puk — stiskni MMB (kolečko myši)', en: 'Teammate has the puck — press MMB (scroll wheel click)' },
+    sub:   { cs: 'MMB = žádost o přihrávku · nahrávač pošle puk zpět k tobě', en: 'MMB = request pass · teammate sends puck back to you' },
     keys:  ['MMB'],
     setup(g) {
       g._goalLock = false; g.world._goalLock = false; g.goalFlash = 0;
@@ -3128,10 +3126,28 @@ const _TUT = [
     hl:    g => ({ type: 'target', x: g.passer.x, y: g.passer.y }),
   },
   {
+    id: 'spin',
+    title: { cs: 'Objížďka a spin', en: 'Spin move' },
+    desc:  { cs: 'S pukem veď hokejku myší po celém kruhu', en: 'With the puck, sweep the stick in a full circle' },
+    sub:   { cs: 'Rychlé kruhové gesto myší — nejlepší na obejití bránícího hráče', en: 'Fast circular mouse gesture — best for getting past a defender' },
+    keys:  { cs: ['krouživý pohyb myší'], en: ['circular mouse move'] },
+    setup(g) {
+      g._goalLock = false; g.world._goalLock = false; g.goalFlash = 0;
+      // Give player puck at current position — no teleport
+      g.local.hasPuck = true;
+      g.puck.x = g.local.x; g.puck.y = g.local.y;
+      g.puck.vx = g.puck.vy = 0; g.puck.faceoffTimer = 0;
+      g.passer.active = false;
+      g._tutSpinDelta = 0; g._tutSpinLastAngle = null;
+    },
+    check: g => (g._tutSpinDelta ?? 0) >= Math.PI * 1.5,
+    hl:    null,
+  },
+  {
     id: 'bodycheck',
     title: { cs: 'Bodyček!', en: 'Body check!' },
     desc:  { cs: 'Najeď do nahrávače — sraz ho z místa', en: 'Skate into the player — knock them down' },
-    sub:   { cs: 'Vyšší rychlost = silnější bodyček · bez puku = není čeho se bát', en: 'Faster skating = harder hit · they don\'t have the puck — safe to check' },
+    sub:   { cs: 'Vyšší rychlost = silnější bodyček · nahrávač nemá puk, můžeš', en: 'Faster skating = harder hit · they don\'t have the puck — safe to check' },
     keys:  [],
     setup(g) {
       g._goalLock = false; g.world._goalLock = false; g.goalFlash = 0;
@@ -3170,8 +3186,8 @@ const _TUT = [
     id: 'tece',
     title: { cs: 'Tečování (dorážka)', en: 'Deflection' },
     desc:  { cs: 'Stůj u tyče — nahrávač vystřelí, ty puk přesměruj', en: 'Stand by the post — teammate shoots, you deflect it' },
-    sub:   { cs: 'Pohyb myší těsně před kontaktem s pukem změní jeho trajektorii · brankáři se pak těžko chytá', en: 'Moving mouse right before puck contact changes its angle · goalie can\'t react in time' },
-    keys:  ['pohyb myší / mouse move'],
+    sub:   { cs: 'Pohyb myší těsně před dotykem puku změní jeho dráhu · brankář ji hůř chytá', en: 'Moving the mouse right before contact changes the puck path · harder for the goalie' },
+    keys:  { cs: ['pohyb myší'], en: ['mouse move'] },
     setup(g) {
       g._goalLock = false; g.world._goalLock = false; g.goalFlash = 0;
       g.local.hasPuck = false;
@@ -3189,24 +3205,10 @@ const _TUT = [
       g._tutTeceShot = false;
       g._tutTeceDone = false;
       g._tutTeceFallback = 0;
+      g._tutTeceHint = false;
     },
     check: g => g._tutTeceDone,
     hl:    g => g._tutTeceShot ? ({ type: 'arrow', tx: RINK.goalLineRight, ty: RINK.h / 2 }) : ({ type: 'target', x: g.passer.x, y: g.passer.y }),
-  },
-  {
-    id: 'goal',
-    title: { cs: 'Dej gól!', en: 'Score a goal!' },
-    desc:  { cs: 'Vyber si roh brány, namiř hokejku a vystřel', en: 'Pick a corner, aim your stick, and shoot' },
-    sub:   { cs: 'Puk se vrátí po každé zachycené střele', en: 'Puck respawns after every save' },
-    keys:  ['LMB'],
-    setup(g) {
-      g._goalLock = false; g.world._goalLock = false; g.goalFlash = 0;
-      g.passer.active = false;
-      g._tutGivePuck();
-      g._tutGoalRespawn = 0; g._tutGoalDone = false; g._tutSaves = 0; g._tutSaveSeen = false;
-    },
-    check: g => g._tutGoalDone,
-    hl:    g => ({ type: 'arrow', tx: RINK.goalLineRight, ty: RINK.h / 2 }),
   },
 ];
 
@@ -3228,6 +3230,14 @@ export class TutorialGame extends SandboxGame {
     this._tutBrakeTimer    = 0;
     this._tutAimTimer      = 0;
     this._tutAimLastAngle  = null;
+    this._tutAimRel = 0; this._tutAimMin = 0; this._tutAimMax = 0;
+    this._tutMissed = [];
+    this._tutNote = null;
+    this._skipArm = 0;
+    this._skipBtn = null;
+    this._completed = false;
+    this._tutPassSent = false;
+    this._tutPassWrongT = 0;
     this._tutSpinDelta     = 0;
     this._tutSpinLastAngle = null;
     this._tutShot          = false;
@@ -3251,6 +3261,8 @@ export class TutorialGame extends SandboxGame {
     this.engine.onTick = (dt, cam) => {
       this._tutCam = cam;
       this._preLmb = this.input.lmbJustPressed;
+      this._preRmb = this.input.rmbJustPressed;
+      this._preHas = this.local.hasPuck;
       origTick(dt, cam);
       this._tutTick(dt);
     };
@@ -3269,6 +3281,18 @@ export class TutorialGame extends SandboxGame {
     this._goalLock = false; this.world._goalLock = false;
   }
 
+  // Společný konec (normální dokončení i přeskočení): flag + onComplete(isFirst) právě jednou
+  _tutComplete() {
+    if (this._completed) return;
+    this._completed = true;
+    let isFirst = true;
+    try {
+      isFirst = !localStorage.getItem('hockey_tutorial_done');
+      localStorage.setItem('hockey_tutorial_done', '1');
+    } catch (e) { /* storage nedostupný */ }
+    this.onComplete?.(isFirst);
+  }
+
   _handleGoal(result) {
     const goalStep = _TUT.findIndex(s => s.id === 'goal');
     if (this._tStep === goalStep && !this._tutGoalDone) {
@@ -3280,9 +3304,8 @@ export class TutorialGame extends SandboxGame {
       SFX.goalWhistle();
       setTimeout(() => SFX.goalHorn(), 950);
       setTimeout(() => SFX.crowd(3), 700);
-      setTimeout(() => { this._finished = true; this._finT = 0; }, 4200);
-    } else if (this._tStep < goalStep) {
-      // Gól před goal stepem: potichu resetuj puk
+    } else if (this._tStep !== goalStep) {
+      // Gól mimo goal step: potichu resetuj puk
       this._goalLock = false; this.world._goalLock = false;
       this.puck.reset();
       this.puck.x = this.local.x + 15; this.puck.y = this.local.y;
@@ -3299,14 +3322,21 @@ export class TutorialGame extends SandboxGame {
         const clickOnBtn = this._preLmb && btn &&
           this.input.mouseX >= btn.x && this.input.mouseX <= btn.x + btn.w &&
           this.input.mouseY >= btn.y && this.input.mouseY <= btn.y + btn.h;
-        if (clickOnBtn || inp.keys['Enter']) {
-          const isFirst = !localStorage.getItem('hockey_tutorial_done');
-          localStorage.setItem('hockey_tutorial_done', '1');
-          this.onComplete?.(isFirst);
-        }
+        if (clickOnBtn || inp.keys['Enter']) this._tutComplete();
       }
       return;
     }
+
+    // Přeskočit tutoriál: tlačítko vpravo dole, 2 kliky (druhý do 3 s potvrdí) → hockey_tutorial_done + onComplete
+    // (Esc nejde: main.js na něj otevírá pauzu)
+    if (this._skipArm > 0) this._skipArm = Math.max(0, this._skipArm - dt);
+    const sb = this._skipBtn;
+    if (this._preLmb && sb && this.input.mouseX >= sb.x && this.input.mouseX <= sb.x + sb.w &&
+        this.input.mouseY >= sb.y && this.input.mouseY <= sb.y + sb.h) {
+      if (this._skipArm > 0) { this._tutComplete(); return; }
+      this._skipArm = 3;
+    }
+    if (this._tutNote && (this._tutNote.t -= dt) <= 0) this._tutNote = null;
 
     const step = _TUT[this._tStep];
     if (!step) return;
@@ -3329,8 +3359,13 @@ export class TutorialGame extends SandboxGame {
     // Krok 'aim': sleduj pohyb mušičky po dobu 2s
     if (step.id === 'aim') {
       const ang = this.local.aimAngle;
-      if (this._tutAimLastAngle !== null && Math.abs(ang - this._tutAimLastAngle) > 0.01) {
-        this._tutAimTimer = (this._tutAimTimer ?? 0) + dt;
+      if (this._tutAimLastAngle !== null) {
+        let d = ang - this._tutAimLastAngle;
+        while (d >  Math.PI) d -= 2 * Math.PI;
+        while (d < -Math.PI) d += 2 * Math.PI;
+        this._tutAimRel += d;
+        this._tutAimMin = Math.min(this._tutAimMin, this._tutAimRel);
+        this._tutAimMax = Math.max(this._tutAimMax, this._tutAimRel);
       }
       this._tutAimLastAngle = ang;
     }
@@ -3369,17 +3404,28 @@ export class TutorialGame extends SandboxGame {
 
     // Krok 'pass': mimo-přihrávka nechá puk ležet někde na ledě → po 2 s ho vrať hráči (jinak se krok nedá dokončit)
     if (step.id === 'pass') {
+      // RMB přihrávka = měl puk, stiskl RMB, puk odešel (nabitá střela se RMB jen zruší → puk zůstane)
+      if (this._preRmb && this._preHas && !this.local.hasPuck) this._tutPassSent = true;
+      // Puk u nahrávače bez RMB (třeba po LMB) → vrať ho hráči, ať se krok naučí správně
+      if (this.passer.hasPuck && !this._tutPassSent) {
+        this._tutPassWrongT += dt;
+        if (this._tutPassWrongT > 1.0) {
+          this._tutPassWrongT = 0; this.passer.hasPuck = false;
+          this._tutNote = { t: 3, cs: 'To byla střela. Přihrávka je pravé tlačítko (RMB).', en: 'That was a shot. A pass is the right button (RMB).' };
+          this._tutGivePuck();
+        }
+      }
       const lost = !this.local.hasPuck && !this.passer.hasPuck && Math.hypot(this.puck.vx, this.puck.vy) < 40;
       this._tutPassLostT = lost ? (this._tutPassLostT ?? 0) + dt : 0;
       // Slabá přihrávka zastaví puk kousek před nahrávačem → počítej ji (nahrávač si puk přibere), místo aby hráč bloudil pro puk
       const dPasser = Math.hypot(this.puck.x - this.passer.x, this.puck.y - this.passer.y);
       const dMe     = Math.hypot(this.puck.x - this.local.x, this.puck.y - this.local.y);
-      if (this._tutPassLostT > 0.6 && dPasser < 130 && dPasser < dMe && this.passer.active) {
+      if (this._tutPassSent && this._tutPassLostT > 0.6 && dPasser < 130 && dPasser < dMe && this.passer.active) {
         this._tutPassLostT = 0;
         this.passer.hasPuck = true; this.passer._returnTimer = 1.3; this.passer._shouldReturn = false;
         this.puck.x = this.passer.x; this.puck.y = this.passer.y; this.puck.vx = this.puck.vy = 0;
       }
-      if (this._tutPassLostT > 2.0) { this._tutPassLostT = 0; this._tutGivePuck(); }
+      if (this._tutPassLostT > 2.0) { this._tutPassLostT = 0; this._tutPassSent = false; this._tutGivePuck(); }
     }
 
     // Krok 'bodycheck': detekuj knockback passera (byl sražen)
@@ -3407,7 +3453,16 @@ export class TutorialGame extends SandboxGame {
       } else {
         if (this.local._deflectCool > 0.25 || this.goalFlash > 0) this._tutTeceDone = true;
         this._tutTeceFallback = (this._tutTeceFallback ?? 0) + dt;
-        if (this._tutTeceFallback > 5) this._tutTeceDone = true;
+        // nápověda po 2.5 s; po 5 s krok popisně přeskoč (ne tiše): finále ukáže, že tečování zbývá procvičit
+        if (this._tutTeceFallback > 2.5 && !this._tutTeceHint && !this._tutTeceDone) {
+          this._tutTeceHint = true;
+          this._tutNote = { t: 3, cs: 'Tip: pohni myší těsně před dotykem puku', en: 'Tip: move the mouse right before the puck touches you' };
+        }
+        if (this._tutTeceFallback > 5 && !this._tutTeceDone) {
+          this._tutTeceDone = true;
+          this._tutMissed.push('tece');
+          this._tutNote = { t: 3.2, cs: 'Přeskočeno — tečování si vyzkoušíš v tréninku', en: 'Skipped — try deflections in training' };
+        }
       }
     }
 
@@ -3419,7 +3474,11 @@ export class TutorialGame extends SandboxGame {
       if (saving && !this._tutSaveSeen) {
         this._tutSaves = (this._tutSaves ?? 0) + 1;
         if (this._tutSaves === 3) { this.goalie.difficulty = 'easy'; this.goalie.showWeakSpots = true; }
-        if (this._tutSaves >= 6) this._tutGoalDone = true;
+        if (this._tutSaves >= 6) {
+          this._tutGoalDone = true;   // poctivě: ne gól, ale dobré pokusy
+          this._tutMissed.push('goal');
+          this._tutNote = { t: 3.2, cs: 'Dobré pokusy! Gól tě čeká v tréninku', en: 'Good shots! A goal awaits you in training' };
+        }
       }
       this._tutSaveSeen = saving;
       if (this.local.hasPuck) {
@@ -3442,7 +3501,7 @@ export class TutorialGame extends SandboxGame {
 
     if (this._tDone) {
       this._tDoneT += dt;
-      if (this._tDoneT > 0.9) {
+      if (this._tDoneT > (step.id === 'goal' && this.goalFlash > 0 ? 2.6 : 0.9)) {
         const next = this._tStep + 1;
         this._goalLock = false; this.world._goalLock = false; this.goalFlash = 0;
         if (next >= _TUT.length) {
@@ -3465,6 +3524,40 @@ export class TutorialGame extends SandboxGame {
     if (!step) return;
     if (cam) this._drawTutHl(ctx, cam, step.hl?.(this));
     this._drawTutPanel(ctx, step, cam);
+    this._drawTutExtras(ctx);
+  }
+
+  // Poctivé hlášky (přeskočeno / tip) + nápověda a průběh přeskočení (drž Esc)
+  _drawTutExtras(ctx) {
+    const W = ctx.canvas.width, H = ctx.canvas.height;
+    const lang = document.documentElement.lang === 'en' ? 'en' : 'cs';
+    ctx.save();
+    ctx.textAlign = 'center';
+    if (this._tutNote) {
+      const txt = this._tutNote[lang];
+      ctx.font = 'bold 15px "Segoe UI", sans-serif';
+      const w = Math.min(W - 32, ctx.measureText(txt).width + 36);
+      ctx.globalAlpha = Math.min(1, this._tutNote.t * 2);
+      ctx.fillStyle = 'rgba(10,20,32,0.92)'; ctx.strokeStyle = '#ffcf3a'; ctx.lineWidth = 2;
+      _rrect(ctx, W / 2 - w / 2, H - 120, w, 38, 10); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#ffcf3a'; ctx.fillText(txt, W / 2, H - 95);
+      ctx.globalAlpha = 1;
+    }
+    const arm = this._skipArm > 0;
+    const label = arm
+      ? (lang === 'en' ? 'Click again to skip' : 'Klikni znovu pro přeskočení')
+      : (lang === 'en' ? 'Skip tutorial ›' : 'Přeskočit tutoriál ›');
+    ctx.font = 'bold 12px "Segoe UI", sans-serif';
+    const bw = ctx.measureText(label).width + 24, bh = 28, bx = W - bw - 16, by = H - bh - 14;
+    this._skipBtn = { x: bx, y: by, w: bw, h: bh };
+    const mx = this.input?.mouseX ?? -1, my = this.input?.mouseY ?? -1;
+    const hov = mx >= bx && mx <= bx + bw && my >= by && my <= by + bh;
+    ctx.fillStyle = arm ? 'rgba(255,207,58,0.95)' : (hov ? 'rgba(40,60,85,0.95)' : 'rgba(10,20,32,0.85)');
+    ctx.strokeStyle = arm ? '#ffcf3a' : '#4a6685'; ctx.lineWidth = 1.5;
+    _rrect(ctx, bx, by, bw, bh, 8); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = arm ? '#050a14' : '#c5d6e8';
+    ctx.fillText(label, bx + bw / 2, by + 18);
+    ctx.restore();
   }
 
   _drawTutHl(ctx, cam, hl) {
@@ -3706,7 +3799,13 @@ export class TutorialGame extends SandboxGame {
     ctx.fillText(lang === 'en' ? 'Tutorial complete! 🏒' : 'Tutoriál dokončen! 🏒', W / 2, by + 38);
 
     ctx.font = '14px "Segoe UI", sans-serif'; ctx.fillStyle = '#8aacca';
-    ctx.fillText(lang === 'en' ? 'You know the basics — now go play!' : 'Ovládáš základy — jdi hrát!', W / 2, by + 76);
+    const names = { tece: { cs: 'tečování', en: 'deflections' }, goal: { cs: 'střelu na gól', en: 'scoring' } };
+    if (this._tutMissed.length) {
+      const list = this._tutMissed.map(k => names[k][lang]).join(', ');
+      ctx.fillText(lang === 'en' ? 'Still to practise in training: ' + list : 'Procvič v tréninku: ' + list, W / 2, by + 76);
+    } else {
+      ctx.fillText(lang === 'en' ? 'You know the basics — now go play!' : 'Ovládáš základy — jdi hrát!', W / 2, by + 76);
+    }
 
     // Tlačítko
     const btnW = 200, btnH = 44;
