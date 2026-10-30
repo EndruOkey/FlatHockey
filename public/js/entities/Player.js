@@ -306,14 +306,14 @@ export class PlayerBase {
       other.overcharged = false;
     }
 
-    // Náraz — odhodí soupeře silou, checker se zbrzdí
+    // Náraz — strčí soupeře (ne vystřelí): 120 < top speed 180, aby to nebylo „funny"; checker se lehce zbrzdí
     const nx = dx / dist;
     const ny = dy / dist;
-    other.vx += nx * 280;
-    other.vy += ny * 280;
-    this.vx  -= nx * 70;
-    this.vy  -= ny * 70;
-    other._knockT = 0.32; this._knockT = 0.14;
+    other.vx += nx * 120;
+    other.vy += ny * 120;
+    this.vx  -= nx * 55;
+    this.vy  -= ny * 55;
+    other._knockT = 0.18; this._knockT = 0.1;
   }
 
   _move(input, dt) {
