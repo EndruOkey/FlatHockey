@@ -178,30 +178,6 @@ async function runItch(browser, base) {
   return got;
 }
 
-// ---------- RUN B: 1920x1080 video + cover source frames ----------
-async function runVideo(browser, base) {
-  const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 }, reducedMotion: 'no-preference',
-    recordVideo: { dir: path.join(TMP, 'vid'), size: { width: 1920, height: 1080 } } });
-  await ctx.addInitScript(INIT);
-  const { page, t0, matchStart } = await openMatch(ctx, base, null, null);
-  const mStart = (matchStart - t0) / 1000;
-  const track = []; let goalT = null;
-  await pilot(page, {
-    async onTick({ s, toS }) {
-      const t = (Date.now() - t0) / 1000;
-      const p = toS(s.puck.x, s.puck.y); track.push([t, p.x]);
-      // stop 4 s after a goal, or after 100 s without one
-      if (goalT && t - goalT > 4) return 'stop';
-      if (!goalT && t - mStart > 100) return 'stop';
-    },
-    async onGoal() { goalT = (Date.now() - t0) / 1000; },
-  }, 130000);
-  const vpath = await page.video().path();
-  await ctx.close();
-  log(`video run: matchStart=${mStart.toFixed(1)}s goalT=${goalT?.toFixed(1) ?? 'none'}s`);
-  return { vpath, mStart, goalT, track };
-}
-
 // ---------- covers: the chosen "ice" cover from release/thumb (single source of truth) ----------
 const THUMB_OUT = path.join(ROOT, 'release', 'thumb', 'out');
 const COVER_DIR = 'ice';
@@ -220,47 +196,15 @@ function ensureCovers() {
   put(coverPng(630, 500), path.join(OUT, 'itch', 'cover-630x500.png'));
 }
 
-// ---------- video conversion ----------
-function buildCropX(track, t0, dur, cropW) {
-  // 1 knot/s: smoothed puck x (moving average +-1.2 s) -> crop left edge; piecewise linear in t
-  const knots = [];
-  for (let k = 0; k <= Math.ceil(dur); k++) {
-    const t = t0 + k; const pts = track.filter(([tt]) => Math.abs(tt - t) <= 1.2);
-    const x = pts.length ? pts.reduce((a, p) => a + p[1], 0) / pts.length : 960;
-    knots.push(Math.round(Math.min(Math.max(x - cropW / 2, 0), 1920 - cropW)));
-  }
-  let e = String(knots[knots.length - 1]);
-  for (let k = knots.length - 2; k >= 0; k--) e = `if(lt(t\,${k + 1})\,${knots[k]}+(${knots[k + 1] - knots[k]})*(t-${k})\,${e})`;
-  return e;
-}
+// ---------- videos: in-engine render (release/thumb/video.mjs), no screen recording ----------
 function probeDuration(file) {
   const r = spawnSync(FFMPEG, ['-hide_banner', '-i', file], { encoding: 'utf8' });
   const m = /Duration: (\d+):(\d+):([\d.]+)/.exec(r.stderr || ''); return m ? (+m[1]) * 3600 + (+m[2]) * 60 + parseFloat(m[3]) : NaN;
 }
-function makeVideos(v) {
-  const dur = 18;
-  let start = v.mStart;
-  if (v.goalT && v.goalT - v.mStart > dur - 4) start = v.goalT + 3.5 - dur;       // window ends ~3.5 s after the goal
-  start = Math.max(start, v.mStart, 0);
-  const total = probeDuration(v.vpath);
-  if (Number.isFinite(total) && start + dur > total) start = Math.max(0, total - dur);
-  log(`video window: ${start.toFixed(1)}s .. ${(start + dur).toFixed(1)}s (source ${total.toFixed(1)}s)`);
-  const enc = ['-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-r', '30', '-an', '-pix_fmt', 'yuv420p', '-movflags', '+faststart'];
-  const o169 = path.join(OUT, 'crazygames', 'preview-16x9-1920x1080.mp4');
-  const o23 = path.join(OUT, 'crazygames', 'preview-2x3-1080x1620.mp4');
-  // CrazyGames: frame 0 must be the static cover. Cover holds HOLD s, then crossfades (no black) over XF s into gameplay.
-  const HOLD = 1.0, XF = 0.4, game = dur - HOLD;                 // gameplay clip length so that total = dur
-  const clip = (cover, w, h, gameVf, out) => ff([
-    '-loop', '1', '-framerate', '30', '-t', String(HOLD + XF), '-i', cover,
-    '-ss', String(start), '-t', String(game), '-i', v.vpath,
-    '-filter_complex', `[0:v]scale=${w}:${h}:flags=lanczos,fps=30,setsar=1,format=yuv420p[c];[1:v]${gameVf},fps=30,setsar=1,format=yuv420p[g];[c][g]xfade=transition=fade:duration=${XF}:offset=${HOLD}[o]`,
-    '-map', '[o]', '-t', String(dur), ...enc, out]);
-  clip(coverPng(1920, 1080), 1920, 1080, 'scale=1920:1080:flags=lanczos', o169);
-  const x = buildCropX(v.track, start, game, 720);
-  clip(coverPng(1080, 1620), 1080, 1620, `crop=720:1080:'${x}':0,scale=1080:1620:flags=lanczos`, o23);
-  ff(['-i', o169, '-frames:v', '1', path.join(TMP, 'first-frame-16x9.png')]);
-  ff(['-i', o23, '-frames:v', '1', path.join(TMP, 'first-frame-2x3.png')]);
-  return [o169, o23];
+function makeVideos() {
+  const r = spawnSync(process.execPath, [path.join(ROOT, 'release', 'thumb', 'video.mjs')], { cwd: ROOT, stdio: 'inherit', env: { ...process.env, PORT: String(+PORT + 40) } });
+  if (r.status !== 0) throw new Error('thumb/video.mjs failed');
+  return [path.join(OUT, 'crazygames', 'preview-16x9-1920x1080.mp4'), path.join(OUT, 'crazygames', 'preview-2x3-1080x1620.mp4')];
 }
 
 // ---------- verification ----------
@@ -284,13 +228,10 @@ const main = async () => {
   const browser = await chromium.launch();
   try {
     await runItch(browser, base);
-    const v = await runVideo(browser, base);
 
     ensureCovers();
 
-    let vids = [];
-    if (FFMPEG) vids = makeVideos(v);
-    else { const o = path.join(OUT, 'crazygames', 'preview-raw-1920x1080.webm'); fs.copyFileSync(v.vpath, o); vids = [o]; }
+    const vids = makeVideos();
 
     // verify
     const expect = {
@@ -310,7 +251,7 @@ const main = async () => {
       const d = probeDuration(vp);
       log(`${d >= 15 && d <= 20 && mb <= 50 ? 'OK     ' : 'CHECK  '} ${path.relative(OUT, vp).replace(/\\/g, '/')} ${d.toFixed(1)} s ${mb} MB (no audio track)`);
     }
-    for (const n of ['first-frame-16x9.png', 'first-frame-2x3.png']) { const p = path.join(TMP, n); if (fs.existsSync(p)) sheet.push(p); }
+    for (const n of ['__none__']) { const p = path.join(TMP, n); if (fs.existsSync(p)) sheet.push(p); }
     await contactSheet(browser, sheet);
   } finally {
     await browser.close();
