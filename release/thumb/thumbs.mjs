@@ -101,17 +101,56 @@ try {
           // Logo namalované v ledu (jako středové logo kluziště) — pod hráči, mírně „zamrzlé“
           // Velikost: ~80 % šířky záběru; poloha: spodní třetina obrazu, převedená do souřadnic ledu
           ctx.font = font(100);
-          const px = Math.round(100 * W * 0.8 / ctx.measureText('FLATHOCKEY').width);
-          const sx = 0, sy = H * 0.28;                                  // od středu plátna
+          // Šikmé logo je širší než text → u užších formátů menší, ať se nic neuřízne
+          const px = Math.round(100 * W * (W / H > 1.5 ? 0.8 : 0.7) / ctx.measureText('FLATHOCKEY').width);
+          const sx = 0, sy = H * 0.2;                                  // od středu plátna
           ctx.save();
           ctx.translate(sx * Math.cos(-rot) - sy * Math.sin(-rot), sx * Math.sin(-rot) + sy * Math.cos(-rot));
           ctx.rotate(-rot + dir.rot * Math.PI / 180);                  // logo drží šikmou osu střely
-          ctx.font = font(px); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          // Barva zamrzlá pod ledem: logo se kreslí do vlastního plátna, tam ho „ojíní“ a poškrábou brusle
+          ctx.font = font(px);
+          const w1 = ctx.measureText('FLAT').width, w2 = ctx.measureText('HOCKEY').width;
+          const pad = px * 0.3, LW = Math.ceil(w1 + w2 + pad * 2), LH = Math.ceil(px * 1.5);
+          const L = document.createElement('canvas'); L.width = LW; L.height = LH;
+          const l = L.getContext('2d');
+          l.filter = 'blur(' + (px * 0.012).toFixed(2) + 'px)';            // barva se rozpila ve vodě
+          l.font = font(px); l.textBaseline = 'middle';
+          l.fillStyle = '#1b2742'; l.fillText('FLAT', pad, LH / 2);
+          l.fillStyle = '#2f7ae8'; l.fillText('HOCKEY', pad + w1, LH / 2);
+          l.filter = 'none';
+          l.globalCompositeOperation = 'destination-out';
+          // Námraza: hrubé skvrny (rozmazaný šum) + jemné zrno ubírají barvu nerovnoměrně
+          const noise = (cw, ch, amp) => {
+            const n = document.createElement('canvas'); n.width = cw; n.height = ch;
+            const nc = n.getContext('2d'), img = nc.createImageData(cw, ch);
+            for (let k = 0; k < cw * ch; k++) { img.data[k * 4 + 3] = Math.random() * 255 * amp; }
+            nc.putImageData(img, 0, 0); return n;
+          };
+          l.imageSmoothingEnabled = true;
+          l.drawImage(noise(24, 8, 0.32), 0, 0, LW, LH);
+          l.drawImage(noise(Math.ceil(LW / 2), Math.ceil(LH / 2), 0.18), 0, 0, LW, LH);
+          // Stopy bruslí: dlouhé mírné oblouky, převážně ve směru jízdy, různě silné
+          const scratch = (c, n, x0, y0, w, h, lwMax, alpha) => {
+            for (let k = 0; k < n; k++) {
+              const sxk = x0 + Math.random() * w, syk = y0 + Math.random() * h;
+              const len = w * (0.25 + Math.random() * 0.6), ang = (Math.random() - 0.5) * 0.9;
+              const ex = sxk + Math.cos(ang) * len, ey = syk + Math.sin(ang) * len;
+              const bend = (Math.random() - 0.5) * len * 0.35;
+              c.globalAlpha = alpha * (0.4 + Math.random() * 0.6);
+              c.lineWidth = lwMax * (0.25 + Math.random() * 0.75); c.lineCap = 'round';
+              c.beginPath(); c.moveTo(sxk, syk);
+              c.quadraticCurveTo((sxk + ex) / 2 - Math.sin(ang) * bend, (syk + ey) / 2 + Math.cos(ang) * bend, ex, ey);
+              c.stroke();
+            }
+            c.globalAlpha = 1;
+          };
+          l.strokeStyle = '#000';
+          scratch(l, 40, -LW * 0.2, 0, LW * 1.2, LH, px * 0.02, 0.7);
           ctx.globalAlpha = 0.9;
-          const w1 = ctx.measureText('FLAT').width, w2 = ctx.measureText('HOCKEY').width, x0 = -(w1 + w2) / 2;
-          ctx.textAlign = 'left';
-          ctx.fillStyle = '#1b2742'; ctx.fillText('FLAT', x0, 0);
-          ctx.fillStyle = '#2f7ae8'; ctx.fillText('HOCKEY', x0 + w1, 0);
+          ctx.drawImage(L, -LW / 2, -LH / 2);
+          // Ledový lesk nad logem: světlé škrábance i mimo barvu (led je jedna vrstva)
+          ctx.globalAlpha = 1; ctx.strokeStyle = '#f6fbff';
+          scratch(ctx, 45, -LW * 0.7, -LH * 1.2, LW * 1.4, LH * 2.4, px * 0.014, 0.55);
           ctx.restore();
         }
         for (const e of world.entities) if (e !== rink) e.draw(ctx, cam);
