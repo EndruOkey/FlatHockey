@@ -35,7 +35,8 @@ Hra nebyla nikdy propagovaná. Plán: vydat na itch.io + CrazyGames, po 14 dnech
 - Vybrat náhled (A/B) a podle něj první snímek videa.
 - (hotovo) Vlna 2: simulace je deterministická — `world.rng` (public/js/rng.js), časovače v ticích; `npm run test:determinism`.
 - (hotovo) Vlna 3: nasazení pushem do main, main = produkce.
-- Bot strká do stojícího hráče (pokus o vyhýbání to zhoršil 2,4× → zahozen).
+- (hotovo) Bot: role, přihrávky, oba rohy; nestrká do stojícího hráče (posun 5371 → 960 px); `npm run test:botq`.
+- (hotovo) Podklady: `node release/make-assets.mjs` → release/assets (covery, video, 4 snímky ze simulace).
 
 ## Další kroky
 1. Texty pro portály: `release/LISTING.md` (projít).

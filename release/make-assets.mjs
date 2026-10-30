@@ -227,7 +227,8 @@ const main = async () => {
   log('server:', base);
   const browser = await chromium.launch();
   try {
-    await runItch(browser, base);
+    { const r = spawnSync(process.execPath, [path.join(ROOT, 'release', 'thumb', 'shots.mjs')], { cwd: ROOT, stdio: 'inherit', env: { ...process.env, PORT: String(+PORT + 50) } });
+      if (r.status !== 0) throw new Error('thumb/shots.mjs failed'); }   // in-engine itch screenshots + real menu
 
     ensureCovers();
 

@@ -9,6 +9,7 @@
     "test:bot": "node test/bot-smoke.mjs",
     "test:puck": "node test/puck-goalmouth.test.mjs",
     "test:server": "node test/server-hardening.test.mjs",
+    "test:botq": "node test/bot-quality.test.mjs",
     "test:determinism": "node test/determinism.test.mjs",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
