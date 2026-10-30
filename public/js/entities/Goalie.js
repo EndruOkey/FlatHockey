@@ -1,6 +1,7 @@
 import { RINK, PUCK } from '../constants.js';
 import { clamp } from '../utils.js';
 import { t } from '../i18n.js';
+import { defaultRng } from '../rng.js';
 
 // ── Save profil (naškálováno na reálnou branku 6 ft = 32px) ───────────────
 const COVER_H  = 14;  // vizuální pady sahají ~13px od středu + puk radius 3 = ~16px effective
@@ -15,6 +16,7 @@ const PADLEN   = 9;
 const PEAK_Z   = PUCK.maxShotVz ** 2 / (2 * PUCK.gravity);
 
 export class Goalie {
+  rng = defaultRng;
   constructor(side = 'right', difficulty = 'casual') {
     this.isGoalie   = true;
     // Pravá branka = goal-home → brání away (červený); levá = goal-away → brání home (modrý)
@@ -44,8 +46,8 @@ export class Goalie {
     this._saveRecoil   = 0;
     this._saveRecoilX  = 0;
     this._wrapReact    = 0;
-    this._formPhase    = Math.random() * Math.PI * 6;
-    this._form         = 0.5 + (Math.random() - 0.5) * 0.3;
+    this._formPhase    = 0; this._form = 0.5; this._formInit = false;   // náhodná část se dolosuje v prvním update (world.rng)
+
     this._retrieving   = false;
     this._boardClear   = false;
     this._passedGate   = false;
@@ -55,6 +57,7 @@ export class Goalie {
   get isHolding() { return this._holdTimer > 0; }
 
   update(dt, world) {
+    if (!this._formInit) { this._formInit = true; this._formPhase = this.rng.next() * Math.PI * 6; this._form = 0.5 + (this.rng.next() - 0.5) * 0.3; }
     const puck = world.puck;
     if (!puck) return;
 
@@ -441,7 +444,7 @@ export class Goalie {
     // Per-střela reakce: každý zákrok má malý náhodný výkyv → golman nevypadá jako stroj
     // Easy: ±12%, Casual: ±7%, Competitive: ±4%
     const reactionSway = this.difficulty === 'competitive' ? 0.04 : this.difficulty === 'easy' ? 0.12 : 0.07;
-    const shotRand = 1.0 - reactionSway + Math.random() * reactionSway * 2;
+    const shotRand = 1.0 - reactionSway + this.rng.next() * reactionSway * 2;
 
     const reachX = (COVER_X + r) * sc * coverXMult * speedFactor * distFactor;
     let   reachY = (COVER_H + r) * sc * coverYMult * speedFactor * distFactor * formMult * shotRand;
@@ -602,7 +605,7 @@ export class Goalie {
     this._saveFlash = dur;
     this._saveFlashMax = dur;
     this._saveRecoil = 0.15;
-    this._saveRecoilX = Math.random() < 0.5 ? -1 : 1;  // alternating recoil
+    this._saveRecoilX = this.rng.next() < 0.5 ? -1 : 1;  // alternating recoil
   }
 
   _release(world) {

@@ -1,6 +1,12 @@
+import { makeRng } from './rng.js';
+
 export class World {
-  constructor(entities) {
+  constructor(entities, seed = 1) {
+    this.seed = seed >>> 0;
+    this.rng  = makeRng(this.seed);   // jediný zdroj náhody simulace
+    this.tick = 0;                    // počet ticků world.update (deterministické časování)
     this.entities = entities;
+    this._attachRng();
     this.authoritative = true;      // false on P2P guest — skips puck physics
     this.onGoal    = null;          // (result) => void
     this.onWhistle = null;          // ({ reason, team? }) => void
@@ -9,7 +15,11 @@ export class World {
     this._whistleCool = 0;          // prevent whistle spam
   }
 
+  _attachRng() { for (const e of this.entities) e.rng = this.rng; }
+
   update(dt) {
+    this.tick++;
+    this._attachRng();   // entity přidané po konstrukci (hráči, boti)
     for (const e of this.entities) e.update(dt, this);
     if (this.authoritative) this._resolveInteractions(dt);
     if (this._whistleCool > 0) this._whistleCool -= dt;

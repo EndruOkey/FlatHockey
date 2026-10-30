@@ -1,8 +1,10 @@
 import { RINK, PLAYER, PUCK } from '../constants.js';
 import { clamp, lerpAngle, angleDiff } from '../utils.js';
 import { SFX } from '../sound.js';
+import { defaultRng } from '../rng.js';
 
 export class PlayerBase {
+  rng = defaultRng;
   constructor(id, team) {
     this.id = id;
     this.team = team;
@@ -36,7 +38,7 @@ export class PlayerBase {
     this._stickDisp      = this.aimAngle; // vyhlazený úhel hole pro vykreslení (bez teleportů)
     this._dispCharge     = 0;             // vyhlazený charge pro wind-up vizuál
     this._cradleSide     = 1;             // plynulá strana puku na čepeli (+forhend / −bekhend)
-    this._skatePhase     = Math.random() * Math.PI * 2; // fáze kroku (vizuál, náhodný start)
+    this._skatePhase     = (Array.from(String(id)).reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 628, 7) / 100); // fáze kroku (vizuál, náhodný start)
     this._lastSkateT     = 0;            // timestamp posledního renderování brusle
   }
 
@@ -155,7 +157,7 @@ export class PlayerBase {
     carrier._shootCooldown = 0.55;
     // Puk se uvolní v náhodném směru (50-50 battle) — žádný instant transfer
     const tip = carrier.stickTip;
-    const kickDir = carrier.carryAngle + (Math.random() - 0.5) * 1.1;
+    const kickDir = carrier.carryAngle + (this.rng.next() - 0.5) * 1.1;
     puck.x  = tip.x;
     puck.y  = tip.y;
     puck.vx = Math.cos(kickDir) * 70;
@@ -177,7 +179,7 @@ export class PlayerBase {
     // Žabička = malá umístěná rána po ledě; slap = tvrdá rána, zvedne se a je lehce nepřesná.
     const c = clamp(charge, 0, 1);
     const spd    = PUCK.minShotSpeed + (PUCK.maxShotSpeed - PUCK.minShotSpeed) * Math.pow(c, 0.85);
-    const spread = (Math.random() - 0.5) * c * 0.08;   // jen tvrdá rána je lehce nepřesná
+    const spread = (this.rng.next() - 0.5) * c * 0.08;   // jen tvrdá rána je lehce nepřesná
     const dir    = this.carryAngle + spread;
     puck.vx = Math.cos(dir) * spd;
     puck.vy = Math.sin(dir) * spd;
@@ -212,7 +214,7 @@ export class PlayerBase {
       const spinThreshold = (this.charge ?? 0) > 0.05 ? 22 : 7.5;
       if (stickDelta > spinThreshold) {
         const slipChance = clamp((stickDelta - spinThreshold) / 6, 0, 1);
-        if (Math.random() < slipChance * dt * 4) {
+        if (this.rng.next() < slipChance * dt * 4) {
           this.hasPuck = false;
           this._shootCooldown = 0.25;
         }
@@ -234,7 +236,7 @@ export class PlayerBase {
     if (Math.hypot(puck.x - tip.x, puck.y - tip.y) > PLAYER.pickupTipRadius + 2) return false;
     // Výchylka kolem aktuálního směru — částečně k hokejce/tělu (tečované góly)
     const dir    = Math.atan2(puck.vy, puck.vx);
-    const jitter = (Math.random() - 0.5) * 0.9;      // ±~26°
+    const jitter = (this.rng.next() - 0.5) * 0.9;      // ±~26°
     const nd     = dir + jitter;
     puck.vx = Math.cos(nd) * inSpeed * 0.92;
     puck.vy = Math.sin(nd) * inSpeed * 0.92;

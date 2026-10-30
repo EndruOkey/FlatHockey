@@ -44,7 +44,7 @@ export class Passer extends PlayerBase {
     const dist = Math.hypot(puck.x - this.x, puck.y - this.y);
     if (dist > RECEIVE_RADIUS) return false;
     this.hasPuck       = true;
-    this._returnTimer  = RETURN_DELAY_MIN + Math.random() * (RETURN_DELAY_MAX - RETURN_DELAY_MIN);
+    this._returnTimer  = RETURN_DELAY_MIN + this.rng.next() * (RETURN_DELAY_MAX - RETURN_DELAY_MIN);
     this._shouldReturn = false;
     puck.vx = puck.vy = puck.vz = 0;
     puck.z  = 0;

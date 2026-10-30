@@ -2845,7 +2845,7 @@ export class SandboxGame {
           const spread = Math.max(...recent) - Math.min(...recent);
           if (spread < 70) {
             const anchor = this.passer._anchorY ?? this.passer.y;
-            const shift  = 50 + Math.random() * 25;
+            const shift  = 50 + this.world.rng.next() * 25;
             const dir    = anchor < RINK.h / 2 ? 1 : -1;
             this.passer._anchorY = Math.max(22, Math.min(RINK.h - 22, anchor + dir * shift));
           }
@@ -2877,9 +2877,9 @@ export class SandboxGame {
     setTimeout(() => {
       this.puck.reset();
       this.puck.x  = RINK.goalLineRight - 35;
-      this.puck.y  = RINK.goalY + RINK.goalH / 2 + (Math.random() - 0.5) * 30;
-      this.puck.vx = -220 - Math.random() * 60;
-      this.puck.vy = (Math.random() - 0.5) * 100;
+      this.puck.y  = RINK.goalY + RINK.goalH / 2 + (this.world.rng.next() - 0.5) * 30;
+      this.puck.vx = -220 - this.world.rng.next() * 60;
+      this.puck.vy = (this.world.rng.next() - 0.5) * 100;
       this.puck.z  = 0; this.puck.vz = 0;
       this.puck.faceoffTimer = 0;
       this._goalLock = false;

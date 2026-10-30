@@ -35,7 +35,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'release', 'assets');
 const TMP = path.join(os.tmpdir(), 'fh-assets');
-const PORT = process.env.PORT || 4120;
+const PORT = process.env.PORT || 4120;   // covers use PORT+1
 const RINK = { w: 1080, h: 456, goalLineRight: 990, goalY: 228 };
 const report = [];
 const log = (...a) => { const s = a.join(' '); console.log(s); report.push(s); };
@@ -202,57 +202,22 @@ async function runVideo(browser, base) {
   return { vpath, mStart, goalT, track };
 }
 
-// ---------- RUN C: 3840x2160 still for the covers (sharp when cropped/zoomed) ----------
-async function runCoverSource(browser, base) {
-  const ctx = await browser.newContext({ viewport: { width: 3840, height: 2160 }, reducedMotion: 'no-preference' });
-  await ctx.addInitScript(INIT);
-  const { page, matchStart } = await openMatch(ctx, base, null, null);
-  const file = path.join(TMP, 'cover-src-4k.png'); let focus = null;
-  await pilot(page, {
-    async onShot({ page, me, toS }) { await sleep(110); await page.screenshot({ path: file }); focus = toS(me.x, me.y); },
-    onTick({ page }) { if (Date.now() - matchStart > 90000) return 'stop'; return focus ? 'stop' : undefined; },
-  }, 100000);
-  await ctx.close();
-  if (!focus) throw new Error('no 4K cover frame captured (no shot fired)');
-  log('cover source: 4K shot frame, focus', Math.round(focus.x) + ',' + Math.round(focus.y));
-  return { file, focus };
-}
-
-// ---------- covers (HTML + CSS rendered by Playwright) ----------
-async function composeCover(browser, { img, W, H, zoom, fx, fy, file, titleSize, titleW, align }) {
-  // image is 3840x2160; scale by `zoom`, keep focus (fx,fy in image px) centred, clamp to image bounds
-  const iw = 3840 * zoom, ih = 2160 * zoom;
-  const left = -Math.min(Math.max(fx * zoom - W / 2, 0), iw - W);
-  const top = -Math.min(Math.max(fy * zoom - H / 2, 0), ih - H);
-  const html = `<!doctype html><meta charset=utf-8>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@1,900&display=swap" rel="stylesheet">
-<style>
-html,body{margin:0;background:#0b0e16}
-#c{position:relative;width:${W}px;height:${H}px;overflow:hidden;background:#0b0e16}
-#c img{position:absolute;left:${left}px;top:${top}px;width:${iw}px;height:${ih}px;image-rendering:auto}
-#g{position:absolute;inset:0;background:
-  linear-gradient(to top,rgba(8,10,20,.96) 0%,rgba(8,10,20,.78) 28%,rgba(8,10,20,0) 62%),
-  linear-gradient(to bottom,rgba(8,10,20,.55) 0%,rgba(8,10,20,0) 22%)}
-#t{position:absolute;left:${Math.round(W * 0.05)}px;bottom:${Math.round(H * 0.07)}px;text-align:${align || 'center'};
-  font:italic 900 ${titleSize}px/0.9 'Barlow Condensed','Arial Narrow',Impact,sans-serif;letter-spacing:.01em;color:#fff;text-transform:uppercase;
-  text-shadow:0 4px 24px rgba(0,0,0,.6)}
-#w{display:inline-block;white-space:nowrap}
-#t b{color:#3a9fff;font-weight:900}
-#t i{color:#ff4455;font-style:italic}
-#bar{height:${Math.max(4, Math.round(titleSize * 0.06))}px;margin:${Math.round(titleSize * 0.12)}px 0 0;width:100%;background:linear-gradient(90deg,#3a9fff 50%,#ff4455 50%)}
-</style>
-<div id=c><img src="${pathToFileURL(img).href}"><div id=g></div><div id=t><span id=w>FLAT<b>HOCKEY</b></span><div id=bar></div></div></div>`;
-  const hp = path.join(TMP, 'cover.html'); fs.writeFileSync(hp, html);
-  const pg = await browser.newPage({ viewport: { width: W, height: H } });
-  await pg.goto(pathToFileURL(hp).href);
-  await pg.evaluate(() => document.fonts.load("italic 900 100px 'Barlow Condensed'").then(() => document.fonts.ready)).catch(() => {});
-  await pg.evaluate(([tw, W, al]) => { const t = document.getElementById('t'), w = document.getElementById('w');
-    const k = (W * tw) / w.getBoundingClientRect().width; t.style.fontSize = (parseFloat(getComputedStyle(t).fontSize) * k) + 'px';
-    t.style.left = al === 'left' ? Math.round(W * 0.05) + 'px' : Math.round(W * (1 - tw) / 2) + 'px'; t.style.width = Math.round(W * tw) + 'px'; }, [titleW, W, align]);
-  const fontOk = await pg.evaluate(() => document.fonts.check("italic 900 100px 'Barlow Condensed'"));
-  if (!fontOk) log('WARN: Barlow Condensed not loaded (offline?) - fallback font used for', path.basename(file));
-  await pg.screenshot({ path: file, clip: { x: 0, y: 0, width: W, height: H } });
-  await pg.close();
+// ---------- covers: the chosen "ice" cover from release/thumb (single source of truth) ----------
+const THUMB_OUT = path.join(ROOT, 'release', 'thumb', 'out');
+const COVER_DIR = 'ice';
+const coverPng = (w, h) => path.join(THUMB_OUT, `${COVER_DIR}-${w}x${h}.png`);
+function ensureCovers() {
+  const sizes = [[1920, 1080], [800, 1200], [1080, 1620], [800, 800], [630, 500]];
+  if (sizes.some(([w, h]) => !fs.existsSync(coverPng(w, h)))) {
+    log('rendering covers via thumb/thumbs.mjs', COVER_DIR);
+    const r = spawnSync(process.execPath, [path.join(ROOT, 'release', 'thumb', 'thumbs.mjs'), COVER_DIR], { cwd: ROOT, stdio: 'inherit', env: { ...process.env, PORT: String(+PORT + 1) } });
+    if (r.status !== 0) throw new Error('thumbs.mjs failed');
+  }
+  const put = (src, dst) => fs.copyFileSync(src, dst);
+  put(coverPng(1920, 1080), path.join(OUT, 'crazygames', 'cover-1920x1080.png'));
+  put(coverPng(800, 1200), path.join(OUT, 'crazygames', 'cover-800x1200.png'));
+  put(coverPng(800, 800), path.join(OUT, 'crazygames', 'cover-800x800.png'));
+  put(coverPng(630, 500), path.join(OUT, 'itch', 'cover-630x500.png'));
 }
 
 // ---------- video conversion ----------
@@ -283,9 +248,16 @@ function makeVideos(v) {
   const enc = ['-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-r', '30', '-an', '-pix_fmt', 'yuv420p', '-movflags', '+faststart'];
   const o169 = path.join(OUT, 'crazygames', 'preview-16x9-1920x1080.mp4');
   const o23 = path.join(OUT, 'crazygames', 'preview-2x3-1080x1620.mp4');
-  ff(['-ss', String(start), '-t', String(dur), '-i', v.vpath, '-vf', 'scale=1920:1080:flags=lanczos', ...enc, o169]);
-  const x = buildCropX(v.track, start, dur, 720);
-  ff(['-ss', String(start), '-t', String(dur), '-i', v.vpath, '-vf', `crop=720:1080:'${x}':0,scale=1080:1620:flags=lanczos`, ...enc, o23]);
+  // CrazyGames: frame 0 must be the static cover. Cover holds HOLD s, then crossfades (no black) over XF s into gameplay.
+  const HOLD = 1.0, XF = 0.4, game = dur - HOLD;                 // gameplay clip length so that total = dur
+  const clip = (cover, w, h, gameVf, out) => ff([
+    '-loop', '1', '-framerate', '30', '-t', String(HOLD + XF), '-i', cover,
+    '-ss', String(start), '-t', String(game), '-i', v.vpath,
+    '-filter_complex', `[0:v]scale=${w}:${h}:flags=lanczos,fps=30,setsar=1,format=yuv420p[c];[1:v]${gameVf},fps=30,setsar=1,format=yuv420p[g];[c][g]xfade=transition=fade:duration=${XF}:offset=${HOLD}[o]`,
+    '-map', '[o]', '-t', String(dur), ...enc, out]);
+  clip(coverPng(1920, 1080), 1920, 1080, 'scale=1920:1080:flags=lanczos', o169);
+  const x = buildCropX(v.track, start, game, 720);
+  clip(coverPng(1080, 1620), 1080, 1620, `crop=720:1080:'${x}':0,scale=1080:1620:flags=lanczos`, o23);
   ff(['-i', o169, '-frames:v', '1', path.join(TMP, 'first-frame-16x9.png')]);
   ff(['-i', o23, '-frames:v', '1', path.join(TMP, 'first-frame-2x3.png')]);
   return [o169, o23];
@@ -314,13 +286,7 @@ const main = async () => {
     await runItch(browser, base);
     const v = await runVideo(browser, base);
 
-    const cs = await runCoverSource(browser, base);
-    const img = cs.file, f = cs.focus;
-    const C = (n) => path.join(OUT, 'crazygames', n);
-    await composeCover(browser, { img, W: 1920, H: 1080, zoom: 0.75, fx: f.x, fy: f.y, file: C('cover-1920x1080.png'), titleSize: 200, titleW: 0.5, align: 'left' });
-    await composeCover(browser, { img, W: 800, H: 1200, zoom: 0.8, fx: f.x, fy: f.y, file: C('cover-800x1200.png'), titleSize: 150, titleW: 0.86, align: 'center' });
-    await composeCover(browser, { img, W: 800, H: 800, zoom: 0.8, fx: f.x, fy: f.y, file: C('cover-800x800.png'), titleSize: 150, titleW: 0.86, align: 'center' });
-    await composeCover(browser, { img, W: 630, H: 500, zoom: 0.6, fx: f.x, fy: f.y, file: path.join(OUT, 'itch', 'cover-630x500.png'), titleSize: 100, titleW: 0.86, align: 'center' });
+    ensureCovers();
 
     let vids = [];
     if (FFMPEG) vids = makeVideos(v);

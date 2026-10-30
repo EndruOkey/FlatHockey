@@ -14,7 +14,7 @@ const PORT = +process.env.PORT || 4130;
 const BASE = `http://localhost:${PORT}`;
 mkdirSync(OUT, { recursive: true });
 
-const SIZES = [[1920, 1080], [800, 1200], [800, 800], [630, 500]];
+const SIZES = [[1920, 1080], [800, 1200], [1080, 1620], [800, 800], [630, 500]];
 const SNAP_AT = 106, SHOOT_AT = 100;   // tick snímku: puk 6 ticků po výstřelu (ve vzduchu)
 
 // Směry: zoom = kolik herních px na výšku záběru (menší = blíž), rot = natočení kamery (°)

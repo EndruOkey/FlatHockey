@@ -33,7 +33,7 @@ Hra nebyla nikdy propagovaná. Plán: vydat na itch.io + CrazyGames, po 14 dnech
 
 ## Zbývá
 - Vybrat náhled (A/B) a podle něj první snímek videa.
-- Vlna 2: náhoda v simulaci (Math.random 26×, Date.now časovače) → seed a ticky.
+- (hotovo) Vlna 2: simulace je deterministická — `world.rng` (public/js/rng.js), časovače v ticích; `npm run test:determinism`.
 - Vlna 3: GitHub Action pro nasazení (nový klíč do Secrets), main = produkce, úklid větve dev (.claude/), zastaralé workflow míří na starý server.
 - Bot strká do stojícího hráče (pokus o vyhýbání to zhoršil 2,4× → zahozen).
 

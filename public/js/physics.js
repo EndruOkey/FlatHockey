@@ -152,7 +152,7 @@ export function puckHitsGoalie(puck, goalie) {
 function resetPuck(puck) {
   puck.x = RINK.centerX;
   puck.y = RINK.h / 2;
-  const kickAngle = Math.random() * Math.PI * 2;
+  const kickAngle = puck.rng.next() * Math.PI * 2;
   puck.vx = Math.cos(kickAngle) * 22;
   puck.vy = Math.sin(kickAngle) * 22;
   puck.vz = 0;

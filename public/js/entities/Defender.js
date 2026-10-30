@@ -85,7 +85,7 @@ export class Defender extends PlayerBase {
     this._passiveT  = 0;
 
     // C3: wrong read — periodic 0.4s mis-read
-    this._wrongReadTimer  = 8 + Math.random() * 4;
+    this._wrongReadTimer  = 10;
     this._wrongReadActive = false;
     this._wrongReadDur    = 0;
     this._wrongReadSide   = 1;
@@ -111,12 +111,13 @@ export class Defender extends PlayerBase {
     this._gapClose = false; this._seekShift = 0;
     this._interceptX = 0; this._interceptY = 0;
     this._gapNoise = 0; this._gapNoiseT = 0; this._passiveT = 0;
-    this._wrongReadTimer = 8 + Math.random() * 4;
+    this._wrongReadTimer = 8 + this.rng.next() * 4;
     this._wrongReadActive = false; this._wrongReadDur = 0;
   }
 
   // ── main update ───────────────────────────────────────────────────────────
   update(dt, world) {
+    this._tick = world.tick;
     if (!this.active) return;
     if (this._pokeT        > 0) this._pokeT        -= dt;
     if (this._bcCoolT      > 0) this._bcCoolT      -= dt;
@@ -141,7 +142,7 @@ export class Defender extends PlayerBase {
     // C1: gap noise — slow random walk, resets each drag
     this._gapNoiseT += dt;
     if (this._gapNoiseT > 0.3) {
-      this._gapNoise += (Math.random() - 0.5) * 2.5;
+      this._gapNoise += (this.rng.next() - 0.5) * 2.5;
       this._gapNoise  = Math.max(-5, Math.min(5, this._gapNoise)) * 0.88;
       this._gapNoiseT = 0;
     }
@@ -149,12 +150,12 @@ export class Defender extends PlayerBase {
     // C3: wrong read timer
     this._wrongReadTimer -= dt;
     if (this._wrongReadTimer <= 0) {
-      if (Math.random() < 0.15) {
+      if (this.rng.next() < 0.15) {
         this._wrongReadActive = true;
         this._wrongReadDur    = 0.4;
-        this._wrongReadSide   = Math.random() > 0.5 ? 1 : -1;
+        this._wrongReadSide   = this.rng.next() > 0.5 ? 1 : -1;
       }
-      this._wrongReadTimer = 8 + Math.random() * 4;
+      this._wrongReadTimer = 8 + this.rng.next() * 4;
     }
     if (this._wrongReadActive) {
       this._wrongReadDur -= dt;
@@ -281,7 +282,7 @@ export class Defender extends PlayerBase {
             const moved = Math.hypot(this.x - this._stuckX, this.y - this._stuckY);
             if (moved < 8) {
               const escDir = Math.atan2(RINK.h / 2 - this.y, chaseX - this.x)
-                           + (Math.random() > 0.5 ? Math.PI / 3 : -Math.PI / 3);
+                           + (this.rng.next() > 0.5 ? Math.PI / 3 : -Math.PI / 3);
               this.vx += Math.cos(escDir) * 55; this.vy += Math.sin(escDir) * 55;
             }
             this._stuckT = 0; this._stuckX = this.x; this._stuckY = this.y;
@@ -461,7 +462,7 @@ export class Defender extends PlayerBase {
       if (dPuck < 14) {
         puck.x = myTip.x; puck.y = myTip.y; puck.z = 0; puck.vz = 0;
         // Loose battle: kick in defender's aim direction ±35° at moderate speed — not a clean clear
-        const ang = this.aimAngle + (Math.random() - 0.5) * 1.2;
+        const ang = this.aimAngle + (this.rng.next() - 0.5) * 1.2;
         puck.vx = Math.cos(ang) * 130;
         puck.vy = Math.sin(ang) * 130;
         SFX.poke(false);
@@ -509,7 +510,7 @@ export class Defender extends PlayerBase {
     const distFactor   = Math.max(0.5, 1 - dPuck / pokeR);  // closer = easier
     const baseChance   = (sc.pokeP ?? 0.55) * speedMul * shieldMul * distFactor;
 
-    if (Math.random() < baseChance) {
+    if (this.rng.next() < baseChance) {
       // Fix #4 (poke success): full reset of player puck state
       target.hasPuck         = false;
       target._shootCooldown  = 0.50;
@@ -523,15 +524,15 @@ export class Defender extends PlayerBase {
       const tip = tipOf(target);
       puck.x  = tip.x; puck.y = tip.y;
       puck.z  = 0;     puck.vz = 0;
-      const kickDir = (target.carryAngle ?? target.aimAngle ?? 0) + (Math.random() - 0.5) * 1.1;
-      const kickSpd = 75 + Math.random() * 45;   // 75–120 px/s — loose battle, ne clear
+      const kickDir = (target.carryAngle ?? target.aimAngle ?? 0) + (this.rng.next() - 0.5) * 1.1;
+      const kickSpd = 75 + this.rng.next() * 45;   // 75–120 px/s — loose battle, ne clear
       puck.vx = Math.cos(kickDir) * kickSpd;
       puck.vy = Math.sin(kickDir) * kickSpd;
       SFX.poke(true);
       this._pokeSweepT       = 0.35;
       this._pokeSweepAngle   = this.aimAngle;
       this._pokeSweepSuccess = true;
-      target._pokedAt = performance.now();
+      target._pokedAt = this._tick;
 
       this._justClearedT = 1.8;   // kratší imunita — defender může re-engagovat jak puk dosadí
       this._setState('recover');

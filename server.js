@@ -26,6 +26,7 @@ import { Rink } from './public/js/entities/Rink.js';
 import { RINK, PUCK } from './public/js/constants.js';
 import { lerpAngle, clamp } from './public/js/utils.js';
 import { botThink, makeBotBrain, hashSeed } from './bot.js';
+import { makeRng } from './public/js/rng.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -110,6 +111,7 @@ const CHARGE_RATE = 1.2;       // pomalejší nápřah → slap shot je cítit j
 const TICK_HZ = 60;
 const SNAP_HZ = 60;            // snapshot každý tick (ostřejší soupeř)
 const DT = 1 / TICK_HZ;
+const ms2ticks = ms => Math.round(ms * TICK_HZ / 1000);   // herní časovače v ticích, ne ve wall-clocku (determinismus)
 const MAX_PLAYERS = 10;        // strop hráčů v lobby (5v5)
 
 function makeInput() {
@@ -253,7 +255,7 @@ function faceoffAt(match, fx, fy) {
   match.icing = null; match.offside = null; match._goalAt = 0; match.stoppage = false; match._whistleAt = 0;
   // "Set" — lehká prodleva při vhazování: vše zmrazené, hráči čelem k puku, pak živé
   match.setup = true;
-  match.faceoffUntil = Date.now() + 900;
+  match.faceoffUntil = match.tick + ms2ticks(900);
   match.world._goalLock = true;
 }
 function faceoff(match) { faceoffAt(match, RINK.centerX, RINK.h / 2); }
@@ -265,7 +267,7 @@ function anyInZone(match, team, pred) {
 }
 function callStoppage(match, rule, lineX, fx, fy) {
   match.stoppage = true;
-  match._whistleAt = Date.now();
+  match._whistleAt = match.tick;
   match._faceoff = { x: fx, y: fy };
   match.world._goalLock = true;              // zmraz interakce (jako u gólu)
   match.puck.vx = match.puck.vy = 0;
@@ -281,23 +283,23 @@ function checkRules(match) {
   // Píšťalka NEhned: puk necháme dojet (jako icing), zmrazíme jen interakce.
   if (match.lastTouch === 'home' && ppx < RINK.blueLineRight && px >= RINK.blueLineRight &&
       anyInZone(match, 'home', p => p.x > RINK.blueLineRight + 8)) {
-    match.offside = { side: 'home', lineX: RINK.blueLineRight, fx: RINK.blueLineRight - 30, fy: dotY, t: Date.now() };
+    match.offside = { side: 'home', lineX: RINK.blueLineRight, fx: RINK.blueLineRight - 30, fy: dotY, t: match.tick };
     match.world._goalLock = true; return;
   }
   if (match.lastTouch === 'away' && ppx > RINK.blueLineLeft && px <= RINK.blueLineLeft &&
       anyInZone(match, 'away', p => p.x < RINK.blueLineLeft - 8)) {
-    match.offside = { side: 'away', lineX: RINK.blueLineLeft, fx: RINK.blueLineLeft + 30, fy: dotY, t: Date.now() };
+    match.offside = { side: 'away', lineX: RINK.blueLineLeft, fx: RINK.blueLineLeft + 30, fy: dotY, t: match.tick };
     match.world._goalLock = true; return;
   }
 
   // ICING — vyhození zpoza půlky přes soupeřovu brankovou čáru (mimo branku), bez dotyku.
   // Píšťalka NEhned: puk necháme dojet (physics běží), zmrazíme jen interakce.
   if (match.lastTouch === 'home' && match.touchX < cx && ppx < RINK.goalLineRight && px >= RINK.goalLineRight && !inMouthY) {
-    match.icing = { side: 'home', lineX: RINK.goalLineRight, fx: 248, fy: dotY, t: Date.now() };
+    match.icing = { side: 'home', lineX: RINK.goalLineRight, fx: 248, fy: dotY, t: match.tick };
     match.world._goalLock = true; return;     // buly v obr. pásmu home (vlevo)
   }
   if (match.lastTouch === 'away' && match.touchX > cx && ppx > RINK.goalLineLeft && px <= RINK.goalLineLeft && !inMouthY) {
-    match.icing = { side: 'away', lineX: RINK.goalLineLeft, fx: RINK.w - 248, fy: dotY, t: Date.now() };
+    match.icing = { side: 'away', lineX: RINK.goalLineLeft, fx: RINK.w - 248, fy: dotY, t: match.tick };
     match.world._goalLock = true; return;     // buly v obr. pásmu away (vpravo)
   }
 }
@@ -324,15 +326,15 @@ function pendingFlags(match) {
   return f;
 }
 
-function createMatch(lobbyId) {
+function createMatch(lobbyId, seed) {
   const rink = new Rink();
   const puck = new Puck();
   const goalieL = new Goalie('left');
   const goalieR = new Goalie('right');
-  const world = new World([rink, goalieL, goalieR, puck]);
+  const world = new World([rink, goalieL, goalieR, puck], seed);
   world.authoritative = true;
   const match = {
-    room: 'lobby:' + lobbyId, world, rink, puck, goalieL, goalieR,
+    room: 'lobby:' + lobbyId, seed, world, rink, puck, goalieL, goalieR,
     players: new Map(),   // socketId -> Player
     inputs:  new Map(),   // socketId -> input obj
     score: { home: 0, away: 0 },
@@ -364,7 +366,7 @@ function createMatch(lobbyId) {
     }
 
     io.to(match.room).emit('goal', { text: result === 'goal-away' ? 'GOAL! 🔴' : 'GOAL! 🔵' });
-    match._goalAt = Date.now();
+    match._goalAt = match.tick;
   };
   // Pevný krok s doháněním: setInterval je nepřesný (Windows volá ~37×/s místo 60 — změřeno) →
   // dorovnej podle skutečně uplynulého času, ať hra běží 60 ticků/s všude. Strop 250 ms = po zaseknutí nedohání donekonečna.
@@ -420,9 +422,10 @@ function syncBots(lobby, match) {
 
 // Sestav zápas z členů lobby (týmy + dresy z nastavení, číslo z profilu)
 function shuffleTeams(lobby) {
+  const rng = makeRng(hashSeed(lobby.id + ':shuffle:' + (lobby.matchSeq || 0)));   // seedované → opakovatelné
   const ids = [...lobby.members.keys()];
   for (let i = ids.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(rng.next() * (i + 1));
     [ids[i], ids[j]] = [ids[j], ids[i]];
   }
   const half = Math.ceil(ids.length / 2);
@@ -443,7 +446,10 @@ function autoRematch(lobby) {
 }
 
 function startMatch(lobby) {
-  const match = createMatch(lobby.id);
+  lobby.matchSeq = (lobby.matchSeq || 0) + 1;
+  const seed = hashSeed(lobby.id + ':match:' + lobby.matchSeq);   // deterministický seed zápasu
+  console.log(`match start lobby=${lobby.id} #${lobby.matchSeq} seed=${seed}`);
+  const match = createMatch(lobby.id, seed);
   for (const [sid, m] of lobby.members) {
     const p = buildPlayer(lobby, sid, m);
     match.players.set(sid, p);
@@ -481,24 +487,24 @@ function stepMatch(match) {
   match.tick++;
 
   // Faceoff po gólu (oslava 1.2 s)
-  if (match.world._goalLock && match._goalAt && Date.now() - match._goalAt >= 1200) {
+  if (match.world._goalLock && match._goalAt && match.tick - match._goalAt >= ms2ticks(1200)) {
     match._goalAt = 0;
     faceoff(match);
   }
   // Buly po přerušení (offside/icing) — píšťalka 1.3 s, pak vhazování na bodě
-  if (match.stoppage && Date.now() - match._whistleAt >= 1300) {
+  if (match.stoppage && match.tick - match._whistleAt >= ms2ticks(1300)) {
     match.stoppage = false;
     faceoffAt(match, match._faceoff.x, match._faceoff.y);
   }
   // Buly "set" — lehká prodleva při vhazování (vše zmrazené, hráči čelem k puku), pak živé
   if (match.setup) {
-    if (Date.now() >= match.faceoffUntil) { match.setup = false; match.world._goalLock = false; }
+    if (match.tick >= match.faceoffUntil) { match.setup = false; match.world._goalLock = false; }
     else { if (match.tick % Math.round(TICK_HZ / SNAP_HZ) === 0) broadcast(match); return; }
   }
   // Icing v běhu — puk necháme dojet; píšťalka až když zpomalí nebo po timeoutu
   if (match.icing && !match.stoppage) {
     const sp = Math.hypot(match.puck.vx, match.puck.vy);
-    if (sp < 45 || Date.now() - match.icing.t > 2600) {
+    if (sp < 45 || match.tick - match.icing.t > ms2ticks(2600)) {
       const ic = match.icing; match.icing = null;
       callStoppage(match, 'icing', ic.lineX, ic.fx, ic.fy);
     }
@@ -506,7 +512,7 @@ function stepMatch(match) {
   // Offside v běhu — stejně jako icing: puk necháme dojet, pak píšťalka
   if (match.offside && !match.stoppage) {
     const sp = Math.hypot(match.puck.vx, match.puck.vy);
-    if (sp < 45 || Date.now() - match.offside.t > 2000) {
+    if (sp < 45 || match.tick - match.offside.t > ms2ticks(2000)) {
       const off = match.offside; match.offside = null;
       callStoppage(match, 'offside', off.lineX, off.fx, off.fy);
     }
@@ -987,3 +993,6 @@ app.post('/api/store/buy', requireAuth, (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`→ listening on :${PORT}`));
+
+// Jen pro testy (test/determinism.test.mjs) — krokování zápasu bez sítě
+export const __test = { lobbies, startMatch, stepMatch, makeMember, sanitizeSettings };

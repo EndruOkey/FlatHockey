@@ -51,8 +51,8 @@ function carrier(s, u, y, goalies = true) {
 
 function step(m, inputFn, ticks, onTick) {
   // Během simulace náhoda = 0.999: hráč nikdy „nesklouzne" puk (anti-helikoptéra v Player.js) → test měří jen geometrii
-  const rnd = Math.random; Math.random = () => 0.999;
-  try { _step(m, inputFn, ticks, onTick); } finally { Math.random = rnd; }
+  const rnd = m.world.rng; m.world.rng = { next: () => 0.999, range: (lo, hi) => lo + (hi - lo) * 0.999 };
+  try { _step(m, inputFn, ticks, onTick); } finally { m.world.rng = rnd; }
 }
 function _step(m, inputFn, ticks, onTick) {
   for (let i = 0; i < ticks; i++) {

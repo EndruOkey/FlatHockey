@@ -1,4 +1,5 @@
 import { RINK, PUCK, PLAYER } from '../constants.js';
+import { defaultRng } from '../rng.js';
 
 function _resolveCorners(puck) {
   const cR = RINK.cornerR, r = PUCK.radius;
@@ -27,6 +28,7 @@ function _resolveCorners(puck) {
 }
 
 export class Puck {
+  rng = defaultRng;
   constructor() {
     this.isPuck  = true;
     this.x       = RINK.centerX;
@@ -50,7 +52,7 @@ export class Puck {
     this.x       = RINK.centerX;
     this.y       = RINK.h / 2;
     // Drobný náhodný kopanec — jako rozhoz rozhodčího, ne přesně statický puk
-    const kickAngle = Math.random() * Math.PI * 2;
+    const kickAngle = this.rng.next() * Math.PI * 2;
     this.vx      = Math.cos(kickAngle) * 22;
     this.vy      = Math.sin(kickAngle) * 22;
     this.z       = 0;
