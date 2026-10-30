@@ -5,7 +5,7 @@ autoritativní: simuluje zápas 60× za s a posílá stav hráčům (P2P/WebRTC 
 v červnu 2026 opuštěna kvůli rozjíždění puku mezi hráči). Prázdná místa v týmu
 doplní bot (`bot.js`).
 
-Produkce běží z větve `gameplay-movement-rework` (ne z `main`).
+Produkce běží z větve `main`. **Nasazení = push do `main`** (GitHub Actions: testy → pull + restart). Ruční postup níže je jen pro nouzi / první instalaci.
 
 Užitečné příkazy:
 - `npm run test:bot` — smoke test botů (spustí server na portu 3998)

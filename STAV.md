@@ -3,7 +3,7 @@
 Čti jako první v každé nové relaci (i v cloudu na claude.ai/code).
 
 ## Co běží
-- Web: https://flathockey.fun — Oracle VPS, služba `hockey`, repo `~/FlatHockey`, větev **`gameplay-movement-rework`** (ne `main`).
+- Web: https://flathockey.fun — Oracle VPS, služba `hockey`, repo `~/FlatHockey`, větev **`main`** (od 30. 10.; stará P2P verze = tag `archive/p2p-webrtc`).
 - Nasazený commit: `2779025` (29. 10.). Předchozí funkční verze pro návrat: `e21223f`.
 - Server je autoritativní, 60 ticků/s; prázdné místo v týmu doplní bot (`bot.js`).
 
@@ -34,7 +34,7 @@ Hra nebyla nikdy propagovaná. Plán: vydat na itch.io + CrazyGames, po 14 dnech
 ## Zbývá
 - Vybrat náhled (A/B) a podle něj první snímek videa.
 - (hotovo) Vlna 2: simulace je deterministická — `world.rng` (public/js/rng.js), časovače v ticích; `npm run test:determinism`.
-- Vlna 3: GitHub Action pro nasazení (nový klíč do Secrets), main = produkce, úklid větve dev (.claude/), zastaralé workflow míří na starý server.
+- (hotovo) Vlna 3: nasazení pushem do main, main = produkce.
 - Bot strká do stojícího hráče (pokus o vyhýbání to zhoršil 2,4× → zahozen).
 
 ## Další kroky
@@ -43,5 +43,6 @@ Hra nebyla nikdy propagovaná. Plán: vydat na itch.io + CrazyGames, po 14 dnech
 3. Ručně zkusit pocit z tutoriálu (automatický test prošel).
 
 ## Nasazení
-Z PC: `ssh ubuntu@flathockey.fun` → `cd ~/FlatHockey && git pull --ff-only && sudo systemctl restart hockey`
-(SSH klíč je jen na PC — z cloudu nasadit nejde, dokud nebude GitHub Action s klíčem v Secrets.)
+Push do `main` → GitHub Actions (`.github/workflows/deploy.yml`): testy (puk, determinismus, server, bot) → až když projdou, pull + restart na serveru + kontrola webu.
+Funguje odkudkoli (i z claude.ai/code). Ručně: GitHub → Actions → Deploy → Run workflow.
+Klíč: GitHub Secrets `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS` (staré `SSH_PRIVATE_KEY`, `BUTLER_API_KEY` patří k březnové verzi).

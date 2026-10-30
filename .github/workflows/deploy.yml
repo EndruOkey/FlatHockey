@@ -1,0 +1,63 @@
+# Push do main → testy → (jen když projdou) nasazení na flathockey.fun
+# Ručně: GitHub → Actions → Deploy → Run workflow
+name: Deploy
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:puck
+      - run: npm run test:determinism
+      - run: npm run test:server
+      - run: npm run test:bot
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: SSH klíč
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519
+      - name: Pull + restart + kontrola
+        run: |
+          ssh ubuntu@flathockey.fun 'bash -s' <<'EOF'
+          set -e
+          cd ~/FlatHockey
+          old=$(git rev-parse HEAD)
+          git fetch -q origin main
+          git checkout -q main 2>/dev/null || git checkout -q -b main origin/main
+          git merge -q --ff-only origin/main
+          # Závislosti jen když se změnil lockfile
+          if ! git diff --quiet "$old" HEAD -- package-lock.json; then npm ci --omit=dev; fi
+          sudo systemctl restart hockey
+          sleep 3
+          systemctl is-active hockey
+          git log --oneline -1
+          EOF
+      - name: Web odpovídá
+        run: |
+          for i in 1 2 3 4 5; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' https://flathockey.fun) && [ "$code" = 200 ] && exit 0
+            sleep 3
+          done
+          echo "web neodpovídá ($code)"; exit 1
