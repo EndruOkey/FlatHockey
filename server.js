@@ -360,16 +360,20 @@ function createMatch(lobbyId, seed) {
   };
   world.onGoal = (result) => {
     if (match.offside || match.icing) return;
+    if (match.ended) return;   // po konci zápasu se góly nepočítají (nešlo by farmit skóre dál)
     const scoringTeam = result === 'goal-home' ? 'home' : 'away';
     if (result === 'goal-away') match.score.away++; else match.score.home++;
 
-    // Scorer tracking
-    if (!match._goalScorers) match._goalScorers = [];
-    if (match._lastTouchSid) match._goalScorers.push(match._lastTouchSid);
+    const isHuman = (sid) => sid && !sid.startsWith('bot:');   // boti se nepočítají do střelce/MVP
+    const scorerMem = match._lastTouchSid ? lobbies.get(lobbyId)?.members.get(match._lastTouchSid) : null;
 
-    // Assist: druhý dotyk z téhož týmu jako střelec
+    // Střelec: jen když se naposled dotkl hráč SKÓRUJÍCÍHO týmu (vlastní gól nikomu gól nepřipíše)
+    if (!match._goalScorers) match._goalScorers = [];
+    if (isHuman(match._lastTouchSid) && scorerMem?.team === scoringTeam) match._goalScorers.push(match._lastTouchSid);
+
+    // Asistence: předchozí dotyk ze stejného týmu jako střelec
     if (!match._assists) match._assists = [];
-    if (match._prevTouchSid && match._prevTouchSid !== match._lastTouchSid) {
+    if (match._prevTouchSid && match._prevTouchSid !== match._lastTouchSid && isHuman(match._prevTouchSid)) {
       const prevMem = lobbies.get(lobbyId)?.members.get(match._prevTouchSid);
       if (prevMem?.team === scoringTeam) match._assists.push(match._prevTouchSid);
     }
@@ -610,6 +614,8 @@ function stepMatch(match) {
     const inp = match.inputs.get(id);
     if (!inp) continue;
     if (p.isBot) botThink(p, inp, match);
+    // Zaseknutá/skrytá záložka přestane posílat vstup → po 300 ms hráč nejede dál jedním směrem
+    else if (inp._stamp && Date.now() - inp._stamp > 300) { inp.dx = 0; inp.dy = 0; inp.lmb = false; inp.rmb = false; inp.mmb = false; }
     computeEdges(inp);
     if (!match.world._goalLock) playerActions(p, inp, DT, match);
   }
@@ -984,7 +990,7 @@ io.on('connection', (socket) => {
     const l = lobbies.get(socket.data.lobbyId);
     if (!l || !l.match) return;
     const inp = l.match.inputs.get(socket.id);
-    if (inp) applyClientInput(inp, msg);
+    if (inp) { applyClientInput(inp, msg); inp._stamp = now; }
   });
 
   socket.on('disconnect', () => {
