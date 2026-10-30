@@ -18,3 +18,4 @@ coverage/
 .tmp-ssh-rotate/new_deploy_key.pub
 *.pem
 *.key
+.claude/
