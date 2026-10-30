@@ -957,14 +957,15 @@ async function _renderLeaderboard(mode) {
     const me = getUser();
     list.innerHTML = rows.map((r, i) => {
       const rank = i + 1;
-      const isMe = me && (r.id === me.id || r.name === me.display_name);
-      const wr = r.games > 0 ? Math.round(r.wins / r.games * 100) + '%' : '—';
+      const gp = r.games_played ?? 0;          // server posílá display_name / rank_points / games_played
+      const isMe = me && r.display_name === me.display_name;
+      const wr = gp > 0 ? Math.round(r.wins / gp * 100) + '%' : '—';
       return `<div class="sv-lb-row${isMe ? ' me' : ''}">
         <span class="sv-lb-rank${rank <= 3 ? ' top3' : ''}">${rank}</span>
-        <span class="sv-lb-name">${r.name || 'Player'}</span>
-        <span class="sv-lb-elo">${r.elo ?? 1000}</span>
+        <span class="sv-lb-name">${esc(r.display_name || 'Player')}</span>
+        <span class="sv-lb-elo">${r.rank_points ?? 1000}</span>
         <span class="sv-lb-wr">${wr}</span>
-        <span class="sv-lb-gp">${r.games ?? 0}</span>
+        <span class="sv-lb-gp">${gp}</span>
       </div>`;
     }).join('');
   } catch {

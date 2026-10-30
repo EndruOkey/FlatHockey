@@ -13,7 +13,8 @@ function _ac() {
     _master.attack.value    = 0.003;
     _master.release.value   = 0.12;
     _volGain = _ctx.createGain();
-    _volGain.gain.value = parseFloat(localStorage.getItem('sfx-vol') ?? '0.8');
+    const _v = parseFloat(localStorage.getItem('sfx-vol'));   // poškozená hodnota (NaN) by shodila zvuk
+    _volGain.gain.value = Number.isFinite(_v) ? Math.min(1, Math.max(0, _v)) : 0.8;
     _master.connect(_volGain);
     _volGain.connect(_ctx.destination);
   }

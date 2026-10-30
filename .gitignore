@@ -7,3 +7,8 @@ flathockey.db-wal
 # Generované obrázky a video (znovu: node release/thumb/thumbs.mjs, node release/make-assets.mjs)
 release/thumb/out/
 release/assets/
+
+# pomocné soubory z analýzy
+_seed.mjs
+iframe-check.tmp.mjs
+test/__pycache__/
