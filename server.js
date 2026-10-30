@@ -478,6 +478,7 @@ function startMatch(lobby) {
     match.inputs.set(sid, p.input);
   }
   syncBots(lobby, match);
+  match._startSids = new Set(lobby.members.keys());   // odměnu dostanou jen hráči od začátku (ne pozdě příchozí)
   // Gólmani v barvě svého týmu (levá branka = home, pravá = away)
   match.goalieL.color = lobby.settings.teams.home.color;
   match.goalieR.color = lobby.settings.teams.away.color;
@@ -571,10 +572,14 @@ function stepMatch(match) {
           for (const [sid, n] of contributions)
             if (n > mvpScore) { mvpScore = n; mvpSid = sid; }
 
+          const paidUsers = new Set();   // jeden účet = jedna odměna (dvě záložky nefarmí dvojmo)
           for (const [sid, mem] of endLobby.members) {
             const sock = io.sockets.sockets.get(sid);
             const userId = sock?.data?.userId;
             if (!userId) continue;
+            if (!match._startSids?.has(sid)) continue;   // pozdě příchozí: bez odměny (nefarmí se připojením před koncem)
+            if (paidUsers.has(userId)) continue;
+            paidUsers.add(userId);
 
             const goals   = scorers.filter(s => s === sid).length;
             const assists = assisters.filter(s => s === sid).length;
