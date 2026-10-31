@@ -15,6 +15,17 @@
   <meta property="og:image" content="https://flathockey.fun/release-cover.png">
   <meta name="twitter:image" content="https://flathockey.fun/release-cover.png">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23111319'/%3E%3Cellipse cx='16' cy='18.5' rx='10' ry='5' fill='%23b6c4ff'/%3E%3Crect x='6' y='13.5' width='20' height='5' fill='%23b6c4ff'/%3E%3Cellipse cx='16' cy='13.5' rx='10' ry='5' fill='%23ffade2'/%3E%3C/svg%3E">
+  <!-- three.js module resolution for the locker 3D viewer. Inert until the 3D toggle is first
+       used (import maps define mappings only; nothing is fetched here), so initial page weight
+       is unchanged. Core = cdnjs pinned three@0.160.0; addons = jsdelivr same version. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
   <script>
     // Vloženo v iframe (itch.io / CrazyGames) → cookie přihlášení nefunguje, Discord login skryjeme
     try { if (window.self !== window.top) document.documentElement.classList.add('embedded'); }
@@ -1821,6 +1832,40 @@
     }
     #hero-stage svg { width: auto; height: 88%; max-height: 88%; display: block; pointer-events: all; }
 
+    /* 2D / 3D toggle — small segmented control, top-right of the stage */
+    .lk-dim-toggle {
+      position: absolute; top: 10px; right: 10px; z-index: 4;
+      display: inline-flex; gap: 2px; padding: 3px;
+      background: rgba(18,21,30,0.7); border: 1px solid rgba(182,196,255,0.22);
+      border-radius: 999px; backdrop-filter: blur(6px);
+    }
+    .lk-dim-btn {
+      font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.05em;
+      color: #8a93a8; background: transparent; border: 0; cursor: pointer;
+      padding: 5px 13px; border-radius: 999px; transition: background .15s, color .15s;
+    }
+    .lk-dim-btn.active { color: #0e1016; background: #b6c4ff; }
+    .lk-dim-toggle.is-hidden { display: none; }
+    /* 3D viewer fills the stage like the 2D figure; hidden until selected */
+    #lk-3d-wrap {
+      position: absolute; inset: 0; z-index: 2; display: none;
+      align-items: center; justify-content: center;
+    }
+    #lk-3d-wrap.on { display: flex; }
+    #lk-3d-canvas {
+      width: 100%; height: 100%; display: block; cursor: grab;
+      touch-action: none;
+      filter: drop-shadow(0 10px 40px rgba(0,0,0,0.55));
+    }
+    #lk-3d-canvas:active { cursor: grabbing; }
+    #lk-3d-hint {
+      position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+      font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; letter-spacing: 0.08em;
+      color: rgba(182,196,255,0.55); text-transform: uppercase; pointer-events: none;
+      opacity: 0; transition: opacity .4s;
+    }
+    #lk-3d-wrap.on #lk-3d-hint { opacity: 1; }
+
     /* Big title above stage — mirrors main screen style */
     .lk-title-block {
       padding: 20px 0 8px;
@@ -2607,7 +2652,17 @@
           <!-- Direction A: live figure left, gear panel right -->
           <div class="lk-grid">
             <div class="lk-stage">
+              <!-- 2D / 3D view toggle (default 2D so production stays safe) -->
+              <div class="lk-dim-toggle" id="lk-dim-toggle" role="group" aria-label="2D / 3D">
+                <button type="button" class="lk-dim-btn active" data-dim="2d" aria-pressed="true">2D</button>
+                <button type="button" class="lk-dim-btn" data-dim="3d" aria-pressed="false">3D</button>
+              </div>
               <div id="hero-stage"></div>
+              <!-- 3D player viewer (three.js canvas; lazy, hidden until 3D is chosen) -->
+              <div id="lk-3d-wrap">
+                <canvas id="lk-3d-canvas"></canvas>
+                <div id="lk-3d-hint" data-i18n="lk_3d_hint">Drag to rotate</div>
+              </div>
               <!-- Feature 4: live top-down mini-rink preview -->
               <div class="lk-minirink-card">
                 <span class="lk-minirink-lbl" data-i18n="lk_minirink">In game</span>

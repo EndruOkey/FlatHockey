@@ -835,17 +835,66 @@ document.querySelectorAll('.lk-fit-equip').forEach(b => b.addEventListener('clic
 // ── Feature 4: live mini-rink preview (own rAF loop) ──
 const lockerPreview = initLockerPreview('lk-minirink', getCurrentKit);
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) lockerPreview.stop();
-  else if (lobby.classList.contains('on-profile')) lockerPreview.start();
+  if (document.hidden) { lockerPreview.stop(); _stop3D(); }
+  else if (lobby.classList.contains('on-profile')) { lockerPreview.start(); if (_is3D && _viewer3d) _viewer3d.start(); }
 });
 
 // Called at the end of every locker redraw (after any gear change)
 function _afterLockerChange() {
   _updateLockerCode();
+  if (_is3D && _viewer3d) _viewer3d.recolor(getCurrentKit());   // keep the 3D model in sync with the kit
 }
 
 // Lightweight hook for deterministic verification / sharing from console.
 window._fhLocker = { rollDice, applyCode, kitFromSeed, getCurrentKit, encodeLook };
+
+// ── 2D / 3D locker viewer toggle (default 2D; three.js lazy-loads only on first 3D open) ──
+let _is3D = false, _viewer3d = null, _viewer3dLoading = false, _three_failed = false;
+const _dimToggle = $('lk-dim-toggle');
+const _wrap3d = $('lk-3d-wrap');
+const _canvas3d = $('lk-3d-canvas');
+const _heroStage = $('hero-stage');
+
+async function _ensure3D() {
+  if (_viewer3d || _viewer3dLoading || _three_failed) return;
+  _viewer3dLoading = true;
+  try {
+    const mod = await import('/js/locker-3d.js');   // pulls three.js only now
+    _viewer3d = mod.initLocker3D({ canvas: _canvas3d, getKit: getCurrentKit });
+    _viewer3d.recolor(getCurrentKit());
+  } catch (err) {
+    _three_failed = true;
+    _dimToggle?.classList.add('is-hidden');          // fallback: hide toggle, stay 2D
+    _set3D(false);
+    console.warn('[locker-3d] three.js unavailable, staying 2D:', err?.message || err);
+  } finally {
+    _viewer3dLoading = false;
+  }
+}
+
+function _set3D(on) {
+  _is3D = on && !_three_failed;
+  _dimToggle?.querySelectorAll('.lk-dim-btn').forEach(b => {
+    const active = (b.dataset.dim === '3d') === _is3D;
+    b.classList.toggle('active', active);
+    b.setAttribute('aria-pressed', String(active));
+  });
+  _wrap3d?.classList.toggle('on', _is3D);
+  if (_heroStage) _heroStage.style.display = _is3D ? 'none' : '';
+  // hide the 2D hero jersey-number DOM overlay while the 3D viewer is up (it has its own number)
+  const _numOv = document.getElementById('hero-num-overlay');
+  if (_numOv) _numOv.style.visibility = _is3D ? 'hidden' : '';
+  if (_is3D) {
+    _ensure3D().then(() => { if (_is3D && _viewer3d) { _viewer3d.resize(); _viewer3d.recolor(getCurrentKit()); _viewer3d.start(); } });
+  } else if (_viewer3d) {
+    _viewer3d.stop();                                 // cancel rAF when back to 2D
+  }
+}
+function _stop3D() { if (_viewer3d) _viewer3d.stop(); }   // called when leaving the locker view
+
+_dimToggle?.querySelectorAll('.lk-dim-btn').forEach(b => b.addEventListener('click', () => _set3D(b.dataset.dim === '3d')));
+// deterministic verification hook
+window._fh3d = () => ({ is3D: _is3D, hasViewer: !!_viewer3d, loading: _viewer3dLoading, failed: _three_failed, running: _viewer3d ? _viewer3d.running() : false });
 
 // ── Create form (týmy = dlaždice) ─────────────────────────────────────
 const swHome = makeSwatches($('sw-home'), '#3a9fff');
@@ -882,8 +931,8 @@ function showView(name) {
   lobby.classList.toggle('on-main',    name === 'main');
   lobby.classList.toggle('on-browse',  name === 'browse');
   lobby.classList.toggle('on-profile', name === 'profile');
-  if (name === 'profile') { _refreshFitSlots(); _updateLockerCode(); lockerPreview.start(); }
-  else lockerPreview.stop();
+  if (name === 'profile') { _refreshFitSlots(); _updateLockerCode(); lockerPreview.start(); if (_is3D && _viewer3d) _viewer3d.start(); }
+  else { lockerPreview.stop(); _stop3D(); }
   lobby.classList.toggle('on-create',  name === 'create');
   lobby.classList.toggle('on-wait',    name === 'wait');
   lobby.classList.toggle('on-stats',   name === 'stats');
