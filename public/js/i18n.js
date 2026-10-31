@@ -53,6 +53,7 @@ const DICT = {
     periods: 'Třetiny',
     minutes: 'Minuty',
     rules: 'Pravidla',
+    bots: 'Boti',
     create: 'VYTVOŘIT HRU',
     // Čekárna
     join_home: 'DO DOMÁCÍCH',
@@ -214,6 +215,7 @@ const DICT = {
     periods: 'Periods',
     minutes: 'Minutes',
     rules: 'Rules',
+    bots: 'Bots',
     create: 'CREATE GAME',
     join_home: 'JOIN HOME',
     join_away: 'JOIN AWAY',

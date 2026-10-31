@@ -902,7 +902,7 @@ const swAway = makeSwatches($('sw-away'), '#ff4455');
 const lobbyName = $('lobby-name');
 const hName = $('hteam-name'), hStyle = $('hteam-style');
 const aName = $('ateam-name'), aStyle = $('ateam-style');
-const setPeriods = $('set-periods'), setMinutes = $('set-minutes'), setRules = $('set-rules');
+const setPeriods = $('set-periods'), setMinutes = $('set-minutes'), setRules = $('set-rules'), setBots = $('set-bots');
 const fmtBtns = document.querySelectorAll('.fmt-btn');
 let chosenFmt = 3;
 fmtBtns.forEach(b => b.addEventListener('click', () => { chosenFmt = parseInt(b.dataset.fmt,10); fmtBtns.forEach(x => x.classList.toggle('active', x === b)); }));
@@ -916,6 +916,8 @@ function readSettings() {
     periods: parseInt(setPeriods.value,10),
     minutes: parseInt(setMinutes.value,10),
     max: chosenFmt * 2,
+    teamSize: chosenFmt,          // formát = cílová velikost týmu; boti dorovnají prázdná místa
+    bots: setBots.checked,        // doplnit boty do týmů
     rules: setRules.checked,
     password: ($('lobby-pass').value || '').trim(),
   };
