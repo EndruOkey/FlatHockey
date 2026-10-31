@@ -219,9 +219,28 @@ export function botThink(p, inp, match) {
         tx = puck.x - dir * SUP_BACK * rank; ty = RINK.h / 2 - side * SUP_WIDE * 0.5;
       }
     } else {
-      // Puk drží soupeř / je volný: každý jiný pás mezi pukem a vlastní brankou (ne všichni na jednom místě)
-      const f = rank <= 0 ? 0.5 : 0.75;
-      tx = puck.x + (ownX - puck.x) * f; ty = goalY + (puck.y - goalY) * (rank <= 0 ? 0.6 : 0.3) + (rank > 0 ? side * 30 : 0);
+      // ── OBRANA: puk drží soupeř / je volný. Rank 0 (nejblíž puku) tlačí na puk, ostatní
+      //    si rozeberou soupeře OSOBNĚ (goal-side marking), ať to vypadá jako hra s lidmi. ──
+      const oppCarrier = [...match.players.values()].find(o => o.team !== p.team && o.hasPuck) || null;
+      if (rank === 0) {
+        // Druhý na puku: tlač na nosiče/puk z vlastní strany (goal-side), ať ho zatlačí od branky
+        const lead = Math.min(LEAD_MAX, Math.max(PUCK_LEAD, Math.hypot(puck.x - p.x, puck.y - p.y) / PLAYER_V));
+        tx = puck.x + puck.vx * lead + dir * -6; ty = puck.y + puck.vy * lead;
+      } else {
+        // Nejnebezpečnější soupeři (bez nosiče — toho řeší chaser) = nejblíž naší brance; rozeber je
+        const threats = [...match.players.values()]
+          .filter(o => o.team !== p.team && o !== oppCarrier)
+          .sort((a, c) => (Math.hypot(a.x - ownX, a.y - goalY) - Math.hypot(c.x - ownX, c.y - goalY)) || (a.id < c.id ? -1 : 1));
+        const mark = threats[rank - 1] || threats[threats.length - 1] || null;
+        if (mark) {
+          // Postav se mezi soupeře a vlastní branku (goal-side), blíž k soupeři → bere pas i nájezd
+          tx = mark.x + (ownX - mark.x) * 0.25; ty = mark.y + (goalY - mark.y) * 0.25;
+          ax = mark.x; ay = mark.y;                 // čelem k bráněnému hráči
+        } else {
+          // Nikoho k bránění → stáhni se před vlastní branku (slot)
+          tx = ownX + dir * CREASE_OUT; ty = goalY + side * 24;
+        }
+      }
     }
   }
 
