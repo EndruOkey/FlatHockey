@@ -248,7 +248,8 @@ export function initLocker3D({ canvas, getKit }) {
     scene.updateMatrixWorld(true);
     const bone = n => obj.getObjectByName(n);
     const Head = bone('Head'), LHand = bone('LeftHand'), RHand = bone('RightHand'),
-          Spine2 = bone('Spine2'), LLeg = bone('LeftLeg'), RLeg = bone('RightLeg');
+          Spine2 = bone('Spine2'), LLeg = bone('LeftLeg'), RLeg = bone('RightLeg'),
+          LFoot = bone('LeftFoot'), RFoot = bone('RightFoot');
     const gm = buildGearMats();
     register(MAT.HELMET, gm.helmet); register(MAT.VISOR, gm.visor);
     register(MAT.GLOVES, gm.gloves); register(MAT.STICK, gm.stick);
@@ -258,47 +259,63 @@ export function initLocker3D({ canvas, getKit }) {
     // reparent a world-space object onto a bone, preserving its look
     const attach = (b, o) => { scene.add(o); o.updateMatrixWorld(true); b.attach(o); };
 
-    // ── HELMET: rounded shell + short visor over the Head bone (front = +Z, toward camera) ──
+    // ── HELMET: a real hockey dome covering the crown, ears and back of the head, with a visor
+    //    across the eyes. No side "ear cup" blobs — they read as headphones. (front = +Z) ──
     if (Head) {
       Head.getWorldPosition(wp);
       const g = new THREE.Group();
-      const hc = wp.clone(); hc.y += 0.11;                 // head centre is ~0.11 above the Head bone
-      const shell = new THREE.Mesh(new THREE.SphereGeometry(0.135, 28, 22, 0, Math.PI * 2, 0, Math.PI * 0.68), gm.helmet);
-      shell.scale.set(1.02, 1.08, 1.05); g.add(shell);
-      for (const sx of [-1, 1]) {                           // ear cups
-        const ear = new THREE.Mesh(new THREE.SphereGeometry(0.045, 14, 12), gm.helmet);
-        ear.position.set(sx * 0.13, -0.02, 0); ear.scale.set(0.7, 1, 1.1); g.add(ear);
-      }
-      const visor = new THREE.Mesh(new THREE.CylinderGeometry(0.142, 0.142, 0.085, 24, 1, true, -0.95, 1.9), gm.visor);
-      visor.position.set(0, -0.015, 0); g.add(visor);       // short visor band across the eyes
+      const hc = wp.clone(); hc.y += 0.10;                  // dome centre ≈ head centre (head is biggish/chibi)
+      // Dome sits OUTSIDE the (large) head sphere. Full-azimuth cap for crown/forehead, then a
+      // back-and-sides shell with a FRONT GAP (centred on +Z) so the face shows through.
+      const R = 0.205;
+      // top cap: covers crown + forehead all the way round, down to just above the brow
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(R, 32, 18, 0, Math.PI * 2, 0, Math.PI * 0.42), gm.helmet);
+      cap.scale.set(1.0, 1.05, 1.03); g.add(cap);
+      // back + sides shell: reaches down past the ears; leaves a ~85° gap at the front for the face
+      const shell = new THREE.Mesh(new THREE.SphereGeometry(R, 32, 28, Math.PI * 0.72, Math.PI * 1.56, 0, Math.PI * 0.74), gm.helmet);
+      shell.scale.set(1.0, 1.05, 1.03); g.add(shell);
+      // dark brim across the brow (front), curved
+      const brim = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.02, 10, 30, Math.PI * 0.9), gm.stick);
+      brim.rotation.x = Math.PI / 2; brim.rotation.y = Math.PI; brim.position.set(0, 0.055, 0.03); g.add(brim);
+      // clear-ish visor band across the eyes (light blue glass)
+      const visor = new THREE.Mesh(new THREE.CylinderGeometry(R * 0.98, R * 0.98, 0.075, 28, 1, true, Math.PI * 0.28, Math.PI * 0.44), gm.visor);
+      visor.position.set(0, -0.005, 0); g.add(visor);
       g.position.copy(hc);
       attach(Head, g);
     }
 
-    // ── GLOVES: chunky shapes on each hand bone ──
+    // ── GLOVES: a boxy hockey glove (rounded) + short cuff on each hand bone ──
     for (const H of [LHand, RHand]) {
       if (!H) continue;
       H.getWorldPosition(wp);
-      const glove = new THREE.Mesh(new THREE.SphereGeometry(0.065, 16, 14), gm.gloves);
-      glove.scale.set(1.15, 1.35, 1.2);
-      glove.position.copy(wp);
-      attach(H, glove);
+      const grp = new THREE.Group();
+      const hand = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.1, 0.08), gm.gloves);
+      // round the box a bit by overlaying a slightly smaller sphere (cheap bevel look)
+      const pad = new THREE.Mesh(new THREE.SphereGeometry(0.052, 16, 12), gm.gloves);
+      pad.scale.set(1.1, 1.0, 1.05); pad.position.y = -0.01; grp.add(hand, pad);
+      const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.045, 0.06, 16), gm.gloves);
+      cuff.position.y = 0.075; grp.add(cuff);                // cuff toward the forearm
+      grp.position.copy(wp);
+      attach(H, grp);
     }
 
-    // ── STICK: shaft + blade held at the right hand, resting toward the ice ──
+    // ── STICK: shaft from the right hand down to a blade lying FLAT on the ice, out in front ──
     if (RHand) {
       RHand.getWorldPosition(wp);
       const g = new THREE.Group();
-      const top = wp.clone();                               // at the hand
-      const heel = new THREE.Vector3(wp.x + 0.14, 0.04, wp.z + 0.52);  // down & forward to the ice
-      limb(g, heel, top, 0.016, 0.018, gm.stick);           // shaft
-      const dir = new THREE.Vector3().subVectors(top, heel).normalize();
-      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.07, 0.025), gm.stick);
-      blade.position.set(heel.x + 0.14, 0.05, heel.z + 0.02); blade.rotation.y = Math.PI / 2; blade.rotation.z = 0.1; g.add(blade);
-      const tape = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.1, 14), gm.tape);  // tape wrap near the heel
-      tape.position.copy(heel).addScaledVector(dir, 0.12);
+      const top = wp.clone();                               // at the hand (top of shaft)
+      const side = Math.sign(wp.x) || 1;                    // keep the blade on the hand's side, not across the legs
+      const heelXZ = new THREE.Vector3(wp.x + side * 0.05, 0.035, wp.z + 0.46);  // where shaft meets blade, on the ice & forward
+      limb(g, heelXZ, top, 0.02, 0.023, gm.stick);          // shaft (slightly thicker)
+      const dir = new THREE.Vector3().subVectors(top, heelXZ).normalize();
+      // blade: long, thin box lying flat (length along +Z = forward), heel at the shaft, toe ahead
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.065, 0.34), gm.stick);
+      blade.position.set(heelXZ.x, 0.033, heelXZ.z + 0.15); blade.rotation.z = 0.06; g.add(blade);
+      // tape wrap on the lower shaft + knob on top
+      const tape = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.12, 14), gm.tape);
+      tape.position.copy(heelXZ).addScaledVector(dir, 0.14);
       tape.quaternion.setFromUnitVectors(V(0, 1, 0), dir); g.add(tape);
-      const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.04, 14), gm.tape);  // tape knob at the top
+      const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.045, 14), gm.tape);
       knob.position.copy(top); g.add(knob);
       attach(RHand, g);
     }
@@ -310,6 +327,24 @@ export function initLocker3D({ canvas, getKit }) {
       const sock = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.07, 0.3, 16), gm.shorts);
       sock.position.copy(wp); sock.position.y -= 0.16;
       attach(L, sock);
+    }
+
+    // ── SKATES: dark boot + steel blade under each foot ──
+    register(MAT.SKATES, gm.dark);
+    for (const F of [LFoot, RFoot]) {
+      if (!F) continue;
+      F.getWorldPosition(wp);
+      const grp = new THREE.Group();
+      const boot = new THREE.Mesh(new THREE.SphereGeometry(0.075, 18, 14), gm.dark);
+      boot.scale.set(0.95, 0.8, 1.5); boot.position.set(0, 0.0, 0.03); grp.add(boot);  // boot hugs the foot, longer toward the toe (+Z)
+      const ankle = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.06, 0.08, 14), gm.dark);
+      ankle.position.set(0, 0.05, -0.01); grp.add(ankle);                               // ankle cuff
+      const holder = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.05, 0.19), gm.dark);
+      holder.position.set(0, -0.075, 0.03); grp.add(holder);                            // blade holder
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.03, 0.22), gm.steel);
+      blade.position.set(0, -0.11, 0.03); grp.add(blade);                               // steel blade on the ice
+      grp.position.copy(wp);
+      attach(F, grp);
     }
 
     // ── NUMBER on chest + back (canvas texture), on the Spine2/chest area ──
