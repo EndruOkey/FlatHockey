@@ -179,11 +179,11 @@ export class PlayerBase {
     // Žabička = malá umístěná rána po ledě; slap = tvrdá rána, zvedne se a je lehce nepřesná.
     const c = clamp(charge, 0, 1);
     const spd    = PUCK.minShotSpeed + (PUCK.maxShotSpeed - PUCK.minShotSpeed) * Math.pow(c, 0.85);
-    const spread = (this.rng.next() - 0.5) * c * 0.08;   // jen tvrdá rána je lehce nepřesná
+    const spread = (this.rng.next() - 0.5) * c * 0.10;   // tvrdá rána je nepřesnější (risk/reward)
     const dir    = this.carryAngle + spread;
     puck.vx = Math.cos(dir) * spd;
     puck.vy = Math.sin(dir) * spd;
-    puck.vz = Math.pow(c, 2.5) * PUCK.maxShotVz;        // jen plný slap se zvedne, wrist/snap jde po ledě
+    puck.vz = Math.pow(c, 1.4) * PUCK.maxShotVz;        // zdvih nabíhá dřív: snap přes betony, plný slap do horního rohu
     puck.trailColor = this.trail || null;               // stopa v barvě střelce
   }
 
