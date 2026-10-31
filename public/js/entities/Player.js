@@ -364,14 +364,14 @@ export class PlayerBase {
       const targetDir = Math.atan2(iy, ix);
       const dA = angleDiff(targetDir, heading);          // kolik chceš zatočit (-π..π)
       const ratio = clamp(sp / PLAYER.speed, 0, 1);
-      let turnRate = 6.5 - 3 * ratio;                    // ~6.5 rad/s pomalu → ~3.5 naplno (těžší)
+      let turnRate = 6.5 - 4 * ratio;                    // ~6.5 rad/s pomalu → ~2.5 naplno (carve, ne pivot)
       if (crossChecking) turnRate *= 0.55;               // crosscheck = těžší zatočit, ale ne ochrnutý
       heading += clamp(dA, -turnRate * dt, turnRate * dt);
       // akcelerace k topSpeed
       const aUp = PLAYER.accel * (crossChecking ? 0.82 : 1) * (charging ? 0.5 : 1);
       sp += clamp(topSpeed - sp, -PLAYER.decel * 2 * dt, aUp * dt);
       // hrany do ledu: čím prudší změna směru, tím větší ztráta rychlosti
-      sp *= 1 - clamp(Math.abs(dA) / Math.PI, 0, 1) * (crossChecking ? 2.8 : 3.5) * dt;
+      sp *= 1 - Math.pow(clamp(Math.abs(dA) / Math.PI, 0, 1), 1.6) * (crossChecking ? 2.4 : 3.0) * dt;
       this.vx = Math.cos(heading) * sp;
       this.vy = Math.sin(heading) * sp;
     } else if (sp > 0) {
