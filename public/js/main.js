@@ -916,7 +916,7 @@ function readSettings() {
     periods: parseInt(setPeriods.value,10),
     minutes: parseInt(setMinutes.value,10),
     max: chosenFmt * 2,
-    botsPerTeam: parseInt(setBots.value, 10) || 0,   // kolik botů přidat do každého týmu
+    botFill: parseInt(setBots.value, 10) || 0,   // doplnit každý tým na tolik hráčů boty (0 = bez botů)
     rules: setRules.checked,
     password: ($('lobby-pass').value || '').trim(),
   };
@@ -1250,7 +1250,7 @@ $('go-bot').onclick = () => {
   const settings = {
     name: t('bot_name'),
     teams: { home: { name: t('team_home_default'), color: '#3a9fff', style: 'solid' }, away: { name: t('team_away_default'), color: '#ff4455', style: 'solid' } },
-    periods: 1, minutes: 5, max: 6, rules: false, botsPerTeam: 2,
+    periods: 1, minutes: 5, max: 6, rules: false, botFill: 3,
     password: 'bot' + Math.random().toString(36).slice(2, 8),   // soukromé: do botmatche se nikdo cizí nepřipojí
   };
   _lastPass = settings.password;

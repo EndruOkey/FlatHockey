@@ -702,7 +702,7 @@ function sanitizeSettings(s) {
     minutes: [5, 10, 15].includes(s.minutes) ? s.minutes : 10,
     rules:   !!s.rules,
     max:     [2, 4, 6, 8, 10].includes(s.max) ? s.max : 10,
-    botsPerTeam: clampBots(s.botsPerTeam),             // kolik botů přidat do každého týmu (0–5)
+    botFill: s.botFill === undefined ? 1 : clampBots(s.botFill),   // doplnit tým na N hráčů boty (0–5; default 1 = původní auto-dorovnání)
     password: String(s.password || '').slice(0, 24),   // prázdné = bez hesla
   };
 }
