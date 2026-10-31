@@ -848,7 +848,10 @@ function _afterLockerChange() {
 // Lightweight hook for deterministic verification / sharing from console.
 window._fhLocker = { rollDice, applyCode, kitFromSeed, getCurrentKit, encodeLook };
 
-// ── 2D / 3D locker viewer toggle (default 2D; three.js lazy-loads only on first 3D open) ──
+// ── 2D / 3D locker viewer toggle — DOČASNĚ SPÍCÍ (2026-10-31): přepínač v index.html je zakomentovaný,
+//    takže _dimToggle je null a celý blok je neaktivní (nic se nenačítá, web je jen 2D). Kód ponechán
+//    pro budoucí návrat k 3D (viz locker-3d.js). Zapnutí = odkomentovat markup + importmap v index.html.
+//    (default 2D; three.js lazy-loads only on first 3D open) ──
 let _is3D = false, _viewer3d = null, _viewer3dLoading = false, _three_failed = false;
 const _dimToggle = $('lk-dim-toggle');
 const _wrap3d = $('lk-3d-wrap');

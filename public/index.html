@@ -15,9 +15,8 @@
   <meta property="og:image" content="https://flathockey.fun/release-cover.png">
   <meta name="twitter:image" content="https://flathockey.fun/release-cover.png">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23111319'/%3E%3Cellipse cx='16' cy='18.5' rx='10' ry='5' fill='%23b6c4ff'/%3E%3Crect x='6' y='13.5' width='20' height='5' fill='%23b6c4ff'/%3E%3Cellipse cx='16' cy='13.5' rx='10' ry='5' fill='%23ffade2'/%3E%3C/svg%3E">
-  <!-- three.js module resolution for the locker 3D viewer. Inert until the 3D toggle is first
-       used (import maps define mappings only; nothing is fetched here), so initial page weight
-       is unchanged. Core = cdnjs pinned three@0.160.0; addons = jsdelivr same version. -->
+  <!-- three.js importmap pro 3D náhled hráče — DOČASNĚ VYPNUTO (2026-10-31), jen 2D.
+       Zapnutí zpět = odkomentovat (a přepínač 2D/3D v šatně + JS v main.js).
   <script type="importmap">
   {
     "imports": {
@@ -26,6 +25,7 @@
     }
   }
   </script>
+  -->
   <script>
     // Vloženo v iframe (itch.io / CrazyGames) → cookie přihlášení nefunguje, Discord login skryjeme
     try { if (window.self !== window.top) document.documentElement.classList.add('embedded'); }
@@ -2652,17 +2652,22 @@
           <!-- Direction A: live figure left, gear panel right -->
           <div class="lk-grid">
             <div class="lk-stage">
-              <!-- 2D / 3D view toggle (default 2D so production stays safe) -->
+              <!-- 3D NÁHLED HRÁČE DOČASNĚ VYPNUTÝ (2026-10-31) — jen 2D.
+                   Kód modelu zůstává: public/js/locker-3d.js, public/models/*, MODEL_3D.md,
+                   JS obsluha v main.js (sekce „2D / 3D locker viewer toggle"), styly .lk-dim-*/#lk-3d-*
+                   a importmap three.js v <head>. Zapnutí zpět = odkomentovat tyto 3 bloky.
               <div class="lk-dim-toggle" id="lk-dim-toggle" role="group" aria-label="2D / 3D">
                 <button type="button" class="lk-dim-btn active" data-dim="2d" aria-pressed="true">2D</button>
                 <button type="button" class="lk-dim-btn" data-dim="3d" aria-pressed="false">3D</button>
               </div>
+              -->
               <div id="hero-stage"></div>
-              <!-- 3D player viewer (three.js canvas; lazy, hidden until 3D is chosen) -->
+              <!-- 3D player viewer (dočasně vypnutý; viz poznámka výše)
               <div id="lk-3d-wrap">
                 <canvas id="lk-3d-canvas"></canvas>
                 <div id="lk-3d-hint" data-i18n="lk_3d_hint">Drag to rotate</div>
               </div>
+              -->
               <!-- Feature 4: live top-down mini-rink preview -->
               <div class="lk-minirink-card">
                 <span class="lk-minirink-lbl" data-i18n="lk_minirink">In game</span>
