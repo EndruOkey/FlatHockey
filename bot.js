@@ -72,28 +72,43 @@ const tucked = (o) => o.hasPuck && (o.aimDist ?? 99) < TUCK;
 
 const clampX = (x, goalX, dir) => (dir > 0 ? Math.min(x, goalX - 90) : Math.max(x, goalX + 90));
 
-// Je pas na nejbližšího spoluhráče (ten, kterého vybere server) dobrý nápad?
-function wantPass(p, match, dir, goalX, goalY, dist) {
-  let t = null, td = Infinity, pressed = false;
-  for (const o of match.players.values()) {
-    if (o === p) continue;
-    const d = Math.hypot(o.x - p.x, o.y - p.y);
-    if (o.team === p.team) { if (d < td) { td = d; t = o; } }
-    else if (d < PRESS_R) pressed = true;
+// Vyber NEJLEPŠÍHO spoluhráče na přihrávku (ne jen nejbližšího): volný, s čistou dráhou,
+// posunutý dopředu k brance. Vrací hráče, nebo null. Simuluje souhru — rozehrávku na volného.
+const PASS_LANE   = 16;   // px — poloviční šířka koridoru přihrávky (soupeř uvnitř = zablokováno)
+const RECV_OPEN   = 26;   // px — soupeř blíž než tohle k příjemci = není volný
+const OPEN_CAP    = 90;   // px — nad tolik už „volnost" příjemce dál neodměňujeme
+function pickPass(p, match, dir, goalX, goalY, dist) {
+  let pressed = false;
+  for (const o of match.players.values())
+    if (o.team !== p.team && Math.hypot(o.x - p.x, o.y - p.y) < PRESS_R) { pressed = true; break; }
+
+  let best = null, bestScore = -Infinity, bestDist = 0;
+  for (const t of match.players.values()) {
+    if (t === p || t.team !== p.team) continue;
+    const td = Math.hypot(t.x - p.x, t.y - p.y);
+    if (td < PASS_MIN || td > PASS_MAX) continue;
+    const ux = (t.x - p.x) / td, uy = (t.y - p.y) / td;
+    // Dráha přihrávky nesmí vést přes soupeře; zároveň změř, jak je příjemce volný
+    let blocked = false, openR = Infinity;
+    for (const o of match.players.values()) {
+      if (o.team === p.team) continue;
+      const rx = o.x - p.x, ry = o.y - p.y;
+      const al = rx * ux + ry * uy, lat = rx * -uy + ry * ux;
+      if (al > 0 && al < td && Math.abs(lat) < PASS_LANE) { blocked = true; break; }
+      const dor = Math.hypot(o.x - t.x, o.y - t.y);
+      if (dor < openR) openR = dor;
+    }
+    if (blocked || openR < RECV_OPEN) continue;         // dráha blokovaná / příjemce pokrytý
+    const tDist = Math.hypot(goalX - t.x, goalY - t.y);
+    const advance = dist - tDist;                        // o kolik je příjemce blíž k brance
+    const score = advance + Math.min(openR, OPEN_CAP) * 0.5;
+    if (score > bestScore) { bestScore = score; best = t; bestDist = tDist; }
   }
-  if (!t || td < PASS_MIN || td > PASS_MAX) return false;
-  // Cesta pasu nesmí vést přes soupeře
-  const ux = (t.x - p.x) / td, uy = (t.y - p.y) / td;
-  for (const o of match.players.values()) {
-    if (o.team === p.team) continue;
-    const rx = o.x - p.x, ry = o.y - p.y, al = rx * ux + ry * uy;
-    if (al > 0 && al < td && Math.abs(rx * -uy + ry * ux) < 16) return false;
-  }
-  // Soupeř u příjemce → nepřihrávat
-  for (const o of match.players.values()) if (o.team !== p.team && Math.hypot(o.x - t.x, o.y - t.y) < 24) return false;
-  const tDist = Math.hypot(goalX - t.x, goalY - t.y);
-  const better = tDist < dist - 30;            // příjemce je blíž k brance
-  return pressed ? (better || tDist < dist + 40) : (better && dist > PASS_FAR);
+  if (!best) return null;
+  const better = bestDist < dist - 20;                   // příjemce je blíž k brance
+  // Pod tlakem odehraj na kohokoli rozumného; jinak jen když to posune hru dopředu
+  if (pressed) return (better || bestScore > 0) ? best : null;
+  return (better && (dist > PASS_FAR || bestScore > 70)) ? best : null;
 }
 
 function nearestOpp(p, match, x, y) {
@@ -142,9 +157,10 @@ export function botThink(p, inp, match) {
     ax = goalX; ay = goalY;
     const dist = Math.hypot(goalX - p.x, goalY - p.y);
     if (b.passCd > 0) b.passCd -= THINK_EVERY;
-    if (!(b.passCd > 0) && wantPass(p, match, dir, goalX, goalY, dist)) {
-      inp.rmb = true; b.passCd = PASS_CD;      // server přihraje nejbližšímu spoluhráči (wantPass ho zná)
-      inp.aim = Math.atan2(goalY - p.y, goalX - p.x);
+    const mate = (b.passCd > 0) ? null : pickPass(p, match, dir, goalX, goalY, dist);
+    if (mate) {
+      inp.rmb = true; b.passCd = PASS_CD; p._passTarget = mate.id;   // server přihraje právě tomuto spoluhráči
+      inp.aim = Math.atan2(mate.y - p.y, mate.x - p.x);
       return;
     }
     if (!behind && dist < b.shotRange && Math.abs(p.y + p.vy * COAST - goalY) < SLOT_Y) {

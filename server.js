@@ -220,8 +220,14 @@ function playerActions(p, inp, dt, match) {
   if (inp.rmbJustPressed && p.hasPuck) {
     if (p.charge > 0.08) { p.charge = 0; p._chargeDecaying = false; p.overcharged = false; p._chargeBlocked = true; p._chargeCancelled = true; }
     else {
-      // Nahrávka JEN spoluhráči — když nikdo není (sám na mapě), puk si necháš.
-      const tgt = nearestTeammate(p, match);
+      // Nahrávka JEN spoluhráči. Bot si vybral příjemce (nejlepšího volného); člověk přihraje nejbližšímu.
+      let tgt = null;
+      if (p.isBot && p._passTarget) {
+        const cand = match.players.get(p._passTarget);
+        if (cand && cand !== p && cand.team === p.team) tgt = cand;
+      }
+      if (!tgt) tgt = nearestTeammate(p, match);
+      p._passTarget = null;
       if (tgt) {
         p.charge = 0;
         const tip = p.stickTip;
