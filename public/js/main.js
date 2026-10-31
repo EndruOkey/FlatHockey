@@ -1494,13 +1494,21 @@ function updateAuthUI(user) {
     authTier.textContent  = user.is_sponsor ? '💎' : '';
     if (user.avatar_url) { authAvatar.src = user.avatar_url; authAvatar.style.display = 'block'; }
     else authAvatar.style.display = 'none';
-    if (!nameInput.value.trim()) nameInput.value = user.display_name;
+    // Přihlášený hráč: jméno VŽDY z účtu (Discord / budoucí web účet), nejde přepsat.
+    nameInput.value = user.display_name || nameInput.value;
+    nameInput.readOnly = true;
+    nameInput.classList.add('lk-input--locked');
+    nameInput.title = t('name_from_account');
     isSponsor = !!user.is_sponsor;
     document.body.classList.toggle('sponsor', isSponsor);
   } else {
     authLabel.textContent = t('auth_label_guest');
     authTier.textContent  = '';
     authAvatar.style.display = 'none';
+    // Host: jméno si zadává sám.
+    nameInput.readOnly = false;
+    nameInput.classList.remove('lk-input--locked');
+    nameInput.title = '';
     isSponsor = false;
     document.body.classList.remove('sponsor');
   }

@@ -2037,6 +2037,8 @@
       transition: border-color .2s;
     }
     .lk-input:focus { border-bottom-color: #b6c4ff; }
+    /* Jméno zamčené účtem (přihlášený hráč): nejde editovat, bere se z účtu */
+    .lk-input--locked { opacity: 0.7; cursor: default; pointer-events: none; }
     .lk-input[type="number"] { text-align: left; }
     /* Hand toggle */
     .lk-hand-toggle { display: flex; gap: 6px; }
