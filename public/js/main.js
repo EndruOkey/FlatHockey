@@ -1245,20 +1245,9 @@ $('go-solo').onclick     = () => {
   startGame(g);
 };
 $('go-tutorial').onclick = () => _startTutorial();
-// Hrát proti botovi: server dorovná prázdná místa boty, takže stačí vytvořit soukromé lobby a hned spustit
+// Boti se nastavují v rámci vytvořené hry (formulář „Boti (hráčů v týmu)"), ne samostatným tlačítkem.
+// _botPending zůstává kvůli případnému „vytvoř + hned start" toku; dnes ho nic nenastavuje na true.
 let _botPending = false;
-$('go-bot').onclick = () => {
-  if (!commitProfile()) return requireProfile();
-  _botPending = true;
-  const settings = {
-    name: t('bot_name'),
-    teams: { home: { name: t('team_home_default'), color: '#3a9fff', style: 'solid' }, away: { name: t('team_away_default'), color: '#ff4455', style: 'solid' } },
-    periods: 1, minutes: 5, max: 6, rules: false, botFill: 3,
-    password: 'bot' + Math.random().toString(36).slice(2, 8),   // soukromé: do botmatche se nikdo cizí nepřipojí
-  };
-  _lastPass = settings.password;
-  net.createLobby(settings, profile());
-};
 
 // ── Procházení ────────────────────────────────────────────────────────
 let _lastPass = null;   // heslo posledního lobby (pro odvetu)
