@@ -1,15 +1,21 @@
 // Kolik hráčů (lidé + boti) má mít každý tým — ryzí funkce, ať jde deterministicky testovat.
 //
-// Pravidlo:
-//  - Boti vypnuti (settings.bots === false) → žádní boti; tým = jen připojení lidé.
-//  - Boti zapnuti → oba týmy se dorovnají na settings.teamSize, a nikdy ne pod počet lidí
-//    v plnějším týmu (aby šlo i přeplněný lidský tým a druhý se mu boty dorovnal).
-//
-// Vrací cílový počet na tým; počet botů = max(0, target - lidé v tom týmu).
+// Nastavení: settings.botsPerTeam = kolik botů přidat do KAŽDÉHO týmu (0–5, 0 = bez botů).
+// Cíl na tým = lidé v tom týmu + botsPerTeam, oříznuto na max 5 bruslařů na tým.
+// Počet skutečně nasazených botů = max(0, cíl - lidé v tom týmu).
+const MAX_PER_TEAM = 5;
+
+export function clampBots(n) {
+  n = Math.round(Number(n));
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(MAX_PER_TEAM, n));
+}
+
 export function botTarget(humans, settings) {
-  const s = settings || {};
-  if (s.bots === false) return { home: humans.home | 0, away: humans.away | 0 };
-  const size = Math.max(1, Math.min(5, s.teamSize || 1));
-  const t = Math.max(size, humans.home | 0, humans.away | 0);
-  return { home: t, away: t };
+  const per = clampBots((settings || {}).botsPerTeam);
+  const h = humans.home | 0, a = humans.away | 0;
+  return {
+    home: Math.min(MAX_PER_TEAM, h + per),
+    away: Math.min(MAX_PER_TEAM, a + per),
+  };
 }

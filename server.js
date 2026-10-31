@@ -13,7 +13,7 @@ import http from 'http';
 import crypto from 'crypto';
 import cookieParser from 'cookie-parser';
 import { Server } from 'socket.io';
-import { botTarget } from './bot-target.js';
+import { botTarget, clampBots } from './bot-target.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import authRouter, { linkRouter, verifySession, requireAuth, bearerToken, createGuestAccount } from './auth.js';
@@ -702,8 +702,7 @@ function sanitizeSettings(s) {
     minutes: [5, 10, 15].includes(s.minutes) ? s.minutes : 10,
     rules:   !!s.rules,
     max:     [2, 4, 6, 8, 10].includes(s.max) ? s.max : 10,
-    teamSize: [1, 2, 3, 4, 5].includes(s.teamSize) ? s.teamSize : 1,   // cílový počet hráčů v týmu (boti dorovnají)
-    bots:    s.bots !== false,                                         // doplnit prázdná místa boty (default ano)
+    botsPerTeam: clampBots(s.botsPerTeam),             // kolik botů přidat do každého týmu (0–5)
     password: String(s.password || '').slice(0, 24),   // prázdné = bez hesla
   };
 }
