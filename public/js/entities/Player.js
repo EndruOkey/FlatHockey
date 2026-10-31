@@ -364,7 +364,7 @@ export class PlayerBase {
       const targetDir = Math.atan2(iy, ix);
       const dA = angleDiff(targetDir, heading);          // kolik chceš zatočit (-π..π)
       const ratio = clamp(sp / PLAYER.speed, 0, 1);
-      let turnRate = 6.5 - 4 * ratio;                    // ~6.5 rad/s pomalu → ~2.5 naplno (carve, ne pivot)
+      let turnRate = 6.5 - 3.5 * ratio;                  // ~6.5 rad/s pomalu → ~3.0 naplno (carve, ne pivot)
       if (crossChecking) turnRate *= 0.55;               // crosscheck = těžší zatočit, ale ne ochrnutý
       heading += clamp(dA, -turnRate * dt, turnRate * dt);
       // akcelerace k topSpeed
