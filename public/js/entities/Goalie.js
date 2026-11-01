@@ -456,6 +456,12 @@ export class Goalie {
       reachY *= 1 + dropRead * 0.18;  // max +18% reach pro rychle klesající puk
     }
 
+    // Chytré vertikální čtení HORNÍHO ROHU: zdvižená rána (vysoké z) → gólman zvedne krytí
+    // úměrně výšce. Přízemní rány (z≈0) nedotčené → nízké rohy/po ledě zůstávají stejné.
+    if (puck.z > PUCK.gloveHeight) {
+      const highRead = clamp((puck.z - PUCK.gloveHeight) / Math.max(1, PEAK_Z - PUCK.gloveHeight), 0, 1);
+      reachY *= 1 + highRead * (this.difficulty === 'competitive' ? 0.28 : this.difficulty === 'easy' ? 0.10 : 0.20);
+    }
     // Boční střela (přichází víc z boku než čelně) → menší boční dosah
     const shotFrontFrac = shotSpeed > 10 ? clamp(Math.max(0, vxTowardGoal) / shotSpeed, 0, 1) : 1.0;
     reachY *= 0.60 + 0.40 * shotFrontFrac;
