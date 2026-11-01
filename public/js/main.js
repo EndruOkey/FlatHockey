@@ -1294,6 +1294,8 @@ function renderLobbyList(list) {
   for (const l of lastLobbyList) {
     const div = document.createElement('div');
     div.className = 'lobby-item';
+    div.setAttribute('role', 'button');     // a11y: ovladatelné klávesnicí (Enter/Space), ne jen myší
+    div.tabIndex = 0;
     const full = l.count >= l.max;
     const lock = l.hp ? '🔒 ' : '';
     let right;
@@ -1309,6 +1311,7 @@ function renderLobbyList(list) {
       (l.state === 'playing' ? ' <span class="li-tag">LIVE</span>' : '') + `</div>` +
       `<div class="li-sub">${esc(l.home)} vs ${esc(l.away)} · ${l.count}/${l.max}</div></div>` + right;
     if (full) div.classList.add('full');
+    div.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); div.click(); } });
     div.onclick = () => {
       if (full) { setStatus(t('err_full'), '#e66'); return; }
       if (!l.hp) { _lastPass = null; net.joinLobby(l.id, profile(), undefined); return; }

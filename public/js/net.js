@@ -30,6 +30,8 @@ export class Net {
     this.onSnap            = null;
     this.onGoal            = null;
     this.onWhistle         = null;
+    this.onSponsor         = null;
+    this.onConnectError    = null;  // fired when connection can't be established (server down)
     this.onPeerLeft        = null;
     this.onMatchRewards    = null;
     this.onOnlineCount     = null;

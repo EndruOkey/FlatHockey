@@ -365,6 +365,12 @@ function createMatch(lobbyId, seed) {
     score: { home: 0, away: 0 },
     tick: 0, _goalAt: 0, loop: null,
   };
+  // Faul na gólmana (najetí crosscheckem) / gólman drží puk moc dlouho → píšťalka + buly.
+  // Dřív nenapojeno (no-op) → crease-crashing bez postihu. Buly uprostřed = ztráta výhody.
+  world.onWhistle = ({ reason }) => {
+    if (match.ended || match.stoppage || match.offside || match.icing || match.setup) return;
+    callStoppage(match, reason, null, RINK.centerX, RINK.h / 2);
+  };
   world.onGoal = (result) => {
     if (match.offside || match.icing) return;
     if (match.ended) return;   // po konci zápasu se góly nepočítají (nešlo by farmit skóre dál)

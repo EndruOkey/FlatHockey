@@ -114,7 +114,7 @@ const oauthStates = new Map();
 setInterval(() => {
   const now = Date.now();
   for (const [k, v] of oauthStates) if (v < now) oauthStates.delete(k);
-}, 60_000);
+}, 60_000).unref();   // ať tenhle interval nebrání čistému ukončení procesu
 
 router.get('/discord', (req, res) => {
   // ?dt = device token hosta; ověříme ho a jeho userId zapečeme do podepsaného state
