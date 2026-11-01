@@ -206,6 +206,19 @@ export class NetGame {
     this.puck.trailColor = s.puck.tc || null;
     this._applyGoalie(this.goalieL, s.gl);
     this._applyGoalie(this.goalieR, s.gr);
+
+    // ── Jitter-buffer: ulož POZICE tohoto snímku s časem příchodu. _interp pak renderuje se
+    //    zpožděním a interpoluje mezi dvěma uloženými snímky → překlene kolísavou cestu (spikes). ──
+    const frame = { t: performance.now(), ents: new Map(),
+      puck: { x: s.puck.x, y: s.puck.y },
+      gl: s.gl ? { x: s.gl.x, y: s.gl.y, tilt: s.gl.t } : null,
+      gr: s.gr ? { x: s.gr.x, y: s.gr.y, tilt: s.gr.t } : null };
+    for (const ps of s.players) if (ps.id !== this.myId)
+      frame.ents.set(ps.id, { x: ps.x, y: ps.y, ba: ps.ba, aa: ps.aa, ca: ps.ca, sd: ps.sd });
+    if (!this._buf) this._buf = [];
+    this._buf.push(frame);
+    const cutoff = frame.t - 1000;
+    while (this._buf.length > 2 && this._buf[0].t < cutoff) this._buf.shift();
   }
 
   _applyGoalie(g, d) {
@@ -229,41 +242,78 @@ export class NetGame {
     const k  = Math.min(1, 22 * dt);
     const ka = Math.min(1, 18 * dt);
     const rk = Math.min(1, 10 * dt); // reconcile vlastního hráče — jemná korekce driftu
+
+    // ── Jitter-buffer: renderuj o DELAY ms pozadu a interpoluj mezi dvěma uloženými snímky.
+    //    Překlene kolísavou cestu (snapshoty chodící nepravidelně) → plynulý pohyb i při spikech. ──
+    const DELAY = 85;
+    const buf = this._buf;
+    const renderT = performance.now() - DELAY;
+    let A = null, B = null;
+    if (buf && buf.length >= 2) {
+      for (let i = 0; i < buf.length; i++) { if (buf[i].t <= renderT) A = buf[i]; else { B = buf[i]; break; } }
+    }
+    const newest = buf && buf.length ? buf[buf.length - 1] : null;
+    const alpha = (A && B) ? Math.min(1, Math.max(0, (renderT - A.t) / ((B.t - A.t) || 1))) : 0;
+    const ivSec = (A && B) ? Math.max(0.001, (B.t - A.t) / 1000) : (1 / 30);
+    const sampEnt = (id) => {
+      if (!buf) return null;
+      if (A && B) { const a = A.ents.get(id), b = B.ents.get(id);
+        if (a && b) return { a, b }; if (b) return { a: b, b }; if (a) return { a, b: a }; return null; }
+      const n = newest && newest.ents.get(id); return n ? { a: n, b: n } : null;
+    };
+
     for (const e of this.players.values()) {
       const ent = e.ent;
       if (e.isMe) {
         // predikce proběhla v _tick; jemně dotáhni k serveru
         ent.x += (e.sx - ent.x) * rk;
         ent.y += (e.sy - ent.y) * rk;
-        // STROP odchylky: predikce nesmí utéct od serveru (klient nepredikuje srážky
-        // s gólmanem/soupeřem) → bez tohohle bys o ně „kroužil" na místě.
         const dx = ent.x - e.sx, dy = ent.y - e.sy, d = Math.hypot(dx, dy), MAX = 16;
         if (d > MAX) { ent.x = e.sx + dx / d * MAX; ent.y = e.sy + dy / d * MAX; }
         continue;
       }
-      const px = ent.x, py = ent.y;
-      ent.x += (e.tx - ent.x) * k; ent.y += (e.ty - ent.y) * k;
-      ent.vx = (ent.x - px) / Math.max(dt, 1e-3); ent.vy = (ent.y - py) / Math.max(dt, 1e-3);
-      ent.bodyAngle  = lerpAngle(ent.bodyAngle,  e.tba, ka);
-      ent.aimAngle   = lerpAngle(ent.aimAngle,   e.taa, ka);
-      ent.carryAngle = lerpAngle(ent.carryAngle, e.tca, k);
-      ent._stickDisp = lerpAngle(ent._stickDisp ?? e.tsd, e.tsd, k);
+      const sm = sampEnt(ent.id);
+      if (sm) {   // interpolace z bufferu (plynulé i při kolísavém příchodu)
+        ent.vx = (sm.b.x - sm.a.x) / ivSec; ent.vy = (sm.b.y - sm.a.y) / ivSec;
+        ent.x = sm.a.x + (sm.b.x - sm.a.x) * alpha;
+        ent.y = sm.a.y + (sm.b.y - sm.a.y) * alpha;
+        ent.bodyAngle  = lerpAngle(sm.a.ba, sm.b.ba, alpha);
+        ent.aimAngle   = lerpAngle(sm.a.aa, sm.b.aa, alpha);
+        ent.carryAngle = lerpAngle(sm.a.ca, sm.b.ca, alpha);
+        ent._stickDisp = lerpAngle(sm.a.sd, sm.b.sd, alpha);
+      } else {   // fallback: původní vyhlazení k poslednímu cíli
+        const px = ent.x, py = ent.y;
+        ent.x += (e.tx - ent.x) * k; ent.y += (e.ty - ent.y) * k;
+        ent.vx = (ent.x - px) / Math.max(dt, 1e-3); ent.vy = (ent.y - py) / Math.max(dt, 1e-3);
+        ent.bodyAngle  = lerpAngle(ent.bodyAngle,  e.tba, ka);
+        ent.aimAngle   = lerpAngle(ent.aimAngle,   e.taa, ka);
+        ent.carryAngle = lerpAngle(ent.carryAngle, e.tca, k);
+        ent._stickDisp = lerpAngle(ent._stickDisp ?? e.tsd, e.tsd, k);
+      }
       if (ent.passReq > 0) ent.passReq = Math.max(0, ent.passReq - dt);
     }
-    // Puk: když ho držím lokálně, cradle k MÉ predikované holi (ostré vedení bez lagu),
-    // jinak plynule k pozici od serveru.
+    // Puk: lokálně držený → cradle; jinak interpolace z bufferu (fallback vyhlazení).
     if (this.localEnt && this.localEnt.hasPuck) {
       this.puck._cradleTo(this.localEnt);
+    } else if (A && B) {
+      this.puck.x = A.puck.x + (B.puck.x - A.puck.x) * alpha;
+      this.puck.y = A.puck.y + (B.puck.y - A.puck.y) * alpha;
     } else {
       this.puck.x += (this.puck._tx - this.puck.x) * k;
       this.puck.y += (this.puck._ty - this.puck.y) * k;
     }
-    for (const g of [this.goalieL, this.goalieR]) {
+    for (const [g, key] of [[this.goalieL, 'gl'], [this.goalieR, 'gr']]) {
       const prevGY = g.y;
-      g.x += ((g._tx ?? g.x) - g.x) * k;
-      g.y += ((g._ty ?? g.y) - g.y) * k;
+      if (A && B && A[key] && B[key]) {
+        g.x = A[key].x + (B[key].x - A[key].x) * alpha;
+        g.y = A[key].y + (B[key].y - A[key].y) * alpha;
+        g._tilt = lerpAngle(A[key].tilt ?? 0, B[key].tilt ?? 0, alpha);
+      } else {
+        g.x += ((g._tx ?? g.x) - g.x) * k;
+        g.y += ((g._ty ?? g.y) - g.y) * k;
+        g._tilt = lerpAngle(g._tilt, g._ttilt ?? 0, ka);
+      }
       g._vy = (g.y - prevGY) / Math.max(dt, 1e-3);
-      g._tilt = lerpAngle(g._tilt, g._ttilt ?? 0, ka);
       if (g._saveFlash  > 0) g._saveFlash  = Math.max(0, g._saveFlash  - dt);
       if (g._saveRecoil > 0) g._saveRecoil = Math.max(0, g._saveRecoil - dt * 4);
     }
@@ -300,6 +350,11 @@ export class NetGame {
       if (frameMs < 1000) this._frameMax = Math.max(this._frameMax, frameMs);
       this._dbgFrames++;
       if (now - this._dbgT >= 500) { this._fps = Math.round(this._dbgFrames * 1000 / (now - this._dbgT)); this._dbgFrames = 0; this._dbgT = now; this._fpsFrameMax = this._frameMax; this._frameMax = 0; }
+      // Auto-telemetrie: každé 3 s pošli naměřené na server (ať jde diagnostikovat bez ptaní hráče)
+      if (!this._netstatT || now - this._netstatT > 3000) {
+        this._netstatT = now;
+        try { this.net && this.net.socket && this.net.socket.emit('netstat', { fps: this._fps, frameMax: Math.round(this._fpsFrameMax || 0), snapAvg: Math.round(this._snapAvg || 0), snapMax: Math.round(this._snapMax || 0) }); } catch {}
+      }
       if (window.__fhDbg) {
         ctx.save();
         ctx.font = 'bold 13px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';

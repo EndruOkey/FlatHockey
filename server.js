@@ -1044,6 +1044,14 @@ io.on('connection', (socket) => {
 
   socket.on('lobby:leave', () => { socket.data._voluntaryLeave = true; leaveCurrentLobby(socket); });
 
+  // Síťová telemetrie z klienta (FPS, jitter snapshotů) — pro diagnostiku plynulosti, read-only v /api/netstat
+  socket.on('netstat', (d) => {
+    if (!rateOk(socket, 'netstat', 2000) || !d) return;
+    const num = (v, max) => { v = Number(v); return Number.isFinite(v) ? Math.max(0, Math.min(max, Math.round(v))) : 0; };
+    netStats.push({ t: Date.now(), fps: num(d.fps, 999), frameMax: num(d.frameMax, 9999), snapAvg: num(d.snapAvg, 9999), snapMax: num(d.snapMax, 9999) });
+    while (netStats.length > 60) netStats.shift();
+  });
+
   socket.on('input', (msg) => {
     // Strop ~150 vstupů/s na socket (legitimní je ~60) → blokuje záplavu vstupů
     const now = Date.now();
@@ -1116,7 +1124,13 @@ app.post('/api/store/buy', requireAuth, (req, res) => {
 if (!process.env.JWT_SECRET) console.warn('⚠ JWT_SECRET není nastaven — přihlášení (Discord i host účet) nebude fungovat.');
 if (!process.env.DISCORD_CLIENT_ID || !process.env.DISCORD_CLIENT_SECRET) console.warn('⚠ DISCORD_* není nastaveno — Discord login vypnutý (host mód funguje).');
 
+const netStats = [];   // ring buffer poslední síťové telemetrie z klientů (FPS/jitter) pro /api/netstat
 app.get('/health', (req, res) => res.json({ ok: true, lobbies: lobbies.size, matches: countMatches(), uptime: Math.round(process.uptime()) }));
+app.get('/api/netstat', (req, res) => {   // read-only diagnostika plynulosti (bez PII)
+  const a = netStats.slice(-30);
+  const avg = (k) => a.length ? Math.round(a.reduce((s, x) => s + x[k], 0) / a.length) : 0;
+  res.json({ count: a.length, avg: { fps: avg('fps'), frameMax: avg('frameMax'), snapAvg: avg('snapAvg'), snapMax: avg('snapMax') }, recent: a });
+});
 
 // Retence metrik: úklid při startu + jednou denně (DB jinak bobtná)
 try { cleanOldMetrics(); } catch {}
