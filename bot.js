@@ -6,7 +6,7 @@ import { RINK } from './public/js/constants.js';
 const THINK_EVERY = 6;            // rozhoduje 10× za s (reakce ~100 ms jako člověk)
 const AIM_ERR     = 0.02;         // max chyba míření při střele (rad) — střela podél tyčky snese jen pár px
 // Gólman kryje celou bránu proti pomalé střele → bot střílí silně (~0.7 s nápřah) těsně podél horní tyčky
-const SHOT_HOLD   = [18, 46];     // ticky nápřahu — širší rozsah: mix přízemních ran (nízké rohy) i tvrdých zvednutých (horní roh), ať bot neskončí jen na roofu proti chytřejšímu gólmanovi
+const SHOT_HOLD   = [18, 46];     // ticky nápřahu — mix přízemních ran (nízké rohy) i tvrdých zvednutých (horní roh), ať bot neskončí jen na roofu proti chytřejšímu gólmanovi
 const SHOT_RANGE  = [130, 170];   // px od branky, odkud bot vystřelí
 const QUICK_RANGE = 40;           // úplně zblízka rychlá střela (gólman je do ~28 px vypíchne)
 const QUICK_HOLD  = 6;

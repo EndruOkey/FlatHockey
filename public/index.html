@@ -886,6 +886,24 @@
     }
     .vmsb-locked { opacity: 0.38; pointer-events: none; }
     .vmsb-dim { color: rgba(255,255,255,0.25) !important; }
+
+    /* Kompaktní hlavní menu na nižších oknech (laptopy) — ať se vejde bez scrollu */
+    @media (max-height: 936px) {
+      #vm-hero-section { padding: 34px 96px 20px; gap: 22px; }
+      #vm-hero { gap: 18px; }
+      #vm-title { font-size: clamp(2.6rem, 4.6vw, 3.8rem); }
+      #vm-footer { padding: 18px 112px 22px; }
+      .vmsb-card { padding: 12px 22px 13px; }
+      #vm-secondary-links { gap: 10px; }
+    }
+    @media (max-height: 720px) {
+      #vm-hero-section { padding: 16px 96px 10px; gap: 12px; }
+      #vm-hero { gap: 10px; }
+      #vm-title { font-size: clamp(2.1rem, 3.8vw, 3rem); }
+      #vm-footer { padding: 10px 112px 12px; }
+      .vmsb-card { padding: 8px 18px 9px; }
+      #vm-secondary-links { gap: 8px; }
+    }
     .vmsb-card {
       display: flex; flex-direction: column; gap: 4px;
       background: rgba(20,24,34,0.8); backdrop-filter: blur(10px);

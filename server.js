@@ -604,6 +604,7 @@ function stepMatch(match) {
 
             const goals   = scorers.filter(s => s === sid).length;
             const assists = assisters.filter(s => s === sid).length;
+            const saves   = (match._blocks?.get(sid)) || 0;   // zblokované střely (polní „save")
             const isWin   = !!(winTeam && mem.team === winTeam);
             const isLoss  = !!(winTeam && mem.team !== winTeam);
             const isMVP   = sid === mvpSid;
@@ -619,7 +620,7 @@ function stepMatch(match) {
               + goals * 15 + assists * 10;
 
             try {
-              updateStats(userId, { goals, assists, games_played: 1, wins: isWin ? 1 : 0, losses: isLoss ? 1 : 0 });
+              updateStats(userId, { goals, assists, saves, games_played: 1, wins: isWin ? 1 : 0, losses: isLoss ? 1 : 0 });
               updateRankAndCredits(userId, { rankDelta, creditsDelta, plusMinusDelta: pm });
             } catch {}
 
@@ -646,7 +647,29 @@ function stepMatch(match) {
     if (!match.world._goalLock) playerActions(p, inp, DT, match);
   }
 
+  // Rychlost puku PŘED updatem (pro detekci „save" = zastavení tvrdé střely na vlastní branku)
+  const _pv0spd = Math.hypot(match.puck.vx, match.puck.vy), _pv0vx = match.puck.vx;
+
   match.world.update(DT);
+
+  // SAVE = polní hráč zastaví tvrdou ránu mířící k VLASTNÍ brance — odrazem od těla (Puck._blockBy)
+  // NEBO obranným zachycením (nově získá puk, co byl rychlá střela k jeho brance). Cooldown proti dvojpočtu.
+  {
+    let saveSid = null;
+    if (match.puck._blockBy) { saveSid = match.puck._blockBy; match.puck._blockBy = null; match.puck._blockTeam = null; }
+    let curSid = null, curTeam = null;
+    for (const [sid, p] of match.players) if (p.hasPuck) { curSid = sid; curTeam = p.team; break; }
+    if (!saveSid && curSid && curSid !== match._carrierPrev) {
+      const ownGoalDir = curTeam === 'home' ? -1 : 1;   // home brání vlevo (−x), away vpravo (+x)
+      if (_pv0spd > 200 && Math.sign(_pv0vx) === ownGoalDir) saveSid = curSid;
+    }
+    match._carrierPrev = curSid;
+    if (saveSid && !saveSid.startsWith('bot:') && !match.ended && match.tick - (match._lastSaveTick || -99) > 20) {
+      match._lastSaveTick = match.tick;
+      if (!match._blocks) match._blocks = new Map();
+      match._blocks.set(saveSid, (match._blocks.get(saveSid) || 0) + 1);
+    }
+  }
 
   // Sleduj poslední dotek (tým + hráč + origin pro icing)
   for (const [sid, p] of match.players) if (p.hasPuck) {

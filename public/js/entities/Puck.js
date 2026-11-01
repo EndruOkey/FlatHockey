@@ -217,9 +217,15 @@ export class Puck {
           this.y = p.y + ny * (minD + 0.5);
           const dot = this.vx * nx + this.vy * ny;
           if (dot < 0) {
+            const ovx = this.vx, ovy = this.vy;       // rychlost PŘED odrazem
+            const spd0 = Math.hypot(ovx, ovy);
             const e = _reb(dot);   // rychlá rána do těla se utlumí (žádný obří odraz)
             this.vx = (this.vx - 2 * dot * nx) * e;
             this.vy = (this.vy - 2 * dot * ny) * e;
+            // BLOK STŘELY = save: polní hráč tělem zastavil tvrdou ránu mířící k VLASTNÍ brance.
+            // home brání vlevo (−x), away vpravo (+x). Jen zaznamenání, fyzika beze změny; server sečte.
+            const ownGoalDir = p.team === 'home' ? -1 : 1;
+            if (spd0 > 160 && Math.sign(ovx) === ownGoalDir) { this._blockBy = p.id; this._blockTeam = p.team; }
           }
         }
       }
