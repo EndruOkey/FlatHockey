@@ -137,6 +137,12 @@ export class NetGame {
   }
 
   _onSnap(s) {
+    // Debug: interval mezi snapshoty (jitter) — vysoký/kolísavý = síť; stabilní ~33ms = OK
+    { const now = performance.now();
+      if (this._lastSnapAt) { const iv = now - this._lastSnapAt;
+        this._snapAvg = this._snapAvg ? this._snapAvg * 0.85 + iv * 0.15 : iv;
+        this._snapMax = Math.max((this._snapMax || 0) * 0.9, iv); }
+      this._lastSnapAt = now; }
     this.score = s.score;
     if (s.clk !== undefined) {
       this.clk = s.clk; this.per = s.per; this.pers = s.pers;
@@ -286,6 +292,25 @@ export class NetGame {
   notify(text) { this._notice = { text, t: 3 }; }
 
   _overlay(ctx) {
+    // ── Debug (přepínač F3): FPS, max frame time, interval snapshotů ──
+    {
+      const now = performance.now();
+      if (!this._dbgT) { this._dbgT = now; this._dbgFrames = 0; this._fps = 0; this._frameMax = 0; this._lastFrameT = now; this._fpsFrameMax = 0; }
+      const frameMs = now - this._lastFrameT; this._lastFrameT = now;
+      if (frameMs < 1000) this._frameMax = Math.max(this._frameMax, frameMs);
+      this._dbgFrames++;
+      if (now - this._dbgT >= 500) { this._fps = Math.round(this._dbgFrames * 1000 / (now - this._dbgT)); this._dbgFrames = 0; this._dbgT = now; this._fpsFrameMax = this._frameMax; this._frameMax = 0; }
+      if (window.__fhDbg) {
+        ctx.save();
+        ctx.font = 'bold 13px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+        const l1 = `FPS ${this._fps}   frame max ${Math.round(this._fpsFrameMax || 0)} ms`;
+        const l2 = `snap ~${this._snapAvg ? this._snapAvg.toFixed(0) : '—'} ms   max ${this._snapMax ? this._snapMax.toFixed(0) : '—'} ms`;
+        ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.fillRect(8, 70, 250, 44);
+        ctx.fillStyle = this._fps >= 50 ? '#6ee0a0' : '#ffcf3a'; ctx.fillText(l1, 14, 76);
+        ctx.fillStyle = (this._snapMax || 0) < 90 ? '#6ee0a0' : '#ff8a5c'; ctx.fillText(l2, 14, 94);
+        ctx.restore();
+      }
+    }
     const W = ctx.canvas.width, H = ctx.canvas.height;
     const tm = this.settings.teams;
     const cx = W / 2;

@@ -1490,6 +1490,8 @@ window.addEventListener('keydown', e => {
   $('auth-dropdown').classList.remove('open');
 });
 window.addEventListener('keydown', e => { if (e.key !== 'Escape' || !inGame) return; if (currentGame?._activeTab === 'build') return; pauseMenu.style.display === 'flex' ? hidePause() : showPause(); });
+// F3 = debug overlay ve hře (FPS / frame time / jitter snapshotů) — diagnostika sekání
+window.addEventListener('keydown', e => { if (e.key === 'F3') { e.preventDefault(); window.__fhDbg = !window.__fhDbg; } });
 window.addEventListener('beforeunload', () => net.leaveLobby());
 
 // ── Jazyk (CS/EN) ─────────────────────────────────────────────────────
