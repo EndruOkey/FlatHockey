@@ -247,8 +247,10 @@ export class NetGame {
     //    DELAY je ADAPTIVNÍ podle naměřeného kolísání příchodu (snapMax): na plynulé cestě ~90 ms,
     //    na kolísavé se sám roztáhne až na 240 ms, aby překlenul i spiky 100–160 ms (jinak podteče a zasekne se).
     const jitter = this._snapMax || 33;
-    const DELAY = this._bufDelay = Math.max(90, Math.min(240,
-      (this._bufDelay || 90) * 0.9 + (jitter * 1.4 + 20) * 0.1));   // plynule najíždí k cíli (bez skoků)
+    const target = Math.max(90, Math.min(260, jitter * 1.5 + 25));
+    // Asymetricky: na spike se buffer ROZTÁHNE rychle (ať zádrhel stihne pokrýt), smršťuje se pomalu.
+    const prev = this._bufDelay || 90;
+    const DELAY = this._bufDelay = target > prev ? prev * 0.5 + target * 0.5 : prev * 0.97 + target * 0.03;
     const buf = this._buf;
     const renderT = performance.now() - DELAY;
     let A = null, B = null;
@@ -256,6 +258,7 @@ export class NetGame {
       for (let i = 0; i < buf.length; i++) { if (buf[i].t <= renderT) A = buf[i]; else { B = buf[i]; break; } }
     }
     const newest = buf && buf.length ? buf[buf.length - 1] : null;
+    if (buf && buf.length >= 2 && B === null) this._underruns = (this._underruns || 0) + 1;   // buffer podtekl = reálný zádrhel
     const alpha = (A && B) ? Math.min(1, Math.max(0, (renderT - A.t) / ((B.t - A.t) || 1))) : 0;
     const ivSec = (A && B) ? Math.max(0.001, (B.t - A.t) / 1000) : (1 / 30);
     const sampEnt = (id) => {
@@ -356,7 +359,8 @@ export class NetGame {
       // Auto-telemetrie: každé 3 s pošli naměřené na server (ať jde diagnostikovat bez ptaní hráče)
       if (!this._netstatT || now - this._netstatT > 3000) {
         this._netstatT = now;
-        try { this.net && this.net.socket && this.net.socket.emit('netstat', { fps: this._fps, frameMax: Math.round(this._fpsFrameMax || 0), snapAvg: Math.round(this._snapAvg || 0), snapMax: Math.round(this._snapMax || 0) }); } catch {}
+        try { this.net && this.net.socket && this.net.socket.emit('netstat', { fps: this._fps, frameMax: Math.round(this._fpsFrameMax || 0), snapAvg: Math.round(this._snapAvg || 0), snapMax: Math.round(this._snapMax || 0), stalls: this._underruns || 0, buf: Math.round(this._bufDelay || 0) }); } catch {}
+        this._underruns = 0;   // reset počítadla zádrhelů na další interval
       }
       if (window.__fhDbg) {
         ctx.save();

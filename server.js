@@ -1048,7 +1048,7 @@ io.on('connection', (socket) => {
   socket.on('netstat', (d) => {
     if (!rateOk(socket, 'netstat', 2000) || !d) return;
     const num = (v, max) => { v = Number(v); return Number.isFinite(v) ? Math.max(0, Math.min(max, Math.round(v))) : 0; };
-    netStats.push({ t: Date.now(), fps: num(d.fps, 999), frameMax: num(d.frameMax, 9999), snapAvg: num(d.snapAvg, 9999), snapMax: num(d.snapMax, 9999) });
+    netStats.push({ t: Date.now(), fps: num(d.fps, 999), frameMax: num(d.frameMax, 9999), snapAvg: num(d.snapAvg, 9999), snapMax: num(d.snapMax, 9999), stalls: num(d.stalls, 9999), buf: num(d.buf, 9999) });
     while (netStats.length > 60) netStats.shift();
   });
 
