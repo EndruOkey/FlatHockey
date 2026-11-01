@@ -17,7 +17,7 @@ import { botTarget, clampBots } from './bot-target.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import authRouter, { linkRouter, verifySession, requireAuth, bearerToken, createGuestAccount } from './auth.js';
-import { updateStats, updateRankAndCredits, getRankPosition, getLeaderboard, getStoreItems, getUserUnlocks, buyItem, getPuckCredits, getActiveSeason, logMetric } from './db.js';
+import { updateStats, updateRankAndCredits, getRankPosition, getLeaderboard, getStoreItems, getUserUnlocks, buyItem, getPuckCredits, getActiveSeason, logMetric, cleanOldMetrics } from './db.js';
 
 import { World } from './public/js/world.js';
 import { Player } from './public/js/entities/Player.js';
@@ -1076,8 +1076,29 @@ app.post('/api/store/buy', requireAuth, (req, res) => {
   } catch { res.status(500).json({ error: 'db_error' }); }
 });
 
+// ── Produkční zpevnění: validace env, /health, graceful shutdown ──
+if (!process.env.JWT_SECRET) console.warn('⚠ JWT_SECRET není nastaven — přihlášení (Discord i host účet) nebude fungovat.');
+if (!process.env.DISCORD_CLIENT_ID || !process.env.DISCORD_CLIENT_SECRET) console.warn('⚠ DISCORD_* není nastaveno — Discord login vypnutý (host mód funguje).');
+
+app.get('/health', (req, res) => res.json({ ok: true, lobbies: lobbies.size, matches: countMatches(), uptime: Math.round(process.uptime()) }));
+
+// Retence metrik: úklid při startu + jednou denně (DB jinak bobtná)
+try { cleanOldMetrics(); } catch {}
+setInterval(() => { try { cleanOldMetrics(); } catch {} }, 24 * 3600 * 1000).unref();
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`→ listening on :${PORT}`));
+
+let _shuttingDown = false;
+function shutdown(sig) {
+  if (_shuttingDown) return; _shuttingDown = true;
+  console.log(`\n${sig} → graceful shutdown`);
+  try { io.close(); } catch {}
+  server.close(() => { console.log('server zavřen'); process.exit(0); });
+  setTimeout(() => process.exit(0), 5000).unref();   // pojistka, kdyby close visel
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT',  () => shutdown('SIGINT'));
 
 // Jen pro testy (test/determinism.test.mjs) — krokování zápasu bez sítě
 export const __test = { lobbies, startMatch, stepMatch, makeMember, sanitizeSettings };

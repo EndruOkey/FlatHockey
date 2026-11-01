@@ -536,4 +536,11 @@ export function cleanExpiredTokens() {
   db.prepare('DELETE FROM sessions WHERE expires_at < ? OR used = 1').run(now);
 }
 
+// Retence metrik: metric_events jinak roste donekonečna. Smaž starší než N dní (default 120).
+export function cleanOldMetrics(days = 120) {
+  const cutoff = Math.floor(Date.now() / 1000) - days * 86400;
+  const info = db.prepare('DELETE FROM metric_events WHERE ts < ?').run(cutoff);
+  return info.changes;
+}
+
 export default db;
