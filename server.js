@@ -407,11 +407,17 @@ function createMatch(lobbyId, seed) {
   // Pevný krok s doháněním: setInterval je nepřesný (Windows volá ~37×/s místo 60 — změřeno) →
   // dorovnej podle skutečně uplynulého času, ať hra běží 60 ticků/s všude. Strop 250 ms = po zaseknutí nedohání donekonečna.
   const STEP_MS = 1000 / TICK_HZ;
-  let last = performance.now(), acc = 0;
+  const SNAP_MS = 1000 / SNAP_HZ;
+  let last = performance.now(), acc = 0, lastSnap = 0;
   match.loop = setInterval(() => {
     const now = performance.now();
     acc += Math.min(now - last, 250); last = now;
-    try { while (acc >= STEP_MS) { stepMatch(match); acc -= STEP_MS; } }
+    try {
+      while (acc >= STEP_MS) { stepMatch(match); acc -= STEP_MS; }
+      // Snapshot ROVNOMĚRNĚ: max 1× za fire, škrceno na SNAP_HZ wall-clockem → žádné bursty
+      // ani když dohánění udělalo víc kroků naráz (to byl zdroj „jak internet" trhání).
+      if (now - lastSnap >= SNAP_MS - 2) { broadcast(match); lastSnap = now; }
+    }
     catch (e) { acc = 0; console.error('stepMatch error (lobby ' + lobbyId + '):', e); }
   }, STEP_MS);
   return match;
@@ -543,7 +549,7 @@ function stepMatch(match) {
   // Buly "set" — lehká prodleva při vhazování (vše zmrazené, hráči čelem k puku), pak živé
   if (match.setup) {
     if (match.tick >= match.faceoffUntil) { match.setup = false; match.world._goalLock = false; }
-    else { if (match.tick % Math.round(TICK_HZ / SNAP_HZ) === 0) broadcast(match); return; }
+    else return;   // zmrazeno; odeslání řeší smyčka rovnoměrně (ne tady)
   }
   // Icing v běhu — puk necháme dojet; píšťalka až když zpomalí nebo po timeoutu
   if (match.icing && !match.stoppage) {
@@ -682,8 +688,8 @@ function stepMatch(match) {
   }
   // Kontrola pravidel (jen když je zapnuto a hraje se)
   if (match.rules && !match.stoppage && !match.world._goalLock && !match.ended) checkRules(match);
-
-  if (match.tick % Math.round(TICK_HZ / SNAP_HZ) === 0) broadcast(match);
+  // Odeslání snapshotu NENÍ tady — řeší ho smyčka rovnoměrně (1× za fire), ať se při doháněním
+  // kroku neposílají snapshoty v nárazech (burst → mezera = trhání u klienta).
 }
 
 function broadcast(match) {
