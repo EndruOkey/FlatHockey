@@ -29,7 +29,8 @@ export function setVolume(v) {
 }
 
 export function getVolume() {
-  return parseFloat(localStorage.getItem('sfx-vol') ?? '0.8');
+  const v = parseFloat(localStorage.getItem('sfx-vol'));
+  return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0.8;   // poškozená hodnota → default (ne NaN)
 }
 
 export const SFX = {

@@ -46,6 +46,8 @@ export class Net {
       // 'io client disconnect' means voluntary (net.leave()), don't fire callback
       if (reason !== 'io client disconnect') this.onDisconnect?.();
     });
+    // Server nedostupný / spojení selhalo → dej vědět (jinak tlačítka tiše nereagují)
+    this.socket.on('connect_error', (err) => { this._connected = false; this.onConnectError?.(err); });
     this.socket.on('lobby:list',      d => this.onLobbyList?.(d));
     this.socket.on('lobby:joined',    d => this.onLobbyJoined?.(d));
     this.socket.on('lobby:state',     d => this.onLobbyState?.(d));

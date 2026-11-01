@@ -826,8 +826,13 @@ _codeIn?.addEventListener('focus', () => _codeIn.select());
 $('lk-code-copy')?.addEventListener('click', () => {
   const code = encodeLook();
   if (_codeIn) _codeIn.value = code;
-  navigator.clipboard?.writeText(code).catch(() => {});
-  setStatus(t('lk_code_copied'), '#6ee0a0');
+  // V iframe (CrazyGames/itch) clipboard API často chybí → nehlásit falešný úspěch, ukázat kód k ruční kopii.
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(code).then(
+      () => setStatus(t('lk_code_copied'), '#6ee0a0'),
+      () => { if (_codeIn) _codeIn.select(); setStatus(code, '#b6c4ff'); }
+    );
+  } else { if (_codeIn) _codeIn.select(); setStatus(code, '#b6c4ff'); }
 });
 document.querySelectorAll('.lk-fit-save').forEach(b => b.addEventListener('click', () => _saveFit(+b.dataset.slot)));
 document.querySelectorAll('.lk-fit-equip').forEach(b => b.addEventListener('click', () => _equipFit(+b.dataset.slot)));
@@ -934,6 +939,8 @@ function showView(name) {
   lobby.classList.toggle('on-splash',  name === 'splash');
   lobby.classList.toggle('on-main',    name === 'main');
   lobby.classList.toggle('on-browse',  name === 'browse');
+  // Placeholder „načítám" než dorazí lobby:list (nebo navždy při offline — doplní connect_error toast)
+  if (name === 'browse') { const _ll = $('lobby-list'); if (_ll && !_ll.children.length) _ll.innerHTML = `<div class="lobby-empty">${esc(t('lobby_loading'))}</div>`; }
   lobby.classList.toggle('on-profile', name === 'profile');
   if (name === 'profile') { _refreshFitSlots(); _updateLockerCode(); lockerPreview.start(); if (_is3D && _viewer3d) _viewer3d.start(); }
   else { lockerPreview.stop(); _stop3D(); }
@@ -1009,7 +1016,14 @@ function hideReconnecting() {
 }
 
 net.onDisconnect = () => { if (inGame) showReconnecting(); };
-net.onReconnect  = () => { hideReconnecting(); };
+net.onReconnect  = () => { hideReconnecting(); _serverDownShown = false; };
+// Server nedostupný: jednou toast (connect_error se opakuje při retry, tak jen první)
+let _serverDownShown = false;
+net.onConnectError = () => {
+  if (_serverDownShown || inGame) return;
+  _serverDownShown = true;
+  setStatus(t('err_server_down'), '#ff8a5c');
+};
 
 // ── Profil — povinný (bez přezdívky nepustíme dál) ────────────────────
 const hasName = () => (nameInput.value || '').trim().length > 0;
@@ -1354,9 +1368,14 @@ $('wait-leave').onclick  = () => { net.leaveLobby(); lastLobbyId = null; localSt
 $('share-btn').addEventListener('click', () => {
   if (!lastLobbyId) return;
   const url = location.origin + '/?join=' + lastLobbyId;
-  navigator.clipboard?.writeText(url).then(() => {
-    setStatus(t('link_copied'), '#6ee0a0');
-  }).catch(() => setStatus(url, '#8aa'));
+  // Pozvánka kamaráda. V iframe (portály) clipboard API chybí → optional chaining dřív celé
+  // spadlo a tlačítko tiše nic neudělalo. Teď: clipboard když je, jinak ukázat odkaz k ruční kopii.
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(url).then(
+      () => setStatus(t('link_copied'), '#6ee0a0'),
+      () => setStatus(url, '#b6c4ff')
+    );
+  } else { setStatus(url, '#b6c4ff'); }
 });
 
 // ── Post-match summary ────────────────────────────────────────────────

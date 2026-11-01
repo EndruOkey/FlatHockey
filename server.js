@@ -485,7 +485,14 @@ function startMatch(lobby) {
     match.inputs.set(sid, p.input);
   }
   syncBots(lobby, match);
-  match._startSids = new Set(lobby.members.keys());   // odměnu dostanou jen hráči od začátku (ne pozdě příchozí)
+  match._startSids = new Set(lobby.members.keys());   // pozdě příchozí bez odměny (sid snímek)
+  // Stabilní klíč odměny = userId (přežije reconnect, kdy se socket.id změní). Bez něj by
+  // reconnectnutý hráč na konci nedostal góly/rank/kredity (sid už není v _startSids).
+  match._startUserIds = new Set();
+  for (const sid of lobby.members.keys()) {
+    const uid = io.sockets.sockets.get(sid)?.data?.userId;
+    if (uid) match._startUserIds.add(uid);
+  }
   // Gólmani v barvě svého týmu (levá branka = home, pravá = away)
   match.goalieL.color = lobby.settings.teams.home.color;
   match.goalieR.color = lobby.settings.teams.away.color;
@@ -584,7 +591,8 @@ function stepMatch(match) {
             const sock = io.sockets.sockets.get(sid);
             const userId = sock?.data?.userId;
             if (!userId) continue;
-            if (!match._startSids?.has(sid)) continue;   // pozdě příchozí: bez odměny (nefarmí se připojením před koncem)
+            // Eligibilita přes userId (přežije reconnect); fallback na sid pro jistotu.
+            if (!(match._startUserIds?.has(userId) || match._startSids?.has(sid))) continue;   // pozdě příchozí: bez odměny
             if (paidUsers.has(userId)) continue;
             paidUsers.add(userId);
 
@@ -970,7 +978,13 @@ io.on('connection', (socket) => {
   socket.on('lobby:team', ({ team }) => {
     const l = lobbies.get(socket.data.lobbyId); if (!l || l.state !== 'waiting') return;
     const m = l.members.get(socket.id); if (!m) return;
-    if (team === 'home' || team === 'away') { m.team = team; broadcastLobby(l); }
+    if (team !== 'home' && team !== 'away') return;
+    if (m.team === team) return;
+    // Strop na tým = polovina kapacity lobby → zabrání nevyváženým týmům (dřív šlo 10v0).
+    const teamCap = Math.max(1, Math.ceil(l.settings.max / 2));
+    let onTeam = 0; for (const o of l.members.values()) if (o.team === team) onTeam++;
+    if (onTeam >= teamCap) { socket.emit('lobby:error', 'err_team_full'); return; }
+    m.team = team; broadcastLobby(l);
   });
 
   socket.on('lobby:settings', ({ settings }) => {
