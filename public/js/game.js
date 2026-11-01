@@ -244,8 +244,11 @@ export class NetGame {
     const rk = Math.min(1, 10 * dt); // reconcile vlastního hráče — jemná korekce driftu
 
     // ── Jitter-buffer: renderuj o DELAY ms pozadu a interpoluj mezi dvěma uloženými snímky.
-    //    Překlene kolísavou cestu (snapshoty chodící nepravidelně) → plynulý pohyb i při spikech. ──
-    const DELAY = 85;
+    //    DELAY je ADAPTIVNÍ podle naměřeného kolísání příchodu (snapMax): na plynulé cestě ~90 ms,
+    //    na kolísavé se sám roztáhne až na 240 ms, aby překlenul i spiky 100–160 ms (jinak podteče a zasekne se).
+    const jitter = this._snapMax || 33;
+    const DELAY = this._bufDelay = Math.max(90, Math.min(240,
+      (this._bufDelay || 90) * 0.9 + (jitter * 1.4 + 20) * 0.1));   // plynule najíždí k cíli (bez skoků)
     const buf = this._buf;
     const renderT = performance.now() - DELAY;
     let A = null, B = null;
