@@ -207,18 +207,21 @@ export class NetGame {
     this._applyGoalie(this.goalieL, s.gl);
     this._applyGoalie(this.goalieR, s.gr);
 
-    // ── Jitter-buffer: ulož POZICE tohoto snímku s časem příchodu. _interp pak renderuje se
-    //    zpožděním a interpoluje mezi dvěma uloženými snímky → překlene kolísavou cestu (spikes). ──
-    const frame = { t: performance.now(), ents: new Map(),
+    // ── Jitter-buffer: ulož POZICE tohoto snímku s jeho SERVEROVÝM časem (tick s.n → ms). _interp
+    //    interpoluje po serverové časové ose (ne podle příchodu!), takže nárazový příchod dvou snímků
+    //    těsně po sobě nezpůsobí skok — motion se vždy rozloží na reálných 33 ms. ──
+    const st = (s.n || 0) * (1000 / 60);   // serverový čas snímku v ms (TICK_HZ 60)
+    const frame = { st, t: performance.now(), ents: new Map(),
       puck: { x: s.puck.x, y: s.puck.y },
       gl: s.gl ? { x: s.gl.x, y: s.gl.y, tilt: s.gl.t } : null,
       gr: s.gr ? { x: s.gr.x, y: s.gr.y, tilt: s.gr.t } : null };
     for (const ps of s.players) if (ps.id !== this.myId)
       frame.ents.set(ps.id, { x: ps.x, y: ps.y, ba: ps.ba, aa: ps.aa, ca: ps.ca, sd: ps.sd });
     if (!this._buf) this._buf = [];
+    // Zahoď snímky mimo pořadí (starší serverový čas než poslední) — jinak by rozbily interpolaci
+    if (this._buf.length && st <= this._buf[this._buf.length - 1].st) return;
     this._buf.push(frame);
-    const cutoff = frame.t - 1000;
-    while (this._buf.length > 2 && this._buf[0].t < cutoff) this._buf.shift();
+    while (this._buf.length > 2 && this._buf[0].st < st - 1200) this._buf.shift();
   }
 
   _applyGoalie(g, d) {
@@ -247,25 +250,47 @@ export class NetGame {
     //    DELAY je ADAPTIVNÍ podle naměřeného kolísání příchodu (snapMax): na plynulé cestě ~90 ms,
     //    na kolísavé se sám roztáhne až na 240 ms, aby překlenul i spiky 100–160 ms (jinak podteče a zasekne se).
     const jitter = this._snapMax || 33;
-    const target = Math.max(90, Math.min(260, jitter * 1.5 + 25));
-    // Asymetricky: na spike se buffer ROZTÁHNE rychle (ať zádrhel stihne pokrýt), smršťuje se pomalu.
-    const prev = this._bufDelay || 90;
-    const DELAY = this._bufDelay = target > prev ? prev * 0.5 + target * 0.5 : prev * 0.97 + target * 0.03;
+    const target = Math.max(90, Math.min(260, jitter * 1.5 + 25));   // DELAY roste plynule (bez skoků renderT)
+    const prevD = this._bufDelay || 100;
+    const DELAY = this._bufDelay = target > prevD ? prevD + (target - prevD) * 0.08 : prevD + (target - prevD) * 0.02;
     const buf = this._buf;
-    const renderT = performance.now() - DELAY;
-    let A = null, B = null;
-    if (buf && buf.length >= 2) {
-      for (let i = 0; i < buf.length; i++) { if (buf[i].t <= renderT) A = buf[i]; else { B = buf[i]; break; } }
-    }
     const newest = buf && buf.length ? buf[buf.length - 1] : null;
-    if (buf && buf.length >= 2 && B === null) this._underruns = (this._underruns || 0) + 1;   // buffer podtekl = reálný zádrhel
-    const alpha = (A && B) ? Math.min(1, Math.max(0, (renderT - A.t) / ((B.t - A.t) || 1))) : 0;
-    const ivSec = (A && B) ? Math.max(0.001, (B.t - A.t) / 1000) : (1 / 30);
-    const sampEnt = (id) => {
-      if (!buf) return null;
-      if (A && B) { const a = A.ents.get(id), b = B.ents.get(id);
-        if (a && b) return { a, b }; if (b) return { a: b, b }; if (a) return { a, b: a }; return null; }
-      const n = newest && newest.ents.get(id); return n ? { a: n, b: n } : null;
+    const prevNewest = buf && buf.length >= 2 ? buf[buf.length - 2] : null;
+
+    // Render-clock na SERVEROVÉ časové ose (.st): plyne reálným časem a jemně se drží DELAY za nejnovějším
+    // snímkem. Interpolace podle serverového času (ne příchodu!) → nárazový příchod nezpůsobí skok.
+    let renderT = 0, A = null, B = null, underrun = false;
+    if (newest) {
+      const tgt = newest.st - DELAY;
+      if (this._interpT == null || Math.abs(this._interpT - tgt) > 500) this._interpT = tgt;   // snap na startu/teleportu
+      this._interpT += dt * 1000;
+      this._interpT += (tgt - this._interpT) * Math.min(1, 2 * dt);   // jemně dožene drift, bez skoku
+      renderT = this._interpT;
+      if (buf.length >= 2) { for (let i = 0; i < buf.length; i++) { if (buf[i].st <= renderT) A = buf[i]; else { B = buf[i]; break; } } }
+      underrun = (buf.length >= 2 && B === null);
+      if (underrun) this._underruns = (this._underruns || 0) + 1;
+    }
+    const alpha = (A && B) ? Math.min(1, Math.max(0, (renderT - A.st) / ((B.st - A.st) || 1))) : 0;
+    const EXTRAP_CAP = 0.22;   // s — max extrapolace (Unity ~⅓ s; bruslař má setrvačnost, ale ne přes klikatou kličku)
+    const aheadSec = (underrun && newest) ? Math.min((renderT - newest.st) / 1000, EXTRAP_CAP) : 0;
+
+    // Jednotný vzorek: interpolace mezi A,B po serverové ose; při podtečení LINEÁRNÍ EXTRAPOLACE.
+    const samp = (get) => {
+      if (A && B) {
+        const a = get(A), b = get(B);
+        if (!a || !b) { const o = b || a; return o ? { ...o, vx: 0, vy: 0 } : null; }
+        const iv = Math.max(0.001, (B.st - A.st) / 1000);
+        const r = { x: a.x + (b.x - a.x) * alpha, y: a.y + (b.y - a.y) * alpha, vx: (b.x - a.x) / iv, vy: (b.y - a.y) / iv };
+        for (const key of ['ba', 'aa', 'ca', 'sd', 'tilt']) if (a[key] != null && b[key] != null) r[key] = lerpAngle(a[key], b[key], alpha);
+        return r;
+      }
+      const b = newest && get(newest); if (!b) return null;
+      const a = prevNewest && get(prevNewest);
+      if (a && newest.st > prevNewest.st) {
+        const iv = (newest.st - prevNewest.st) / 1000, vx = (b.x - a.x) / iv, vy = (b.y - a.y) / iv;
+        return { ...b, x: b.x + vx * aheadSec, y: b.y + vy * aheadSec, vx, vy };   // plyne dál → žádné zamrznutí
+      }
+      return { ...b, vx: 0, vy: 0 };
     };
 
     for (const e of this.players.values()) {
@@ -278,16 +303,14 @@ export class NetGame {
         if (d > MAX) { ent.x = e.sx + dx / d * MAX; ent.y = e.sy + dy / d * MAX; }
         continue;
       }
-      const sm = sampEnt(ent.id);
-      if (sm) {   // interpolace z bufferu (plynulé i při kolísavém příchodu)
-        ent.vx = (sm.b.x - sm.a.x) / ivSec; ent.vy = (sm.b.y - sm.a.y) / ivSec;
-        ent.x = sm.a.x + (sm.b.x - sm.a.x) * alpha;
-        ent.y = sm.a.y + (sm.b.y - sm.a.y) * alpha;
-        ent.bodyAngle  = lerpAngle(sm.a.ba, sm.b.ba, alpha);
-        ent.aimAngle   = lerpAngle(sm.a.aa, sm.b.aa, alpha);
-        ent.carryAngle = lerpAngle(sm.a.ca, sm.b.ca, alpha);
-        ent._stickDisp = lerpAngle(sm.a.sd, sm.b.sd, alpha);
-      } else {   // fallback: původní vyhlazení k poslednímu cíli
+      const sm = samp(f => f.ents.get(ent.id));
+      if (sm) {
+        ent.x = sm.x; ent.y = sm.y; ent.vx = sm.vx; ent.vy = sm.vy;
+        ent.bodyAngle  = sm.ba ?? ent.bodyAngle;
+        ent.aimAngle   = sm.aa ?? ent.aimAngle;
+        ent.carryAngle = sm.ca ?? ent.carryAngle;
+        ent._stickDisp = sm.sd ?? ent._stickDisp;
+      } else {   // buffer ještě nenaběhl → původní vyhlazení k poslednímu cíli
         const px = ent.x, py = ent.y;
         ent.x += (e.tx - ent.x) * k; ent.y += (e.ty - ent.y) * k;
         ent.vx = (ent.x - px) / Math.max(dt, 1e-3); ent.vy = (ent.y - py) / Math.max(dt, 1e-3);
@@ -298,23 +321,19 @@ export class NetGame {
       }
       if (ent.passReq > 0) ent.passReq = Math.max(0, ent.passReq - dt);
     }
-    // Puk: lokálně držený → cradle; jinak interpolace z bufferu (fallback vyhlazení).
+    // Puk: lokálně držený → cradle; jinak interpolace/extrapolace z bufferu (fallback vyhlazení).
     if (this.localEnt && this.localEnt.hasPuck) {
       this.puck._cradleTo(this.localEnt);
-    } else if (A && B) {
-      this.puck.x = A.puck.x + (B.puck.x - A.puck.x) * alpha;
-      this.puck.y = A.puck.y + (B.puck.y - A.puck.y) * alpha;
     } else {
-      this.puck.x += (this.puck._tx - this.puck.x) * k;
-      this.puck.y += (this.puck._ty - this.puck.y) * k;
+      const ps = samp(f => f.puck);
+      if (ps) { this.puck.x = ps.x; this.puck.y = ps.y; }
+      else { this.puck.x += (this.puck._tx - this.puck.x) * k; this.puck.y += (this.puck._ty - this.puck.y) * k; }
     }
     for (const [g, key] of [[this.goalieL, 'gl'], [this.goalieR, 'gr']]) {
       const prevGY = g.y;
-      if (A && B && A[key] && B[key]) {
-        g.x = A[key].x + (B[key].x - A[key].x) * alpha;
-        g.y = A[key].y + (B[key].y - A[key].y) * alpha;
-        g._tilt = lerpAngle(A[key].tilt ?? 0, B[key].tilt ?? 0, alpha);
-      } else {
+      const gs = samp(f => f[key]);
+      if (gs) { g.x = gs.x; g.y = gs.y; if (gs.tilt != null) g._tilt = gs.tilt; }
+      else {
         g.x += ((g._tx ?? g.x) - g.x) * k;
         g.y += ((g._ty ?? g.y) - g.y) * k;
         g._tilt = lerpAngle(g._tilt, g._ttilt ?? 0, ka);
