@@ -128,7 +128,8 @@ const countMatches = () => [...lobbies.values()].filter(l => l.match).length;
 // ── Authoritativní simulace ──────────────────────────────────────────────
 const CHARGE_RATE = 1.2;       // pomalejší nápřah → slap shot je cítit jako wind-up (méně twitchy)
 const TICK_HZ = 60;
-const SNAP_HZ = 60;            // snapshot každý tick (ostřejší soupeř)
+const SNAP_HZ = 30;            // 30 snapshotů/s (klient plynule interpoluje v game.js _interp) — 60/s
+                              // zahlcovalo slabší/kolísavá připojení = trhání „jak internet"; 30 je odolnější a půlí provoz
 const DT = 1 / TICK_HZ;
 const ms2ticks = ms => Math.round(ms * TICK_HZ / 1000);   // herní časovače v ticích, ne ve wall-clocku (determinismus)
 const MAX_PLAYERS = 10;        // strop hráčů v lobby (5v5)
