@@ -37,6 +37,7 @@ const _env = (k, d) => (typeof process !== 'undefined' && process.env[k] != null
 // až je nosič blíž než ENGAGE px k naší brance. 0 = staré chování (napadá hned). Měřeno scripts/attack_test.mjs
 // + rubrika (2026-11-02): k ráně 0 % → 58 %, změny týmu u puku 17,7 → 14,6/min.
 const ENGAGE      = _env('FH_ENGAGE', 200);
+const PASS_LEAD   = _env('FH_PLEAD', 1);   // dráhu pasu kontroluj k místu setkání, ne k příjemci teď
 const GAP         = _env('FH_GAP', 120);
 const ATTACK_V    = _env('FH_ATTV', 60);   // px/s — rychlost nosiče směrem k naší brance, od které jde o nájezd
 const SECOND_COVER = _env('FH_COVER', 1);   // 1 = druhý bot kryje prostor před brankou místo druhého tlaku na puk
@@ -84,8 +85,8 @@ const clampX = (x, goalX, dir) => (dir > 0 ? Math.min(x, goalX - 90) : Math.max(
 
 // Vyber NEJLEPŠÍHO spoluhráče na přihrávku (ne jen nejbližšího): volný, s čistou dráhou,
 // posunutý dopředu k brance. Vrací hráče, nebo null. Simuluje souhru — rozehrávku na volného.
-const PASS_LANE   = 16;   // px — poloviční šířka koridoru přihrávky (soupeř uvnitř = zablokováno)
-const RECV_OPEN   = 26;   // px — soupeř blíž než tohle k příjemci = není volný
+const PASS_LANE   = _env('FH_LANE', 30);   // px — poloviční šířka koridoru přihrávky (soupeř uvnitř = zablokováno)
+const RECV_OPEN   = _env('FH_OPEN', 40);   // px — soupeř blíž než tohle k příjemci = není volný
 const OPEN_CAP    = 90;   // px — nad tolik už „volnost" příjemce dál neodměňujeme
 function pickPass(p, match, dir, goalX, goalY, dist) {
   let pressed = false;
@@ -112,9 +113,13 @@ function pickPass(p, match, dir, goalX, goalY, dist) {
   let best = null, bestScore = -Infinity, bestDist = 0;
   for (const t of match.players.values()) {
     if (t === p || t.team !== p.team) continue;
-    const td = Math.hypot(t.x - p.x, t.y - p.y);
-    if (td < PASS_MIN || td > PASS_MAX) continue;
-    const ux = (t.x - p.x) / td, uy = (t.y - p.y) / td;
+    const td0 = Math.hypot(t.x - p.x, t.y - p.y);
+    if (td0 < PASS_MIN || td0 > PASS_MAX) continue;
+    // Místo setkání (kam pas poletí — viz server leadAim): příjemce + 70 % jeho pohybu za dobu letu
+    const tf = PASS_LEAD ? td0 / 250 : 0;
+    const lx = t.x + (t.vx || 0) * tf * 0.7, ly = t.y + (t.vy || 0) * tf * 0.7;
+    const td = Math.hypot(lx - p.x, ly - p.y) || 1;
+    const ux = (lx - p.x) / td, uy = (ly - p.y) / td;
     // Dráha přihrávky nesmí vést přes soupeře; zároveň změř, jak je příjemce volný
     let blocked = false, openR = Infinity;
     for (const o of match.players.values()) {
