@@ -82,6 +82,23 @@ function pickPass(p, match, dir, goalX, goalY, dist) {
   for (const o of match.players.values())
     if (o.team !== p.team && Math.hypot(o.x - p.x, o.y - p.y) < PRESS_R) { pressed = true; break; }
 
+  // VYŽÁDÁNÍ: spoluhráč (člověk) si řekl o puk (passReq) → dej mu ho, pokud je dráha čistá. Priorita.
+  let req = null, reqD = Infinity;
+  for (const t of match.players.values()) {
+    if (t === p || t.team !== p.team || !((t.passReq || 0) > 0)) continue;
+    const td = Math.hypot(t.x - p.x, t.y - p.y);
+    if (td < 20 || td > PASS_MAX * 1.3) continue;
+    const ux = (t.x - p.x) / td, uy = (t.y - p.y) / td;
+    let blocked = false;
+    for (const o of match.players.values()) {
+      if (o.team === p.team) continue;
+      const rx = o.x - p.x, ry = o.y - p.y, al = rx * ux + ry * uy, lat = rx * -uy + ry * ux;
+      if (al > 0 && al < td && Math.abs(lat) < PASS_LANE) { blocked = true; break; }
+    }
+    if (!blocked && td < reqD) { reqD = td; req = t; }
+  }
+  if (req) return req;
+
   let best = null, bestScore = -Infinity, bestDist = 0;
   for (const t of match.players.values()) {
     if (t === p || t.team !== p.team) continue;

@@ -179,6 +179,22 @@ function leadAim(from, target, speed) {
   return Math.atan2(ty - from.y, tx - from.x);
 }
 
+// Výběr příjemce lidské nahrávky: kdo si řekl (passReq) má přednost; jinak nejlíp ve SMĚRU kurzoru
+// (aby šlo zacílit konkrétního spoluhráče/bota), s preferencí bližšího. Boty i lidi jsou kandidáti.
+function pickHumanPass(p, match) {
+  let best = null, bestScore = -Infinity, reqBest = null, reqD = Infinity;
+  for (const o of match.players.values()) {
+    if (o === p || o.team !== p.team) continue;
+    const dx = o.x - p.x, dy = o.y - p.y, d = Math.hypot(dx, dy);
+    if ((o.passReq || 0) > 0 && d < reqD) { reqD = d; reqBest = o; }
+    const ang = Math.atan2(dy, dx);
+    const diff = Math.abs(((ang - (p.aimAngle || 0) + Math.PI * 3) % (Math.PI * 2)) - Math.PI);  // 0..π
+    const score = -diff * 2 - d / 400;   // po směru kurzoru a blíž = lepší
+    if (score > bestScore) { bestScore = score; best = o; }
+  }
+  return reqBest || best;
+}
+
 function nearestTeammate(p, match) {
   let best = null, bd = Infinity;
   for (const o of match.players.values()) {
@@ -221,11 +237,14 @@ function playerActions(p, inp, dt, match) {
   if (inp.rmbJustPressed && p.hasPuck) {
     if (p.charge > 0.08) { p.charge = 0; p._chargeDecaying = false; p.overcharged = false; p._chargeBlocked = true; p._chargeCancelled = true; }
     else {
-      // Nahrávka JEN spoluhráči. Bot si vybral příjemce (nejlepšího volného); člověk přihraje nejbližšímu.
+      // Nahrávka JEN spoluhráči. Bot si vybral příjemce; člověk míří kurzorem + prioritně tomu,
+      // kdo si o nahrávku řekl (vyžádání). Fallback nejbližší.
       let tgt = null;
       if (p.isBot && p._passTarget) {
         const cand = match.players.get(p._passTarget);
         if (cand && cand !== p && cand.team === p.team) tgt = cand;
+      } else if (!p.isBot) {
+        tgt = pickHumanPass(p, match);
       }
       if (!tgt) tgt = nearestTeammate(p, match);
       p._passTarget = null;
