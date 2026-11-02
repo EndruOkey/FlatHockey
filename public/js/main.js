@@ -1591,8 +1591,24 @@ const settingsWrap = $('settings-wrap');
 const settingsBtn  = $('settings-btn');
 const settingsDrop = $('settings-dropdown');
 settingsBtn.addEventListener('click', () => settingsDrop.classList.toggle('open'));
+// Nastavení = panel přes obrazovku: zavře ✕, klik na pozadí nebo Esc
+$('set-close').addEventListener('click', () => settingsDrop.classList.remove('open'));
+settingsDrop.addEventListener('click', e => { if (e.target === settingsDrop) settingsDrop.classList.remove('open'); });
+$('set-tutorial').addEventListener('click', () => { settingsDrop.classList.remove('open'); _startTutorial(); });
+// Celá obrazovka (stav podle prohlížeče, i když ji hráč ukončí Esc)
+const fsChk = $('set-fullscreen');
+fsChk.addEventListener('change', () => { try { fsChk.checked ? document.documentElement.requestFullscreen?.() : document.exitFullscreen?.(); } catch {} });
+document.addEventListener('fullscreenchange', () => { fsChk.checked = !!document.fullscreenElement; });
+if (!document.fullscreenEnabled) fsChk.closest('label').style.display = 'none';   // v iframe portálu bez povolení
+// Ukazatel výkonu = totéž co F3, pamatuje se
+const fpsChk = $('set-fps');
+try { window.__fhDbg = localStorage.getItem('fh_dbg') === '1'; } catch {}
+fpsChk.checked = !!window.__fhDbg;
+fpsChk.addEventListener('change', () => { window.__fhDbg = fpsChk.checked; try { localStorage.setItem('fh_dbg', fpsChk.checked ? '1' : '0'); } catch {} });
+window.addEventListener('keydown', e => { if (e.key === 'F3') setTimeout(() => { fpsChk.checked = !!window.__fhDbg; }, 0); });
+document.body.appendChild(settingsDrop);   // panel přes celou obrazovku (v liště by ho ořízl její kontext)
 document.addEventListener('click', e => {
-  if (!settingsWrap.contains(e.target)) settingsDrop.classList.remove('open');
+  if (!settingsWrap.contains(e.target) && !settingsDrop.contains(e.target)) settingsDrop.classList.remove('open');
 });
 
 $('footer-signin-btn')?.addEventListener('click', openAuthModal);
