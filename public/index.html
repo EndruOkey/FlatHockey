@@ -2522,6 +2522,12 @@
     .lk-share { margin-top: 14px; border: 1px solid rgba(182,196,255,0.15); padding: 0 12px; }
     .lk-share summary { text-align: left; cursor: pointer; padding: 11px 0; font-size: 0.85rem; color: var(--ux-text-2); }
     .lk-share[open] { padding-bottom: 12px; }
+    .lk-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border-bottom: 1px solid var(--ux-line); margin: 4px 0 10px; }
+    .lk-tab { background: transparent !important; border: none !important; border-bottom: 2px solid transparent !important; color: var(--ux-text-2) !important; padding: 11px 6px; font: 700 0.8rem 'JetBrains Mono', monospace; letter-spacing: 0.08em; text-transform: uppercase; }
+    .lk-tab.active { color: #fff !important; border-bottom-color: var(--ux-primary) !important; }
+    .lk-group[hidden] { display: none !important; }
+    .lk-group .lk-ident { display: grid; grid-template-columns: 1fr 90px 110px; gap: 10px; margin: 0 0 4px; }
+    .lk-hint { display: block !important; font-size: 0.8rem; color: var(--ux-text-2); text-align: left; margin: 4px 0 6px; }
     #profile-rank-row, #profile-stats { display: none !important; }   /* duplicita stránky Statistiky */
     /* Žebříček: jméno zarovnané vlevo jako ostatní tabulky */
     .sv-lb-name, .sv-lb-col-name { text-align: left; }
@@ -2594,26 +2600,6 @@
           <div id="settings-dropdown" role="dialog" aria-modal="true" aria-labelledby="set-h">
             <div class="set-panel">
               <div class="set-head"><div id="set-h" class="set-title" data-i18n="settings_h">NASTAVENÍ</div><button type="button" id="set-close" class="set-close" aria-label="Zavřít">✕</button></div>
-              <section class="set-sec"><h3 data-i18n="set_player">Hráč</h3>
-              <div class="lk-ident">
-                <label class="lk-field lk-f-name">
-                  <span class="lk-field-lbl" data-i18n="lk_p_name">NAME</span>
-                  <input id="name-input" type="text" class="lk-input" data-i18n-ph="name_ph" placeholder="YOUR NAME" maxlength="14" autocomplete="off" spellcheck="false" />
-                </label>
-                <label class="lk-field lk-f-num">
-                  <span class="lk-field-lbl" data-i18n="lk_p_num">NUMBER</span>
-                  <input id="num-input" type="number" class="lk-input" min="0" max="99" placeholder="16" />
-                </label>
-                <div class="lk-field lk-f-hand">
-                  <span class="lk-field-lbl" data-i18n="lk_p_grip">GRIP</span>
-                  <div id="hand-toggle" class="lk-hand-toggle">
-                    <button type="button" class="hand-btn" data-hand="-1" aria-label="Left">L</button>
-                    <button type="button" class="hand-btn active" data-hand="1" aria-label="Right">R</button>
-                  </div>
-                </div>
-              </div>
-                <p class="set-hint" data-i18n="hand_hint">Strana, na které držíš hokejku.</p>
-              </section>
               <section class="set-sec"><h3 data-i18n="set_sound">Zvuk</h3>
                 <div class="sd-vol-row">
                   <input type="range" id="vol-slider" min="0" max="100" step="1" value="80" aria-label="Hlasitost">
@@ -2871,7 +2857,54 @@
                     <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.3" fill="currentColor" stroke="none"/><circle cx="16" cy="8" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="8" cy="16" r="1.3" fill="currentColor" stroke="none"/><circle cx="16" cy="16" r="1.3" fill="currentColor" stroke="none"/></svg>
                     <span data-i18n="lk_randomize">Randomize</span>
                   </button></div>
-              <div class="lk-group"><div class="lk-group-h" data-i18n="grp_helmet">Helma</div>
+              <div class="lk-tabs" role="tablist">
+                <button type="button" class="lk-tab active" data-lk="dres" role="tab" data-i18n="grp_jersey">Hráč a dres</button>
+                <button type="button" class="lk-tab" data-lk="helma" role="tab" data-i18n="grp_helmet">Helma</button>
+                <button type="button" class="lk-tab" data-lk="hul" role="tab" data-i18n="grp_stick">Hokejka</button>
+                <button type="button" class="lk-tab" data-lk="doplnky" role="tab" data-i18n="grp_gear">Doplňky</button>
+              </div>
+              <div class="lk-group" data-lk="dres">
+                <div class="lk-ident">
+                <label class="lk-field lk-f-name">
+                  <span class="lk-field-lbl" data-i18n="lk_p_name">NAME</span>
+                  <input id="name-input" type="text" class="lk-input" data-i18n-ph="name_ph" placeholder="YOUR NAME" maxlength="14" autocomplete="off" spellcheck="false" />
+                </label>
+                <label class="lk-field lk-f-num">
+                  <span class="lk-field-lbl" data-i18n="lk_p_num">NUMBER</span>
+                  <input id="num-input" type="number" class="lk-input" min="0" max="99" placeholder="16" />
+                </label>
+                <div class="lk-field lk-f-hand">
+                  <span class="lk-field-lbl" data-i18n="lk_p_grip">GRIP</span>
+                  <div id="hand-toggle" class="lk-hand-toggle">
+                    <button type="button" class="hand-btn" data-hand="-1" aria-label="Left">L</button>
+                    <button type="button" class="hand-btn active" data-hand="1" aria-label="Right">R</button>
+                  </div>
+                </div>
+              </div>
+                <div class="lk-hint" data-i18n="hand_hint">Strana, na které držíš hokejku.</div>
+              <div class="lk-row">
+                <div class="lk-row-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3l-5 3 2 5 3-1v11h8V10l3 1 2-5-5-3a4 4 0 0 1-8 0z"/></svg></div>
+                <div class="lk-row-lbl" data-i18n="lk_p_jersey">Dres</div>
+                <div class="swatches" id="sw-jersey"></div>
+              </div>
+              <div class="lk-row">
+                <div class="lk-row-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h16M4 13h16"/></svg></div>
+                <div class="lk-row-lbl" data-i18n="lk_p_stripe">Pruh na dresu</div>
+                <div class="swatches" id="sw-stripe"></div>
+              </div>
+              <div class="lk-row">
+                <div class="lk-row-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12l1 18h-5l-2-9-2 9H5z"/></svg></div>
+                <div class="lk-row-lbl" data-i18n="lk_p_shorts">Kalhoty</div>
+                <div class="swatches" id="sw-shorts"></div>
+              </div>
+              <div class="lk-row">
+                <div class="lk-row-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17h15l3-3v3H3zM6 17V9h6l2 4"/></svg></div>
+                <div class="lk-row-lbl" data-i18n="lk_p_laces">Tkaničky bruslí</div>
+                <div class="swatches" id="sw-laces"></div>
+              </div>
+                <div class="lk-hint" data-i18n="lk_gear_note">Výbava platí pro tréninky a hry proti botovi.</div>
+              </div>
+              <div class="lk-group" data-lk="helma" hidden>
               <div class="lk-row">
                 <div class="lk-row-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15a8 8 0 0 1 16 0v2H4z"/><path d="M12 7v4M4 17h16"/></svg></div>
                 <div class="lk-row-lbl" data-i18n="lk_p_helmet">Helmet</div>
@@ -2888,7 +2921,7 @@
                 <div class="swatches" id="sw-visor"></div>
               </div>
               </div>
-              <div class="lk-group"><div class="lk-group-h" data-i18n="grp_stick">Hokejka</div>
+              <div class="lk-group" data-lk="hul" hidden>
               <div class="lk-row">
                 <div class="lk-row-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 3 9 17"/><path d="M9 17c-2 0-4 1-5 3h6c1 0 2-1 2-2"/></svg></div>
                 <div class="lk-row-lbl" data-i18n="lk_p_stick">Stick</div>
@@ -2905,7 +2938,7 @@
                 <div class="chips" id="ts-chips"></div>
               </div>
               </div>
-              <div class="lk-group"><div class="lk-group-h" data-i18n="grp_gear">Rukavice a stopa</div>
+              <div class="lk-group" data-lk="doplnky" hidden>
               <div class="lk-row">
                 <div class="lk-row-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 20v-6l-2-4 2-1 2 3V5h2v6V4h2v7V5h2v7V7h2v8l-2 5z"/></svg></div>
                 <div class="lk-row-lbl" data-i18n="lk_p_gloves">Gloves</div>
@@ -2968,22 +3001,11 @@
           <!-- Offscreen canvas still required by drawPreview(); hidden (was the empty light-blue box) -->
           <div class="lk-minimap" hidden><canvas id="prof-preview" width="320" height="100"></canvas></div>
 
-          <!-- Gear info note -->
-          <div class="lk-gear-note">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            <span data-i18n="lk_gear_note">Gear applies to all solo &amp; pond games. In team games, your jersey takes the team color.</span>
-          </div>
+
+          <!-- Hidden swatch containers (JS needs them in DOM) -->
 
           <!-- Auto-save status -->
           <div class="lk-autosave" id="lk-autosave"></div>
-
-          <!-- Hidden swatch containers (JS needs them in DOM) -->
-          <div id="lk-hidden-swatches" style="display:none;position:absolute;pointer-events:none">
-            <div class="swatches" id="sw-jersey"></div>
-            <div class="swatches" id="sw-shorts"></div>
-            <div class="swatches" id="sw-stripe"></div>
-            <div class="swatches" id="sw-laces"></div>
-          </div>
 
           <!-- rank stat placeholders for JS (hidden) -->
           <span id="stat-position" style="display:none"></span>

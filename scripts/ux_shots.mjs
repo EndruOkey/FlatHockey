@@ -33,6 +33,8 @@ await click('go-online'); await shot('03-browse');
 await click('mn-tab-home'); await click('vm-create-btn'); await shot('04-create');
 await p.locator('.sv-teams-adv summary').click(); await shot('04b-create-teams');
 await click('mn-tab-locker'); await shot('05-locker');
+for (const k of ['helma','hul','doplnky']) { await p.click(`.lk-tab[data-lk=${k}]`); await shot('05-locker-' + k); }
+await p.click('.lk-tab[data-lk=dres]');
 await click('mn-tab-stats'); await shot('06-stats');
 await click('mn-tab-home'); await click('vm-create-btn'); await click('create-go'); await p.waitForTimeout(800); await shot('08-wait');
 await click('mn-tab-home'); await click('settings-btn'); await shot('07-settings'); await p.keyboard.press('Escape');

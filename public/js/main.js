@@ -904,6 +904,12 @@ _dimToggle?.querySelectorAll('.lk-dim-btn').forEach(b => b.addEventListener('cli
 // deterministic verification hook
 window._fh3d = () => ({ is3D: _is3D, hasViewer: !!_viewer3d, loading: _viewer3dLoading, failed: _three_failed, running: _viewer3d ? _viewer3d.running() : false });
 
+// Šatna: záložky (Hráč a dres / Helma / Hokejka / Rukavice a stopa)
+document.querySelectorAll('.lk-tab').forEach(tb => tb.addEventListener('click', () => {
+  document.querySelectorAll('.lk-tab').forEach(x => x.classList.toggle('active', x === tb));
+  document.querySelectorAll('.lk-group[data-lk]').forEach(g => { g.hidden = g.dataset.lk !== tb.dataset.lk; });
+}));
+
 // ── Create form (týmy = dlaždice) ─────────────────────────────────────
 const swHome = makeSwatches($('sw-home'), '#3a9fff');
 const swAway = makeSwatches($('sw-away'), '#ff4455');
