@@ -31,6 +31,7 @@ jobs:
       - run: npm run test:scorehack
       - run: npm run test:balance
       - run: npm run test:freeze
+      - run: npm run test:cc
       - run: npm run test:bot
 
   deploy:

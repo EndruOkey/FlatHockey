@@ -233,6 +233,7 @@ export class PlayerBase {
     if (this._shootCooldown > 0 || this._deflectCool > 0) return false;
     const inSpeed = Math.hypot(puck.vx, puck.vy);
     if (inSpeed < 150) return false;                 // jen letící střela/pas
+    if (PLAYER.receiveFirst && this.canPickup(puck)) return false;   // zpracovatelný puk (pas) převezmi, netečuj
     const tip = this.stickTip;
     if (Math.hypot(puck.x - tip.x, puck.y - tip.y) > PLAYER.pickupTipRadius + 2) return false;
     // Výchylka kolem aktuálního směru — částečně k hokejce/tělu (tečované góly)
@@ -257,13 +258,14 @@ export class PlayerBase {
     other.x += nx * pen * 0.5; other.y += ny * pen * 0.5;
     // utlum přibližování
     const rel = (other.vx - this.vx) * nx + (other.vy - this.vy) * ny;
+    const closing = Math.max(0, -rel);   // rychlost srážky (px/s) — měřítko odrazu
     if (rel < 0) {
       const imp = rel * 0.5;
       this.vx  += nx * imp; this.vy  += ny * imp;
       other.vx -= nx * imp; other.vy -= ny * imp;
     }
-    // Lehký knockback — oba se od sebe symetricky odrazí (bumpnutí)
-    const KB = 85;
+    // Knockback úměrný síle srážky (dřív pevných 85 px/s i při lehkém doteku): lehký dotyk ≈ nic, plný náraz ≤ KB_MAX
+    const KB = Math.min(PLAYER.kbMax, closing * PLAYER.kbFactor);
     this.vx  -= nx * KB; this.vy  -= ny * KB;
     other.vx += nx * KB; other.vy += ny * KB;
     this._knockT = other._knockT = 0.2; // dočasně zpomalí útlum, aby náraz dojel
@@ -300,20 +302,26 @@ export class PlayerBase {
 
     this._crossCheckCool = 0.55;
 
-    // Strip puck
+    // Strip puck — a nositel ho NESMÍ hned sebrat zpět (dřív bez pauzy → bot měl puk dál i po crosschecku)
     if (other.hasPuck) {
       other.hasPuck    = false;
       other.charge     = 0;
       other.overcharged = false;
+      other._chargeDecaying = false; other._oneTimer = false;
+      other._shootCooldown = 0.6;
+      if (this._puckRef) {             // puk odletí ve směru úderu (nositel ho ztratí z hole)
+        const pk = this._puckRef, ang = Math.atan2(dy, dx);
+        pk.vx = Math.cos(ang) * 110 + (other.vx || 0) * 0.3; pk.vy = Math.sin(ang) * 110 + (other.vy || 0) * 0.3; pk.vz = 0;
+      }
     }
 
     // Náraz — strčí soupeře (ne vystřelí): 120 < top speed 180, aby to nebylo „funny"; checker se lehce zbrzdí
     const nx = dx / dist;
     const ny = dy / dist;
-    other.vx += nx * 120;
-    other.vy += ny * 120;
-    this.vx  -= nx * 55;
-    this.vy  -= ny * 55;
+    other.vx += nx * PLAYER.ccPush;
+    other.vy += ny * PLAYER.ccPush;
+    this.vx  -= nx * PLAYER.ccPush * 0.45;
+    this.vy  -= ny * PLAYER.ccPush * 0.45;
     other._knockT = 0.18; this._knockT = 0.1;
   }
 
@@ -330,7 +338,7 @@ export class PlayerBase {
     if (il > 1) { ix /= il; iy /= il; }         // diagonála není rychlejší
     const hasInput = il > 0.01;
 
-    let topSpeed = PLAYER.speed * (crossChecking ? 1.12 : 1);
+    let topSpeed = PLAYER.speed * (crossChecking ? PLAYER.ccSpeed : 1);   // crosscheck = hůl napřed, pomaleji než bruslení
     if (this.hasPuck) topSpeed *= 0.92;
     if (charging) topSpeed *= clamp(1 - (this.charge || 0) * 0.85, 0.12, 1);
     // Kurzor blízko = hůl stažená = pohyb výrazně pomalejší (kratší krok)

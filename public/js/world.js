@@ -60,6 +60,7 @@ export class World {
 
     // Cross-check + kolize mezi hráči
     const players = this.players;
+    for (const p of players) p._puckRef = puck;   // crosscheck potřebuje puk (odstrčí ho nositeli z hole)
     for (let i = 0; i < players.length; i++)
       for (let j = 0; j < players.length; j++)
         if (i !== j) players[i].tryCrossCheck(players[j]);

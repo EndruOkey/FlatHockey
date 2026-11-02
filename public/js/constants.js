@@ -4,6 +4,8 @@
 const _envTempo = (typeof process !== 'undefined' && process.env && Number(process.env.FH_TEMPO)) || 0;
 export const TEMPO = _envTempo > 0 ? _envTempo : 1;
 
+const _penv = (k, d) => (typeof process !== 'undefined' && process.env && process.env[k] != null && process.env[k] !== '') ? Number(process.env[k]) : d;
+
 export const RINK = {
   w: 1080, h: 456,
   cornerR: 80,
@@ -32,6 +34,12 @@ export const PLAYER = {
   stickLen: 16,    // úměrně k tělu
   pickupTipRadius: 10,
   // Ochrana po převzetí puku (s): tak dlouho ho soupeř holí nevyrazí → méně chaosu. Env FH_GRACE pro měření.
+  // Kontakt a crosscheck (2026-11-02; env FH_* jen pro měření v Node)
+  kbMax:    _penv('FH_KBMAX', 45),     // px/s — strop odrazu při srážce (dřív pevných 85)
+  kbFactor: _penv('FH_KBF', 0.35),     // odraz = rychlost srážky × faktor
+  ccSpeed:  _penv('FH_CCSPD', 0.9),    // rychlost při crosschecku × top speed (dřív 1.12)
+  ccPush:   _penv('FH_CCPUSH', 80),    // px/s — strčení soupeře crosscheckem (dřív 120)
+  receiveFirst: _penv('FH_RECV', 1) > 0,   // pas, který jde zpracovat, hráč převezme (dřív se od hole náhodně odrazil)
   stealGrace: ((typeof process !== 'undefined' && process.env && process.env.FH_GRACE != null) ? Number(process.env.FH_GRACE) : 1.2),   // 1.2 = změřeno scripts/tempo_sweep.mjs (2026-11-02)     // dosah čepele na puk (velkorysejší úchop)
   pickupMaxRelSpeed: 420,  // ať jde chytit i rychlá přihrávka
   colors: { home: '#3a9fff', away: '#ff4455', passer: '#22cc88' },

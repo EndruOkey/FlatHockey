@@ -170,12 +170,19 @@ function _updateAim(p, rawAim, dt) {
   p.aimAngle = lerpAngle(p.aimAngle, rawAim, Math.min(1, rate * dt));
 }
 
+const LEAD_K = (typeof process !== 'undefined' && process.env.FH_LEADK) ? Number(process.env.FH_LEADK) : 0.7;   // změřeno scripts/pass_test.mjs: 0.7 → 92 % převzatých (dřív 46 %)
 function leadAim(from, target, speed) {
-  // Předvídání kam spoluhráč dojede — TLUMENÉ (0.6), aby rychlá změna směru nepřepálila pas.
-  const dist = Math.hypot(target.x - from.x, target.y - from.y) || 1;
-  const t = (dist / speed) * 0.6;
-  const tx = target.x + (target.vx || 0) * t;
-  const ty = target.y + (target.vy || 0) * t;
+  // Přihrávka DO JÍZDY: místo setkání = kde bude čepel příjemce, až tam puk (zpomalující o PUCK.decel) dojede.
+  // Dřív: tlumené 0.6 × lineární čas bez zpomalení → puk chodil za hráče („na paty“). 3 iterace stačí.
+  const tip = target;   // míří na střed těla příjemce (změřeno: čepel dávala jen 25–33 %)
+  const a = PUCK.decel;
+  let tx = tip.x, ty = tip.y;
+  for (let i = 0; i < 3; i++) {
+    const d = Math.hypot(tx - from.x, ty - from.y) || 1;
+    const disc = speed * speed - 2 * a * d;
+    const t = disc > 0 ? (speed - Math.sqrt(disc)) / a : speed / a;   // doba letu se zpomalením
+    tx = tip.x + (target.vx || 0) * t * LEAD_K; ty = tip.y + (target.vy || 0) * t * LEAD_K;
+  }
   return Math.atan2(ty - from.y, tx - from.x);
 }
 
