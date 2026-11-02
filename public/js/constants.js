@@ -30,7 +30,9 @@ export const PLAYER = {
   decel: 70,       // skluz při puštění (glide), ale kontrolovatelný
   turnRate: 3.8,   // rotace — střed: ovladatelná, ne těžkopádná ani twitchy
   stickLen: 16,    // úměrně k tělu
-  pickupTipRadius: 10,     // dosah čepele na puk (velkorysejší úchop)
+  pickupTipRadius: 10,
+  // Ochrana po převzetí puku (s): tak dlouho ho soupeř holí nevyrazí → méně chaosu. Env FH_GRACE pro měření.
+  stealGrace: ((typeof process !== 'undefined' && process.env && process.env.FH_GRACE != null) ? Number(process.env.FH_GRACE) : 1.2),   // 1.2 = změřeno scripts/tempo_sweep.mjs (2026-11-02)     // dosah čepele na puk (velkorysejší úchop)
   pickupMaxRelSpeed: 420,  // ať jde chytit i rychlá přihrávka
   colors: { home: '#3a9fff', away: '#ff4455', passer: '#22cc88' },
 };

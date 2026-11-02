@@ -1,4 +1,5 @@
 import { makeRng } from './rng.js';
+import { PLAYER } from './constants.js';
 
 export class World {
   constructor(entities, seed = 1) {
@@ -80,7 +81,7 @@ export class World {
 
     const carrier = this.players.find(p => p.hasPuck);
     if (carrier) {
-      for (const p of this.players) {
+      if ((carrier._possT ?? 99) >= PLAYER.stealGrace) for (const p of this.players) {
         if (p === carrier || p.team === carrier.team) continue;
         if (p.canSteal(puck)) { p.stealFrom(carrier, puck); break; }
       }

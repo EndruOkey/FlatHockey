@@ -130,6 +130,7 @@ export class PlayerBase {
   }
 
   _grabPuck() {
+    if (!this.hasPuck) this._possT = 0;   // čerstvé převzetí → běží ochrana (PLAYER.stealGrace)
     this.hasPuck    = true;
     this.forehand   = true;
     this.carryAngle = this.aimAngle; // puk navázán na aktuální směr hole
@@ -155,7 +156,7 @@ export class PlayerBase {
     carrier.hasPuck = false;
     carrier.charge = 0; carrier._chargeDecaying = false; carrier.overcharged = false; carrier._oneTimer = false;
     carrier._shootCooldown = 0.55;
-    // Puk se uvolní v náhodném směru (50-50 battle) — žádný instant transfer
+    // Puk se uvolní v náhodném směru (50-50 battle) — žádný instant transfer (čisté převzetí chaos zvyšovalo, změřeno)
     const tip = carrier.stickTip;
     const kickDir = carrier.carryAngle + (this.rng.next() - 0.5) * 1.1;
     puck.x  = tip.x;
@@ -438,6 +439,7 @@ export class Player extends PlayerBase {
   }
 
   update(dt, world) {
+    if (this.hasPuck) this._possT = (this._possT ?? 0) + dt;
     if (this._shootCooldown > 0) this._shootCooldown -= dt;
     if (this._passCooldown  > 0) this._passCooldown  -= dt;
     if (this._deflectCool   > 0) this._deflectCool   -= dt;

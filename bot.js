@@ -28,7 +28,7 @@ const NET_CLEAR   = 50;           // px — za brankou: dokud je |y od středu| 
 const STANDOFF    = 12;           // px za puk (směrem od soupeře)
 const LOOK        = 120;          // px — jak daleko dopředu hledá soupeře v cestě
 const CLEAR       = 26;           // px — boční odstup od soupeře na dráze (poloměry 7+7 + rezerva)
-const PRESS_R     = 34;           // px — soupeř takhle blízko = nátlak → pas
+const PRESS_R     = (typeof process !== 'undefined' && Number(process.env.FH_PRESS)) || 20;           // px — soupeř takhle blízko = nátlak → pas
 const PASS_MIN    = 50, PASS_MAX = 260, PASS_CD = TT(90);   // px / ticky pauzy mezi pasy
 const PASS_FAR    = 150;          // px od branky: dál než to se vyplatí přihrát lepšímu
 const SUP_AHEAD   = 80, SUP_BACK = 55, SUP_WIDE = 100;  // rozestavení podpory
