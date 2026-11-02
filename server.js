@@ -24,7 +24,7 @@ import { Player } from './public/js/entities/Player.js';
 import { Puck } from './public/js/entities/Puck.js';
 import { Goalie } from './public/js/entities/Goalie.js';
 import { Rink } from './public/js/entities/Rink.js';
-import { RINK, PUCK } from './public/js/constants.js';
+import { RINK, PUCK, TEMPO } from './public/js/constants.js';
 import { lerpAngle, clamp } from './public/js/utils.js';
 import { botThink, makeBotBrain, hashSeed } from './bot.js';
 import { makeRng } from './public/js/rng.js';
@@ -682,13 +682,13 @@ function stepMatch(match) {
     // Zaseknutá/skrytá záložka přestane posílat vstup → po 300 ms hráč nejede dál jedním směrem
     else if (inp._stamp && Date.now() - inp._stamp > 300) { inp.dx = 0; inp.dy = 0; inp.lmb = false; inp.rmb = false; inp.mmb = false; }
     computeEdges(inp);
-    if (!match.world._goalLock) playerActions(p, inp, DT, match);
+    if (!match.world._goalLock) playerActions(p, inp, DT * TEMPO, match);
   }
 
   // Rychlost puku PŘED updatem (pro detekci „save" = zastavení tvrdé střely na vlastní branku)
   const _pv0spd = Math.hypot(match.puck.vx, match.puck.vy), _pv0vx = match.puck.vx;
 
-  match.world.update(DT);
+  match.world.update(DT * TEMPO);   // fyzika v herním tempu; časomíra (match.clock) běží reálně
 
   // SAVE = polní hráč zastaví tvrdou ránu mířící k VLASTNÍ brance — odrazem od těla (Puck._blockBy)
   // NEBO obranným zachycením (nově získá puk, co byl rychlá střela k jeho brance). Cooldown proti dvojpočtu.

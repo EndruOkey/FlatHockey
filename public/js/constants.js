@@ -1,4 +1,9 @@
 // Měřítko ≈ NHL: 1080×456 px = 200×85 ft → 5.3 px/ft. Velikosti sedí na realitu.
+// TEMPO hry: jednotné zpomalení CELÉ simulace (bruslení, puk, gólman, časování botů) — hra vypadá stejně, jen klidněji.
+// Časomíra a herní prodlevy (buly, píšťalka) běží v reálném čase. Pro měření lze přepsat env FH_TEMPO (jen Node).
+const _envTempo = (typeof process !== 'undefined' && process.env && Number(process.env.FH_TEMPO)) || 0;
+export const TEMPO = _envTempo > 0 ? _envTempo : 1;
+
 export const RINK = {
   w: 1080, h: 456,
   cornerR: 80,

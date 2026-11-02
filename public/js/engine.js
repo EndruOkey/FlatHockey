@@ -48,9 +48,10 @@ export class Engine {
     const cam = this.cameraOverride ? this.cameraOverride(this.canvas) : computeCamera(this.canvas);
     const ctx = this.canvas.getContext('2d');
 
-    this.onTick?.(dt, cam);
-    this._world.update(dt);
-    this.onAfterTick?.(dt, cam);
+    const sdt = dt * (this.tempo ?? 1);   // lokální simulace (trénink/tutoriál) běží v herním tempu
+    this.onTick?.(sdt, cam);
+    this._world.update(sdt);
+    this.onAfterTick?.(sdt, cam);
     this._world.draw(ctx, cam);
     this.onDraw?.(ctx, cam);
 

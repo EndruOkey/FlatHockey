@@ -1,4 +1,4 @@
-import { RINK, PLAYER, PUCK } from './constants.js';
+import { RINK, PLAYER, PUCK, TEMPO } from './constants.js';
 import { lerpAngle, clamp } from './utils.js';
 import { t } from './i18n.js';
 import { Input } from './input.js';
@@ -121,8 +121,8 @@ export class NetGame {
       // CLIENT-SIDE PREDICTION — vlastní hráč se hýbe OKAMŽITĚ (bez čekání na server);
       // server zůstává autoritativní, _interp pak jemně koriguje drift.
       me.aimDist = aimDist;
-      _updateAim(me, aim, dt);
-      if (!this.locked) me.update(dt);   // při buly setu / oslavě / píšťalce stojíme čelem k puku
+      _updateAim(me, aim, dt * TEMPO);   // predikce v herním tempu (jako server)
+      if (!this.locked) me.update(dt * TEMPO);   // při buly setu / oslavě / píšťalce stojíme čelem k puku
       // Client-side passReq: okamžitá odezva (server si to taky nastaví)
       if (this.input.mmbJustPressed && !me.hasPuck) me.passReq = 0.9;
     }
@@ -586,6 +586,7 @@ export class SandboxGame {
     this._whistleBanner = null;
 
     this.engine = new Engine(canvas);
+    this.engine.tempo     = TEMPO;   // lokální fyzika v herním tempu
     this._rWas            = false;
     this._tabWas          = false;
     this._rWas            = false;

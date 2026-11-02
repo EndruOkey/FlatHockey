@@ -83,20 +83,21 @@ function sim3v3(seed, minutes) {
   const { l, m } = setup('B3_' + seed, seed, 3, 3, true);
   botify(l, m);
   const r = rec = newRec(m);
-  let ph = 0, pa = 0, liveT = 0, carryT = 0, run = 0, runOwner = null, longest = 0;
+  let ph = 0, pa = 0, liveT = 0, carryT = 0, run = 0, runOwner = null, longest = 0, lastTeam = null, teamChanges = 0, runs = 0, runSum = 0;
   for (let t = 0; t < minutes * 60 * HZ; t++) {
     stepMatch(m);
     if (m.score.home > ph) r.goal('home');
     if (m.score.away > pa) r.goal('away');
     ph = m.score.home; pa = m.score.away;
-    if (!live(m)) { run = 0; runOwner = null; continue; }
+    if (!live(m)) { if (run) { runs++; runSum += run; } run = 0; runOwner = null; lastTeam = null; continue; }
     liveT++;
     let o = null; for (const p of m.players.values()) if (p.hasPuck) o = p;
-    if (o) { carryT++; if (o === runOwner) run++; else { run = 1; runOwner = o; } if (run > longest) longest = run; }
-    else { run = 0; runOwner = null; }
+    if (o) { carryT++; if (o === runOwner) run++; else { if (run) { runs++; runSum += run; } run = 1; runOwner = o; } if (run > longest) longest = run;
+             if (lastTeam && lastTeam !== o.team) teamChanges++; lastTeam = o.team; }
+    else { if (run) { runs++; runSum += run; } run = 0; runOwner = null; }
   }
   rec = null; lobbies.delete(l.id);
-  return { score: { ...m.score }, shots: r.shots, steals: r.steals, liveT, carryT, longest };
+  return { score: { ...m.score }, shots: r.shots, steals: r.steals, liveT, carryT, longest, teamChanges, runs, runSum };
 }
 
 // ---- 1v1 bot (away) vs stojici clovek ----
@@ -182,11 +183,11 @@ function longSlap(trials, x = 600, y = 228) {
 export function runAll(opts = {}) {
   const seeds = opts.seeds ?? 30, minutes = opts.minutes ?? 5;
   const S = {};
-  let hg = 0, ag = 0, withGoal = 0, shots = [], steals = 0, liveT = 0, carryT = 0, longest = 0;
+  let hg = 0, ag = 0, withGoal = 0, shots = [], steals = 0, liveT = 0, carryT = 0, longest = 0, teamChanges = 0, runs = 0, runSum = 0;
   for (let s = 1; s <= seeds; s++) {
     const r = sim3v3(s, minutes);
     hg += r.score.home; ag += r.score.away; if (r.score.home + r.score.away > 0) withGoal++;
-    shots.push(...r.shots); steals += r.steals; liveT += r.liveT; carryT += r.carryT; longest = Math.max(longest, r.longest);
+    shots.push(...r.shots); steals += r.steals; teamChanges += r.teamChanges; runs += r.runs; runSum += r.runSum; liveT += r.liveT; carryT += r.carryT; longest = Math.max(longest, r.longest);
   }
   S.goals_per_game_home = +(hg / seeds).toFixed(2); S.goals_per_game_away = +(ag / seeds).toFixed(2);
   S.goals_per_game_total = +((hg + ag) / seeds).toFixed(2);
@@ -208,6 +209,9 @@ export function runAll(opts = {}) {
   S.possession_pct = pct(carryT, liveT);
   S.longest_carry_s = +(longest / HZ).toFixed(1);
   S.steals_per_min = +(steals / (liveT / HZ / 60)).toFixed(2);
+  // Chaos (informativní, reálný čas): změny týmu u puku za minutu a průměrná délka jednoho držení
+  S.chaos_team_changes_per_min = +(teamChanges / (liveT / HZ / 60)).toFixed(2);
+  S.chaos_avg_carry_s = runs ? +(runSum / runs / HZ).toFixed(2) : 0;
   const st = stallTest(1, 120); S.stall_possession_pct = pct(st.held, st.liveT);
   const cm = opts.creaseMin ?? 40;
   const parked = creaseTest(1, cm, 118, 228), corner = creaseTest(1, cm, 40, 40);

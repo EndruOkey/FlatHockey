@@ -1,15 +1,17 @@
-import { RINK } from './public/js/constants.js';
+import { RINK, TEMPO } from './public/js/constants.js';
+// Časování botů je v ticích → při jiném tempu natáhnout stejným dílem (herní sekunda = TICK_HZ/TEMPO ticků)
+const TT = v => Math.max(1, Math.round(v / TEMPO));
 
 // Bot = obyčejný Player, jen vstupy (směr, míření, střela) mu generuje server místo klávesnice.
 // Stejná fyzika i pravidla jako člověk. Náhoda je seedovaná → stejný zápas = stejné chování.
 
-const THINK_EVERY = 6;            // rozhoduje 10× za s (reakce ~100 ms jako člověk)
+const THINK_EVERY = TT(6);            // rozhoduje 10× za s (reakce ~100 ms jako člověk)
 const AIM_ERR     = 0.02;         // max chyba míření při střele (rad) — střela podél tyčky snese jen pár px
 // Gólman kryje celou bránu proti pomalé střele → bot střílí silně (~0.7 s nápřah) těsně podél horní tyčky
-const SHOT_HOLD   = [18, 46];     // ticky nápřahu — mix přízemních ran (nízké rohy) i tvrdých zvednutých (horní roh), ať bot neskončí jen na roofu proti chytřejšímu gólmanovi
+const SHOT_HOLD   = [TT(18), TT(46)];     // ticky nápřahu — mix přízemních ran (nízké rohy) i tvrdých zvednutých (horní roh), ať bot neskončí jen na roofu proti chytřejšímu gólmanovi
 const SHOT_RANGE  = [130, 170];   // px od branky, odkud bot vystřelí
 const QUICK_RANGE = 40;           // úplně zblízka rychlá střela (gólman je do ~28 px vypíchne)
-const QUICK_HOLD  = 6;
+const QUICK_HOLD  = TT(6);
 const LANE        = 8;            // px nad středem — bot najíždí skoro středem, gólman tam stojí nejblíž ose
 const SLOT_Y      = 48;           // střílí jen z úzkého slotu kolem osy (|y od středu| < SLOT_Y)
 const COAST       = 0.35;         // s — kam bot dojede setrvačností za nápřahu (do slotu se počítá s tím)
@@ -27,7 +29,7 @@ const STANDOFF    = 12;           // px za puk (směrem od soupeře)
 const LOOK        = 120;          // px — jak daleko dopředu hledá soupeře v cestě
 const CLEAR       = 26;           // px — boční odstup od soupeře na dráze (poloměry 7+7 + rezerva)
 const PRESS_R     = 34;           // px — soupeř takhle blízko = nátlak → pas
-const PASS_MIN    = 50, PASS_MAX = 260, PASS_CD = 90;   // px / ticky pauzy mezi pasy
+const PASS_MIN    = 50, PASS_MAX = 260, PASS_CD = TT(90);   // px / ticky pauzy mezi pasy
 const PASS_FAR    = 150;          // px od branky: dál než to se vyplatí přihrát lepšímu
 const SUP_AHEAD   = 80, SUP_BACK = 55, SUP_WIDE = 100;  // rozestavení podpory
 const DIAG        = 0.38;         // práh pro diagonálu (8 směrů jako WASD)
