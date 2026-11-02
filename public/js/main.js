@@ -13,6 +13,8 @@ const $ = id => document.getElementById(id);
 const canvas = $('canvas');
 const lobby  = $('lobby');
 const toastEl = $('toast');
+const IS_MOBILE = matchMedia('(max-width: 759px), (pointer: coarse) and (hover: none)').matches;
+document.documentElement.classList.toggle('mobile', IS_MOBILE);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // Volume slidery — inicializace + sync při změně
@@ -1110,6 +1112,26 @@ $('profile-done').onclick = () => {
 // ── Hlavní menu ───────────────────────────────────────────────────────
 $('go-profile').onclick = () => { showView('profile'); drawPreview(); _loadStats(); };
 $('go-stats').onclick = () => showView('stats');
+$('go-store').onclick = () => showView('store');
+// ── Divák (sledování běžícího zápasu bez ovládání) ───────────────────
+let _spectating = false;
+function watchLobby(l) {
+  if (!l.hp) { net.watchLobby(l.id); return; }
+  askPassword(l.name).then(pass => { if (pass != null) net.watchLobby(l.id, pass); });
+}
+function exitSpectate() {
+  net.unwatchLobby(); _spectating = false; $('spec-bar').hidden = true;
+  stopGame(); showView('browse'); net.listLobbies();
+}
+$('spec-leave').onclick = exitSpectate;
+// ── Mobil: hrát nejde (myš + klávesnice), ale statistiky, Šatna, Obchod a sledování ano ──
+if (IS_MOBILE) {
+  for (const id of ['go-play', 'vm-create-btn', 'go-solo', 'go-tutorial']) {
+    const b = $(id); b.classList.add('pc-only'); b.setAttribute('aria-disabled', 'true');
+    // capture: proběhne před jakýmkoli onclick (i později přiřazeným) a zastaví ho
+    b.addEventListener('click', (e) => { e.preventDefault(); e.stopImmediatePropagation(); setStatus(t('pc_only'), '#FFB020'); }, true);
+  }
+}
 function _updateNavPlayer(rp = 1000, pos = null, cred = 0) {
   const pr = profile();
   $('nav-p-num').textContent = (pr.number === '' || pr.number == null) ? '#' : pr.number;
@@ -1136,7 +1158,7 @@ window.addEventListener('keydown', e => {
   else if (e.key === 'ArrowUp') { e.preventDefault(); m3Select(_m3Sel - 1, true); }
   else if (e.key === 'Enter' && document.activeElement === document.body) { e.preventDefault(); _m3Items[_m3Sel].click(); }
 });
-m3Select(0);
+m3Select(IS_MOBILE ? 1 : 0);
 async function _loadStats() {
   const [stats, rankData] = await Promise.all([loadServerStats(), loadRankAndCredits()]);
   const user = getUser();
@@ -1348,7 +1370,13 @@ function renderLobbyList(list) {
       `<div class="li-sub">${esc(l.home)} vs ${esc(l.away)} · ${l.count}/${l.max}</div></div>` + right;
     if (full) div.classList.add('full');
     div.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); div.click(); } });
+    if (l.state === 'playing') {
+      const w = document.createElement('button'); w.type = 'button'; w.className = 'li-watch'; w.textContent = t('watch');
+      w.onclick = (e) => { e.stopPropagation(); watchLobby(l); };
+      div.appendChild(w);
+    }
     div.onclick = () => {
+      if (IS_MOBILE) { if (l.state === 'playing') watchLobby(l); else setStatus(t('pc_only'), '#FFB020'); return; }
       if (full) { setStatus(t('err_full'), '#e66'); return; }
       if (!l.hp) { _lastPass = null; net.joinLobby(l.id, profile(), undefined); return; }
       askPassword(l.name).then(pass => {
@@ -1399,7 +1427,7 @@ net.onLobbyJoined = (st) => {
   lastLobbyId = st.id; localStorage.setItem('fh_last_lobby', st.id); setStatus(''); renderWait(st);
   if (_botPending) { _botPending = false; net.startLobby(); }   // „Hrát proti botovi" = vytvoř + hned start
 };
-net.onLobbyState  = (st) => { if (!inGame) renderWait(st); };
+net.onLobbyState  = (st) => { if (!inGame && !_spectating) renderWait(st); };
 net.onLobbyError  = (code) => { _botPending = false; setStatus(t(code), '#ff4455'); };
 document.querySelectorAll('.pick-btn').forEach(b => b.addEventListener('click', () => net.setTeam(b.dataset.team)));
 $('start-btn').onclick   = () => net.startLobby();
@@ -1463,8 +1491,13 @@ $('mr-rematch-btn').addEventListener('click', () => {
 // ── Start hry ─────────────────────────────────────────────────────────
 net.onLobbyStart = (data) => {
   if (inGame && currentGame?.stop) currentGame.stop();
+  if (IS_MOBILE && !data?.spectate) { net.leaveLobby(); setStatus(t('pc_only'), '#FFB020'); return; }   // mobil nehraje
+  _spectating = !!data?.spectate;
   const g = new NetGame(canvas, net, net.id, data && data.settings);
+  $('spec-bar').hidden = !_spectating;
+  if (_spectating) $('spec-name').textContent = data?.settings?.name || '';
   g.onExit = () => {
+    if (_spectating) { exitSpectate(); return; }
     const rewards = _lastMatchRewards;
     _lastMatchRewards = null;
     showMatchResult(rewards, g);
@@ -1514,7 +1547,7 @@ const pauseMenu = $('pause-menu'), pauseTitle = $('pause-title'), resumeBtn = $(
 function showPause(title=t('pause'), disc=false) { currentGame?.input?.clear(); pauseTitle.textContent = title; resumeBtn.style.display = disc ? 'none' : ''; pauseMenu.style.display = 'flex'; cgGameplay(false); }
 const hidePause = () => { pauseMenu.style.display = 'none'; if (inGame) cgGameplay(true); };
 resumeBtn.addEventListener('click', hidePause);
-leaveBtn.addEventListener('click', () => { net.leaveLobby(); lastLobbyId = null; localStorage.removeItem('fh_last_lobby'); stopGame(); hidePause(); showView('main'); });
+leaveBtn.addEventListener('click', () => { if (_spectating) { hidePause(); exitSpectate(); return; } net.leaveLobby(); lastLobbyId = null; localStorage.removeItem('fh_last_lobby'); stopGame(); hidePause(); showView('main'); });
 net.onPeerLeft = () => { if (inGame) currentGame?.notify?.(t('peer_left')); };  // hra běží dál, jen upozorni
 // Esc zavře okna a rozbalené nabídky všude (ne jen ve hře)
 window.addEventListener('keydown', e => {

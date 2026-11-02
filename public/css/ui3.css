@@ -113,3 +113,28 @@ kbd, .key3 { display: inline-block; min-width: 30px; text-align: center; border:
 #lobby.on-main #v-main { position: relative !important; inset: auto !important; overflow: visible !important; }
 #lobby .m3-title { display: block !important; }
 .nav3-pill, .nav3-player { white-space: nowrap; }
+
+/* ── Mobil: hraje se jen na PC, zbytek funguje ───────────────────── */
+#mobile-block { display: none !important; }
+html.mobile .m3-item.pc-only { opacity: .45; }
+html.mobile .m3-item.pc-only .m3-label small { display: block; }
+html.mobile .m3-item.pc-only .m3-label small::before { content: '🔒 '; }
+html.mobile #create-btn, html.mobile .sv-join-row { display: none !important; }
+@media (max-width: 640px) {
+  #main-nav { height: 72px !important; } #lobby > .box { height: calc(100% - 72px); }
+  .m3 { padding: 8px 16px 32px; } .m3-item, .m3-item.on { width: 100%; }
+  .m3-season { padding: 16px 20px; } .m3-season-name, .m3-season-elo { font-size: 28px; }
+  #main-nav .nav-logo { font-size: 28px !important; }
+  #lobby > .box { overflow-y: auto !important; }
+}
+/* ── Divák ───────────────────────────────────────────────────────── */
+#spec-bar { position: fixed; left: 16px; top: 16px; z-index: 60; display: flex; align-items: center; gap: 14px; padding: 8px 8px 8px 16px; color: var(--a3-text); }
+#spec-bar[hidden] { display: none; }
+#spec-bar #spec-name { font-size: 22px; }
+#spec-leave { all: unset; cursor: pointer; background: linear-gradient(90deg, var(--a3-red), var(--a3-red2)); padding: 8px 26px 8px 16px; font-size: 18px; clip-path: var(--a3-cut); }
+.li-watch { margin-left: 12px; background: transparent; border: 1px solid rgba(127,212,255,.6); color: #BFE9FF; padding: 6px 12px; font: italic 800 15px 'Barlow Condensed', sans-serif; text-transform: uppercase; cursor: pointer; }
+@media (max-width: 760px) {
+  .sv-body-stats { grid-template-columns: 1fr !important; display: grid !important; height: auto !important; }
+  .sv-stats-title-area .lk-title-line { font-size: 36px !important; }
+  #v-stats, #v-store { overflow-x: hidden; }
+}

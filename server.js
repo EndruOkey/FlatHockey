@@ -1064,6 +1064,25 @@ io.on('connection', (socket) => {
 
   socket.on('lobby:leave', () => { socket.data._voluntaryLeave = true; leaveCurrentLobby(socket); });
 
+  // Divák (2026-11-02): sleduje běžící zápas — dostává snímky místnosti, ale nemá hráče, vstupy
+  // ani místo v lobby (nepočítá se do kapacity, odměn ani statistik). Pro mobil i PC.
+  const MAX_WATCHERS = 50;
+  const stopWatching = () => { const w = socket.data.watchId; if (!w) return; socket.data.watchId = null; socket.leave('lobby:' + w); const l = lobbies.get(w); if (l) l.watchers = Math.max(0, (l.watchers || 1) - 1); };
+  socket.on('lobby:watch', ({ id, password } = {}) => {
+    if (!rateOk(socket, 'watch', 500)) return;
+    if (typeof id !== 'string') return;
+    const l = lobbies.get(id);
+    if (!l || l.state !== 'playing' || !l.match) { socket.emit('lobby:error', 'err_unavailable'); return; }
+    if (l.settings.password && l.settings.password !== String(password || '')) { socket.emit('lobby:error', 'err_password'); return; }
+    if ((l.watchers || 0) >= MAX_WATCHERS) { socket.emit('lobby:error', 'err_full'); return; }
+    leaveCurrentLobby(socket); stopWatching();
+    socket.data.watchId = id; l.watchers = (l.watchers || 0) + 1;
+    socket.join('lobby:' + id);
+    socket.emit('lobby:start', { settings: l.settings, spectate: true });
+  });
+  socket.on('lobby:unwatch', stopWatching);
+  socket.on('disconnect', stopWatching);
+
   // Síťová telemetrie z klienta (FPS, jitter snapshotů) — pro diagnostiku plynulosti, read-only v /api/netstat
   socket.on('netstat', (d) => {
     if (!rateOk(socket, 'netstat', 2000) || !d) return;

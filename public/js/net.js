@@ -71,6 +71,8 @@ export class Net {
   updateSettings(settings)             { this.socket.emit('lobby:settings', { settings }); }
   startLobby()                         { this.socket.emit('lobby:start'); }
   leaveLobby()                         { this.socket.emit('lobby:leave'); }
+  watchLobby(id, password)             { this.socket.emit('lobby:watch', { id, password }); }
+  unwatchLobby()                       { this.socket.emit('lobby:unwatch'); }
   checkSponsor(name)                   { this.socket.emit('sponsor:check', name); }
 
   input(msg) { this.socket.emit('input', msg); }
