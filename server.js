@@ -267,7 +267,10 @@ function rebuildEntities(match) {
   match.world.entities = [match.rink, ...match.players.values(), match.goalieL, match.goalieR, match.puck];
 }
 
+// Buly body v pásmech (stejné jako kreslí Rink.js: FO_X 248, FO_Y 114)
+const FO_X = 248, FO_Y = 114;
 function faceoffAt(match, fx, fy) {
+  for (const g of [match.goalieL, match.goalieR]) if (g) { g._holdTimer = 0; g._heldPuck = null; g._froze = false; }
   // Realistické rozestavení na buly: centr přímo na bodě, křídla po stranách, obránci vzadu.
   // Každý tým stojí na své OBRANNÉ straně bodu (home brání vlevo, away vpravo), čelem k bodu.
   const home = [], away = [];
@@ -388,8 +391,16 @@ function createMatch(lobbyId, seed) {
   };
   // Faul na gólmana (najetí crosscheckem) / gólman drží puk moc dlouho → píšťalka + buly.
   // Dřív nenapojeno (no-op) → crease-crashing bez postihu. Buly uprostřed = ztráta výhody.
-  world.onWhistle = ({ reason }) => {
+  world.allowFreeze = true;   // gólman smí pod tlakem podržet puk (buly v pásmu)
+  world.onWhistle = ({ reason, team }) => {
     if (match.ended || match.stoppage || match.offside || match.icing || match.setup) return;
+    if (reason === 'freeze') {
+      // Gólman podržel puk → buly na bodě v jeho obranném pásmu, na straně puku (jako v hokeji)
+      const fx = team === 'home' ? FO_X : RINK.w - FO_X;
+      const fy = match.puck.y < RINK.h / 2 ? FO_Y : RINK.h - FO_Y;
+      callStoppage(match, 'freeze', null, fx, fy);
+      return;
+    }
     callStoppage(match, reason, null, RINK.centerX, RINK.h / 2);
   };
   world.onGoal = (result) => {

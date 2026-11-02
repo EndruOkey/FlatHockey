@@ -452,10 +452,12 @@ export class NetGame {
       const cam = this._cam;
       const lx = cam.ox + this.call.lineX * cam.scale;
       const y0 = cam.oy, y1 = cam.oy + RINK.h * cam.scale;
-      ctx.save();
-      ctx.strokeStyle = this.call.color; ctx.globalAlpha = 0.35 + 0.45 * a;
-      ctx.lineWidth = 7 * cam.scale; ctx.beginPath(); ctx.moveTo(lx, y0); ctx.lineTo(lx, y1); ctx.stroke();
-      ctx.restore();
+      if (this.call.lineX != null) {   // podržení gólmanem nemá čáru
+        ctx.save();
+        ctx.strokeStyle = this.call.color; ctx.globalAlpha = 0.35 + 0.45 * a;
+        ctx.lineWidth = 7 * cam.scale; ctx.beginPath(); ctx.moveTo(lx, y0); ctx.lineTo(lx, y1); ctx.stroke();
+        ctx.restore();
+      }
       ctx.fillStyle = `rgba(0,0,0,0.5)`; ctx.fillRect(cx - 160, H * 0.3 - 30, 320, 52);
       ctx.font = 'bold 30px "Segoe UI", sans-serif'; ctx.textAlign = 'center';
       ctx.fillStyle = this.call.color; ctx.fillText(t(this.call.rule), cx, H * 0.3 + 7);

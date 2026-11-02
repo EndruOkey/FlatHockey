@@ -618,6 +618,15 @@ export class Goalie {
 
   _release(world) {
     if (!this._heldPuck) return;
+    // Pod tlakem (soupeř u gólmana) puk PODRŽ → píšťalka a buly v obranném pásmu (jako v hokeji).
+    // Jen jednou za držení (_froze) a jen v online zápase (world.allowFreeze) — trénink/tutoriál beze změny.
+    if (!this._froze && world?.allowFreeze && _underPressure(world, this)) {
+      this._froze = true;
+      this._holdTimer = 1.6;                 // drž dál, než přijde buly (stoppage 1.3 s)
+      world.whistle('freeze', this.team);
+      return;
+    }
+    this._froze = false;
     const p = this._heldPuck;
     this._heldPuck = null;
     this._noGrab = 0.6;   // bez toho pas na spoluhráče <15 px dojel pomalu (<90 px/s) a gólman ho hned znovu chytil → držel navždy
@@ -915,4 +924,14 @@ function _roundRect(ctx, x, y, w, h, rad) {
   ctx.arcTo(x,     y + h, x,     y,     rad);
   ctx.arcTo(x,     y,     x + w, y,     rad);
   ctx.closePath();
+}
+
+// Tlak na gólmana: soupeř blíž než 60 px od gólmana (deterministické, jen z pozic)
+const PRESSURE_R = 60;
+function _underPressure(world, g) {
+  for (const p of world.players) {
+    if (p.team === g.team) continue;
+    if (Math.hypot(p.x - g.x, p.y - g.y) < PRESSURE_R) return true;
+  }
+  return false;
 }
