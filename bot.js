@@ -32,6 +32,14 @@ const PRESS_R     = (typeof process !== 'undefined' && Number(process.env.FH_PRE
 const PASS_MIN    = 50, PASS_MAX = 260, PASS_CD = TT(90);   // px / ticky pauzy mezi pasy
 const PASS_FAR    = 150;          // px od branky: dál než to se vyplatí přihrát lepšímu
 const SUP_AHEAD   = 80, SUP_BACK = 55, SUP_WIDE = 100;  // rozestavení podpory
+const _env = (k, d) => (typeof process !== 'undefined' && process.env[k] != null && process.env[k] !== '') ? Number(process.env[k]) : d;
+// Obrana s odstupem (gap control): napadající bot drží GAP px před nosičem na obranné straně a napadne ho,
+// až je nosič blíž než ENGAGE px k naší brance. 0 = staré chování (napadá hned). Měřeno scripts/attack_test.mjs
+// + rubrika (2026-11-02): k ráně 0 % → 58 %, změny týmu u puku 17,7 → 14,6/min.
+const ENGAGE      = _env('FH_ENGAGE', 200);
+const GAP         = _env('FH_GAP', 120);
+const ATTACK_V    = _env('FH_ATTV', 60);   // px/s — rychlost nosiče směrem k naší brance, od které jde o nájezd
+const SECOND_COVER = _env('FH_COVER', 1);   // 1 = druhý bot kryje prostor před brankou místo druhého tlaku na puk
 const DIAG        = 0.38;         // práh pro diagonálu (8 směrů jako WASD)
 
 // Malý seedovaný PRNG (mulberry32) — deterministický, bez Math.random
@@ -202,6 +210,14 @@ export function botThink(p, inp, match) {
     // Gólman drží puk → neblokuj brankoviště, počkej před ním
     tx = g.netX + g.inX * CREASE_OUT; ty = goalY;
     ax = puck.x; ay = puck.y;
+  } else if (ENGAGE > 0 && isChaser(p, match) && (() => { const oc = [...match.players.values()].find(o => o.team !== p.team && o.hasPuck); if (!oc) return false; const dx = ownX - oc.x, dy = goalY - oc.y, dd = Math.hypot(dx, dy) || 1;
+      // odstup jen proti nájezdu: nosič jede k naší brance rychleji než ATTACK_V (stojící/couvající se napadá hned)
+      return dd > ENGAGE && (oc.vx * dx + oc.vy * dy) / dd > ATTACK_V; })()) {
+    // Nosič soupeře je ještě daleko od naší branky → nenapadej, drž odstup na obranné straně (zrcadli ho)
+    const oc = [...match.players.values()].find(o => o.team !== p.team && o.hasPuck);
+    const gx = ownX - oc.x, gy = goalY - oc.y, gd = Math.hypot(gx, gy) || 1;
+    tx = oc.x + gx / gd * GAP; ty = oc.y + gy / gd * GAP;
+    ax = oc.x; ay = oc.y;
   } else if (isChaser(p, match)) {
     // Předstih = doba, za kterou bot k puku dojede (max LEAD_MAX), ne pevných 0.25 s — jinak jen ocasí nosiče
     // po kružnici (naměřeno: 65 px za ním, puk držel 98.8 % času) místo aby mu přeťal dráhu
@@ -241,7 +257,11 @@ export function botThink(p, inp, match) {
       // ── OBRANA: puk drží soupeř / je volný. Rank 0 (nejblíž puku) tlačí na puk, ostatní
       //    si rozeberou soupeře OSOBNĚ (goal-side marking), ať to vypadá jako hra s lidmi. ──
       const oppCarrier = [...match.players.values()].find(o => o.team !== p.team && o.hasPuck) || null;
-      if (rank === 0) {
+      if (rank === 0 && SECOND_COVER && oppCarrier) {
+        // Druhý obránce nejde na puk (to by byli dva na jednoho) — kryje prostor mezi nosičem a brankou
+        tx = oppCarrier.x + (ownX - oppCarrier.x) * 0.55; ty = oppCarrier.y + (goalY - oppCarrier.y) * 0.55;
+        ax = oppCarrier.x; ay = oppCarrier.y;
+      } else if (rank === 0) {
         // Druhý na puku: tlač na nosiče/puk z vlastní strany (goal-side), ať ho zatlačí od branky
         const lead = Math.min(LEAD_MAX, Math.max(PUCK_LEAD, Math.hypot(puck.x - p.x, puck.y - p.y) / PLAYER_V));
         tx = puck.x + puck.vx * lead + dir * -6; ty = puck.y + puck.vy * lead;
