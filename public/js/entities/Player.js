@@ -468,6 +468,15 @@ function _renderPlayer(ctx, p, cam) {
   const vmag  = Math.hypot(p.vx, p.vy);
   const vdir  = Math.atan2(p.vy, p.vx);
 
+  // Ovládaný hráč: ledový kruh pod bruslařem (návrh UI: fokus #7FD4FF) — ať se v hloučku neztratíš
+  if (p._isLocal) {
+    ctx.save();
+    ctx.beginPath(); ctx.arc(sx, sy, r + 9 * s, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(127,212,255,0.18)'; ctx.fill();
+    ctx.lineWidth = 2.5 * s; ctx.strokeStyle = '#7FD4FF'; ctx.stroke();
+    ctx.restore();
+  }
+
   // Sprint trail — mizející stopa za bruslařem při rychlosti
   if (vmag > 120) {
     const tt = Math.min(1, (vmag - 120) / 80);
@@ -997,6 +1006,19 @@ function _renderPlayer(ctx, p, cam) {
     ctx.stroke();
   }
 
+  // Ovládaný hráč: štítek se jménem a šipkou dolů (návrh UI) místo prostého jména
+  if (p._isLocal) {
+    const label = (p.name || 'TY').toUpperCase();
+    ctx.font = `italic 800 ${Math.round(10 * s)}px 'Barlow Condensed', 'Segoe UI', sans-serif`;
+    const tw = ctx.measureText(label).width, ph = 16 * s, pw = tw + 10 * s;   // výška i s diakritikou (Á, Č)
+    const by = sy - r - 9 * s - 6 * s - ph;          // nad kruhem
+    ctx.fillStyle = '#1F4FD8';
+    ctx.fillRect(sx - pw / 2, by, pw, ph);
+    ctx.beginPath(); ctx.moveTo(sx - 4 * s, by + ph); ctx.lineTo(sx + 4 * s, by + ph); ctx.lineTo(sx, by + ph + 5 * s); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(label, sx, by + ph / 2 + 1.5 * s);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  } else
   // Jméno nad hráčem — v barvě týmu, jemný obrys pro čitelnost (tenké)
   if (p.name) {
     ctx.font = `${Math.round(9.5 * s)}px 'Segoe UI', sans-serif`;
