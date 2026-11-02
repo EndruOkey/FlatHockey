@@ -54,7 +54,7 @@
   </style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,700;0,900;1,700;1,900&family=JetBrains+Mono:wght@400;500;700;800&family=Anybody:ital,wght@0,400;0,700;0,800;1,400;1,700;1,800;1,900&family=Hanken+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,900;1,700;1,800;1,900&family=Barlow:wght@500;600;700&family=JetBrains+Mono:wght@400;500;700;800&family=Anybody:ital,wght@0,400;0,700;0,800;1,400;1,700;1,800;1,900&family=Hanken+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html { font-size: 100%; }
@@ -2532,6 +2532,7 @@
     /* Žebříček: jméno zarovnané vlevo jako ostatní tabulky */
     .sv-lb-name, .sv-lb-col-name { text-align: left; }
   </style>
+  <link rel="stylesheet" href="/css/ui3.css">
 </head>
 <body>
   <canvas id="canvas"></canvas>
@@ -2570,12 +2571,30 @@
   </div>
 
   <div id="lobby" class="on-splash">
+    <!-- UI v3: scéna = rozostřené levé pásmo kluziště (z návrhu Main) -->
+    <div class="scene3" aria-hidden="true"><svg viewBox="-40 170 900 506" preserveAspectRatio="xMidYMid slice">
+      <defs><radialGradient id="s3ice" cx="50%" cy="50%" r="75%"><stop offset="0" stop-color="#F4F9FE"/><stop offset="1" stop-color="#C3D9EE"/></radialGradient></defs>
+      <rect x="-300" y="-300" width="2200" height="1500" fill="#050A14"/>
+      <rect x="-6" y="104" width="1612" height="692" rx="230" fill="#0E1A2E"/><rect x="6" y="116" width="1588" height="668" rx="220" fill="#F2F5F9"/>
+      <rect x="16" y="126" width="1568" height="648" rx="212" fill="url(#s3ice)"/>
+      <g fill="none" stroke-linecap="round"><path d="M60 600 C 240 520, 420 700, 640 560 S 900 420, 1000 470" stroke="#8FB0CF" stroke-opacity=".4" stroke-width="2"/><path d="M40 330 C 200 260, 360 380, 560 300" stroke="#fff" stroke-opacity=".9" stroke-width="3"/><path d="M120 700 C 280 600, 420 560, 700 640" stroke="#8FB0CF" stroke-opacity=".3" stroke-width="2"/></g>
+      <rect x="593" y="126" width="14" height="648" fill="#1F4FD8"/>
+      <line x1="88" y1="179" x2="88" y2="721" stroke="#C8102E" stroke-width="4"/>
+      <path d="M88 402 A48 48 0 0 1 88 498Z" fill="#8DBDEB" fill-opacity=".6" stroke="#C8102E" stroke-width="4"/>
+      <rect x="52" y="426" width="36" height="48" fill="#fff" stroke="#C8102E" stroke-width="4"/>
+      <circle cx="248" cy="274" r="120" fill="none" stroke="#C8102E" stroke-width="4"/><circle cx="248" cy="274" r="12" fill="#C8102E"/>
+      <circle cx="248" cy="626" r="120" fill="none" stroke="#C8102E" stroke-width="4"/><circle cx="248" cy="626" r="12" fill="#C8102E"/>
+      <circle cx="640" cy="274" r="10" fill="#C8102E"/><circle cx="640" cy="626" r="10" fill="#C8102E"/>
+      <g transform="translate(330 330) rotate(-30)"><ellipse rx="16" ry="30" fill="#E4002B" stroke="#0B1626" stroke-width="3"/><circle r="12" fill="#111"/><path d="M16 10L58 30" stroke="#C9A36B" stroke-width="5" stroke-linecap="round"/></g>
+      <g transform="translate(470 520) rotate(160)"><ellipse rx="16" ry="30" fill="#1F4FD8" stroke="#0B1626" stroke-width="3"/><circle r="12" fill="#111"/><path d="M16 10L58 30" stroke="#C9A36B" stroke-width="5" stroke-linecap="round"/></g>
+      <ellipse cx="400" cy="372" rx="10" ry="7" fill="#0B1626"/>
+    </svg></div>
 
     <!-- TOP NAV — horizontal esports bar -->
     <nav id="main-nav">
       <div id="mn-inner">
       <div style="display:flex;align-items:center;gap:0">
-        <div class="nav-logo">FLATHOCKEY</div>
+        <div class="nav-logo c3">FLAT<span>HOCKEY</span></div>
         <div id="mn-tabs">
           <button class="mn-tab active" id="mn-tab-home" data-i18n="nav_home">HOME</button>
           <button class="mn-tab" id="mn-tab-locker" data-i18n="nav_locker">LOCKER ROOM</button>
@@ -2584,7 +2603,9 @@
         </div>
       </div>
       <div id="mn-right">
-        <div id="nav-online-badge"><span id="nav-online-dot"></span><span>Online</span></div>
+        <div id="nav-online-badge" class="g3 nav3-pill"><span id="nav-online-dot"></span><span>Online</span></div>
+        <div id="nav-pc" class="g3 nav3-pill" title="Puck Credits"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7.5" fill="none" stroke="#FFB020" stroke-width="2"/><circle cx="9" cy="9" r="2.5" fill="#FFB020"/></svg><span id="nav-pc-val">0</span> PC</div>
+        <button type="button" id="nav-player" class="g3 nav3-player"><span class="c3 nav3-num" id="nav-p-num">16</span><span class="nav3-pinfo"><span class="c3" id="nav-p-name">HRÁČ</span><small id="nav-p-meta">ELO 1000</small></span></button>
         <div id="nav-ctx-browse"></div>
         <div id="nav-ctx-profile"><button id="profile-done" data-i18n="save_loadout">SAVE LOADOUT</button></div>
         <div id="nav-ctx-wait">
@@ -2715,81 +2736,34 @@
         </div>
       </div>
 
-      <!-- HLAVNÍ MENU — FIGMA ESPORTS REDESIGN -->
+      <!-- HLAVNÍ MENU — UI v3 (návrh 2026-11-02, responzivní) -->
       <div id="v-main" class="view" style="display:none">
-        <!-- Background atmosphere -->
-        <div id="vm-bg">
-          <div id="vm-bg-blue"></div>
-          <div id="vm-bg-pink"></div>
-          <div id="vm-bg-scratch"></div>
+        <div class="m3">
+          <nav class="m3-menu" aria-label="Hlavní menu">
+            <button type="button" id="go-play" class="m3-item" data-kicker="m_k_play" data-title="play" data-text="m_t_play" data-chips="m_c_play"><span class="m3-label"><span data-i18n="play">Hrát</span><small data-i18n="play_sub">RYCHLÝ ZÁPAS 3V3 S BOTY</small></span><span class="m3-arrow" aria-hidden="true">▸</span></button>
+            <button type="button" id="go-online" class="m3-item" data-kicker="m_k_browse" data-title="browse_title" data-text="m_t_browse" data-chips="m_c_browse"><span class="m3-label"><span data-i18n="browse_title">Procházet hry</span><small data-i18n="m_s_browse">OTEVŘENÁ LOBBY</small></span><span class="m3-arrow" aria-hidden="true">▸</span></button>
+            <button type="button" id="vm-create-btn" class="m3-item" data-kicker="m_k_create" data-title="create_title" data-text="m_t_create" data-chips="m_c_create"><span class="m3-label"><span data-i18n="create_title">Vytvořit hru</span><small data-i18n="m_s_create">VLASTNÍ PRAVIDLA</small></span><span class="m3-arrow" aria-hidden="true">▸</span></button>
+            <button type="button" id="go-solo" class="m3-item" data-kicker="m_k_train" data-title="training" data-text="m_t_train" data-chips="m_c_train"><span class="m3-label"><span data-i18n="training">Trénink</span><small data-i18n="m_s_train">BEZ SOUPEŘE</small></span><span class="m3-arrow" aria-hidden="true">▸</span></button>
+            <button type="button" id="go-tutorial" class="m3-item" data-kicker="m_k_tut" data-title="tutorial" data-text="m_t_tut" data-chips="m_c_tut"><span class="m3-label"><span data-i18n="tutorial">Tutoriál</span><small data-i18n="m_s_tut">PRVNÍ KROKY</small></span><span class="m3-arrow" aria-hidden="true">▸</span></button>
+            <button type="button" id="go-profile" class="m3-item" data-kicker="m_k_locker" data-title="nav_locker" data-text="m_t_locker" data-chips="m_c_locker"><span class="m3-label"><span data-i18n="nav_locker">Šatna</span><small data-i18n="m_s_locker">TVOJE VÝBAVA</small></span><span class="m3-arrow" aria-hidden="true">▸</span></button>
+            <button type="button" id="go-stats" class="m3-item" data-kicker="m_k_stats" data-title="nav_stats" data-text="m_t_stats" data-chips="m_c_stats"><span class="m3-label"><span data-i18n="nav_stats">Statistiky</span><small data-i18n="m_s_stats">ŽEBŘÍČEK</small></span><span class="m3-arrow" aria-hidden="true">▸</span></button>
+          </nav>
+          <aside class="m3-side">
+            <section class="g3 g3-cut m3-detail" aria-live="polite">
+              <div class="k3" id="m3-kicker"></div>
+              <h1 class="c3 m3-title" id="m3-title"></h1>
+              <p class="m3-text" id="m3-text"></p>
+              <div class="m3-chips" id="m3-chips"></div>
+            </section>
+            <section class="g3 m3-season">
+              <div><div class="k3 k3-amber" data-i18n="m_season_k">SEZÓNA 1: ALPHA</div><div class="c3 m3-season-name">Velocity Ice</div></div>
+              <div class="m3-season-r"><div class="c3 m3-season-elo" id="vm-footer-rank">1000</div><div class="m3-muted"><span>ELO</span> · <span data-i18n="m_pos">Pozice</span> <span id="m3-pos">#—</span></div></div>
+            </section>
+          </aside>
+          <!-- skryté prvky, na které sahá _loadStats (zachovány kvůli kompatibilitě) -->
+          <div hidden><span id="vm-footer-games"></span><span id="vm-footer-credits"></span><div id="vm-footer-guest"></div><button id="footer-signin-btn"></button></div>
         </div>
-
-        <!-- Hero section: player + content -->
-        <div id="vm-hero-section">
-
-          <!-- Hero content -->
-          <div id="vm-hero">
-            <div id="vm-eyebrow"><span data-i18n="vm_eyebrow">READY FOR FACEOFF?</span><span id="vm-season-pill"></span></div>
-            <div id="vm-title">
-              <div data-i18n="vm_title_a">CRUSH THE</div>
-              <div class="vm-title-blue" data-i18n="vm_title_b">COMPETITION</div>
-            </div>
-
-            <div id="vm-btn-row">
-              <button id="go-play" class="vm-cta-primary">
-                <div class="vmcta-title" data-i18n="play">HRÁT</div>
-                <div class="vmcta-sub" data-i18n="play_sub">RYCHLÝ ZÁPAS 3V3 S BOTY</div>
-              </button>
-            </div>
-
-            <!-- Vedlejší akce: všechny stejného typu (UX 2026-11-02) -->
-            <div id="vm-secondary-links">
-              <button id="go-online" class="vm-sec-link"><span class="sec-icon">☰</span> <span data-i18n="browse_title">Procházet hry</span></button>
-              <button id="vm-create-btn" class="vm-sec-link"><span class="sec-icon">+</span> <span data-i18n="create_title">Vytvořit hru</span></button>
-              <button id="go-solo" class="vm-sec-link"><span class="sec-icon">◈</span> <span data-i18n="training">Trénink</span></button>
-              <button id="go-tutorial" class="vm-sec-link"><span class="sec-icon">▶</span> <span data-i18n="tutorial">Tutoriál</span></button>
-            </div>
-
-            <div id="vm-season-card" style="display:none">
-              <div class="vm-sc-icon">⚡</div>
-              <div class="vm-sc-info">
-                <div class="vm-sc-name">SEASON 1: ALPHA — VELOCITY ICE</div>
-                <div class="vm-sc-sub">Unlock exclusive gear · Earn Ice Credits · Climb the leaderboard</div>
-              </div>
-              <button id="vm-season-arrow">→</button>
-            </div>
-
-            <!-- hidden wired button (locker room nav handled by tab) -->
-            <div style="display:none">
-              <button id="go-profile">LOCKER ROOM</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Footer stats row -->
-        <div id="vm-footer">
-          <div class="vmsb-card">
-            <div class="vmsb-lbl" data-i18n="f_rank">GLOBAL RANK</div>
-            <div class="vmsb-val" id="vm-footer-rank">#—</div>
-          </div>
-          <div class="vmsb-card">
-            <div class="vmsb-lbl" data-i18n="f_games">GAMES PLAYED</div>
-            <div class="vmsb-val" id="vm-footer-games">0</div>
-          </div>
-          <div class="vmsb-card">
-            <div class="vmsb-lbl" data-i18n="f_credits">ICE CREDITS</div>
-            <div class="vmsb-val" id="vm-footer-credits">0</div>
-          </div>
-          <div class="vmsb-card">
-            <div class="vmsb-lbl" data-i18n="f_wr">WIN RATE</div>
-            <div class="vmsb-val" id="vm-footer-wr">—</div>
-          </div>
-          <!-- Guest sign-in bar — below the 4 cards, full row -->
-          <div id="vm-footer-guest" style="display:none;grid-column:1/-1;flex-direction:column;align-items:center;justify-content:center;padding:28px 2px 8px;gap:14px">
-            <div style="font-family:'JetBrains Mono',monospace;font-size:0.8rem;letter-spacing:0.12em;color:#aab3cc;text-transform:uppercase;text-align:center" data-i18n="guest_unlock">🔒 Sign in to unlock your rank &amp; match history</div>
-            <button id="footer-signin-btn" style="font-family:'JetBrains Mono',monospace;font-size:0.8rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;padding:10px 28px;background:rgba(182,196,255,0.08);border:1px solid rgba(182,196,255,0.35);color:#b6c4ff;cursor:pointer;flex-shrink:0;white-space:nowrap;width:auto;transition:background 0.15s,border-color 0.15s,color 0.15s" onmouseover="this.style.background='rgba(182,196,255,0.16)';this.style.borderColor='rgba(182,196,255,0.7)';this.style.color='#fff'" onmouseout="this.style.background='rgba(182,196,255,0.08)';this.style.borderColor='rgba(182,196,255,0.35)';this.style.color='#b6c4ff'" data-i18n="footer_signin">SIGN IN WITH DISCORD →</button>
-          </div>
-        </div>
+        <div class="keys3" aria-hidden="true"><span><kbd>↑</kbd> <kbd>↓</kbd> <span data-i18n="k_select">Vybrat</span></span><span><kbd>Enter</kbd> <span data-i18n="k_confirm">Potvrdit</span></span><span><kbd>Esc</kbd> <span data-i18n="k_back">Zpět</span></span></div>
       </div>
 
 

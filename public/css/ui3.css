@@ -1,0 +1,115 @@
+/* ═══════════════════════════════════════════════════════════════
+   FlatHockey UI v3 (2026-11-02) — vizuální jazyk z HANDOFF.md, rozvržení RESPONZIVNÍ
+   Tokeny: aréna #050A14, sklo rgba(8,16,30,.72)+blur 14, text #F2F6FB / #A9BBD1,
+   akcent červená #E4002B→#A8001F, fokus ledová #7FD4FF, tabule jantar #FFB020.
+   Písma: Barlow Condensed kurzíva 800 VERZÁLKY (nadpisy, čísla, tlačítka), Barlow 500–700 (text).
+   Seříznuté hrany: tlačítka/položky pravý dolní roh, panely pravý horní roh 28 px. Žádné měkké stíny.
+   ═══════════════════════════════════════════════════════════════ */
+:root {
+  --a3-bg: #050A14; --a3-glass: rgba(8,16,30,.72); --a3-line: rgba(255,255,255,.14);
+  --a3-text: #F2F6FB; --a3-mute: #A9BBD1; --a3-mute2: #C3D2E6;
+  --a3-red: #E4002B; --a3-red2: #A8001F; --a3-ice: #7FD4FF; --a3-amber: #FFB020;
+  --a3-home: #C8102E; --a3-away: #1F4FD8; --a3-online: #3DDC84;
+  --a3-gut: clamp(16px, 4vw, 64px);
+  --a3-cut: polygon(0 0, 100% 0, calc(100% - 22px) 100%, 0 100%);
+  --a3-cut-panel: polygon(0 0, calc(100% - 28px) 0, 100% 28px, 100% 100%, 0 100%);
+}
+
+/* ── Základ ─────────────────────────────────────────────────────── */
+body { font-family: 'Barlow', system-ui, sans-serif; }
+#lobby { background: var(--a3-bg) !important; color: var(--a3-text); overflow: hidden; }
+#lobby:not([style*="display: none"]) { display: block !important; }
+#lobby > .box { position: relative; z-index: 1; width: 100%; height: calc(100% - 96px); max-width: none; min-width: 0; margin: 0; padding: 0 !important;
+  background: transparent !important; border: none !important; box-shadow: none !important; text-align: left; overflow-y: auto; }
+#lobby > .box > h1 { display: none !important; }
+#lobby .view { min-height: 100%; }
+.c3 { font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 800; text-transform: uppercase; letter-spacing: .01em; }
+.k3 { font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 800; text-transform: uppercase; letter-spacing: .14em; font-size: 15px; color: var(--a3-ice); }
+.k3-amber { color: var(--a3-amber); }
+.g3 { background: var(--a3-glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid var(--a3-line); }
+.g3-cut { clip-path: var(--a3-cut-panel); }
+.chip3 { font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 700; text-transform: uppercase; font-size: 18px; letter-spacing: .06em;
+  border: 1px solid rgba(127,212,255,.6); color: #BFE9FF; padding: 4px 14px; }
+kbd, .key3 { display: inline-block; min-width: 30px; text-align: center; border: 1px solid rgba(255,255,255,.55); border-radius: 5px; padding: 2px 8px;
+  font: 700 14px 'Barlow', sans-serif; background: rgba(255,255,255,.08); color: var(--a3-text); }
+#lobby :focus-visible { outline: 3px solid var(--a3-ice); outline-offset: 2px; }
+
+/* ── Scéna: rozostřené kluziště za menu ─────────────────────────── */
+.scene3 { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.scene3 svg { position: absolute; inset: -12px; width: calc(100% + 24px); height: calc(100% + 24px); filter: blur(2.5px) saturate(.9); }
+.scene3::after { content: ''; position: absolute; inset: 0;
+  background: linear-gradient(90deg, rgba(5,10,20,.94) 0%, rgba(5,10,20,.82) 36%, rgba(5,10,20,.30) 62%, rgba(5,10,20,.6) 100%),
+              radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(0,0,0,.6) 100%); }
+#lobby:not(.on-main) .scene3::after { background: rgba(5,10,20,.78); }
+
+/* ── Horní lišta ────────────────────────────────────────────────── */
+#main-nav { position: relative; z-index: 2; background: transparent !important; border: none !important; height: 96px !important; }
+#main-nav #mn-inner { height: 100%; max-width: none !important; padding: 0 var(--a3-gut) !important; display: flex; align-items: center; justify-content: space-between; }
+#main-nav .nav-logo { font-size: clamp(30px, 3vw, 44px) !important; line-height: 1; color: var(--a3-text) !important; background: none !important; -webkit-text-fill-color: currentColor !important; }
+#main-nav .nav-logo span { color: #FF2D4A; }
+#mn-tabs { display: none !important; }
+#mn-right { display: flex; align-items: center; gap: 12px; }
+.nav3-pill { display: flex !important; align-items: center; gap: 10px; padding: 8px 18px; font: 600 16px 'Barlow', sans-serif; color: var(--a3-text); height: auto !important; border-radius: 0 !important; }
+#nav-online-badge #nav-online-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--a3-online); box-shadow: 0 0 10px var(--a3-online); }
+#nav-online-badge span:last-child { font: 600 16px 'Barlow', sans-serif !important; letter-spacing: 0 !important; text-transform: none !important; color: var(--a3-text) !important; }
+#nav-pc { font-weight: 700; }
+.nav3-player { display: flex; align-items: center; gap: 14px; padding: 6px 20px 6px 8px !important; color: var(--a3-text) !important; cursor: pointer; border-radius: 0 !important; text-align: left; }
+.nav3-num { background: var(--a3-red); width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; font-size: 28px; line-height: 1; }
+.nav3-pinfo { display: flex; flex-direction: column; }
+.nav3-pinfo .c3 { font-size: 24px; line-height: 1; }
+.nav3-pinfo small { font: 600 13px 'Barlow', sans-serif; color: var(--a3-mute); }
+#settings-btn { width: 58px !important; height: 58px !important; border-radius: 0 !important; background: var(--a3-glass) !important; border: 1px solid var(--a3-line) !important; color: var(--a3-text) !important; display: flex; align-items: center; justify-content: center; }
+#settings-btn svg { width: 26px; height: 26px; }
+#auth-wrap { display: none !important; }   /* přihlášení je v Nastavení → Účet; karta hráče vede do Šatny */
+#nav-ctx-profile, #nav-ctx-wait { display: none !important; }
+
+/* ── Hlavní menu ────────────────────────────────────────────────── */
+#lobby.on-main > .box { overflow: hidden; }
+.m3 { display: grid; grid-template-columns: minmax(0, 600px) minmax(300px, 536px); justify-content: space-between; align-items: start; gap: 32px;
+  padding: clamp(16px, 6vh, 94px) var(--a3-gut) 120px; }
+.m3-menu { display: flex; flex-direction: column; gap: 8px; }
+.m3-item { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; justify-content: space-between;
+  width: min(520px, 100%); min-height: 58px; padding: 0 36px 0 28px; background: var(--a3-glass); backdrop-filter: blur(14px);
+  border-left: 6px solid rgba(255,255,255,.18); clip-path: polygon(0 0, 100% 0, calc(100% - 26px) 100%, 0 100%);
+  color: var(--a3-text); transition: width .15s, background .15s, min-height .15s; }
+.m3-label > span { display: block; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 800; text-transform: uppercase; font-size: 32px; line-height: 1; }
+.m3-label small { display: none; margin-top: 6px; font: 700 15px 'Barlow', sans-serif; letter-spacing: .12em; opacity: .9; }
+.m3-arrow { font: italic 800 30px 'Barlow Condensed', sans-serif; opacity: .35; }
+.m3-item.on { width: min(600px, 100%); min-height: 100px; background: linear-gradient(90deg, var(--a3-red), var(--a3-red2)); border-left-color: #fff; }
+.m3-item.on .m3-label > span { font-size: clamp(44px, 4.2vw, 60px); }
+.m3-item.on .m3-label small { display: block; }
+.m3-item.on .m3-arrow { opacity: 1; }
+.m3-item:focus-visible { outline: none; border-left-color: var(--a3-ice); }
+.m3-side { display: flex; flex-direction: column; gap: 24px; }
+.m3-detail { padding: 32px 36px; }
+.m3-title { margin: 6px 0 0; font-size: clamp(44px, 4.4vw, 64px); line-height: .95; color: var(--a3-text); }
+.m3-text { margin: 16px 0 0; font-size: 20px; line-height: 1.4; color: #D3DEEC; font-weight: 500; }
+.m3-chips { margin-top: 22px; display: flex; flex-wrap: wrap; gap: 10px; }
+.m3-season { padding: 22px 36px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.m3-season-name { font-size: 36px; line-height: 1; }
+.m3-season-r { text-align: right; }
+.m3-season-elo { font-size: 36px; line-height: 1; }
+.m3-muted { font: 600 13px 'Barlow', sans-serif; color: var(--a3-mute); }
+.keys3 { position: fixed; left: 0; right: 0; bottom: 0; z-index: 2; height: 84px; display: flex; align-items: center; gap: 36px; padding: 0 var(--a3-gut);
+  background: linear-gradient(0deg, rgba(0,0,0,.75), rgba(0,0,0,0)); font: 600 16px 'Barlow', sans-serif; color: var(--a3-text); pointer-events: none; }
+#lobby:not(.on-main) .keys3 { display: none; }
+
+/* Responzivita: pod 1000 px karta s popisem zmizí, menu přes celou šířku; nízká okna = menší položky */
+@media (max-width: 1000px) {
+  .m3 { grid-template-columns: 1fr; }
+  .m3-detail { display: none; }
+  .nav3-pinfo small, #nav-pc { display: none !important; }
+}
+@media (max-width: 640px) { .nav3-pinfo, #nav-online-badge { display: none !important; } .keys3 { display: none; } }
+@media (max-height: 760px) {
+  .m3 { padding-top: 8px; }
+  .m3-item { min-height: 48px; } .m3-label > span { font-size: 26px; }
+  .m3-item.on { min-height: 80px; } .m3-item.on .m3-label > span { font-size: 44px; }
+  .keys3 { height: 56px; }
+}
+
+/* ── Opravy kolizí se starým CSS ─────────────────────────────────── */
+#lobby .view { background: transparent !important; }
+#lobby.on-main #v-main { position: relative !important; inset: auto !important; overflow: visible !important; }
+#lobby .m3-title { display: block !important; }
+.nav3-pill, .nav3-player { white-space: nowrap; }

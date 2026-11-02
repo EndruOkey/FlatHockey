@@ -2,7 +2,7 @@
 import { chromium } from 'playwright';
 const url = process.argv[2] || 'http://localhost:4900/';
 const b = await chromium.launch(); const errs = [];
-for (const [label, sel, pre] of [['splash (1. návštěva)', '#splash-play-btn', null], ['menu (vracející se)', '#go-play', '1']]) {
+for (const [label, sel, pre] of [['menu (1. návštěva)', '#go-play', null], ['menu (vracející se)', '#go-play', '1']]) {
   const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } }); const p = await ctx.newPage();
   p.on('pageerror', e => errs.push(label + ': ' + e.message));
   await p.goto(url, { waitUntil: 'networkidle' });

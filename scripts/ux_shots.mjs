@@ -23,20 +23,21 @@ const metrics = () => p.evaluate(() => {
   return { texts: n, small, lowc, smallEx: smallEx.slice(0,6), lowEx: lowEx.slice(0,6) };
 });
 const shot = async n => { await p.waitForTimeout(500); await p.screenshot({ path: `${out}/${n}.png` }); const m = await metrics(); console.log(n.padEnd(18), 'texty', m.texts, '| <12px', m.small, '| kontrast<4.5', m.lowc, '|', m.smallEx.join(' · '), '| low:', m.lowEx.join(' · ')); };
+const home = async () => { await p.keyboard.press('Escape'); await p.waitForTimeout(200); };
 const click = async id => { const e = p.locator('#' + id); if (await e.isVisible()) await e.click(); else console.log('  skryto:', id); };
 await p.goto(url, { waitUntil: 'networkidle' }); await p.waitForTimeout(800);
 await shot('01-splash-first');
 await p.evaluate(() => localStorage.setItem('hockey_tutorial_done', '1')); await p.reload({ waitUntil: 'networkidle' }); await p.waitForTimeout(800);
 await shot('01b-return');
-await click('mn-tab-home'); await shot('02-main');
+await shot('02-main');
 await click('go-online'); await shot('03-browse');
-await click('mn-tab-home'); await click('vm-create-btn'); await shot('04-create');
+await home(); await click('vm-create-btn'); await shot('04-create');
 await p.locator('.sv-teams-adv summary').click(); await shot('04b-create-teams');
-await click('mn-tab-locker'); await shot('05-locker');
+await home(); await click('go-profile'); await shot('05-locker');
 for (const k of ['helma','hul','doplnky']) { await p.click(`.lk-tab[data-lk=${k}]`); await shot('05-locker-' + k); }
 await p.click('.lk-tab[data-lk=dres]');
-await click('mn-tab-stats'); await shot('06-stats');
-await click('mn-tab-home'); await click('vm-create-btn'); await click('create-go'); await p.waitForTimeout(800); await shot('08-wait');
-await click('mn-tab-home'); await click('settings-btn'); await shot('07-settings'); await p.keyboard.press('Escape');
-await click('mn-tab-home'); await click('go-play'); await p.waitForTimeout(3000); await shot('09-ingame');
+await home(); await click('go-stats'); await shot('06-stats');
+await home(); await click('vm-create-btn'); await click('create-go'); await p.waitForTimeout(800); await shot('08-wait');
+await home(); await click('settings-btn'); await shot('07-settings'); await p.keyboard.press('Escape');
+await home(); await click('go-play'); await p.waitForTimeout(3000); await shot('09-ingame');
 await b.close();

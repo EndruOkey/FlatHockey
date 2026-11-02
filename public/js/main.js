@@ -1065,16 +1065,9 @@ function proceedAsGuest() {
 function initFlow() {
   const user = getUser();
   const tutorialDone = !!localStorage.getItem('hockey_tutorial_done');
-  if (user) {
-    // Přihlášený uživatel
-    if (!tutorialDone) { _startTutorial(); return; }
-    showView('main'); _loadStats();
-  } else {
-    // Host s existujícím účtem zařízení a hotovým tutoriálem → rovnou do menu (bez splash a klikání na „Hrát jako host")
-    _loadStats();
-    if (tutorialDone && getKind() === 'guest') { commitProfile(); showView('main'); }
-    else showView('splash');
-  }
+  // UI v3: vždy rovnou hlavní menu (HRÁT je první položka, tutoriál je v menu) — bez úvodní obrazovky
+  void tutorialDone; commitProfile(); showView('main'); _loadStats();
+  if (!user) { /* host: účet zařízení vznikne při prvním uložení */ }
 }
 $('profile-done').onclick = () => {
   if (!commitProfile()) return;
@@ -1116,6 +1109,34 @@ $('profile-done').onclick = () => {
 
 // ── Hlavní menu ───────────────────────────────────────────────────────
 $('go-profile').onclick = () => { showView('profile'); drawPreview(); _loadStats(); };
+$('go-stats').onclick = () => showView('stats');
+function _updateNavPlayer(rp = 1000, pos = null, cred = 0) {
+  const pr = profile();
+  $('nav-p-num').textContent = (pr.number === '' || pr.number == null) ? '#' : pr.number;
+  $('nav-p-name').textContent = (pr.name || t('guest_name')).toUpperCase();
+  $('nav-p-meta').textContent = `ELO ${rp} · ${t('m_pos')} ${pos ? '#' + pos : '#—'}`;
+  $('nav-pc-val').textContent = cred;
+}
+$('nav-player').onclick = () => { showView('profile'); drawPreview(); _loadStats(); };
+// Hlavní menu UI v3: vybraná položka (myš / fokus / šipky) mění kartu s popisem režimu
+const _m3Items = [...document.querySelectorAll('.m3-item')];
+let _m3Sel = 0;
+function m3Select(i, focus = false) {
+  _m3Sel = (i + _m3Items.length) % _m3Items.length;
+  _m3Items.forEach((b, k) => { b.classList.toggle('on', k === _m3Sel); b.setAttribute('aria-current', k === _m3Sel ? 'true' : 'false'); });
+  const it = _m3Items[_m3Sel], d = it.dataset;
+  $('m3-kicker').textContent = t(d.kicker); $('m3-title').textContent = t(d.title); $('m3-text').textContent = t(d.text);
+  $('m3-chips').innerHTML = t(d.chips).split('|').map(c => `<span class="chip3">${esc(c)}</span>`).join('');
+  if (focus) it.focus();
+}
+_m3Items.forEach((b, i) => { b.addEventListener('mouseenter', () => m3Select(i)); b.addEventListener('focus', () => m3Select(i)); });
+window.addEventListener('keydown', e => {
+  if (inGame || $('v-main').style.display === 'none' || e.target.matches('input,select,textarea')) return;
+  if (e.key === 'ArrowDown') { e.preventDefault(); m3Select(_m3Sel + 1, true); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); m3Select(_m3Sel - 1, true); }
+  else if (e.key === 'Enter' && document.activeElement === document.body) { e.preventDefault(); _m3Items[_m3Sel].click(); }
+});
+m3Select(0);
 async function _loadStats() {
   const [stats, rankData] = await Promise.all([loadServerStats(), loadRankAndCredits()]);
   const user = getUser();
@@ -1166,7 +1187,9 @@ async function _loadStats() {
   });
   const footerRank = $('vm-footer-rank');
   if (footerRank) {
-    footerRank.textContent             = pos ? `#${pos}` : '#—';
+    footerRank.textContent             = rp;   // UI v3: sezónní karta ukazuje ELO
+    const m3p = $('m3-pos'); if (m3p) m3p.textContent = pos ? `#${pos}` : '#—';
+    _updateNavPlayer(rp, pos, cred);
     $('vm-footer-games').textContent   = gp;
     $('vm-footer-credits').textContent = `⊙ ${cred}`;
     const wrVal = $('vm-wr-val');   // win rate zmizel z patičky při redesignu
@@ -1498,8 +1521,10 @@ window.addEventListener('keydown', e => {
   if (e.key !== 'Escape' || inGame) return;
   if (pwModal.classList.contains('open')) { closePwModal(null); return; }
   if ($('auth-modal').classList.contains('open')) { $('auth-modal').classList.remove('open'); return; }
-  $('settings-dropdown').classList.remove('open');
+  if ($('settings-dropdown').classList.contains('open')) { $('settings-dropdown').classList.remove('open'); return; }
   $('auth-dropdown').classList.remove('open');
+  // UI v3: Esc = Zpět do hlavního menu z podobrazovek (ne z čekárny — tam je Odejít)
+  if (['v-profile','v-browse','v-create','v-stats','v-store'].some(id => $(id) && $(id).style.display !== 'none')) showView('main');
 });
 window.addEventListener('keydown', e => { if (e.key !== 'Escape' || !inGame) return; if (currentGame?._activeTab === 'build') return; pauseMenu.style.display === 'flex' ? hidePause() : showPause(); });
 // F3 = debug overlay ve hře (FPS / frame time / jitter snapshotů) — diagnostika sekání
@@ -1508,7 +1533,8 @@ window.addEventListener('beforeunload', () => net.leaveLobby());
 
 // ── Jazyk (CS/EN) ─────────────────────────────────────────────────────
 $('lang-btn').onclick = () => toggleLang();
-setOnChange(() => {                 // po přepnutí jazyka přerenderuj z cache (bez probliknutí)
+setOnChange(() => {
+  try { m3Select(_m3Sel); } catch {}                 // po přepnutí jazyka přerenderuj z cache (bez probliknutí)
   if ($('v-browse').style.display !== 'none') renderLobbyList(lastLobbyList);
   if ($('v-wait').style.display !== 'none' && lastWaitState) renderWait(lastWaitState);
   authLabel.textContent = getUser() ? getUser().display_name : t('auth_label_guest');   // popisek přihlášení podle jazyka

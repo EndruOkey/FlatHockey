@@ -34,12 +34,12 @@ export class Rink {
       const cy = oy + RINK.h / 2 * s;
       ctx.beginPath();
       ctx.arc(cx, cy, CIRCLE_R * s, 0, Math.PI * 2);
-      ctx.strokeStyle = '#cc2233';
+      ctx.strokeStyle = '#2255cc';   // středový kruh modrý (návrh UI)
       ctx.lineWidth = 2.5 * s;
       ctx.stroke();
       ctx.beginPath();
       ctx.arc(cx, cy, 5 * s, 0, Math.PI * 2);
-      ctx.fillStyle = '#cc2233';
+      ctx.fillStyle = '#2255cc';
       ctx.fill();
     }
 
@@ -143,26 +143,7 @@ function _drawFaceoffCircle(ctx, cam, cx, cy) {
   ctx.fillStyle = '#cc2233';
   ctx.fill();
 
-  // Hash marks: crosshair inside the circle
-  const hShort = 16 * s;  // short arm (toward center)
-  const hLong  = 28 * s;  // long arm (away from center)
-  const hOff   = 22 * s;  // distance from center to mark
-  ctx.strokeStyle = '#cc2233';
-  ctx.lineWidth = 2.5 * s;
-  // Left and right marks (vertical lines at ±hOff)
-  for (const dx of [-hOff, hOff]) {
-    ctx.beginPath();
-    ctx.moveTo(sx + dx, sy - hLong);
-    ctx.lineTo(sx + dx, sy + hLong);
-    ctx.stroke();
-  }
-  // Top and bottom marks (horizontal lines at ±hOff)
-  for (const dy of [-hOff, hOff]) {
-    ctx.beginPath();
-    ctx.moveTo(sx - hLong, sy + dy);
-    ctx.lineTo(sx + hLong, sy + dy);
-    ctx.stroke();
-  }
+  // Bez vnitřní mřížky „#“ (vypadala jako čtverec v kruhu) — jen kruh + tečka (návrh UI 2026-11-02)
 }
 
 // Trapézové čáry za brankou (dir=+1: vpravo k x=1080, dir=-1: vlevo k x=0)
