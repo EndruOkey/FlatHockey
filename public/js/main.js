@@ -1029,7 +1029,7 @@ net.onConnectError = () => {
 const hasName = () => (nameInput.value || '').trim().length > 0;
 const suggestName = () => t('guest_name') + Math.floor(100 + Math.random() * 900);
 function commitProfile() {
-  if (!hasName()) { setStatus(t('name_required'), '#ffcf3a'); nameInput.focus(); return false; }
+  if (!hasName()) nameInput.value = getUser()?.display_name || suggestName();   // jméno doplníme, Šatnu nevnucujeme
   const p = profile();       // ulož jméno + výbavu do localStorage
   if (getUser() || getKind() === 'guest' || document.documentElement.classList.contains('embedded')) {
     saveServerProfile({      // synchronizuj na server pro přihlášené hráče i hosty (účet zařízení)
@@ -1051,8 +1051,7 @@ function requireProfile() {
 
 // Guest flow — tutorial pokud první návštěva, jinak profil/menu
 function proceedAsGuest() {
-  if (!localStorage.getItem('hockey_tutorial_done')) { _startTutorial(); return; }
-  if (!hasName()) { requireProfile(); return; }
+  commitProfile();
   showView('main');
 }
 
@@ -1067,7 +1066,7 @@ function initFlow() {
   } else {
     // Host s existujícím účtem zařízení a hotovým tutoriálem → rovnou do menu (bez splash a klikání na „Hrát jako host")
     _loadStats();
-    if (tutorialDone && getKind() === 'guest') { if (hasName()) showView('main'); else requireProfile(); }
+    if (tutorialDone && getKind() === 'guest') { commitProfile(); showView('main'); }
     else showView('splash');
   }
 }
@@ -1221,7 +1220,7 @@ async function _renderLeaderboard(mode) {
     const resp = await fetch('/api/leaderboard?limit=50');
     if (!resp.ok) throw new Error();
     const rows = await resp.json();
-    if (!rows.length) { list.innerHTML = '<div class="sv-lb-empty">NO DATA YET</div>'; return; }
+    if (!rows.length) { list.innerHTML = `<div class="sv-lb-empty">${esc(t('lb_empty'))}</div>`; return; }
     const me = getUser();
     list.innerHTML = rows.map((r, i) => {
       const rank = i + 1;
@@ -1262,6 +1261,14 @@ $('go-tutorial').onclick = () => _startTutorial();
 // Boti se nastavují v rámci vytvořené hry (formulář „Boti (hráčů v týmu)"), ne samostatným tlačítkem.
 // _botPending zůstává kvůli případnému „vytvoř + hned start" toku; dnes ho nic nenastavuje na true.
 let _botPending = false;
+function playNow() {
+  commitProfile();
+  localStorage.setItem('hockey_tutorial_done', '1');   // tutoriál je volitelný, z menu kdykoli
+  _botPending = true; _lastPass = null;
+  net.createLobby({ name: nameInput.value.trim() || 'Lobby', teams: { home: { name: t('home_ph'), color: '#3a9fff', style: 'solid' }, away: { name: t('away_ph'), color: '#ff4455', style: 'solid' } },
+    periods: 3, minutes: 5, max: 6, botFill: 3, rules: false, password: '' }, profile());
+}
+$('go-play').onclick = playNow;
 
 // ── Procházení ────────────────────────────────────────────────────────
 let _lastPass = null;   // heslo posledního lobby (pro odvetu)
@@ -1468,8 +1475,7 @@ function _startTutorial() {
   g.local.color = pr.jersey;
   g.onComplete = (isFirst) => {
     stopGame();
-    if (isFirst) { showView('profile'); drawPreview(); setStatus(t('welcome'), '#6ee0a0'); }
-    else showView('main');
+    showView('main');
   };
   startGame(g);
 }
@@ -1592,6 +1598,7 @@ document.addEventListener('click', e => {
 $('footer-signin-btn')?.addEventListener('click', openAuthModal);
 $('store-back-btn')?.addEventListener('click', () => { showView('main'); _loadStats(); });
 $('splash-tutorial-btn').addEventListener('click', _startTutorial);
+$('splash-play-btn').addEventListener('click', playNow);
 $('splash-discord-btn').addEventListener('click', loginWithDiscord);
 $('splash-guest-btn').addEventListener('click', proceedAsGuest);
 $('profile-discord-btn').addEventListener('click', loginWithDiscord);

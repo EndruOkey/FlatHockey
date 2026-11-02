@@ -118,7 +118,7 @@
       margin-bottom: 18px;
     }
     h1 span { color: #ffade2; }
-    .sub { color: #3E5268; margin-bottom: 28px; font-size: 0.8rem; letter-spacing: 0.05em; }
+    .sub { color: #748492; margin-bottom: 28px; font-size: 0.8rem; letter-spacing: 0.05em; }
 
     /* ── Inputs ───────────────────────────────────────────────────── */
     input {
@@ -131,7 +131,7 @@
       margin-bottom: 10px; transition: border-color 0.15s, box-shadow 0.15s;
     }
     input:focus { outline: none; border-color: #00D4FF; box-shadow: 0 0 0 1px rgba(0,212,255,0.2); }
-    input::placeholder { color: #253040; letter-spacing: 0.1em; }
+    input::placeholder { color: #7b828b; letter-spacing: 0.1em; }
 
     /* ═══════════════════════════════════════════════════════════════
        BUTTON SYSTEM
@@ -166,7 +166,7 @@
       border: 1px solid rgba(255,255,255,0.06);
       border-left: 3px solid rgba(0,212,255,0.5);
       border-radius: 0;
-      color: #5A7080;
+      color: #738693;
     }
     button.ghost:hover:not(:disabled), button.back:hover:not(:disabled) {
       filter: none;
@@ -195,21 +195,21 @@
       clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
       display: flex; align-items: center; justify-content: center; gap: 9px; }
     #discord-login-btn:hover:not(:disabled) { filter: none; background: #4752e0; box-shadow: 0 0 20px rgba(88,101,242,0.5); }
-    #auth-close-btn { background: transparent; border: none; color: #2E4055; font-size: 0.75rem; margin-top: 2px; clip-path: none; }
-    #auth-close-btn:hover { color: #5A7080; }
+    #auth-close-btn { background: transparent; border: none; color: #758190; font-size: 0.75rem; margin-top: 2px; clip-path: none; }
+    #auth-close-btn:hover { color: #738693; }
 
     /* ── HAND TOGGLE ─────────────────────────────────────────────── */
     #hand-toggle { display: flex; gap: 6px; }
     .hand-btn {
       flex: 1; padding: 10px; margin: 0;
       background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 0; color: #3E5268; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em;
+      border-radius: 0; color: #748492; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em;
     }
     .hand-btn.active {
       background: rgba(0,212,255,0.06); border-color: rgba(0,212,255,0.25);
       border-left: 3px solid #00D4FF; color: #C0E4F4;
     }
-    .hand-btn:hover:not(.active) { background: rgba(255,255,255,0.03); color: #5A7080; filter: none; }
+    .hand-btn:hover:not(.active) { background: rgba(255,255,255,0.03); color: #738693; filter: none; }
 
     /* ── SECTION HEADINGS ─────────────────────────────────────────── */
     .box h2 {
@@ -218,13 +218,13 @@
       margin-bottom: 14px; text-transform: uppercase;
       border-left: 3px solid #b6c4ff; padding-left: 12px; text-align: left;
     }
-    .box .lbl { color: #3E5268; font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase;
+    .box .lbl { color: #748492; font-size: 0.75rem; letter-spacing: 0.12em; text-transform: uppercase;
       text-align: left; margin: 6px 0 5px; }
 
     /* ── GEAR / PROFILE ──────────────────────────────────────────── */
     .gear-item { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-    .gear-item > span { width: 88px; flex: none; text-align: left; color: #3E5268;
-      font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase; }
+    .gear-item > span { width: 88px; flex: none; text-align: left; color: #748492;
+      font-size: 0.75rem; letter-spacing: 0.1em; text-transform: uppercase; }
     .swatches { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
     .sw { width: 24px; height: 24px; padding: 0; margin: 0; border-radius: 2px;
       border: 2px solid transparent; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.4); }
@@ -245,16 +245,16 @@
     .prof-row #hand-toggle { flex: 1; margin: 0; }
     #num-input { width: 70px; margin: 0 0 0 auto; padding: 9px 6px; font-size: 1rem; letter-spacing: 0.06em; text-align: center; }
     .chips { display: flex; gap: 4px; flex: 1; }
-    .chip { flex: 1 1 0; min-width: 0; text-align: center; font-size: 0.57rem; padding: 6px 2px;
+    .chip { flex: 1 1 0; min-width: 0; text-align: center; font-size: 0.75rem; padding: 6px 2px;
       background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);
-      color: #4A6078; cursor: pointer; letter-spacing: 0.04em; border-radius: 0; }
+      color: #718496; cursor: pointer; letter-spacing: 0.04em; border-radius: 0; }
     .chip.active {
       border-color: rgba(0,212,255,0.25); border-left: 2px solid #00D4FF;
       background: rgba(0,212,255,0.06); color: #C0E4F4;
     }
     .chip:hover:not(.active) { background: rgba(255,255,255,0.03); color: #6A8098; filter: none; }
     .sw.locked, .chip.locked { opacity: 0.45; cursor: not-allowed; position: relative; }
-    .sw.locked::after, .chip.locked::after { content: '🔒'; position: absolute; top: -7px; right: -4px; font-size: 0.55rem; }
+    .sw.locked::after, .chip.locked::after { content: '🔒'; position: absolute; top: -7px; right: -4px; font-size: 0.75rem; }
     .sw.custom { background: conic-gradient(red,orange,yellow,lime,cyan,blue,magenta,red); }
     body.sponsor .sw.locked, body.sponsor .chip.locked { opacity: 1; cursor: pointer; }
     body.sponsor .sw.locked::after, body.sponsor .chip.locked::after { content: '💎'; }
@@ -272,27 +272,27 @@
       transition: border-left-color 0.12s, background 0.12s; }
     .lobby-item:hover { border-left-color: #b6c4ff; background: rgba(182,196,255,0.04); }
     .lobby-item .li-name { font-weight: 700; font-size: 0.88rem; letter-spacing: 0.02em; }
-    .lobby-item .li-sub { color: #3E5268; font-size: 0.65rem; margin-top: 2px; }
+    .lobby-item .li-sub { color: #748492; font-size: 0.75rem; margin-top: 2px; }
     .lobby-item .li-cnt { color: #3ecf4a; font-size: 0.8rem; font-weight: 700; }
     .lobby-item .li-live { text-align: right; }
     .lobby-item .li-score { color: #ffd95e; font-size: 0.95rem; font-weight: 800;
       font-family: 'Barlow Condensed', system-ui; }
-    .lobby-item .li-time { color: #3E5268; font-size: 0.65rem; }
-    .lobby-item .li-tag { color: #FF5A5A; font-size: 0.55rem; font-weight: 800; border: 1px solid rgba(255,90,90,0.5); padding: 1px 4px; vertical-align: middle; letter-spacing: 0.08em; }
+    .lobby-item .li-time { color: #748492; font-size: 0.75rem; }
+    .lobby-item .li-tag { color: #FF5A5A; font-size: 0.75rem; font-weight: 800; border: 1px solid rgba(255,90,90,0.5); padding: 1px 4px; vertical-align: middle; letter-spacing: 0.08em; }
     .lobby-item.full { opacity: 0.4; cursor: not-allowed; }
     .lobby-item.full:hover { border-left-color: rgba(255,255,255,0.06); background: transparent; }
-    .lobby-empty { color: #2E4055; font-size: 0.8rem; text-align: center; padding: 22px 0; letter-spacing: 0.06em; }
+    .lobby-empty { color: #758190; font-size: 0.8rem; text-align: center; padding: 22px 0; letter-spacing: 0.06em; }
 
     /* discord link in settings dropdown */
     #discord-link { color: inherit; text-decoration: none; }
 
     #wip { display: block; width: max-content; max-width: 100%; margin: 8px auto 16px;
-      font-size: 0.62rem; letter-spacing: 0.8px; text-transform: uppercase;
+      font-size: 0.75rem; letter-spacing: 0.8px; text-transform: uppercase;
       color: #ffcf3a; background: rgba(255,207,58,0.08);
       border: 1px solid rgba(255,207,58,0.3); border-radius: 2px; padding: 4px 12px; }
 
-    #lang-btn { display: inline-flex; align-items: center; gap: 4px; font-size: 0.62rem; font-weight: 700;
-      color: #2E4055; background: transparent; border: none; padding: 2px; cursor: pointer; opacity: 0.75; }
+    #lang-btn { display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; font-weight: 700;
+      color: #758190; background: transparent; border: none; padding: 2px; cursor: pointer; opacity: 0.75; }
     #lang-btn:hover { color: #C0D8F0; opacity: 1; }
     #lang-btn .globe { font-size: 0.9rem; line-height: 1; }
 
@@ -306,10 +306,10 @@
     .fmt-btn {
       flex: 1; padding: 10px 2px; margin: 0;
       background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 0;
-      color: #2E4055; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em;
+      color: #758190; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em;
       transition: background 0.12s, color 0.12s; border-bottom: 2px solid transparent;
     }
-    .fmt-btn.main { color: #4A6078; }
+    .fmt-btn.main { color: #718496; }
     .fmt-btn:hover:not(.active) { background: rgba(255,255,255,0.04); color: #6A8098; filter: none; }
     .fmt-btn.active { background: rgba(0,212,255,0.06); border-color: rgba(0,212,255,0.18); border-bottom: 2px solid #00D4FF; color: #C0E4F4; }
 
@@ -322,9 +322,9 @@
       margin-bottom: 6px; letter-spacing: 0.12em; text-transform: uppercase; color: #8AAAC8; }
     .wt-col .wt-p { font-size: 0.82rem; color: #C8D8E8; padding: 2px 0; }
     .wt-p-dc { color: rgba(255,180,50,0.7); font-style: italic; }
-    .pick-btn { font-size: 0.68rem; padding: 9px 4px; background: rgba(255,255,255,0.02);
+    .pick-btn { font-size: 0.75rem; padding: 9px 4px; background: rgba(255,255,255,0.02);
       border: 1px solid rgba(255,255,255,0.06); border-left: 2px solid rgba(0,212,255,0.3);
-      color: #5A7080; transition: background 0.12s, color 0.12s; }
+      color: #738693; transition: background 0.12s, color 0.12s; }
     .pick-btn:hover { background: rgba(0,212,255,0.06); color: #C0E4F4; border-left-color: #00D4FF; filter: none; }
 
     /* ── SETTINGS ROWS ───────────────────────────────────────────── */
@@ -332,7 +332,7 @@
     .team-row .tname { flex: 1; margin: 0; text-transform: none; letter-spacing: normal; text-align: left; font-size: 0.9rem; padding: 10px; }
     .team-row input[type=color] { width: 42px; padding: 4px; margin: 0; background: #0A0C1A; border: 1px solid rgba(255,255,255,0.08); }
     .team-row select, .set-row select { background: #0A0C1A; color: #8AAAC8; border: 1px solid rgba(255,255,255,0.08); padding: 7px; font-size: 0.85rem; }
-    .set-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; color: #4A6078; font-size: 0.76rem; align-items: center; }
+    .set-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; color: #718496; font-size: 0.76rem; align-items: center; }
     .set-row label { display: flex; flex-direction: column; gap: 3px; }
     .set-row label.chk { flex-direction: row; align-items: center; gap: 5px; }
 
@@ -371,7 +371,7 @@
     #hint {
       position: fixed; bottom: 14px; left: 50%;
       transform: translateX(-50%);
-      color: #222; font-size: 0.7rem;
+      color: #222; font-size: 0.75rem;
       pointer-events: none; white-space: nowrap;
     }
 
@@ -418,12 +418,12 @@
     .mr-score {
       font-family: 'Barlow Condensed', system-ui;
       font-size: 1rem; font-weight: 700; font-style: italic;
-      color: rgba(182,196,255,0.4); letter-spacing: 0.06em; text-transform: uppercase;
+      color: rgba(182,196,255,0.6); letter-spacing: 0.06em; text-transform: uppercase;
       margin-top: 6px;
     }
     .mr-mvp-badge {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.52rem; font-weight: 700; letter-spacing: 0.16em;
+      font-size: 0.75rem; font-weight: 700; letter-spacing: 0.16em;
       color: #ffcf3a; background: rgba(255,207,58,0.08);
       border: 1px solid rgba(255,207,58,0.22); padding: 5px 10px; text-transform: uppercase;
       align-self: flex-start; margin-top: 4px;
@@ -444,8 +444,8 @@
     }
     .mr-stat label {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.42rem; letter-spacing: 0.18em;
-      color: rgba(182,196,255,0.3); text-transform: uppercase;
+      font-size: 0.75rem; letter-spacing: 0.18em;
+      color: rgba(182,196,255,0.6); text-transform: uppercase;
       display: block; margin-top: 4px;
     }
     .mr-rewards {
@@ -464,12 +464,12 @@
     }
     .mr-reward-val.elo-pos { color: #19c37d; }
     .mr-reward-val.elo-neg { color: #ff4455; }
-    .mr-reward-val.elo-zero { color: rgba(182,196,255,0.4); }
+    .mr-reward-val.elo-zero { color: rgba(182,196,255,0.6); }
     .mr-reward-val.credits-val { color: #ffade2; }
     .mr-reward-card label {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.42rem; letter-spacing: 0.18em;
-      color: rgba(182,196,255,0.3); text-transform: uppercase;
+      font-size: 0.75rem; letter-spacing: 0.18em;
+      color: rgba(182,196,255,0.6); text-transform: uppercase;
       display: block; margin-top: 5px;
     }
     .mr-footer { padding: 16px 24px; display: flex; gap: 8px; }
@@ -477,21 +477,21 @@
     .mr-footer .ghost { color: #c3c5d9; }
     /* Zpět — v sub-views (procházet / vytvořit) */
     .sv-back { width: auto; display: inline-flex; align-items: center; gap: 6px; margin: 0 0 14px; padding: 8px 16px;
-      font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; text-align: left; }
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; text-align: left; }
     .mr-footer .primary { background: #b6c4ff; color: #0a0f28; font-weight: 800; }
     .mr-footer .primary:hover { filter: brightness(1.1); }
 
     .vol-row { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 0 2px; }
-    .vol-row label { font-size: 0.62rem; color: #3E5268; white-space: nowrap; letter-spacing: 0.1em; text-transform: uppercase; }
+    .vol-row label { font-size: 0.75rem; color: #748492; white-space: nowrap; letter-spacing: 0.1em; text-transform: uppercase; }
     .vol-row input[type=range] { flex: 1; height: 3px; accent-color: #00D4FF; cursor: pointer; }
-    .vol-pct { font-size: 0.72rem; color: #4A6078; min-width: 34px; text-align: right; }
+    .vol-pct { font-size: 0.75rem; color: #718496; min-width: 34px; text-align: right; }
 
     /* ── STATS CELLS ─────────────────────────────────────────────── */
     .stat-cell { background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);
       border-top:2px solid rgba(255,255,255,0.06);padding:10px 4px;text-align:center; }
     .stat-cell span { display:block;font-family:'Barlow Condensed',system-ui;
       font-size:1.45rem;font-weight:900;color:#C0D4E8;line-height:1; }
-    .stat-cell label { display:block;font-size:0.5rem;letter-spacing:0.1em;text-transform:uppercase;color:#2E4055;margin-top:4px; }
+    .stat-cell label { display:block;font-size: 0.75rem;letter-spacing:0.1em;text-transform:uppercase;color:#758190;margin-top:4px; }
 
     /* ═══════════════════════════════════════════════════════════════
        AUTH ELEMENTS
@@ -514,7 +514,7 @@
       width: 20px; height: 20px; border-radius: 50%;
       object-fit: cover; display: none; flex: none;
     }
-    #auth-tier { font-size: 0.6rem; opacity: 0.6; }
+    #auth-tier { font-size: 0.75rem; opacity: 0.6; }
 
     #auth-dropdown {
       display: none; position: absolute; right: 0; top: calc(100% + 8px); left: auto; bottom: auto;
@@ -526,13 +526,13 @@
     #auth-dropdown.open { display: block; }
     .dd-item {
       display: block; width: 100%; padding: 11px 16px;
-      text-align: left; font-size: 0.72rem; font-weight: 700;
-      color: #5A7080; background: transparent; border: none;
+      text-align: left; font-size: 0.75rem; font-weight: 700;
+      color: #738693; background: transparent; border: none;
       cursor: pointer; letter-spacing: 0.08em; margin: 0; border-radius: 0;
       text-transform: uppercase; transition: background 0.1s, color 0.1s;
     }
     .dd-item:hover { background: rgba(182,196,255,0.06); color: #EEF4FF; }
-    .dd-item.danger { color: #C04040; }
+    .dd-item.danger { color: #ca5d5d; }
     .dd-item.danger:hover { background: rgba(192,64,64,0.08); color: #FF8080; }
     .dd-sep { border: none; border-top: 1px solid rgba(255,255,255,0.05); margin: 0; }
 
@@ -544,8 +544,8 @@
     #auth-modal.open, #pw-modal.open { display: flex; }
     #auth-modal .box, #pw-modal .box { min-width: 300px; max-width: 340px; }
     #pw-modal input { margin-bottom: 12px; }
-    #pw-cancel { background: transparent; border: none; color: #2E4055; font-size: 0.75rem; margin-top: 2px; }
-    #pw-cancel:hover { color: #5A7080; }
+    #pw-cancel { background: transparent; border: none; color: #758190; font-size: 0.75rem; margin-top: 2px; }
+    #pw-cancel:hover { color: #738693; }
     #auth-modal h2, #pw-modal h2 { font-size: 1rem; font-weight: 900; letter-spacing: 0.12em;
       margin-bottom: 6px; color: #EEF4FF; text-transform: uppercase;
       border-left: 3px solid #b6c4ff; padding-left: 12px; text-align: left; }
@@ -618,8 +618,8 @@
     #nav-ctx-browse, #nav-ctx-profile, #nav-ctx-wait { display: none; }
     #nav-online-badge {
       display: none; align-items: center; gap: 6px;
-      font-family: 'JetBrains Mono', monospace; font-size: 0.52rem;
-      font-weight: 700; letter-spacing: 0.12em; color: rgba(182,196,255,0.4);
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
+      font-weight: 700; letter-spacing: 0.12em; color: rgba(182,196,255,0.6);
       text-transform: uppercase; margin-right: 4px;
     }
     #nav-online-dot {
@@ -828,7 +828,7 @@
       border: 1px solid rgba(182,196,255,0.1);
       border-radius: 6px;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem; font-weight: 700; letter-spacing: 0.12em;
+      font-size: 0.75rem; font-weight: 700; letter-spacing: 0.12em;
       text-transform: uppercase; color: rgba(195,197,217,0.65);
       cursor: pointer;
       transition: border-color 0.15s, color 0.15s, background 0.15s;
@@ -885,7 +885,7 @@
       position: relative; z-index: 1;
     }
     .vmsb-locked { opacity: 0.38; pointer-events: none; }
-    .vmsb-dim { color: rgba(255,255,255,0.25) !important; }
+    .vmsb-dim { color: rgba(255,255,255,0.45) !important; }
 
     /* Kompaktní hlavní menu na nižších oknech (laptopy) — ať se vejde bez scrollu */
     @media (max-height: 936px) {
@@ -938,7 +938,7 @@
     /* Season arrow button */
     #vm-season-arrow {
       background: transparent; border: 1px solid rgba(142,180,255,0.15);
-      color: rgba(142,180,255,0.4); font-size: 0.9rem; padding: 4px 10px;
+      color: rgba(142,180,255,0.7); font-size: 0.9rem; padding: 4px 10px;
       width: auto; margin: 0; border-radius: 2px; cursor: pointer; flex-shrink: 0;
       transition: background 0.12s, color 0.12s, border-color 0.12s;
     }
@@ -957,8 +957,8 @@
     #v-stats .vmsb-card:nth-child(3) { border-top-color: #FF8C00; }
     #v-stats .vmsb-card:nth-child(4) { border-top-color: #00C864; }
     #v-stats .vmsb-lbl {
-      font-size: 0.46rem; letter-spacing: 0.16em; text-transform: uppercase;
-      color: rgba(182,196,255,0.35); margin-bottom: 3px;
+      font-size: 0.75rem; letter-spacing: 0.16em; text-transform: uppercase;
+      color: rgba(182,196,255,0.6); margin-bottom: 3px;
     }
     #v-stats .vmsb-val {
       font-family: 'Barlow Condensed', system-ui;
@@ -969,7 +969,7 @@
     #v-stats .vmsb-green  { color: #00C864; }
 
 
-    #lobby-list:empty::after { content: 'Žádná lobby — vytvoř první.'; color: #2E4055; font-size: 0.8rem; text-align: center; padding: 18px 0; letter-spacing: 0.05em; }
+    #lobby-list:empty::after { content: 'Žádná lobby — vytvoř první.'; color: #758190; font-size: 0.8rem; text-align: center; padding: 18px 0; letter-spacing: 0.05em; }
 
     /* ═══════════════════════════════════════════════════════════════
        LOCKER ROOM — ESPORTS PROFILE REDESIGN
@@ -999,8 +999,8 @@
     /* Gear items */
     .gear-item { align-items: flex-start; padding: 8px 0 12px; margin-bottom: 1px; gap: 8px;
       border-bottom: 1px solid rgba(255,255,255,0.03); }
-    .gear-item > span { width: 80px; flex: none; text-align: left; color: #3A5268;
-      font-size: 0.54rem; letter-spacing: 0.1em; text-transform: uppercase; padding-top: 6px; }
+    .gear-item > span { width: 80px; flex: none; text-align: left; color: #718492;
+      font-size: 0.75rem; letter-spacing: 0.1em; text-transform: uppercase; padding-top: 6px; }
 
     /* Swatches — bigger, sharper */
     .sw { width: 28px; height: 28px; border-radius: 2px;
@@ -1012,20 +1012,20 @@
       transform: scale(1.13);
     }
     .sw.locked { opacity: 0.32; cursor: not-allowed; filter: saturate(0.3); }
-    .sw.locked::after { content: '🔒'; font-size: 0.5rem; top: -6px; right: -5px; }
+    .sw.locked::after { content: '🔒'; font-size: 0.75rem; top: -6px; right: -5px; }
 
     /* Chips (profile override) */
     .chip {
       background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 0; color: #3A5268;
-      font-size: 0.57rem; letter-spacing: 0.05em; padding: 7px 2px;
+      border-radius: 0; color: #718492;
+      font-size: 0.75rem; letter-spacing: 0.05em; padding: 7px 2px;
     }
     .chip.active {
       background: rgba(0,212,255,0.06);
       border-color: rgba(0,212,255,0.18);
       border-left: 2px solid #00D4FF; color: #B8D8F0;
     }
-    .chip:hover:not(.active) { background: rgba(255,255,255,0.03); color: #5A7080; filter: none; }
+    .chip:hover:not(.active) { background: rgba(255,255,255,0.03); color: #738693; filter: none; }
 
     /* Rank + Credits row */
     #profile-rank-row {
@@ -1038,7 +1038,7 @@
       border-top: 2px solid #00D4FF; padding: 9px 10px;
     }
     .rank-card .rc-label {
-      font-size: 0.46rem; letter-spacing: 0.12em; color: #2E4055;
+      font-size: 0.75rem; letter-spacing: 0.12em; color: #758190;
       text-transform: uppercase; margin-bottom: 3px; display: block;
     }
     .rank-card .rc-value {
@@ -1052,8 +1052,8 @@
 
     /* Stats section heading */
     .stats-heading {
-      font-size: 0.5rem; letter-spacing: 0.16em; text-transform: uppercase;
-      color: #2E4055; margin-bottom: 6px; margin-top: 10px;
+      font-size: 0.75rem; letter-spacing: 0.16em; text-transform: uppercase;
+      color: #758190; margin-bottom: 6px; margin-top: 10px;
       display: flex; align-items: center; gap: 8px;
     }
     .stats-heading::before { content: ''; display: block; width: 16px; height: 1px; background: rgba(255,255,255,0.08); }
@@ -1069,7 +1069,7 @@
     #profile-stats .stat-cell:nth-child(5) { border-top-color: #00C864; }
     #profile-stats .stat-cell:nth-child(6) { border-top-color: #8B1A1A; }
     #profile-stats .stat-cell span { font-size: 1.55rem; color: #A8C0D4; }
-    #profile-stats .stat-cell label { color: #2E4055; }
+    #profile-stats .stat-cell label { color: #758190; }
 
     /* Jersey number */
     #num-input {
@@ -1219,14 +1219,14 @@
     .splash-tagline {
       margin-top: 14px;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.62rem; font-weight: 700; letter-spacing: 0.2em;
-      text-transform: uppercase; color: rgba(182,196,255,0.35);
+      font-size: 0.75rem; font-weight: 700; letter-spacing: 0.2em;
+      text-transform: uppercase; color: rgba(182,196,255,0.6);
     }
     .splash-season-badge {
       display: inline-flex; align-items: center; gap: 6px;
       margin-top: 16px;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.56rem; font-weight: 700; letter-spacing: 0.22em;
+      font-size: 0.75rem; font-weight: 700; letter-spacing: 0.22em;
       text-transform: uppercase; color: #b6c4ff;
       background: rgba(182,196,255,0.07); border: 1px solid rgba(182,196,255,0.2);
       padding: 5px 14px;
@@ -1256,7 +1256,7 @@
     .splash-auth-title span { color: #b6c4ff; }
     .splash-auth-desc {
       font-family: 'JetBrains Mono', monospace;
-      color: rgba(182,196,255,0.35); font-size: 0.7rem; line-height: 1.65;
+      color: rgba(182,196,255,0.6); font-size: 0.75rem; line-height: 1.65;
       margin-bottom: 28px; letter-spacing: 0.04em;
     }
 
@@ -1280,8 +1280,8 @@
     .splash-or {
       display: flex; align-items: center; gap: 14px;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.56rem; font-weight: 700; letter-spacing: 0.2em;
-      text-transform: uppercase; color: rgba(182,196,255,0.18);
+      font-size: 0.75rem; font-weight: 700; letter-spacing: 0.2em;
+      text-transform: uppercase; color: rgba(182,196,255,0.63);
       margin: 18px 0;
     }
     .splash-or::before, .splash-or::after {
@@ -1301,7 +1301,7 @@
     }
     .splash-btn-ghost:hover { color: #e2e2eb; background: rgba(182,196,255,0.06); border-color: rgba(182,196,255,0.38); filter: none; }
     .splash-privacy { display: block; text-align: center; margin-top: 18px; font-family: 'JetBrains Mono', monospace;
-      font-size: 0.64rem; letter-spacing: 0.1em; text-transform: uppercase; color: #6a7390; text-decoration: none; opacity: 0.8; }
+      font-size: 0.75rem; letter-spacing: 0.1em; text-transform: uppercase; color: #767e99; text-decoration: none; opacity: 0.8; }
     .splash-privacy:hover { color: #b6c4ff; opacity: 1; text-decoration: underline; }
 
     /* Tutorial CTA */
@@ -1353,7 +1353,7 @@
     .sv-profile-identity-row .sv-num-row {
       display: flex; align-items: center; gap: 6px; flex-shrink: 0;
     }
-    .sv-profile-identity-row .sv-num-row .lbl { margin: 0; white-space: nowrap; font-size: 0.52rem; }
+    .sv-profile-identity-row .sv-num-row .lbl { margin: 0; white-space: nowrap; font-size: 0.75rem; }
     .sv-profile-identity-row .sv-num-row #num-input {
       width: 58px; margin: 0; padding: 8px 4px; text-align: center;
       font-family: 'Barlow Condensed', system-ui; font-size: 1.05rem; font-weight: 700;
@@ -1367,7 +1367,7 @@
     .vm-extra-btn {
       flex: 1; padding: 10px 12px; margin: 0;
       background: rgba(255,255,255,0.018); border: 1px solid rgba(255,255,255,0.06);
-      color: #3A5268; font-size: 0.62rem; font-weight: 700;
+      color: #718492; font-size: 0.75rem; font-weight: 700;
       letter-spacing: 0.1em; cursor: pointer; border-radius: 0;
       text-transform: uppercase; transition: color 0.12s, background 0.12s;
     }
@@ -1381,7 +1381,7 @@
       display: flex; align-items: center; justify-content: center;
       width: 36px; height: 36px; padding: 8px; margin: 0;
       background: transparent; border: none;
-      color: rgba(255,255,255,0.3); font-size: 0.60rem; font-weight: 700;
+      color: rgba(255,255,255,0.45); font-size: 0.75rem; font-weight: 700;
       letter-spacing: 0.14em; text-transform: uppercase;
       cursor: pointer; border-radius: 2px; transition: color 0.12s, background 0.12s;
       text-align: left;
@@ -1396,8 +1396,8 @@
     }
     #settings-dropdown.open { display: block; }
     .sd-label {
-      font-size: 0.48rem; font-weight: 700; letter-spacing: 0.16em;
-      text-transform: uppercase; color: rgba(142,180,255,0.4);
+      font-size: 0.75rem; font-weight: 700; letter-spacing: 0.16em;
+      text-transform: uppercase; color: rgba(142,180,255,0.7);
       padding: 10px 14px 4px;
     }
     .sd-vol-row {
@@ -1405,12 +1405,12 @@
       padding: 6px 14px 12px;
     }
     .sd-vol-row input[type=range] { flex: 1; height: 3px; accent-color: #00D4FF; cursor: pointer; }
-    .sd-vol-pct { font-size: 0.68rem; color: #4A6078; min-width: 30px; text-align: right; }
+    .sd-vol-pct { font-size: 0.75rem; color: #718496; min-width: 30px; text-align: right; }
     .sd-item {
       display: flex; align-items: center; gap: 8px;
       width: 100%; padding: 10px 14px;
-      font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em;
-      color: #4A6078; background: transparent; border: none;
+      font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em;
+      color: #718496; background: transparent; border: none;
       cursor: pointer; text-transform: uppercase; text-decoration: none;
       transition: background 0.1s, color 0.1s; border-radius: 0; margin: 0;
     }
@@ -1438,7 +1438,7 @@
       max-width: 380px;
     }
     .store-soon-eyebrow {
-      font-family: 'JetBrains Mono', monospace; font-size: 0.52rem; font-weight: 700;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 700;
       letter-spacing: 0.26em; color: #ffade2; text-transform: uppercase;
     }
     .store-soon-title {
@@ -1449,7 +1449,7 @@
     .store-soon-title span { color: #b6c4ff; }
     .store-soon-sub {
       font-family: 'Hanken Grotesk', sans-serif; font-size: 0.82rem;
-      color: rgba(182,196,255,0.35); line-height: 1.6;
+      color: rgba(182,196,255,0.6); line-height: 1.6;
     }
     .store-soon-credits {
       margin-top: 10px; padding: 14px 24px;
@@ -1459,15 +1459,15 @@
       display: flex; flex-direction: column; align-items: center; gap: 4px;
     }
     .store-soon-credits-label {
-      font-family: 'JetBrains Mono', monospace; font-size: 0.44rem;
-      letter-spacing: 0.18em; color: rgba(255,173,226,0.4); text-transform: uppercase;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
+      letter-spacing: 0.18em; color: rgba(255,173,226,0.6); text-transform: uppercase;
     }
     .store-soon-credits-val {
       font-family: 'Barlow Condensed', system-ui; font-size: 2.6rem;
       font-weight: 900; font-style: italic; color: #ffade2; line-height: 1;
     }
     .store-soon-credits-unit {
-      font-size: 1rem; color: rgba(255,173,226,0.4);
+      font-size: 1rem; color: rgba(255,173,226,0.6);
     }
 
     .sv-store-left {
@@ -1484,8 +1484,8 @@
     }
     .sv-store-earn-row {
       display: flex; justify-content: space-between; align-items: center;
-      font-family: 'JetBrains Mono', monospace; font-size: 0.52rem;
-      color: rgba(182,196,255,0.35); padding: 4px 0;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
+      color: rgba(182,196,255,0.6); padding: 4px 0;
       border-bottom: 1px solid rgba(255,255,255,0.03);
     }
     .sv-store-earn-row:last-child { border-bottom: none; }
@@ -1500,8 +1500,8 @@
       display: flex; align-items: baseline; gap: 14px; margin-bottom: 10px;
     }
     .sv-store-section-sub {
-      font-family: 'JetBrains Mono', monospace; font-size: 0.42rem;
-      color: rgba(182,196,255,0.25); letter-spacing: 0.14em; text-transform: uppercase;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
+      color: rgba(182,196,255,0.6); letter-spacing: 0.14em; text-transform: uppercase;
     }
     .sv-store-grid {
       display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px;
@@ -1528,17 +1528,17 @@
       letter-spacing: 0.04em; color: #EEF4FF; text-transform: uppercase; line-height: 1.1;
     }
     .sv-item-type {
-      font-family: 'JetBrains Mono', monospace; font-size: 0.38rem;
-      letter-spacing: 0.12em; color: rgba(182,196,255,0.3); text-transform: uppercase;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
+      letter-spacing: 0.12em; color: rgba(182,196,255,0.6); text-transform: uppercase;
     }
     .sv-item-price {
-      font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; font-weight: 700;
-      letter-spacing: 0.1em; color: rgba(255,173,226,0.55); margin-top: auto;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 700;
+      letter-spacing: 0.1em; color: rgba(255,173,226,0.6); margin-top: auto;
     }
     .sv-item-badge {
       position: absolute; top: 7px; right: 7px;
-      font-family: 'JetBrains Mono', monospace; font-size: 0.38rem; font-weight: 700;
-      letter-spacing: 0.12em; color: rgba(182,196,255,0.35);
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 700;
+      letter-spacing: 0.12em; color: rgba(182,196,255,0.6);
       background: rgba(182,196,255,0.06); padding: 2px 5px; text-transform: uppercase;
     }
 
@@ -1570,8 +1570,8 @@
       color: #EEF4FF; line-height: 0.9;
     }
     .sv-stats-rank-lbl {
-      font-family: 'JetBrains Mono', monospace; font-size: 0.46rem; font-weight: 700;
-      letter-spacing: 0.18em; text-transform: uppercase; color: rgba(182,196,255,0.3);
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 700;
+      letter-spacing: 0.18em; text-transform: uppercase; color: rgba(182,196,255,0.6);
     }
     .sv-stats-personal-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
     .sv-stat-cell {
@@ -1588,8 +1588,8 @@
     .sv-stat-cell.cyan .sv-stat-val  { color: #00D4FF; }
     .sv-stat-cell.orange .sv-stat-val { color: #FF8C00; }
     .sv-stat-lbl {
-      font-family: 'JetBrains Mono', monospace; font-size: 0.42rem;
-      letter-spacing: 0.14em; text-transform: uppercase; color: rgba(182,196,255,0.3); margin-top: 2px;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
+      letter-spacing: 0.14em; text-transform: uppercase; color: rgba(182,196,255,0.6); margin-top: 2px;
     }
     .sv-stat-winrate-row {
       display: flex; align-items: baseline; gap: 10px;
@@ -1602,8 +1602,8 @@
       font-weight: 900; color: #00C864; line-height: 1;
     }
     .sv-stat-wr-lbl {
-      font-family: 'JetBrains Mono', monospace; font-size: 0.44rem;
-      letter-spacing: 0.16em; text-transform: uppercase; color: rgba(182,196,255,0.3);
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
+      letter-spacing: 0.16em; text-transform: uppercase; color: rgba(182,196,255,0.6);
     }
     .sv-stat-credits-badge {
       padding: 12px 14px; margin-top: auto;
@@ -1611,8 +1611,8 @@
       background: rgba(255,173,226,0.025);
     }
     .sv-stat-credits-lbl {
-      font-family: 'JetBrains Mono', monospace; font-size: 0.42rem;
-      letter-spacing: 0.18em; color: rgba(255,173,226,0.4); text-transform: uppercase;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
+      letter-spacing: 0.18em; color: rgba(255,173,226,0.6); text-transform: uppercase;
     }
     .sv-stat-credits-val {
       font-family: 'Barlow Condensed', system-ui; font-size: 2rem;
@@ -1632,17 +1632,17 @@
     }
     .sv-lb-tab {
       padding: 6px 16px;
-      font-family: 'JetBrains Mono', monospace; font-size: 0.46rem; font-weight: 700;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 700;
       letter-spacing: 0.16em; text-transform: uppercase;
       background: none; border: none; cursor: pointer;
-      color: rgba(182,196,255,0.35); transition: color 0.15s, background 0.15s;
+      color: rgba(182,196,255,0.6); transition: color 0.15s, background 0.15s;
     }
     .sv-lb-tab.active { background: rgba(182,196,255,0.1); color: #b6c4ff; }
     .sv-lb-cols {
       display: grid; grid-template-columns: 44px 1fr 80px 60px 50px;
       padding: 8px 24px;
-      font-family: 'JetBrains Mono', monospace; font-size: 0.42rem; font-weight: 700;
-      letter-spacing: 0.14em; text-transform: uppercase; color: rgba(182,196,255,0.25);
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 700;
+      letter-spacing: 0.14em; text-transform: uppercase; color: rgba(182,196,255,0.6);
       border-bottom: 1px solid rgba(182,196,255,0.07); flex-shrink: 0;
     }
     .sv-lb-list { flex: 1; overflow-y: auto; }
@@ -1654,8 +1654,8 @@
     .sv-lb-row:hover { background: rgba(182,196,255,0.04); }
     .sv-lb-row.me { background: rgba(182,196,255,0.06); border-left: 2px solid rgba(182,196,255,0.4); }
     .sv-lb-rank {
-      font-family: 'JetBrains Mono', monospace; font-size: 0.52rem;
-      font-weight: 700; color: rgba(182,196,255,0.3);
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
+      font-weight: 700; color: rgba(182,196,255,0.6);
     }
     .sv-lb-rank.top3 { color: #ffade2; }
     .sv-lb-name {
@@ -1664,30 +1664,30 @@
     }
     .sv-lb-elo { font-family: 'Barlow Condensed', system-ui; font-size: 1rem; font-weight: 700; color: #00D4FF; }
     .sv-lb-wr, .sv-lb-gp {
-      font-family: 'JetBrains Mono', monospace; font-size: 0.5rem; color: rgba(182,196,255,0.5);
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: rgba(182,196,255,0.6);
     }
     .sv-lb-empty {
       padding: 40px 24px; text-align: center;
-      font-family: 'JetBrains Mono', monospace; font-size: 0.5rem;
-      letter-spacing: 0.14em; color: rgba(182,196,255,0.2); text-transform: uppercase;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
+      letter-spacing: 0.14em; color: rgba(182,196,255,0.6); text-transform: uppercase;
     }
     .sv-lb-friends-cta {
       flex-shrink: 0; padding: 20px 24px; display: flex; align-items: center; gap: 12px;
-      font-family: 'JetBrains Mono', monospace; font-size: 0.5rem;
-      letter-spacing: 0.12em; color: rgba(182,196,255,0.3); text-transform: uppercase;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
+      letter-spacing: 0.12em; color: rgba(182,196,255,0.6); text-transform: uppercase;
       border-top: 1px solid rgba(182,196,255,0.07);
     }
     .sv-stats-login-cta {
       margin-top: auto; padding: 16px; text-align: center;
       background: rgba(88,101,242,0.06); border: 1px solid rgba(88,101,242,0.15);
-      color: #6070C8; font-size: 0.68rem; letter-spacing: 0.1em;
+      color: #6d7bcc; font-size: 0.75rem; letter-spacing: 0.1em;
     }
 
     /* Contextual icon buttons in nav right */
     .sv-icon-btn {
       padding: 10px 14px; width: 100%; margin: 0;
       background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); border-radius: 2px;
-      color: #4A6078; font-size: 0.60rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+      color: #718496; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
       cursor: pointer; text-align: left; display: flex; align-items: center; gap: 10px;
     }
     .sv-icon-btn:hover:not(:disabled) { background: rgba(255,255,255,0.07); color: #C8D8E8; filter: none; }
@@ -1697,7 +1697,7 @@
 
     /* Eyebrow + big title */
     .sv-eyebrow {
-      font-size: 0.56rem; font-weight: 700; letter-spacing: 0.24em;
+      font-size: 0.75rem; font-weight: 700; letter-spacing: 0.24em;
       color: #b6c4ff; text-transform: uppercase; margin-bottom: 10px;
       display: flex; align-items: center; gap: 10px;
     }
@@ -1710,8 +1710,8 @@
       margin-bottom: clamp(16px,2vw,28px);
     }
     .sv-section-lbl {
-      font-size: 0.48rem; font-weight: 700; letter-spacing: 0.18em;
-      text-transform: uppercase; color: #2E4055; margin-bottom: 10px;
+      font-size: 0.75rem; font-weight: 700; letter-spacing: 0.18em;
+      text-transform: uppercase; color: #758190; margin-bottom: 10px;
       display: flex; align-items: center; gap: 8px;
     }
     .sv-section-lbl::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.04); }
@@ -1758,7 +1758,7 @@
     .sv-browse-top #refresh-btn {
       width: auto; flex: none; padding: 5px 12px; margin: 0;
       background: transparent; border: 1px solid rgba(255,255,255,0.06);
-      color: #2E4055; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.1em;
+      color: #758190; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em;
       text-transform: uppercase; cursor: pointer; border-radius: 0;
       transition: color 0.12s, border-color 0.12s;
     }
@@ -1776,12 +1776,12 @@
       color: #EEF4FF; font-size: 0.8rem; letter-spacing: 0.16em; text-transform: uppercase;
       border-radius: 0;
     }
-    .sv-join-row #join-input::placeholder { color: #243040; letter-spacing: 0.1em; }
+    .sv-join-row #join-input::placeholder { color: #7b828b; letter-spacing: 0.1em; }
     .sv-join-row #join-input:focus { outline: none; box-shadow: none; border-color: transparent; background: rgba(0,212,255,0.04); }
     .sv-join-row #join-btn {
       width: auto; flex: none; padding: 9px 16px; margin: 0;
       background: rgba(0,212,255,0.06); border: none;
-      color: #00D4FF; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.1em;
+      color: #00D4FF; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em;
       cursor: pointer; border-radius: 0; text-transform: uppercase;
       clip-path: none;
     }
@@ -1861,7 +1861,7 @@
       border-radius: 999px; backdrop-filter: blur(6px);
     }
     .lk-dim-btn {
-      font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.05em;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.05em;
       color: #8a93a8; background: transparent; border: 0; cursor: pointer;
       padding: 5px 13px; border-radius: 999px; transition: background .15s, color .15s;
     }
@@ -1881,8 +1881,8 @@
     #lk-3d-canvas:active { cursor: grabbing; }
     #lk-3d-hint {
       position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
-      font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; letter-spacing: 0.08em;
-      color: rgba(182,196,255,0.55); text-transform: uppercase; pointer-events: none;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; letter-spacing: 0.08em;
+      color: rgba(182,196,255,0.6); text-transform: uppercase; pointer-events: none;
       opacity: 0; transition: opacity .4s;
     }
     #lk-3d-wrap.on #lk-3d-hint { opacity: 1; }
@@ -1924,8 +1924,8 @@
       background: rgba(182,196,255,0.025);
     }
     .lk-minimap-label {
-      font-family: 'JetBrains Mono', monospace; font-size: 0.48rem; font-weight: 700;
-      letter-spacing: 0.22em; color: rgba(182,196,255,0.35); text-transform: uppercase;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 700;
+      letter-spacing: 0.22em; color: rgba(182,196,255,0.6); text-transform: uppercase;
     }
     #prof-preview {
       display: block; width: 100%; height: auto;
@@ -1936,9 +1936,9 @@
     .lk-gear-note {
       display: flex; align-items: flex-start; gap: 7px;
       margin-top: 8px; padding: 10px 12px;
-      font-family: 'JetBrains Mono', monospace; font-size: 0.5rem;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
       letter-spacing: 0.06em; line-height: 1.6;
-      color: rgba(182,196,255,0.35);
+      color: rgba(182,196,255,0.6);
       border-top: 1px solid rgba(182,196,255,0.07);
     }
     .lk-gear-note svg { flex-shrink: 0; margin-top: 1px; opacity: 0.4; }
@@ -1946,7 +1946,7 @@
 
     /* Auto-save status line */
     .lk-autosave {
-      font-family: 'JetBrains Mono', monospace; font-size: 0.48rem; font-weight: 700;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 700;
       letter-spacing: 0.18em; text-transform: uppercase; text-align: center;
       color: rgba(100,220,130,0.7); padding: 6px 0 2px;
       opacity: 0; transition: opacity 0.3s;
@@ -1964,7 +1964,7 @@
       position: absolute; bottom: 58px; left: 50%; transform: translateX(-50%);
       z-index: 4; pointer-events: none;
       display: flex; align-items: center; gap: 6px;
-      font-family: 'JetBrains Mono', monospace; font-size: 0.58rem; font-weight: 700;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 700;
       letter-spacing: 0.18em; text-transform: uppercase; white-space: nowrap;
       color: #b6c4ff;
       border: 1px solid rgba(182,196,255,0.25);
@@ -1980,7 +1980,7 @@
     /* Hover label floating above hovered SVG part */
     #hero-hover-label {
       position: fixed; z-index: 9999; pointer-events: none;
-      font-family: 'JetBrains Mono', monospace; font-size: 0.58rem; font-weight: 700;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 700;
       letter-spacing: 0.2em; color: #b6c4ff; text-transform: uppercase;
       background: rgba(12,17,28,0.88); border: 1px solid rgba(182,196,255,0.2);
       padding: 3px 8px; white-space: nowrap;
@@ -2006,7 +2006,7 @@
     .lk-plate-num {
       font-family: 'Barlow Condensed', system-ui; font-weight: 900; font-style: italic;
       font-size: 7rem; line-height: 1; letter-spacing: -0.05em;
-      color: rgba(182,196,255,0.07); text-align: right;
+      color: rgba(182,196,255,0.62); text-align: right;
       position: absolute; top: -12px; right: 16px; pointer-events: none;
       user-select: none;
     }
@@ -2022,12 +2022,12 @@
       margin-top: 8px; position: relative; z-index: 1;
     }
     .lk-plate-hand {
-      font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; font-weight: 700;
-      letter-spacing: 0.18em; color: rgba(255,173,226,0.5); text-transform: uppercase;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 700;
+      letter-spacing: 0.18em; color: rgba(255,173,226,0.6); text-transform: uppercase;
     }
     .lk-plate-edit {
-      font-family: 'JetBrains Mono', monospace; font-size: 0.58rem; font-weight: 700;
-      letter-spacing: 0.16em; color: rgba(182,196,255,0.4); text-transform: uppercase;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 700;
+      letter-spacing: 0.16em; color: rgba(182,196,255,0.6); text-transform: uppercase;
       cursor: pointer; padding: 4px 8px;
       border: 1px solid rgba(182,196,255,0.15);
       transition: color .15s, border-color .15s;
@@ -2045,7 +2045,7 @@
     .lk-form-row { display: flex; gap: 16px; }
     .lk-field { display: flex; flex-direction: column; gap: 5px; }
     .lk-field-lbl {
-      font-family: 'JetBrains Mono', monospace; font-size: 0.62rem; font-weight: 700;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 700;
       letter-spacing: 0.18em; color: rgba(255,173,226,0.6); text-transform: uppercase;
     }
     .lk-input {
@@ -2065,7 +2065,7 @@
     .lk-hand-toggle { display: flex; gap: 6px; }
     .lk-hand-toggle .hand-btn {
       flex: 1; background: transparent; border: 1px solid rgba(182,196,255,0.15);
-      color: rgba(182,196,255,0.35);
+      color: rgba(182,196,255,0.6);
       font-family: 'Barlow Condensed', system-ui; font-style: italic; font-weight: 900;
       font-size: 1rem; letter-spacing: 0.04em; text-transform: uppercase;
       padding: 8px 10px; border-radius: 0; cursor: pointer;
@@ -2146,7 +2146,7 @@
     .lk-row .sw { flex: 0 0 auto; width: 22px; height: 22px; border-radius: 6px; transform: none; }
     .lk-row .sw.active { border-color: #fff; box-shadow: 0 0 0 2px #3a9fff, 0 0 10px rgba(58,159,255,.5); transform: scale(1.08); }
     .lk-row .chips { gap: 5px; }
-    .lk-row .chip { border-radius: 6px; font-size: .68rem; padding: 7px 4px; border: 1px solid rgba(182,196,255,0.14); text-transform: uppercase; color: #8fa3c8; }
+    .lk-row .chip { border-radius: 6px; font-size: 0.75rem; padding: 7px 4px; border: 1px solid rgba(182,196,255,0.14); text-transform: uppercase; color: #8fa3c8; }
     .lk-row .chip.active { border-color: #3a9fff; background: rgba(58,159,255,.16); color: #fff; box-shadow: 0 0 0 1px #3a9fff; }
     #v-profile .lk-wrap > #profile-guest-login, #v-profile .lk-wrap > #profile-link, #v-profile .lk-wrap > #profile-rank-row,
     #v-profile .lk-wrap > #profile-stats, #v-profile .lk-wrap > .lk-gear-note { max-width: 620px; align-self: flex-end; }
@@ -2174,8 +2174,8 @@
       box-shadow: 0 8px 24px rgba(0,0,0,0.5);
     }
     .lk-minirink-lbl {
-      display: block; font-family: 'JetBrains Mono', monospace; font-size: 0.44rem; font-weight: 700;
-      letter-spacing: 0.22em; color: rgba(182,196,255,0.55); text-transform: uppercase;
+      display: block; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 700;
+      letter-spacing: 0.22em; color: rgba(182,196,255,0.6); text-transform: uppercase;
       padding: 1px 2px 4px;
     }
     #lk-minirink { display: block; width: 100%; height: auto; border-radius: 5px; }
@@ -2201,14 +2201,14 @@
     .lk-dice-btn:active { transform: translateY(1px); }
     .lk-code-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 180px; }
     .lk-code-lbl {
-      font-family: 'JetBrains Mono', monospace; font-size: 0.5rem; font-weight: 700;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 700;
       letter-spacing: 0.18em; color: rgba(255,173,226,0.6); text-transform: uppercase;
     }
     .lk-code-row { display: flex; gap: 6px; }
     #lk-code-in {
       flex: 1; min-width: 0; background: rgba(0,0,0,0.28); border: 1px solid rgba(182,196,255,0.2);
       color: #e2e2eb; border-radius: 6px; padding: 7px 10px;
-      font-family: 'JetBrains Mono', monospace; font-size: 0.74rem; font-weight: 700;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 700;
       letter-spacing: 0.1em; text-transform: uppercase; outline: none;
     }
     #lk-code-in:focus { border-color: #b6c4ff; }
@@ -2224,8 +2224,8 @@
     #lk-code-apply:hover, .lk-code-copy:hover { background: rgba(182,196,255,0.2); }
     .lk-fits { display: flex; align-items: center; gap: 10px; }
     .lk-fits-lbl {
-      font-family: 'JetBrains Mono', monospace; font-size: 0.5rem; font-weight: 700;
-      letter-spacing: 0.18em; color: rgba(182,196,255,0.45); text-transform: uppercase;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 700;
+      letter-spacing: 0.18em; color: rgba(182,196,255,0.6); text-transform: uppercase;
       writing-mode: horizontal-tb; flex-shrink: 0; width: 54px; line-height: 1.3;
     }
     .lk-fit-slots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; flex: 1; }
@@ -2245,8 +2245,8 @@
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .lk-fit-save {
-      background: transparent; border: 1px dashed rgba(182,196,255,0.22); color: rgba(182,196,255,0.55);
-      font-family: 'JetBrains Mono', monospace; font-size: 0.46rem; font-weight: 700;
+      background: transparent; border: 1px dashed rgba(182,196,255,0.22); color: rgba(182,196,255,0.6);
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 700;
       letter-spacing: 0.1em; text-transform: uppercase; padding: 4px 2px; border-radius: 5px; cursor: pointer;
       transition: color .15s, border-color .15s;
     }
@@ -2278,7 +2278,7 @@
     }
     #hero-popup.visible { display: block; }
     #hero-popup .hp-label {
-      font-family: 'JetBrains Mono', monospace; font-size: 0.58rem; font-weight: 700;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 700;
       letter-spacing: 0.22em; color: #ffade2; text-transform: uppercase; margin-bottom: 9px;
     }
     #hero-popup .hp-swatches { display: flex; flex-wrap: wrap; gap: 5px; }
@@ -2296,7 +2296,7 @@
       display: flex; flex-direction: column; align-items: center; gap: 0;
       padding: 0; border-radius: 0; cursor: pointer; overflow: hidden;
       background: rgba(255,255,255,0.03); border: 1px solid rgba(182,196,255,0.12);
-      color: rgba(182,196,255,0.45);
+      color: rgba(182,196,255,0.6);
       clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 0 100%);
       transition: border-color .15s, color .15s;
       width: 80px;
@@ -2314,9 +2314,9 @@
     .chip-svg-wrap svg { display: block; width: 80px; height: 56px; }
     #hero-popup .hp-chips .chip .chip-lbl {
       display: block; width: 100%; text-align: center;
-      font-family: 'Barlow Condensed', system-ui; font-size: 0.72rem;
+      font-family: 'Barlow Condensed', system-ui; font-size: 0.75rem;
       font-weight: 900; font-style: italic; letter-spacing: 0.06em; text-transform: uppercase;
-      color: rgba(182,196,255,0.5);
+      color: rgba(182,196,255,0.6);
       padding: 3px 0 4px;
       background: rgba(0,0,0,0.25);
     }
@@ -2352,7 +2352,7 @@
     .sv-vs-divider {
       text-align: center;
       font-family: 'Barlow Condensed', system-ui; font-size: 1.6rem; font-weight: 900; font-style: italic;
-      color: rgba(255,255,255,0.05); letter-spacing: 0.12em; pointer-events: none;
+      color: rgba(255,255,255,0.45); letter-spacing: 0.12em; pointer-events: none;
     }
 
     .sv-create-right {
@@ -2382,7 +2382,7 @@
     /* Lobby name + info block */
     .sv-wait-meta { text-align: center; }
     .sv-wait-eyebrow {
-      font-size: 0.52rem; font-weight: 700; letter-spacing: 0.26em;
+      font-size: 0.75rem; font-weight: 700; letter-spacing: 0.26em;
       color: #b6c4ff; text-transform: uppercase; margin-bottom: 10px;
       display: flex; align-items: center; justify-content: center; gap: 10px;
     }
@@ -2393,7 +2393,7 @@
       margin-bottom: 6px;
     }
     #lobby.on-wait #wait-info {
-      font-size: 0.58rem; color: #2E4055; letter-spacing: 0.12em; text-align: center; margin: 0;
+      font-size: 0.75rem; color: #758190; letter-spacing: 0.12em; text-align: center; margin: 0;
       text-transform: uppercase;
     }
 
@@ -2402,7 +2402,7 @@
       content: 'VS'; pointer-events: none;
       position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
       font-family: 'Barlow Condensed', system-ui; font-size: 3rem; font-weight: 900; font-style: italic;
-      color: rgba(255,255,255,0.035); z-index: 2; letter-spacing: 0.1em;
+      color: rgba(255,255,255,0.49); z-index: 2; letter-spacing: 0.1em;
     }
     #lobby.on-wait #wait-teams { display: flex !important; width: 100%; gap: 0; }
     #lobby.on-wait .wt-col { flex: 1; padding: 18px 20px; min-height: 110px; }
@@ -2422,12 +2422,78 @@
       padding: 16px;
     }
     .wait-leave-btn {
-      background: transparent; border: none; color: #2E4055;
-      font-size: 0.62rem; font-weight: 700; letter-spacing: 0.1em;
+      background: transparent; border: none; color: #758190;
+      font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em;
       text-transform: uppercase; cursor: pointer; padding: 8px 0; width: auto;
       margin-top: 4px;
     }
-    .wait-leave-btn:hover { color: #C04040; filter: none; }
+    .wait-leave-btn:hover { color: #ca5d5d; filter: none; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       UX v2 (2026-11-02) — jeden systém pro celé menu
+       Pravidla: 1 barva hlavní akce (--ux-primary), 1 styl vedlejší akce,
+       min. písmo 12 px, kontrast textu ≥ 4.5:1, stejná osa obrazovek.
+       ═══════════════════════════════════════════════════════════════ */
+    :root { --ux-primary: #b6c4ff; --ux-primary-ink: #0a1440; --ux-line: rgba(182,196,255,0.30); --ux-text-2: #aab3cc; }
+    /* Hlavní akce: všude stejná (splash HRÁT, menu HRÁT, Vytvořit, Start, Pokračovat) */
+    button.primary, #create-btn, #start-btn, #resume-btn, .splash-btn-primary, .vm-cta-primary {
+      background: var(--ux-primary) !important; color: var(--ux-primary-ink) !important;
+      box-shadow: none !important; border: none !important;
+    }
+    button.primary:hover:not(:disabled), #start-btn:hover:not(:disabled), .splash-btn-primary:hover, .vm-cta-primary:hover:not(:disabled) {
+      background: #cdd7ff !important; box-shadow: 0 0 24px rgba(182,196,255,0.35) !important;
+    }
+    .vm-cta-primary .vmcta-title, .vm-cta-primary .vmcta-sub { color: var(--ux-primary-ink) !important; }
+    .vm-cta-primary .vmcta-sub { opacity: 1; }
+    /* Vedlejší akce: průhledné, tenký rámeček, světlý text */
+    .splash-btn-ghost, .vm-sec-link, .pick-btn, button.ghost, button.back, #mr-rematch-btn, #mr-close-btn {
+      background: transparent !important; border: 1px solid var(--ux-line) !important; color: #dfe4f5 !important; border-radius: 0 !important;
+    }
+    .splash-btn-ghost:hover, .vm-sec-link:hover, .pick-btn:hover:not(:disabled), button.ghost:hover:not(:disabled), button.back:hover:not(:disabled) {
+      background: rgba(182,196,255,0.08) !important; border-color: var(--ux-primary) !important; color: #fff !important;
+    }
+    .splash-btn-ghost { width: 100%; padding: 14px 28px; }
+    /* Hlavní menu: 1 velké HRÁT + 4 stejné vedlejší */
+    #vm-btn-row { grid-template-columns: 1fr; }
+    #vm-btn-row .vm-cta-primary { padding: 34px 32px; align-items: center; text-align: center; }
+    #vm-btn-row .vm-cta-primary .vmcta-title { font-size: 3.4rem; }
+    #vm-secondary-links { grid-template-columns: repeat(4, 1fr); }
+    .vm-sec-link { justify-content: center; font-size: 0.8rem !important; padding: 14px 10px !important; }
+    /* Kredity: obchod je skrytý → kredity neukazujeme (slepá ulička) */
+    .sv-stat-credits-badge, .mr-reward-card:has(#mr-credits) { display: none !important; }
+    #vm-footer .vmsb-card:has(#vm-footer-credits) { display: none; }
+    #vm-footer { grid-template-columns: repeat(3, 1fr); }
+    /* Vytvořit hru: jeden sloupec, hlavní tlačítko hned pod nastavením */
+    #v-create { flex-direction: column; align-items: center; overflow-y: auto; }
+    .sv-create-one { width: 100%; max-width: 560px; margin: 0 auto; padding: 32px 16px; display: flex; flex-direction: column; gap: 14px; text-align: left; }
+    .sv-create-one .lk-title-line { text-align: center; margin: 4px 0 6px; }
+    .sv-create-one .sv-back { align-self: flex-start; width: auto; padding: 8px 16px; }
+    .sv-create-one .lbl { margin: 0; }
+    .sv-create-one .set-row { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px; margin: 0; }
+    .sv-create-one .set-row label { display: flex; flex-direction: column; gap: 6px; font-size: 0.8rem; color: var(--ux-text-2); }
+    .sv-create-one select, .sv-create-one input[type=text] {
+      width: 100%; padding: 11px 12px; background: #0d1020; color: #e8ebf7; border: 1px solid var(--ux-line); border-radius: 0;
+      font: 500 0.9rem 'Hanken Grotesk', system-ui; text-align: left; letter-spacing: 0; text-transform: none;
+    }
+    .sv-create-one input::placeholder { color: #8890a8; }
+    .sv-create-one .chk { display: flex; align-items: center; gap: 10px; font-size: 0.9rem; color: #dfe4f5; cursor: pointer; }
+    .sv-create-one .chk input { width: 18px; height: 18px; accent-color: var(--ux-primary); }
+    .sv-teams-adv { border: 1px solid rgba(182,196,255,0.15); padding: 0 14px; }
+    .sv-teams-adv summary { cursor: pointer; padding: 12px 0; font-size: 0.85rem; color: var(--ux-text-2); }
+    .sv-teams-adv[open] { padding-bottom: 14px; }
+    .sv-teams-adv .team-block { margin-top: 10px; }
+    .sv-teams-adv .tb-head { display: grid; grid-template-columns: 1fr 140px; gap: 8px; margin-bottom: 8px; }
+    #lobby.on-create #create-go { margin-top: 6px; padding: 16px; }
+    /* Procházet hry: stejná osa jako Nová hra (jeden sloupec, nadpis nahoře) */
+    .sv-body-browse { grid-template-columns: 1fr !important; grid-template-rows: auto 1fr; align-content: start; max-width: 720px; margin: 0 auto; width: 100%; background: transparent; }
+    .sv-browse-hero { justify-content: flex-start !important; background: transparent !important; border: none !important; padding: 32px 16px 8px !important; gap: 12px; align-items: stretch; }
+    .sv-browse-hero .sv-back { align-self: flex-start; width: auto; padding: 8px 16px; }
+    .sv-browse-hero .sv-eyebrow { display: none; }
+    .sv-browse-hero .sv-big-title { text-align: center; }
+    .sv-browse-list { padding: 8px 16px 32px !important; background: transparent !important; }
+    .sv-join-row input { text-align: left !important; }
+    /* Žebříček: jméno zarovnané vlevo jako ostatní tabulky */
+    .sv-lb-name, .sv-lb-col-name { text-align: left; }
   </style>
 </head>
 <body>
@@ -2472,7 +2538,7 @@
     <nav id="main-nav">
       <div id="mn-inner">
       <div style="display:flex;align-items:center;gap:0">
-        <div class="nav-logo">HOCKEY</div>
+        <div class="nav-logo">FLATHOCKEY</div>
         <div id="mn-tabs">
           <button class="mn-tab active" id="mn-tab-home" data-i18n="nav_home">HOME</button>
           <button class="mn-tab" id="mn-tab-locker" data-i18n="nav_locker">LOCKER ROOM</button>
@@ -2538,9 +2604,12 @@
             <p class="splash-auth-desc" data-i18n="splash_first_text">
               Welcome! Before you play, complete the quick tutorial.
             </p>
-            <button id="splash-tutorial-btn" class="splash-btn-primary">
+            <button id="splash-play-btn" class="splash-btn-primary">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              <span data-i18n="splash_tutorial">START TUTORIAL</span>
+              <span data-i18n="play">PLAY</span>
+            </button>
+            <button id="splash-tutorial-btn" class="splash-btn-ghost" style="margin-top:12px">
+              <span data-i18n="splash_tutorial">TUTORIAL</span>
             </button>
           </div>
           <!-- Return visit -->
@@ -2580,21 +2649,16 @@
             </div>
 
             <div id="vm-btn-row">
-              <button id="go-online" class="vm-cta-primary">
-                <span class="vmcta-icon">🏒</span>
-                <div class="vmcta-title" data-i18n="browse_title">Procházet hry</div>
-                <div class="vmcta-sub" data-i18n="browse_sub">ONLINE ZÁPASY • 3V3</div>
-              </button>
-              <button id="vm-create-btn" class="vm-cta-ghost">
-                <span class="vmcta-icon">+</span>
-                <div class="vmcta-title" data-i18n="create_title">Vytvořit hru</div>
-                <div class="vmcta-sub" data-i18n="create_sub">SOUKROMÉ LOBBY • VLASTNÍ PRAVIDLA</div>
+              <button id="go-play" class="vm-cta-primary">
+                <div class="vmcta-title" data-i18n="play">HRÁT</div>
+                <div class="vmcta-sub" data-i18n="play_sub">RYCHLÝ ZÁPAS 3V3 S BOTY</div>
               </button>
             </div>
 
-            <!-- secondary actions — tutorial & training above season card -->
+            <!-- Vedlejší akce: všechny stejného typu (UX 2026-11-02) -->
             <div id="vm-secondary-links">
-              <!-- „Hrát proti botovi" zrušeno — boti se nastaví při vytvoření hry (formulář: Boti (hráčů v týmu)) -->
+              <button id="go-online" class="vm-sec-link"><span class="sec-icon">☰</span> <span data-i18n="browse_title">Procházet hry</span></button>
+              <button id="vm-create-btn" class="vm-sec-link"><span class="sec-icon">+</span> <span data-i18n="create_title">Vytvořit hru</span></button>
               <button id="go-solo" class="vm-sec-link"><span class="sec-icon">◈</span> <span data-i18n="training">Trénink</span></button>
               <button id="go-tutorial" class="vm-sec-link"><span class="sec-icon">▶</span> <span data-i18n="tutorial">Tutoriál</span></button>
             </div>
@@ -2635,8 +2699,8 @@
           </div>
           <!-- Guest sign-in bar — below the 4 cards, full row -->
           <div id="vm-footer-guest" style="display:none;grid-column:1/-1;flex-direction:column;align-items:center;justify-content:center;padding:28px 2px 8px;gap:14px">
-            <div style="font-family:'JetBrains Mono',monospace;font-size:0.7rem;letter-spacing:0.18em;color:rgba(182,196,255,0.55);text-transform:uppercase;text-align:center" data-i18n="guest_unlock">🔒 Sign in to unlock your rank, credits &amp; match history</div>
-            <button id="footer-signin-btn" style="font-family:'JetBrains Mono',monospace;font-size:0.72rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;padding:10px 28px;background:rgba(182,196,255,0.08);border:1px solid rgba(182,196,255,0.35);color:#b6c4ff;cursor:pointer;flex-shrink:0;white-space:nowrap;width:auto;transition:background 0.15s,border-color 0.15s,color 0.15s" onmouseover="this.style.background='rgba(182,196,255,0.16)';this.style.borderColor='rgba(182,196,255,0.7)';this.style.color='#fff'" onmouseout="this.style.background='rgba(182,196,255,0.08)';this.style.borderColor='rgba(182,196,255,0.35)';this.style.color='#b6c4ff'" data-i18n="footer_signin">SIGN IN WITH DISCORD →</button>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:0.8rem;letter-spacing:0.12em;color:#aab3cc;text-transform:uppercase;text-align:center" data-i18n="guest_unlock">🔒 Sign in to unlock your rank &amp; match history</div>
+            <button id="footer-signin-btn" style="font-family:'JetBrains Mono',monospace;font-size:0.8rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;padding:10px 28px;background:rgba(182,196,255,0.08);border:1px solid rgba(182,196,255,0.35);color:#b6c4ff;cursor:pointer;flex-shrink:0;white-space:nowrap;width:auto;transition:background 0.15s,border-color 0.15s,color 0.15s" onmouseover="this.style.background='rgba(182,196,255,0.16)';this.style.borderColor='rgba(182,196,255,0.7)';this.style.color='#fff'" onmouseout="this.style.background='rgba(182,196,255,0.08)';this.style.borderColor='rgba(182,196,255,0.35)';this.style.color='#b6c4ff'" data-i18n="footer_signin">SIGN IN WITH DISCORD →</button>
           </div>
         </div>
       </div>
@@ -2893,11 +2957,27 @@
 
       <!-- ONLINE: VYTVOŘENÍ -->
       <div id="v-create" class="view" style="display:none">
-        <div class="sv-body sv-body-create">
-          <!-- Left: Team setup -->
-          <div class="sv-create-left">
-            <button type="button" class="ghost back sv-back" data-to="browse" data-i18n="back_btn">ZPĚT</button>
-            <div class="sv-eyebrow" data-i18n="cfg_teams">CONFIGURE TEAMS</div>
+        <div class="sv-create-one">
+          <button type="button" class="ghost back sv-back" data-to="main" data-i18n="back_btn">ZPĚT</button>
+          <div class="lk-title-line"><span class="lk-title-bold" data-i18n="new_game_a">NOVÁ</span> <span class="lk-title-light" data-i18n="new_game_b">HRA</span></div>
+          <div class="lbl" data-i18n="format">FORMÁT</div>
+          <div id="format-row">
+            <button class="fmt-btn main" data-fmt="1">1v1</button>
+            <button class="fmt-btn" data-fmt="2">2v2</button>
+            <button class="fmt-btn main active" data-fmt="3">3v3</button>
+            <button class="fmt-btn" data-fmt="4">4v4</button>
+            <button class="fmt-btn main" data-fmt="5">5v5</button>
+          </div>
+          <div class="set-row">
+            <label><span data-i18n="bots">Doplnit týmy boty na</span><select id="set-bots"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option></select></label>
+            <label><span data-i18n="periods">Třetiny</span><select id="set-periods"><option>1</option><option selected>3</option></select></label>
+            <label><span data-i18n="minutes">Minuty</span><select id="set-minutes"><option>5</option><option selected>10</option><option>15</option></select></label>
+          </div>
+          <label class="chk"><input id="set-rules" type="checkbox" /><span data-i18n="rules">Ofsajd a zakázané uvolnění</span></label>
+          <input id="lobby-name" type="text" data-i18n-ph="lobby_name_ph" placeholder="NÁZEV LOBBY" maxlength="24" />
+          <input id="lobby-pass" type="text" data-i18n-ph="pass_ph" placeholder="HESLO (nepovinné)" maxlength="24" />
+          <details class="sv-teams-adv">
+            <summary data-i18n="teams_adv">Názvy a barvy týmů</summary>
             <div class="team-block">
               <div class="tb-head">
                 <input id="hteam-name" class="tname" type="text" data-i18n-ph="home_ph" placeholder="Domácí" maxlength="16" />
@@ -2905,7 +2985,6 @@
               </div>
               <div class="swatches" id="sw-home"></div>
             </div>
-            <div class="sv-vs-divider">VS</div>
             <div class="team-block">
               <div class="tb-head">
                 <input id="ateam-name" class="tname" type="text" data-i18n-ph="away_ph" placeholder="Hosté" maxlength="16" />
@@ -2913,28 +2992,8 @@
               </div>
               <div class="swatches" id="sw-away"></div>
             </div>
-          </div>
-          <!-- Right: Game settings -->
-          <div class="sv-create-right">
-            <div class="sv-eyebrow" data-i18n="cfg_game">GAME SETTINGS</div>
-            <input id="lobby-name" type="text" data-i18n-ph="lobby_name_ph" placeholder="NÁZEV LOBBY" maxlength="24" />
-            <input id="lobby-pass" type="text" data-i18n-ph="pass_ph" placeholder="HESLO (nepovinné)" maxlength="24" />
-            <div class="lbl" data-i18n="format">FORMÁT</div>
-            <div id="format-row">
-              <button class="fmt-btn main" data-fmt="1">1v1</button>
-              <button class="fmt-btn" data-fmt="2">2v2</button>
-              <button class="fmt-btn main active" data-fmt="3">3v3</button>
-              <button class="fmt-btn" data-fmt="4">4v4</button>
-              <button class="fmt-btn main" data-fmt="5">5v5</button>
-            </div>
-            <div class="set-row">
-              <label><span data-i18n="periods">Třetiny</span><select id="set-periods"><option>1</option><option selected>3</option></select></label>
-              <label><span data-i18n="minutes">Minuty</span><select id="set-minutes"><option>5</option><option selected>10</option><option>15</option></select></label>
-              <label class="chk"><input id="set-rules" type="checkbox" /><span data-i18n="rules">Pravidla</span></label>
-              <label><span data-i18n="bots">Boti (hráčů v týmu)</span><select id="set-bots"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option></select></label>
-            </div>
-            <button id="create-go" class="primary" data-i18n="create">VYTVOŘIT HRU</button>
-          </div>
+          </details>
+          <button id="create-go" class="primary" data-i18n="create">VYTVOŘIT HRU</button>
         </div>
       </div>
 
