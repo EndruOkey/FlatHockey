@@ -253,7 +253,8 @@ function playerActions(p, inp, dt, match) {
         const tip = p.stickTip;
         const dist = Math.hypot(tgt.x - tip.x, tgt.y - tip.y);
         // Přeměřená síla: dojede ke spoluhráči s rozumným tempem (nepřepálí, neztratí se).
-        const sp = clamp(Math.sqrt(2 * PUCK.decel * dist) + 45, 175, PUCK.maxPassSpeed);
+        // Crisp přihrávka: dorazí s tempem (ne doťapká) → míň slabá/pozdní, hůř zachytitelná.
+        const sp = clamp(Math.sqrt(2 * PUCK.decel * dist) + 110, 210, PUCK.maxPassSpeed);
         p.pass(match.puck, leadAim(tip, tgt, sp), sp);
       }
     }
