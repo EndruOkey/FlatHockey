@@ -5,7 +5,7 @@ import { join } from 'path';
 process.env.PORT = process.env.PORT || '4150';
 process.env.DB_PATH = join(tmpdir(), `fh-determinism-${process.pid}.db`);
 const { __test } = await import('../server.js');
-const { botThink, makeBotBrain, hashSeed } = await import('../bot.js');
+const { botThink, makeBotBrain, hashSeed } = await import('../public/js/bot.js');
 const { lobbies, startMatch, stepMatch, makeMember, sanitizeSettings } = __test;
 
 const TICKS = 3600, EVERY = 600;

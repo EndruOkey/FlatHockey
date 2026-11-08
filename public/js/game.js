@@ -11,6 +11,8 @@ import { Passer } from './entities/Passer.js';
 import { Defender } from './entities/Defender.js';
 import { Rink } from './entities/Rink.js';
 import { SFX } from './sound.js';
+import { createMatch, stepMatch, applyClientInput, makeInput, faceoff, rebuildEntities, pendingFlags, DT as CORE_DT } from './match-core.js';
+import { makeBotBrain, hashSeed } from './bot.js';
 
 const CHARGE_RATE = 1.4; // pomalejší nápřah → slap shot je cítit (jen sandbox; online řídí server)
 
@@ -68,24 +70,110 @@ export class NetGame {
     this._cam = null;
     this.onExit = null; // callback pro "zpět do menu"
     this._endBackBtn = null;
-    net.onSnap = s => this._onSnap(s);
-    net.onGoal = g => {
-      this.goalFlash = 2.5; this.goalText = g.text;
-      SFX.goalWhistle();
-      setTimeout(() => SFX.goalHorn(), 950);
-      setTimeout(() => SFX.crowd(3), 700);
-    };
-    net.onWhistle = d => {
-      this.call = { rule: d.rule, lineX: d.lineX, color: d.color, t: 1.5 };
-      // Přerušení hry = jeden ostrý hvizd; rozehrávka z buly se hvízdne při lock→unlock
-      SFX.stopWhistle();
-    };
 
-    // Render-svět pro Engine: update = interpolace, draw = vykreslení
+    // OFFLINE (lokální) režim: zápas proti botům běží CELÝ v prohlížeči přes match-core,
+    // žádná síť → nulová latence a žádné TCP trhání. Online multiplayer dál přes net (níž).
+    this.offline = !!(settings && settings.offline);
+    this._lastMsg = makeInput();
+
+    if (!this.offline) {
+      net.onSnap = s => this._onSnap(s);
+      net.onGoal = g => {
+        this.goalFlash = 2.5; this.goalText = g.text;
+        SFX.goalWhistle();
+        setTimeout(() => SFX.goalHorn(), 950);
+        setTimeout(() => SFX.crowd(3), 700);
+      };
+      net.onWhistle = d => {
+        this.call = { rule: d.rule, lineX: d.lineX, color: d.color, t: 1.5 };
+        // Přerušení hry = jeden ostrý hvizd; rozehrávka z buly se hvízdne při lock→unlock
+        SFX.stopWhistle();
+      };
+    } else {
+      this._initOffline(settings);
+    }
+
+    // Render-svět pro Engine: update = krok simulace (offline) / interpolace (online), draw = vykreslení
     this.renderWorld = {
-      update: dt => this._interp(dt),
+      update: dt => (this.offline ? this._localStep(dt) : this._interp(dt)),
       draw: (ctx, cam) => this._draw(ctx, cam),
     };
+  }
+
+  // Postav lokální zápas (match-core): 1 člověk + boti, efekty (gól/píšťalka) stejné jako net handlery.
+  _initOffline(settings) {
+    const seed = (settings && settings.seed) || ((Math.random() * 2147483647) >>> 0);
+    const hooks = {
+      goal: (result) => {
+        this.goalFlash = 2.5; this.goalText = result === 'goal-away' ? 'GOAL! 🔴' : 'GOAL! 🔵';
+        SFX.goalWhistle();
+        setTimeout(() => SFX.goalHorn(), 950);
+        setTimeout(() => SFX.crowd(3), 700);
+      },
+      whistle: (rule, lineX) => {
+        const color = rule === 'offside' ? '#2a6bff' : '#ff3344';
+        this.call = { rule, lineX, color, t: 1.5 };
+        SFX.stopWhistle();
+      },
+      period: () => {},
+      gameover: () => {},
+    };
+    const m = createMatch(seed, hooks);
+    m.rules = (settings && settings.rules) !== false;
+    m.minutes = (settings && settings.minutes) || 5;
+    m.periods = (settings && settings.periods) || 1;
+    m.period = 1;
+    m.clock = m.minutes * 60;
+    this.match = m;
+
+    // Hráči: člověk (myId) do týmu home; boti doplní oba týmy na fill (0–5).
+    const fill = Math.max(0, Math.min(5, Math.round((settings && settings.botFill) || 3)));
+    // Jako server: KAŽDÝ hráč (i člověk) má plain input (makeInput), do kterého se píše ze zprávy
+    // (Input třída má gettery dx/dy → nejde do ní zapisovat). Člověku vstup cpe _localStep.
+    const makeP = (id, team, isMe) => {
+      const p = new Player(id, team, makeInput());
+      if (!isMe) { p.isBot = true; p.brain = makeBotBrain(hashSeed(seed + id)); }
+      m.players.set(id, p);
+      m.inputs.set(id, p.input);
+      return p;
+    };
+    const human = makeP(this.myId, 'home', true);
+    human.name = (settings && settings.myName) || 'TY';
+    human.num = (settings && settings.myNum) || 99;
+    let bi = 0;
+    for (const team of ['home', 'away']) {
+      const humans = team === 'home' ? 1 : 0;
+      for (let k = humans; k < fill; k++) makeP(`bot:${team}:${bi++}`, team, false);
+    }
+    rebuildEntities(m);
+    faceoff(m);
+
+    // Render + HUD čtou živé entity z match-core (žádné kopírování, žádný buffer)
+    this.rink = m.rink; this.puck = m.puck; this.goalieL = m.goalieL; this.goalieR = m.goalieR;
+    this.players = new Map();
+    for (const [id, p] of m.players) this.players.set(id, { ent: p, isMe: id === this.myId });
+    this.localEnt = human;
+  }
+
+  // Jeden krok lokální hry: vstup hráče rovnou do simulace + fixní 60Hz krok (bez sítě, bez bufferu).
+  _localStep(dt) {
+    const m = this.match; if (!m) return;
+    const inp = m.inputs.get(this.myId);
+    if (inp) { applyClientInput(inp, this._lastMsg); inp._stamp = Date.now(); }
+    this._acc = (this._acc || 0) + dt;
+    let n = 0;
+    while (this._acc >= CORE_DT && n++ < 5) { stepMatch(m); this._acc -= CORE_DT; }
+    if (this._acc > CORE_DT) this._acc = 0;   // po velkém zdržení nedohánět donekonečna
+    // HUD ze živého stavu
+    this.score = m.score;
+    this.clk = Math.max(0, Math.ceil(m.clock));
+    this.per = m.period; this.pers = m.periods;
+    if (m.ended && !this.ended) this._endedAt = Date.now();
+    this.ended = !!m.ended;
+    const wasLocked = this.locked;
+    this.locked = !!m.world._goalLock;
+    if (wasLocked && !this.locked && !this.goalFlash) SFX.whistle();
+    this.pnd = pendingFlags(m);
   }
 
   // kompat s main.js (applyProfile/menu) — vlastní hráč (může být null před 1. snapem)
@@ -118,20 +206,23 @@ export class NetGame {
       const mouse = fromScreen(this.input.mouseX, this.input.mouseY, cam);
       aim = Math.atan2(mouse.y - me.y, mouse.x - me.x);
       aimDist = Math.hypot(mouse.x - me.x, mouse.y - me.y);
-      // CLIENT-SIDE PREDICTION — vlastní hráč se hýbe OKAMŽITĚ (bez čekání na server);
-      // server zůstává autoritativní, _interp pak jemně koriguje drift.
-      me.aimDist = aimDist;
-      _updateAim(me, aim, dt * TEMPO);   // predikce v herním tempu (jako server)
-      if (!this.locked) me.update(dt * TEMPO);   // při buly setu / oslavě / píšťalce stojíme čelem k puku
-      // Client-side passReq: okamžitá odezva (server si to taky nastaví)
-      if (this.input.mmbJustPressed && !me.hasPuck) me.passReq = 0.9;
+      // ONLINE: client-side prediction (vlastní hráč se hýbe hned, server pak koriguje).
+      // OFFLINE: NEpredikuj — hráče hýbe přímo lokální simulace (_localStep), žádný drift.
+      if (!this.offline) {
+        me.aimDist = aimDist;
+        _updateAim(me, aim, dt * TEMPO);
+        if (!this.locked) me.update(dt * TEMPO);
+        if (this.input.mmbJustPressed && !me.hasPuck) me.passReq = 0.9;
+      }
     }
-    this.net.input({
+    const msg = {
       dx: this.input.dx, dy: this.input.dy,
       space: !!this.input.keys['Space'],
       lmb: this.input.lmb, rmb: this.input.rmb, mmb: this.input.mmb,
       aim, aimDist,
-    });
+    };
+    if (this.offline) { this._lastMsg = msg; }   // vstup spotřebuje _localStep (žádná síť)
+    else this.net.input(msg);
     this.input.flush();
     if (this.goalFlash > 0) this.goalFlash -= dt;
   }

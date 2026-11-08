@@ -26,7 +26,7 @@ import { Goalie } from './public/js/entities/Goalie.js';
 import { Rink } from './public/js/entities/Rink.js';
 import { RINK, PUCK, TEMPO } from './public/js/constants.js';
 import { lerpAngle, clamp } from './public/js/utils.js';
-import { botThink, makeBotBrain, hashSeed } from './bot.js';
+import { botThink, makeBotBrain, hashSeed } from './public/js/bot.js';
 import { makeRng } from './public/js/rng.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

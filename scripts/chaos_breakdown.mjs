@@ -4,7 +4,7 @@ import { tmpdir } from 'os'; import { join } from 'path';
 process.env.PORT = process.env.PORT || '4670';
 process.env.DB_PATH = join(tmpdir(), `fh-chaos-${process.pid}.db`);
 const { __test } = await import('../server.js');
-const { makeBotBrain, hashSeed } = await import('../bot.js');
+const { makeBotBrain, hashSeed } = await import('../public/js/bot.js');
 const { Player } = await import('../public/js/entities/Player.js');
 const { lobbies, startMatch, stepMatch, makeMember, sanitizeSettings } = __test;
 let last = null;   // poslední akce nositele v tomto ticku

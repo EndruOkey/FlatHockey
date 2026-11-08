@@ -6,7 +6,7 @@ import { join } from 'path';
 process.env.PORT = process.env.PORT || '4621';
 process.env.DB_PATH = join(tmpdir(), `fh-churn-${process.pid}.db`);
 const { __test } = await import('../server.js');
-const { makeBotBrain, hashSeed } = await import('../bot.js');
+const { makeBotBrain, hashSeed } = await import('../public/js/bot.js');
 const { RINK } = await import('../public/js/constants.js');
 const { lobbies, startMatch, stepMatch, makeMember, sanitizeSettings } = __test;
 const HZ = 60;

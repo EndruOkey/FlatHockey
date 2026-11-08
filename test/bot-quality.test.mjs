@@ -6,7 +6,7 @@ import { join } from 'path';
 process.env.PORT = process.env.PORT || '4151';
 process.env.DB_PATH = join(tmpdir(), `fh-botq-${process.pid}.db`);
 const { __test } = await import('../server.js');
-const { botThink, makeBotBrain, hashSeed } = await import('../bot.js');
+const { botThink, makeBotBrain, hashSeed } = await import('../public/js/bot.js');
 const { lobbies, startMatch, stepMatch, makeMember, sanitizeSettings } = __test;
 
 // Základ = naměřeno původním botem (commit před úpravou), stejný harness

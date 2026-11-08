@@ -13,7 +13,7 @@ import { Player } from './entities/Player.js';
 import { Puck } from './entities/Puck.js';
 import { Goalie } from './entities/Goalie.js';
 import { Rink } from './entities/Rink.js';
-import { botThink } from '../../bot.js';
+import { botThink } from './bot.js';
 
 const CHARGE_RATE = 1.2;       // pomalejší nápřah → slap shot je cítit jako wind-up (méně twitchy)
 export const TICK_HZ = 60;

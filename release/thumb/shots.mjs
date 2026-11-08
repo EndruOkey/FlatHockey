@@ -22,7 +22,7 @@ const W = 1280, H = 720, SCALE = 4.4, VW = W / SCALE, VH = H / SCALE;
 fs.mkdirSync(OUT, { recursive: true });
 process.env.PORT = PORT; process.env.DB_PATH = path.join(os.tmpdir(), `fh-shots-${PORT}.db`);
 const { __test } = await import(pathToFileURL(path.join(ROOT, 'server.js')).href);
-const { makeBotBrain, hashSeed } = await import(pathToFileURL(path.join(ROOT, 'bot.js')).href);
+const { makeBotBrain, hashSeed } = await import(pathToFileURL(path.join(ROOT, 'public/js/bot.js')).href);
 const { lobbies, startMatch, stepMatch, makeMember, sanitizeSettings } = __test;
 
 function newMatch(seq) {

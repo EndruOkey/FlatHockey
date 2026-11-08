@@ -1,4 +1,4 @@
-import { RINK, TEMPO } from './public/js/constants.js';
+import { RINK, TEMPO } from './constants.js';
 // Časování botů je v ticích → při jiném tempu natáhnout stejným dílem (herní sekunda = TICK_HZ/TEMPO ticků)
 const TT = v => Math.max(1, Math.round(v / TEMPO));
 

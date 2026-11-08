@@ -1313,11 +1313,26 @@ $('go-tutorial').onclick = () => _startTutorial();
 // _botPending zůstává kvůli případnému „vytvoř + hned start" toku; dnes ho nic nenastavuje na true.
 let _botPending = false;
 function playNow() {
-  commitProfile();
+  if (!commitProfile()) return requireProfile();
   localStorage.setItem('hockey_tutorial_done', '1');   // tutoriál je volitelný, z menu kdykoli
-  _botPending = true; _lastPass = null;
-  net.createLobby({ name: nameInput.value.trim() || 'Lobby', teams: { home: { name: t('home_ph'), color: '#3a9fff', style: 'solid' }, away: { name: t('away_ph'), color: '#ff4455', style: 'solid' } },
-    periods: 3, minutes: 5, max: 6, botFill: 3, rules: false, password: '' }, profile());
+  _lastPass = null;
+  if (IS_MOBILE) { setStatus(t('pc_only'), '#FFB020'); return; }   // mobil nehraje
+  if (inGame && currentGame?.stop) currentGame.stop();
+  // LOKÁLNÍ zápas proti botům — celá simulace běží v prohlížeči (match-core), žádná síť
+  // → nulová latence a žádné TCP trhání. Online (lidé) dál přes lobby/net.
+  const pr = profile();
+  const g = new NetGame(canvas, net, 'me', {
+    offline: true, botFill: 3, periods: 3, minutes: 5, rules: false, difficulty: 'casual',
+    myName: pr.name, myNum: pr.number,
+    teams: { home: { name: t('home_ph'), color: '#3a9fff', style: 'solid' }, away: { name: t('away_ph'), color: '#ff4455', style: 'solid' } },
+  });
+  const me = g.local;
+  if (me) {
+    Object.assign(me, { name: pr.name, handed: pr.handed, num: pr.number, helmet: pr.helmet, jersey: pr.jersey, shorts: pr.shorts, stripe: pr.stripe, laces: pr.laces, gloves: pr.gloves, tape: pr.tape, trail: pr.trail, stick: pr.stick, tapeStyle: pr.tapeStyle, helmetType: pr.helmetType, visor: pr.visor });
+    me.color = pr.jersey;
+  }
+  g.onExit = () => { stopGame(); showView('main'); };
+  startGame(g);
 }
 $('go-play').onclick = playNow;
 

@@ -25,7 +25,7 @@ fs.mkdirSync(OUT, { recursive: true });
 process.env.PORT = PORT;
 process.env.DB_PATH = path.join(os.tmpdir(), `fh-video-${PORT}.db`);
 const { __test } = await import(pathToFileURL(path.join(ROOT, 'server.js')).href);
-const { botThink, makeBotBrain, hashSeed } = await import(pathToFileURL(path.join(ROOT, 'bot.js')).href);
+const { botThink, makeBotBrain, hashSeed } = await import(pathToFileURL(path.join(ROOT, 'public/js/bot.js')).href);
 const { lobbies, startMatch, stepMatch, makeMember, sanitizeSettings } = __test;
 
 // ---------- simulation ----------

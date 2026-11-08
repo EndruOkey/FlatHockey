@@ -2,7 +2,7 @@
 // To je základ pro klientský lokální režim. Spuštění: node scripts/core_smoke.mjs
 import { createMatch, stepMatch, makeInput, faceoff, rebuildEntities } from '../public/js/match-core.js';
 import { Player } from '../public/js/entities/Player.js';
-import { makeBotBrain, hashSeed } from '../bot.js';
+import { makeBotBrain, hashSeed } from '../public/js/bot.js';
 
 function buildBotMatch(seed, tag) {
   const m = createMatch(seed, {});           // žádné hooky — čistá simulace, skóre v m.score

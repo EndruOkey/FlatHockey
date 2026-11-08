@@ -22,7 +22,7 @@ import { pathToFileURL } from 'url';
 process.env.PORT = process.env.PORT || '4620';
 process.env.DB_PATH = join(tmpdir(), `fh-balance-${process.pid}.db`);
 const { __test } = await import('../server.js');
-const { makeBotBrain, hashSeed } = await import('../bot.js');
+const { makeBotBrain, hashSeed } = await import('../public/js/bot.js');
 const { Player } = await import('../public/js/entities/Player.js');
 const { Goalie } = await import('../public/js/entities/Goalie.js');
 const { RINK } = await import('../public/js/constants.js');
