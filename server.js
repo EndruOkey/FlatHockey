@@ -154,6 +154,7 @@ function applyClientInput(inp, msg) {
   inp.lmb = !!msg.lmb; inp.rmb = !!msg.rmb; inp.mmb = !!msg.mmb;
   if (Number.isFinite(msg.aim))     inp.aim     = msg.aim;
   if (Number.isFinite(msg.aimDist)) inp.aimDist = clamp(msg.aimDist, 0, 4000);
+  if (Number.isInteger(msg.sq)) inp._sq = msg.sq;   // pořadí vstupu → klient reconciluje přesně (ne odhadem)
 }
 
 function computeEdges(inp) {
@@ -734,8 +735,9 @@ function stepMatch(match) {
 function broadcast(match) {
   const players = [];
   for (const [id, p] of match.players) {
+    const inp = match.inputs.get(id);
     players.push({
-      id, team: p.team, nm: p.name || '',
+      id, team: p.team, nm: p.name || '', sq: (inp && inp._sq) || 0,
       x: r1(p.x), y: r1(p.y), ba: r3(p.bodyAngle), aa: r3(p.aimAngle), ca: r3(p.carryAngle),
       sd: r3(p._stickDisp), dr: r1(p._dispReach), dc: r2(p._dispCharge),
       fh: p.forehand ? 1 : 0, hp: p.hasPuck ? 1 : 0, ch: r2(p.charge),

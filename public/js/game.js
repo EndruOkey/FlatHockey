@@ -223,10 +223,6 @@ export class NetGame {
         me.aimDist = aimDist;
         _updateAim(me, aim, dt * TEMPO);
         if (!this.locked) me.update(dt * TEMPO);
-        // Historie predikce (0,5 s) — reconcile porovnává server s MINULOU predikcí, ne s aktuální polohou
-        const H = this._predHist || (this._predHist = []), now = performance.now();
-        H.push({ t: now, x: me.x, y: me.y });
-        while (H.length && H[0].t < now - 500) H.shift();
         if (this.input.mmbJustPressed && !me.hasPuck) me.passReq = 0.9;
       }
     }
@@ -237,7 +233,18 @@ export class NetGame {
       aim, aimDist,
     };
     if (this.offline) { this._lastMsg = msg; }   // vstup spotřebuje _localStep (žádná síť)
-    else this.net.input(msg);
+    else {
+      // Posílej nejvýš ~60×/s (= tick serveru). Dřív každý snímek → na 144–240 Hz monitoru >150 zpráv/s a server
+      // (strop 150/s) zbytek sekundy ZAHODIL → ztracené klávesy/střely, hráč „lítal" (scripts/play_probe.mjs).
+      // Změna tlačítka/směru odejde hned, ať se žádný stisk neztratí.
+      const now = performance.now(), last = this._sent;
+      const changed = !last || last.space !== msg.space || last.lmb !== msg.lmb || last.rmb !== msg.rmb || last.mmb !== msg.mmb || last.dx !== msg.dx || last.dy !== msg.dy;
+      if (changed || now - (this._sentAt || 0) >= 16) { msg.sq = this._seq = (this._seq || 0) + 1; this.net.input(msg); this._sent = msg; this._sentAt = now; }
+      // Historie predikce s pořadím posledního odeslaného vstupu (1 s) — server vrací sq zpracovaného vstupu
+      if (me && !this.locked) { const H = this._predHist || (this._predHist = []);
+        H.push({ t: now, sq: this._seq || 0, x: me.x, y: me.y });
+        while (H.length && H[0].t < now - 1000) H.shift(); }
+    }
     this.input.flush();
     if (this.goalFlash > 0) this.goalFlash -= dt;
   }
@@ -299,12 +306,12 @@ export class NetGame {
         e.sx = ps.x; e.sy = ps.y;
         // Server je o ping pozadu: najdi minulou predikci nejblíž serverové poloze → chyba = skutečná odchylka.
         // (Dřív se táhlo k zastaralé poloze serveru → hráč se při jízdě chvěl; měřeno stutter_probe.mjs.)
-        const H = this._predHist;
-        if (H && H.length) {
-          let best = H[0], bd = Infinity;
-          for (const h of H) { const d = (h.x - ps.x) ** 2 + (h.y - ps.y) ** 2; if (d < bd) { bd = d; best = h; } }
-          this._recErr = { x: ps.x - best.x, y: ps.y - best.y };
-        } else this._recErr = { x: ps.x - ent.x, y: ps.y - ent.y };
+        // Přesně: poloha predikce v okamžiku, kdy jsme odeslali vstup, který server naposledy zpracoval (ps.sq).
+        // (Dřív hledání nejbližšího místa v historii — schovalo rozjezd od serveru, hráč „lítal".)
+        const H = this._predHist; let ref = null;
+        if (H && ps.sq) for (let i = H.length - 1; i >= 0; i--) if (H[i].sq === ps.sq) { ref = H[i]; break; }
+        this._recErr = ref ? { x: ps.x - ref.x, y: ps.y - ref.y } : { x: ps.x - ent.x, y: ps.y - ent.y };
+        if (!ref && Math.hypot(this._recErr.x, this._recErr.y) < 80) this._recErr = null;   // bez shody (start) jen velké odchylky
       } else {
         e.tx = ps.x; e.ty = ps.y; e.tba = ps.ba; e.taa = ps.aa; e.tca = ps.ca; e.tsd = ps.sd;
         ent._dispReach = ps.dr; ent._dispCharge = ps.dc; ent.crossCheck = !!ps.cc; ent._lean = ps.ln;

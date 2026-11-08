@@ -37,6 +37,7 @@ export function applyClientInput(inp, msg) {
   inp.lmb = !!msg.lmb; inp.rmb = !!msg.rmb; inp.mmb = !!msg.mmb;
   if (Number.isFinite(msg.aim))     inp.aim     = msg.aim;
   if (Number.isFinite(msg.aimDist)) inp.aimDist = clamp(msg.aimDist, 0, 4000);
+  if (Number.isInteger(msg.sq)) inp._sq = msg.sq;   // pořadí vstupu → klient reconciluje přesně (ne odhadem)
 }
 export function computeEdges(inp) {
   inp.lmbJustPressed  = inp.lmb && !inp._p.lmb;
