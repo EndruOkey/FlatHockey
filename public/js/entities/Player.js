@@ -122,9 +122,12 @@ export class PlayerBase {
     const by = tip.y + Math.sin(bladeDir) * 6;
     const dTip   = Math.hypot(puck.x - tip.x, puck.y - tip.y);
     const dBlade = Math.hypot(puck.x - bx,    puck.y - by);
-    if (Math.min(dTip, dBlade) > PLAYER.pickupTipRadius) return false;
+    const intended = puck._passTo != null && puck._passTo === this.id;   // přihrávka je pro mě
+    const dBody = Math.hypot(puck.x - this.x, puck.y - this.y);
+    if (intended ? (Math.min(dTip, dBlade) > PLAYER.passRecvRadius && dBody > this.radius + 8)
+                 : Math.min(dTip, dBlade) > PLAYER.pickupTipRadius) return false;
     // Při nabíjení (one-timer) přijmeš i rychlou nahrávku — usnadní načasování
-    const maxRel = this.charge > 0 ? 9999 : PLAYER.pickupMaxRelSpeed;
+    const maxRel = this.charge > 0 ? 9999 : (intended ? PLAYER.passRecvMaxRel : PLAYER.pickupMaxRelSpeed);
     if (Math.hypot(puck.vx - this.vx, puck.vy - this.vy) > maxRel) return false;
     return true;
   }
@@ -138,6 +141,7 @@ export class PlayerBase {
 
   tryPickup(puck) {
     if (!this.canPickup(puck)) return false;
+    puck._passTo = null;
     this._grabPuck();
     return true;
   }

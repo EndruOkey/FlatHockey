@@ -24,7 +24,7 @@ import { Player } from './public/js/entities/Player.js';
 import { Puck } from './public/js/entities/Puck.js';
 import { Goalie } from './public/js/entities/Goalie.js';
 import { Rink } from './public/js/entities/Rink.js';
-import { RINK, PUCK, TEMPO } from './public/js/constants.js';
+import { RINK, PUCK, TEMPO, passSpeedFor } from './public/js/constants.js';
 import { lerpAngle, clamp } from './public/js/utils.js';
 import { botThink, makeBotBrain, hashSeed } from './public/js/bot.js';
 import { makeRng } from './public/js/rng.js';
@@ -261,8 +261,9 @@ function playerActions(p, inp, dt, match) {
         const dist = Math.hypot(tgt.x - tip.x, tgt.y - tip.y);
         // Přeměřená síla: dojede ke spoluhráči s rozumným tempem (nepřepálí, neztratí se).
         // Crisp přihrávka: dorazí s tempem (ne doťapká) → míň slabá/pozdní, hůř zachytitelná.
-        const sp = clamp(Math.sqrt(2 * PUCK.decel * dist) + 110, 210, PUCK.maxPassSpeed);
+        const sp = passSpeedFor(dist);
         p.pass(match.puck, leadAim(tip, tgt, sp), sp);
+        if (typeof process === 'undefined' || process.env.FH_NOADDR !== '1') { match.puck._passTo = tgt.id; match.puck._passT = 1.2; }   // adresát má větší zónu převzetí
       }
     }
   }

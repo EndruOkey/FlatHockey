@@ -41,7 +41,10 @@ export const PLAYER = {
   ccPush:   _penv('FH_CCPUSH', 80),    // px/s — strčení soupeře crosscheckem (dřív 120)
   receiveFirst: _penv('FH_RECV', 1) > 0,   // pas, který jde zpracovat, hráč převezme (dřív se od hole náhodně odrazil)
   stealGrace: ((typeof process !== 'undefined' && process.env && process.env.FH_GRACE != null) ? Number(process.env.FH_GRACE) : 1.2),   // 1.2 = změřeno scripts/tempo_sweep.mjs (2026-11-02)     // dosah čepele na puk (velkorysejší úchop)
-  pickupMaxRelSpeed: 420,  // ať jde chytit i rychlá přihrávka
+  pickupMaxRelSpeed: 420,
+  // Adresát přihrávky má větší zónu převzetí (pas míří na tělo, čepel je 16 px před ním). Soupeř zachytává normálně.
+  passRecvRadius: _penv('FH_RECVR', 18),
+  passRecvMaxRel: _penv('FH_RECVREL', 560),  // ať jde chytit i rychlá přihrávka
   colors: { home: '#3a9fff', away: '#ff4455', passer: '#22cc88' },
 };
 
@@ -52,9 +55,17 @@ export const PUCK = {
   maxShotSpeed: 470,   // „prdel" — plný slap (plné nabití)
   minShotSpeed: 150,   // „žabička" — malá měkká rána (lehký tap), umístěná, ne silová
   passSpeed: 320,
-  maxPassSpeed: 370,
+  maxPassSpeed: 450,   // 370→450 + passBase 110→250: pas letí 2× rychleji (0,73→0,36 s), převzetí 96→100 % (scripts/pass_stride.mjs), rubrika zelená
+  passBase: 250,    // rychlostní rezerva nad „doklouzání“ k cíli (px/s) — viz passSpeedFor
   maxShotVz: 160,   // max vertical speed — plný slap na břevno (~22px): horní roh dosažitelný. Pozn.: nižší (≤146) zavře top shelf skokem a zakončení je moc těžké (bot nestihne skórovat) — viz analýza.
   gravity: 580,     // px/s² downward
   gloveHeight: 4,   // z above which glove/blocker applies
   crossbarHeight: 21,  // břevno ~4 ft
 };
+
+// Rychlost přihrávky podle vzdálenosti: doklouzání k cíli + rezerva, ať dorazí ostře. JEDINÉ místo
+// (server.js i match-core.js). Env FH_PASSBASE / FH_PASSMAX jen pro měření v Node (scripts/pass_stride.mjs).
+export function passSpeedFor(dist) {
+  const base = _penv('FH_PASSBASE', PUCK.passBase), max = _penv('FH_PASSMAX', PUCK.maxPassSpeed);
+  return Math.max(210, Math.min(max, Math.sqrt(2 * PUCK.decel * dist) + base));
+}

@@ -6,7 +6,7 @@
 // Efekty, které nejsou čistá simulace (síť/DB/UI), jdou přes match.hooks:
 //   whistle(rule, lineX)  · goal(result, scoringTeam)  · period(period)  · gameover()
 // Server je naplní io.emit + statistikami; klient lokální obsluhou. Když hook chybí, jen se přeskočí.
-import { RINK, PUCK, TEMPO } from './constants.js';
+import { RINK, PUCK, TEMPO, passSpeedFor } from './constants.js';
 import { lerpAngle, clamp } from './utils.js';
 import { World } from './world.js';
 import { Player } from './entities/Player.js';
@@ -131,8 +131,9 @@ export function playerActions(p, inp, dt, match) {
         p.charge = 0;
         const tip = p.stickTip;
         const dist = Math.hypot(tgt.x - tip.x, tgt.y - tip.y);
-        const sp = clamp(Math.sqrt(2 * PUCK.decel * dist) + 110, 210, PUCK.maxPassSpeed);
+        const sp = passSpeedFor(dist);
         p.pass(match.puck, leadAim(tip, tgt, sp), sp);
+        if (typeof process === 'undefined' || process.env.FH_NOADDR !== '1') { match.puck._passTo = tgt.id; match.puck._passT = 1.2; }   // adresát má větší zónu převzetí
       }
     }
   }

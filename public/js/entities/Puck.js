@@ -141,6 +141,7 @@ export class Puck {
   update(dt, world) {
     if (!world.authoritative) { this._interpolateNet(dt, world); return; }
     if (this.faceoffTimer > 0) this.faceoffTimer -= dt;
+    if (this._passT > 0 && (this._passT -= dt) <= 0) this._passTo = null;   // adresát přihrávky vyprší
 
     this.prevX = this.x;
     this.prevY = this.y;
