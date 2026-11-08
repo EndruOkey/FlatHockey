@@ -47,7 +47,8 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
       - name: Pull + restart + kontrola
         run: |
-          ssh ubuntu@flathockey.fun 'bash -s' <<'EOF'
+          # Doména jde přes Cloudflare (SSH nepropouští) → přímo na IP VPS, otisk ověřen pod jménem flathockey.fun
+          ssh -o HostKeyAlias=flathockey.fun ubuntu@89.168.124.254 'bash -s' <<'EOF'
           set -e
           cd ~/FlatHockey
           old=$(git rev-parse HEAD)
