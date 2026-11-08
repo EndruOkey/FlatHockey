@@ -247,10 +247,14 @@ export class NetGame {
     const rk = Math.min(1, 10 * dt); // reconcile vlastního hráče — jemná korekce driftu
 
     // ── Jitter-buffer: renderuj o DELAY ms pozadu a interpoluj mezi dvěma uloženými snímky.
-    //    DELAY je ADAPTIVNÍ podle naměřeného kolísání příchodu (snapMax): na plynulé cestě ~90 ms,
-    //    na kolísavé se sám roztáhne až na 240 ms, aby překlenul i spiky 100–160 ms (jinak podteče a zasekne se).
+    //    DELAY je ADAPTIVNÍ podle naměřeného kolísání příchodu (snapMax): podlaha 130 ms,
+    //    na kolísavé se sám roztáhne až na 260 ms, aby překlenul i spiky 100–160 ms (jinak podteče a zasekne se).
+    //    Podlaha 90→130: WebSocket je TCP, ztráta paketu = head-of-line burst; ~3× interval snapshotů (Gaffer)
+    //    krije ztrátu 2 paketů po sobě. Měřeno scripts/test_netsmooth.mjs (harsh TCP profil): stalls 27→19, bez ztráty přesnosti.
+    //    Daň = +40 ms latence u vzdálených objektů (puk/soupeři); lokální hráč jede predikcí, toho se netýká.
+    const BUF_FLOOR = 90;   // online podlaha; lokální (bot) režim jde mimo buffer úplně. 130 tlumí trhání, ale přidá ~40 ms latence (měřeno test_netsmooth.mjs); online „plynule i svižně" chce až WebTransport.
     const jitter = this._snapMax || 33;
-    const target = Math.max(90, Math.min(260, jitter * 1.5 + 25));   // DELAY roste plynule (bez skoků renderT)
+    const target = Math.max(BUF_FLOOR, Math.min(260, jitter * 1.5 + 25));   // DELAY roste plynule (bez skoků renderT)
     const prevD = this._bufDelay || 100;
     const DELAY = this._bufDelay = target > prevD ? prevD + (target - prevD) * 0.08 : prevD + (target - prevD) * 0.02;
     const buf = this._buf;

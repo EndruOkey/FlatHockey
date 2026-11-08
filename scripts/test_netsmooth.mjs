@@ -1,15 +1,24 @@
 // Interpolace podle SERVEROVÉHO času (tick), render-clock plyne reálně + jemně dohání. Buffer kryje jitter, extrapolace kryje podtečení.
 function mulberry(s){let a=s>>>0;return()=>{a=(a+0x6D2B79F5)>>>0;let t=a;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;};}
 const truth=(ms)=>{const s=ms/1000;return{x:540+140*Math.sin(s*2.2),y:228+90*Math.sin(s*1.3+1)};};
-function run({useServerTime, extrapCap}){
+function run({useServerTime, extrapCap, floor=90, profile='mild', jitterCap=Infinity}){
   const rng=mulberry(42); const SEND=1000/30, REND=1000/170, BASE=20;
-  const arr=[]; for(let s=0;s<6000;s+=SEND){ if(rng()<0.03)continue; let j=rng()*25; if(rng()<0.05)j+=80+rng()*120; arr.push({at:s+BASE+j, st:s, pos:truth(s)});}
+  // 'mild' = původní syntetický jitter; 'harsh' = kalibrováno na reálnou telemetrii hráče
+  // (snapMax 45–59, časté stalls): víc i větších špiček + občas dvě pozdě za sebou (shluk).
+  const P = profile==='harsh' ? {drop:0.02, baseJ:12, holP:0.03, holMin:100, holMax:300} : {drop:0.03, baseJ:25, holP:0, holMin:80, holMax:200};
+  // TCP head-of-line: občas se doručení zasekne (ztráta→retransmit); vše poslané během zámku
+  // dorazí AŽ po jeho uvolnění, naráz (burst). Arrival je monotónní (ordered TCP).
+  const arr=[]; let blockedUntil=0; for(let s=0;s<6000;s+=SEND){ if(rng()<P.drop)continue;
+    const j=rng()*P.baseJ; let at=s+BASE+j;
+    if(profile==='harsh' && rng()<P.holP) blockedUntil=Math.max(blockedUntil, at + P.holMin + rng()*(P.holMax-P.holMin));
+    at=Math.max(at, blockedUntil);           // zablokované pakety čekají na uvolnění
+    arr.push({at, st:s, pos:truth(s)});}
   arr.sort((a,b)=>a.at-b.at); let ai=0;
   const buf=[]; let snapMax=33,lastArr=null,bufDelay=100,prev=null,maxJump=0,freeze=0,tot=0,stalls=0,errSum=0,errN=0,interpT=null;
   for(let now=300;now<5800;now+=REND){
-    while(ai<arr.length&&arr[ai].at<=now){const a=arr[ai++]; if(lastArr!=null){snapMax=Math.max(snapMax*0.9,a.at-lastArr);} lastArr=a.at; buf.push({t:a.at,st:a.st,pos:a.pos}); while(buf.length>2&&buf[0].st<a.st-1200)buf.shift();}
+    while(ai<arr.length&&arr[ai].at<=now){const a=arr[ai++]; if(lastArr!=null){snapMax=Math.max(snapMax*0.9,Math.min(a.at-lastArr,jitterCap));} lastArr=a.at; buf.push({t:a.at,st:a.st,pos:a.pos}); while(buf.length>2&&buf[0].st<a.st-1200)buf.shift();}
     if(buf.length<2)continue;
-    const target=Math.max(90,Math.min(260,snapMax*1.5+25));
+    const target=Math.max(floor,Math.min(260,snapMax*1.5+25));
     bufDelay=target>bufDelay?bufDelay+(target-bufDelay)*0.08:bufDelay+(target-bufDelay)*0.02;
     const nw=buf[buf.length-1],pn=buf[buf.length-2];
     let renderT;
@@ -27,3 +36,15 @@ function run({useServerTime, extrapCap}){
 }
 console.log('podle PŘÍCHODU (teď):     ', JSON.stringify(run({useServerTime:false,extrapCap:0.22})));
 console.log('podle SERV. času + extrap:', JSON.stringify(run({useServerTime:true, extrapCap:0.22})));
+console.log('\n=== kalibrovaný "harsh" profil (TCP HoL dle telemetrie), sweep podlahy bufferu ===');
+for(const floor of [90,110,130,150,170]){
+  const r=run({useServerTime:true,extrapCap:0.22,floor,profile:'harsh'});
+  console.log(`floor ${String(floor).padStart(3)} ms →`, JSON.stringify(r));
+}
+console.log('\n=== totéž + cap jitter špiček na 80 ms (ať DELAY negumuje) ===');
+for(const floor of [90,110,130,150,170]){
+  const r=run({useServerTime:true,extrapCap:0.22,floor,profile:'harsh',jitterCap:80});
+  console.log(`floor ${String(floor).padStart(3)} ms →`, JSON.stringify(r));
+}
+console.log('\n=== vyšší extrapolace (0.35 s) místo delší podlahy, floor 110 ===');
+console.log('extrap 0.35 →', JSON.stringify(run({useServerTime:true,extrapCap:0.35,floor:110,profile:'harsh',jitterCap:80})));

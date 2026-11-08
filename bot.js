@@ -68,14 +68,38 @@ export function makeBotBrain(seed) {
   return { rng, hold: 0, shotAim: 0, shotRange: between(rng, SHOT_RANGE) };
 }
 
-// Je p ze svého týmu nejblíž k puku? (ostatní hrají podporu, ať se neshluknou)
-function isChaser(p, match) {
-  const d = (o) => Math.hypot(o.x - match.puck.x, o.y - match.puck.y);
-  const mine = d(p);
-  for (const o of match.players.values())
-    if (o !== p && o.team === p.team && d(o) < mine) return false;
-  return true;
+// Stabilní honič s hysterezí: tým má jednoho určeného honiče k puku a drží ho,
+// dokud není jiný spoluhráč o CHASE_HYST px blíž. Bez toho se dva skoro stejně vzdálení
+// hráči v roli střídali každý think (10×/s) → vizuální cukání ("nedrží pozici").
+const CHASE_HYST = _env('FH_CHYST', 50);   // px — náskok, který musí mít vyzyvatel, aby převzal honiče (50 = bezpečné max, 80 už sráží konverzi pod rubriku)
+function nearestToPuck(match, team) {
+  let best = null, bd = Infinity;
+  for (const o of match.players.values()) {
+    if (o.team !== team) continue;
+    const d = Math.hypot(o.x - match.puck.x, o.y - match.puck.y);
+    if (d < bd) { bd = d; best = o; }
+  }
+  return best ? { p: best, d: bd } : null;
 }
+function pickChaser(match, team, prevId) {
+  const near = nearestToPuck(match, team); if (!near) return null;
+  const prev = prevId != null ? match.players.get(prevId) : null;
+  if (prev && prev.team === team) {
+    const pd = Math.hypot(prev.x - match.puck.x, prev.y - match.puck.y);
+    if (pd <= near.d + CHASE_HYST) return prevId;   // stávající honič si roli udrží
+  }
+  return near.p.id;
+}
+// Přepočítá se jednou za tick a nacachuje na match, aby všichni hráči obou týmů viděli shodné přidělení.
+function chaserId(match, team) {
+  if (match._chaseTick !== match.tick) {
+    match._chaseTick = match.tick;
+    match._chaseHome = pickChaser(match, 'home', match._chaseHome);
+    match._chaseAway = pickChaser(match, 'away', match._chaseAway);
+  }
+  return team === 'home' ? match._chaseHome : match._chaseAway;
+}
+function isChaser(p, match) { return p.id === chaserId(match, p.team); }
 
 // Soupeř drží puk staženě u těla (kurzor < TUCK px) → čepelí se k němu dostaneš jen z blízka; boti sami drží puk s aimDist ≥ 40
 const TUCK = 40;
@@ -184,6 +208,7 @@ export function botThink(p, inp, match) {
   b.hadPuck = p.hasPuck;
 
   if (p.hasPuck) {
+    p._botMode = 'carry';
     const behind = (p.x - goalX) * dir > -4;               // za brankovou čarou → vyjeď do slotu
     tx = goalX - dir * (behind ? 90 : 110); ty = goalY + (behind ? 0 : b.lane * LANE);
     ax = goalX; ay = goalY;
@@ -212,18 +237,21 @@ export function botThink(p, inp, match) {
       return;
     }
   } else if (g.isHolding) {
+    p._botMode = 'wait';
     // Gólman drží puk → neblokuj brankoviště, počkej před ním
     tx = g.netX + g.inX * CREASE_OUT; ty = goalY;
     ax = puck.x; ay = puck.y;
   } else if (ENGAGE > 0 && isChaser(p, match) && (() => { const oc = [...match.players.values()].find(o => o.team !== p.team && o.hasPuck); if (!oc) return false; const dx = ownX - oc.x, dy = goalY - oc.y, dd = Math.hypot(dx, dy) || 1;
       // odstup jen proti nájezdu: nosič jede k naší brance rychleji než ATTACK_V (stojící/couvající se napadá hned)
       return dd > ENGAGE && (oc.vx * dx + oc.vy * dy) / dd > ATTACK_V; })()) {
+    p._botMode = 'gap';
     // Nosič soupeře je ještě daleko od naší branky → nenapadej, drž odstup na obranné straně (zrcadli ho)
     const oc = [...match.players.values()].find(o => o.team !== p.team && o.hasPuck);
     const gx = ownX - oc.x, gy = goalY - oc.y, gd = Math.hypot(gx, gy) || 1;
     tx = oc.x + gx / gd * GAP; ty = oc.y + gy / gd * GAP;
     ax = oc.x; ay = oc.y;
   } else if (isChaser(p, match)) {
+    p._botMode = 'chase';
     // Předstih = doba, za kterou bot k puku dojede (max LEAD_MAX), ne pevných 0.25 s — jinak jen ocasí nosiče
     // po kružnici (naměřeno: 65 px za ním, puk držel 98.8 % času) místo aby mu přeťal dráhu
     const lead = Math.min(LEAD_MAX, Math.max(PUCK_LEAD, Math.hypot(puck.x - p.x, puck.y - p.y) / PLAYER_V));
@@ -242,6 +270,7 @@ export function botThink(p, inp, match) {
     if (pd > REACH && pd < PICK_NEAR) { const k = (pd - REACH) / pd; tx = p.x + pdx * k; ty = p.y + pdy * k; }
   } else {
     ax = puck.x; ay = puck.y;
+    p._botMode = 'support';                    // upřesněno níž (support/defend) podle držení
     const mates = [];                          // spoluhráči bez puku, seřazení podle vzdálenosti k puku (shoda → id)
     let carrier = null;
     for (const o of match.players.values()) {
@@ -261,6 +290,7 @@ export function botThink(p, inp, match) {
     } else {
       // ── OBRANA: puk drží soupeř / je volný. Rank 0 (nejblíž puku) tlačí na puk, ostatní
       //    si rozeberou soupeře OSOBNĚ (goal-side marking), ať to vypadá jako hra s lidmi. ──
+      p._botMode = 'defend';
       const oppCarrier = [...match.players.values()].find(o => o.team !== p.team && o.hasPuck) || null;
       if (rank === 0 && SECOND_COVER && oppCarrier) {
         // Druhý obránce nejde na puk (to by byli dva na jednoho) — kryje prostor mezi nosičem a brankou
