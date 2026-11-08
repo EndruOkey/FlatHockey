@@ -1,9 +1,10 @@
 // Měří SEKÁNÍ na obrazovce: per-frame posun botů vs. jejich vyhlazená rychlost.
+// FH_IP=<ip> vynutí adresu serveru (např. Cloudflare před rozšířením DNS).
 // node scripts/stutter_probe.mjs <url> <#tlačítko> [sekund=15]
 // hitch = snímek, kde bot jedoucí >80 px/s urazí <40 % nebo >180 % očekávané dráhy; dlouhý snímek = dt > 25 ms.
 import { chromium } from 'playwright';
 const [url = 'http://localhost:4900/', sel = '#go-offline', secs = '15'] = process.argv.slice(2);
-const b = await chromium.launch(); const p = await (await b.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
+const b = await chromium.launch(process.env.FH_IP ? { args: [`--host-resolver-rules=MAP ${new URL(url).hostname} ${process.env.FH_IP}`] } : {}); const p = await (await b.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
 const errs = [];
 // Na produkci (bez háčku) ho vlož do main.js jen v tomto testovacím prohlížeči
 // LOCAL_CLIENT=1: na produkci podstrč místní public/js/game.js (test nového klienta proti živému serveru)
