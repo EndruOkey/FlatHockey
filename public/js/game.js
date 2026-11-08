@@ -160,10 +160,21 @@ export class NetGame {
     const m = this.match; if (!m) return;
     const inp = m.inputs.get(this.myId);
     if (inp) { applyClientInput(inp, this._lastMsg); inp._stamp = Date.now(); }
+    // Vyhlazení: render ukazuje polohu MEZI posledními dvěma kroky simulace (alpha = zbytek akumulátoru).
+    // Bez toho rAF (≠ přesně 60 Hz) občas dostane 0 nebo 2 kroky → škubnutí (měřeno stutter_probe.mjs).
+    const objs = this._smoothObjs || (this._smoothObjs = () => [...m.players.values(), m.puck, m.goalieL, m.goalieR]);
+    if (this._smCur) for (const [o, c] of this._smCur) { o.x = c.x; o.y = c.y; }   // vrať pravé polohy simulaci
     this._acc = (this._acc || 0) + dt;
     let n = 0;
-    while (this._acc >= CORE_DT && n++ < 5) { stepMatch(m); this._acc -= CORE_DT; }
+    const snap = () => new Map(objs().map(o => [o, { x: o.x, y: o.y }]));
+    while (this._acc >= CORE_DT && n++ < 5) { this._smPrev = snap(); stepMatch(m); this._acc -= CORE_DT; }
     if (this._acc > CORE_DT) this._acc = 0;   // po velkém zdržení nedohánět donekonečna
+    this._smCur = snap();
+    if (this._smPrev) {
+      const a = Math.min(1, this._acc / CORE_DT);
+      for (const [o, c] of this._smCur) { const q = this._smPrev.get(o);
+        if (q && Math.hypot(c.x - q.x, c.y - q.y) < 60) { o.x = q.x + (c.x - q.x) * a; o.y = q.y + (c.y - q.y) * a; } }   // teleport (buly) neinterpoluj
+    }
     // HUD ze živého stavu
     this.score = m.score;
     this.clk = Math.max(0, Math.ceil(m.clock));
@@ -212,6 +223,10 @@ export class NetGame {
         me.aimDist = aimDist;
         _updateAim(me, aim, dt * TEMPO);
         if (!this.locked) me.update(dt * TEMPO);
+        // Historie predikce (0,5 s) — reconcile porovnává server s MINULOU predikcí, ne s aktuální polohou
+        const H = this._predHist || (this._predHist = []), now = performance.now();
+        H.push({ t: now, x: me.x, y: me.y });
+        while (H.length && H[0].t < now - 500) H.shift();
         if (this.input.mmbJustPressed && !me.hasPuck) me.passReq = 0.9;
       }
     }
@@ -281,7 +296,15 @@ export class NetGame {
       ent.hasPuck = newHasPuck;
 
       if (isMe) {
-        e.sx = ps.x; e.sy = ps.y;  // jen reconcile cíl; pozici/úhly/stick predikuju lokálně
+        e.sx = ps.x; e.sy = ps.y;
+        // Server je o ping pozadu: najdi minulou predikci nejblíž serverové poloze → chyba = skutečná odchylka.
+        // (Dřív se táhlo k zastaralé poloze serveru → hráč se při jízdě chvěl; měřeno stutter_probe.mjs.)
+        const H = this._predHist;
+        if (H && H.length) {
+          let best = H[0], bd = Infinity;
+          for (const h of H) { const d = (h.x - ps.x) ** 2 + (h.y - ps.y) ** 2; if (d < bd) { bd = d; best = h; } }
+          this._recErr = { x: ps.x - best.x, y: ps.y - best.y };
+        } else this._recErr = { x: ps.x - ent.x, y: ps.y - ent.y };
       } else {
         e.tx = ps.x; e.ty = ps.y; e.tba = ps.ba; e.taa = ps.aa; e.tca = ps.ca; e.tsd = ps.sd;
         ent._dispReach = ps.dr; ent._dispCharge = ps.dc; ent.crossCheck = !!ps.cc; ent._lean = ps.ln;
@@ -392,10 +415,14 @@ export class NetGame {
       const ent = e.ent;
       if (e.isMe) {
         // predikce proběhla v _tick; jemně dotáhni k serveru
-        ent.x += (e.sx - ent.x) * rk;
-        ent.y += (e.sy - ent.y) * rk;
-        const dx = ent.x - e.sx, dy = ent.y - e.sy, d = Math.hypot(dx, dy), MAX = 16;
-        if (d > MAX) { ent.x = e.sx + dx / d * MAX; ent.y = e.sy + dy / d * MAX; }
+        // Plynule dorovnej skutečnou odchylku od serveru; velkou (buly, teleport) přeskoč najednou
+        const err = this._recErr;
+        if (err) {
+          const big = Math.hypot(err.x, err.y) > 80, f = big ? 1 : rk;
+          const cx = err.x * f, cy = err.y * f;
+          ent.x += cx; ent.y += cy; err.x -= cx; err.y -= cy;
+          if (this._predHist) for (const h of this._predHist) { h.x += cx; h.y += cy; }
+        }
         continue;
       }
       const sm = samp(f => f.ents.get(ent.id));

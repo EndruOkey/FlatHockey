@@ -1323,6 +1323,28 @@ function playNow() {
     periods: 3, minutes: 5, max: 6, botFill: 3, rules: false, password: '' }, profile());
 }
 $('go-play').onclick = playNow;
+// OFFLINE zápas proti botům — celá simulace v prohlížeči (match-core), žádná síť → bez sekání.
+function playOffline() {
+  if (!commitProfile()) return requireProfile();
+  localStorage.setItem('hockey_tutorial_done', '1');
+  _lastPass = null;
+  if (IS_MOBILE) { setStatus(t('pc_only'), '#FFB020'); return; }
+  if (inGame && currentGame?.stop) currentGame.stop();
+  const pr = profile();
+  const g = new NetGame(canvas, net, 'me', {
+    offline: true, botFill: 3, periods: 3, minutes: 5, rules: false, difficulty: 'casual',
+    myName: pr.name, myNum: pr.number,
+    teams: { home: { name: t('home_ph'), color: '#3a9fff', style: 'solid' }, away: { name: t('away_ph'), color: '#ff4455', style: 'solid' } },
+  });
+  const me = g.local;
+  if (me) {
+    Object.assign(me, { name: pr.name, handed: pr.handed, num: pr.number, helmet: pr.helmet, jersey: pr.jersey, shorts: pr.shorts, stripe: pr.stripe, laces: pr.laces, gloves: pr.gloves, tape: pr.tape, trail: pr.trail, stick: pr.stick, tapeStyle: pr.tapeStyle, helmetType: pr.helmetType, visor: pr.visor });
+    me.color = pr.jersey;
+  }
+  g.onExit = () => { stopGame(); showView('main'); };
+  startGame(g);
+}
+$('go-offline').onclick = playOffline;
 
 // ── Procházení ────────────────────────────────────────────────────────
 let _lastPass = null;   // heslo posledního lobby (pro odvetu)
@@ -1517,6 +1539,7 @@ net.onOnlineCount = ({ count }) => {
 
 function startGame(game) {
   inGame = true; currentGame = game;
+  window.__fhGame = game;   // měřicí háček (scripts/stutter_probe.mjs)
   lobby.style.display = 'none'; canvas.style.cursor = 'crosshair';
   // SandboxGame má vlastní dock s popisy — hint překrýval dock
   const hintEl = document.getElementById('hint');
