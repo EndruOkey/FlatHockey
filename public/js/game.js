@@ -475,9 +475,11 @@ export class NetGame {
     for (const e of this.players.values()) solids.push({ ent: e.ent, x: e.ent.x, y: e.ent.y, r: e.ent.radius });
     solids.push({ ent: this.goalieL, x: this.goalieL.x, y: this.goalieL.y, r: this.goalieL.radius });
     solids.push({ ent: this.goalieR, x: this.goalieR.x, y: this.goalieR.y, r: this.goalieR.radius });
+    const ents = [...this.players.values()].map(e => e.ent);
     this.puck.draw(ctx, cam);   // puk POD hráči → hokejka se kreslí navrch (puk leží na ledě u čepele)
     for (const e of this.players.values()) {
       e.ent._solids = solids.filter(so => so.ent !== e.ent);
+      e.ent._others = ents;   // kontakt hokejek (Player.draw / stickTip)
       e.ent._isLocal = e.isMe;   // charge arc kreslíme jen vlastnímu hráči (ostatní vidí nápřah hole)
       e.ent.draw(ctx, cam);
     }

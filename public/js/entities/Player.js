@@ -105,6 +105,14 @@ export class PlayerBase {
     // Clip against rounded corners — shrink until tip is inside valid arc
     t = _clipCorners(gx, gy, cos, sin, t);
 
+    // Ostatní hráči: hokejka neprojde tělem ani dříkem cizí hokejky (dřív šla skrz — scripts/stick_contact.mjs)
+    if (this._others) for (const o of this._others) {
+      if (o === this) continue;
+      if (_STK_BODY && !(_STK_MODE === 'opp' && o.team === this.team) && !(_STK_MODE === 'nopuck' && this.hasPuck)) t = _clipRayCircle(gx, gy, cos, sin, t, o.x, o.y, o.radius + _STK_BODY_PAD);
+      if (_STK_STICK && !o.crossCheck) { const q = o.gripPoint, qd = o.carryAngle ?? o.aimAngle;
+        t = _clipRayStick(gx, gy, cos, sin, t, q.x, q.y, Math.cos(qd), Math.sin(qd), o._dispReach ?? PLAYER.stickLen); }
+    }
+
     t = Math.max(0, t);
     return { x: gx + cos * t, y: gy + sin * t };
   }
@@ -598,6 +606,12 @@ function _renderPlayer(ctx, p, cam) {
     RINK.goalLineRight, RINK.goalLineRight + RINK.goalDepth, RINK.goalY, RINK.goalY + RINK.goalH);
   // Pevné objekty (ostatní hráči, gólmani)
   if (p._solids) for (const so of p._solids) wt = _clipRayCircle(gxw, gyw, windCos, windSin, wt, so.x, so.y, so.r);
+  // Cizí hokejky (vykreslený dřík): zkřížené hole se zastaví v bodě dotyku, neprolnou se
+  if (p._others) for (const o of p._others) {
+    if (o === p || o.crossCheck) continue;
+    const q = o.gripPoint, qd = o._stickDisp, ql = (o._dispReach ?? PLAYER.stickLen) * (1 - (o._dispCharge ?? 0) * 0.30);
+    wt = _clipRayStick(gxw, gyw, windCos, windSin, wt, q.x, q.y, Math.cos(qd), Math.sin(qd), ql);
+  }
   wt = Math.max(0, wt - BLADE);   // stáhni zpět o čepel → čepel skončí přesně u překážky
 
   const tipX = ox + (gxw + windCos * wt) * s;
@@ -1050,6 +1064,18 @@ function _renderPlayer(ctx, p, cam) {
 }
 
 // Zkrať paprsek hole tak, aby nevjel do kruhu (hráč/gólman) — vrátí nové tMax
+const _env = k => (typeof process !== 'undefined' && process.env) ? process.env[k] : undefined;   // jen měření v Node
+const _STK_BODY = _env('FH_STKBODY') !== '0', _STK_STICK = _env('FH_STKSTICK') !== '0', _STK_BODY_PAD = Number(_env('FH_STKPAD') || 0), _STK_MODE = _env('FH_STKMODE') || 'nopuck';   // nopuck: o těla se zastaví hokejka hráče BEZ puku (bránění, nastavené tělo). 'all' kope home_away mimo rubriku (1.93), změřeno test:balance
+// Paprsek (hokejka) vs. DŘÍK cizí hokejky (úsečka z úchopu, bez posledních 5 px = čepel → čepele se smí potkat
+// kvůli vypíchnutí puku). Vrací zkrácené tMax. Každý hráč se ořízne jen o SUROVÝ dřík druhého → pořadí nehraje roli.
+function _clipRayStick(px, py, cos, sin, tMax, qx, qy, qc, qs, qLen) {
+  const den = cos * qs - sin * qc;
+  if (Math.abs(den) < 1e-9) return tMax;
+  const dx = qx - px, dy = qy - py;
+  const t = (dx * qs - dy * qc) / den, u = (dx * sin - dy * cos) / den;
+  return (t > 2 && t < tMax && u > 0 && u < qLen - 5) ? t : tMax;
+}
+
 function _clipRayCircle(px, py, cos, sin, tMax, cx, cy, rr) {
   const ox = px - cx, oy = py - cy;
   const b = ox * cos + oy * sin;          // D je jednotkový → kvadratika t²+2bt+c=0

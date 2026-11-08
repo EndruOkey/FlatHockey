@@ -21,6 +21,7 @@ export class World {
   update(dt) {
     this.tick++;
     this._attachRng();   // entity přidané po konstrukci (hráči, boti)
+    { const pl = this.players; for (const p of pl) p._others = pl; }   // hokejka se zastaví o tělo / hokejku ostatních (stickTip)
     for (const e of this.entities) e.update(dt, this);
     if (this.authoritative) this._resolveInteractions(dt);
     if (this._whistleCool > 0) this._whistleCool -= dt;
