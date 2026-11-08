@@ -19,10 +19,11 @@ await p.click(sel); await p.waitForTimeout(4000);
 const drive = (async () => { const keys = ['KeyW', 'KeyD', 'KeyS', 'KeyA']; for (let i = 0; i < +secs; i++) { const k = keys[i % 4]; await p.keyboard.down(k); await p.waitForTimeout(1000); await p.keyboard.up(k); } })();
 const r = await p.evaluate(secs => new Promise(res => {
   const g = window.__fhGame; if (!g) return res({ err: 'no game' });
-  const prev = new Map(), vavg = new Map(); const H = {}, S = {}, PV = {}, PJ = { n: 0, max: 0 }; let last = performance.now(), frames = 0, longF = 0, hitch = 0, samples = 0;
+  const prev = new Map(), vavg = new Map(); const RC = { prev: null, n: 0, over10: 0, over25: 0, max: 0 }, H = {}, S = {}, PV = {}, PJ = { n: 0, max: 0 }; let last = performance.now(), frames = 0, longF = 0, hitch = 0, samples = 0;
   const end = last + secs * 1000;
   const f = now => {
     const dt = (now - last) / 1000; last = now; frames++; if (dt > 0.025) longF++;
+    if (g._interpT != null) { if (RC.prev != null && dt > 0) { const rate = (g._interpT - RC.prev) / (dt * 1000); RC.n++; const dv = Math.abs(rate - 1); if (dv > 0.1) RC.over10++; if (dv > 0.25) RC.over25++; RC.max = Math.max(RC.max, dv); } RC.prev = g._interpT; }
     const list = [...[...g.players].map(([id, e]) => [e.isMe ? 'JA' : 'bot', e.ent]), ['puk', g.puck]];
     for (const [id, ent] of list) { const x = ent.x, y = ent.y, q = prev.get(ent);
       if (q && dt > 0) { const v = Math.hypot(x - q.x, y - q.y) / dt, a = vavg.get(ent) ?? v;
@@ -33,7 +34,7 @@ const r = await p.evaluate(secs => new Promise(res => {
         PV.v = { x: dx, y: dy }; }
       prev.set(ent, { x, y }); }
     if (now < end) requestAnimationFrame(f);
-    else res({ frames, fps: +(frames / secs).toFixed(1), longFramePct: +(100 * longF / frames).toFixed(1), hitchPct: +(100 * hitch / Math.max(1, samples)).toFixed(2), samples, snapAvg: g._snapAvg && +g._snapAvg.toFixed(1), snapMax: g._snapMax && +g._snapMax.toFixed(1), underruns: g._underruns || 0, offline: !!g.offline, pukZpet: PJ, pct: Object.fromEntries(Object.keys(S).map(k => [k, +(100 * ((H['skok+:' + k] || 0) + (H['stop-:' + k] || 0)) / S[k]).toFixed(2)])), H });
+    else res({ frames, fps: +(frames / secs).toFixed(1), longFramePct: +(100 * longF / frames).toFixed(1), hitchPct: +(100 * hitch / Math.max(1, samples)).toFixed(2), samples, snapAvg: g._snapAvg && +g._snapAvg.toFixed(1), snapMax: g._snapMax && +g._snapMax.toFixed(1), underruns: g._underruns || 0, offline: !!g.offline, tempoHodin: { mimo10pct: +(100 * RC.over10 / Math.max(1, RC.n)).toFixed(1), mimo25pct: +(100 * RC.over25 / Math.max(1, RC.n)).toFixed(1), maxOdchylkaPct: Math.round(100 * RC.max) }, bufDelay: g._bufDelay && Math.round(g._bufDelay), pukZpet: PJ, pct: Object.fromEntries(Object.keys(S).map(k => [k, +(100 * ((H['skok+:' + k] || 0) + (H['stop-:' + k] || 0)) / S[k]).toFixed(2)])), H });
   }; requestAnimationFrame(f);
 }), +secs);
 await drive.catch(() => {});

@@ -335,6 +335,11 @@ export class NetGame {
     // Zahoď snímky mimo pořadí (starší serverový čas než poslední) — jinak by rozbily interpolaci
     if (this._buf.length && st <= this._buf[this._buf.length - 1].st) return;
     this._buf.push(frame);
+    // Odhad serverových hodin: offset = serverový čas − čas příchodu. Nejrychleji doručené snímky (max offset)
+    // za ~2 s = nejlepší odhad; jeden zpožděný paket ho nerozhodí (dřív se hodiny honily za každým snímkem → výstřelky).
+    const offs = this._clkOffs || (this._clkOffs = []);
+    offs.push({ t: frame.t, off: st - frame.t });
+    while (offs.length && offs[0].t < frame.t - 2000) offs.shift();
     while (this._buf.length > 2 && this._buf[0].st < st - 1200) this._buf.shift();
   }
 
@@ -379,10 +384,12 @@ export class NetGame {
     // snímkem. Interpolace podle serverového času (ne příchodu!) → nárazový příchod nezpůsobí skok.
     let renderT = 0, A = null, B = null, underrun = false;
     if (newest) {
-      const tgt = newest.st - DELAY;
+      let maxOff = -Infinity; for (const o of (this._clkOffs || [])) if (o.off > maxOff) maxOff = o.off;
+      const tgt = (Number.isFinite(maxOff) ? performance.now() + maxOff : newest.st) - DELAY;
       if (this._interpT == null || Math.abs(this._interpT - tgt) > 500) this._interpT = tgt;   // snap na startu/teleportu
-      this._interpT += dt * 1000;
-      this._interpT += (tgt - this._interpT) * Math.min(1, 2 * dt);   // jemně dožene drift, bez skoku
+      // Hodiny plynou reálným časem a k cíli se dotahují tempem nejvýš ±2 % → scéna nikdy viditelně nezrychlí/nezpomalí
+      const warp = Math.max(-0.02, Math.min(0.02, (tgt - this._interpT) * 0.004));
+      this._interpT += dt * 1000 * (1 + warp);
       renderT = this._interpT;
       if (buf.length >= 2) { for (let i = 0; i < buf.length; i++) { if (buf[i].st <= renderT) A = buf[i]; else { B = buf[i]; break; } } }
       underrun = (buf.length >= 2 && B === null);
