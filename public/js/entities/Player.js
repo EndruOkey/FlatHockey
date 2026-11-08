@@ -344,6 +344,9 @@ export class PlayerBase {
     // Kurzor blízko = hůl stažená = pohyb výrazně pomalejší (kratší krok)
     const _ad = this.aimDist ?? 60;
     topSpeed *= 0.45 + 0.55 * clamp(_ad / 65, 0, 1);  // blízko: ~45-55%, daleko: 100%
+    // CRUISE (volitelný strop rychlosti): boti zpomalí při pozicování/krytí/rozehře (míň frantičnosti,
+    // prostor na kličku); hráč může držet modifikátor pro kontrolovanou jízdu. null/1 = bez stropu.
+    if (input.cruise != null && input.cruise < 1) topSpeed *= clamp(input.cruise, 0.3, 1);
 
     // Zpátečka (backskating): jízda dozadu je ~25% pomalejší
     // Détekce: pohyb opačný k facing direction (bodyAngle)

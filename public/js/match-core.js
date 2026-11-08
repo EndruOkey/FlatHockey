@@ -52,7 +52,7 @@ function _updateAim(p, rawAim, dt) {
   const rate = clamp(d / 35, 0.12, 1) * 28;
   p.aimAngle = lerpAngle(p.aimAngle, rawAim, Math.min(1, rate * dt));
 }
-const LEAD_K = (typeof process !== 'undefined' && process.env && process.env.FH_LEADK) ? Number(process.env.FH_LEADK) : 0.7;   // změřeno scripts/pass_test.mjs: 0.7 → 92 % převzatých (dřív 46 %)
+const LEAD_K = (typeof process !== 'undefined' && process.env && process.env.FH_LEADK) ? Number(process.env.FH_LEADK) : 0.78;  // 0.78: pas dorazí do stride (scripts/pass_stride.mjs: offset −13→−6 px, míň „za tebe") a převzetí drží ~92 % (pass_test). 0.7 házelo za příjemce.
 function leadAim(from, target, speed) {
   const tip = target;   // míří na střed těla příjemce (změřeno: čepel dávala jen 25–33 %)
   const a = PUCK.decel;

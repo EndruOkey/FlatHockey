@@ -170,7 +170,7 @@ function _updateAim(p, rawAim, dt) {
   p.aimAngle = lerpAngle(p.aimAngle, rawAim, Math.min(1, rate * dt));
 }
 
-const LEAD_K = (typeof process !== 'undefined' && process.env.FH_LEADK) ? Number(process.env.FH_LEADK) : 0.7;   // změřeno scripts/pass_test.mjs: 0.7 → 92 % převzatých (dřív 46 %)
+const LEAD_K = (typeof process !== 'undefined' && process.env.FH_LEADK) ? Number(process.env.FH_LEADK) : 0.78;  // 0.78: pas do stride (scripts/pass_stride.mjs: offset −13→−6 px) při převzetí ~92 % (pass_test). Drž v souladu s match-core.js.
 function leadAim(from, target, speed) {
   // Přihrávka DO JÍZDY: místo setkání = kde bude čepel příjemce, až tam puk (zpomalující o PUCK.decel) dojede.
   // Dřív: tlumené 0.6 × lineární čas bez zpomalení → puk chodil za hráče („na paty“). 3 iterace stačí.

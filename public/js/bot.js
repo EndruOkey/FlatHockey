@@ -349,4 +349,9 @@ export function botThink(p, inp, match) {
   inp.lmb = false;
   inp.aim = Math.atan2(ay - p.y, ax - p.x);
   inp.aimDist = Math.max(40, Math.hypot(ax - p.x, ay - p.y));
+  // CRUISE podle režimu: útočná podpora, rozehra s pukem a čekání = pod kontrolou (klid, prostor).
+  // OBRANA (chase/gap/defend) zůstává PLNÁ rychlost — zasahovat do ní rozbíjí stall/steal guardrail
+  // (změřeno: zpomalení/zrychlení obránce kope stall mimo rubriku). Měřeno motion_probe + balance.
+  const CRUISE = { support: 0.66, wait: 0.6 };
+  inp.cruise = CRUISE[p._botMode] ?? 1;
 }
