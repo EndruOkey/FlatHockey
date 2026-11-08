@@ -26,6 +26,9 @@ export const RINK = {
 
 export const PLAYER = {
   radius: 7,       // tělo (mírně nad realitou kvůli čitelnosti)
+  // Srážka hráč–hráč a zastavení hokejky o tělo: podle NAKRESLENÝCH ramen (trup 1.25×radius), jinak se těla
+  // na obrazovce překrývala (scripts/body_overlap.mjs: 18 % blízkých dvojic). Braní puku/gólman dál přes radius.
+  bodyRadius: _penv('FH_BODYR', 8.75),
   speed: 180,      // ~34 ft/s top speed (realistický sprint) — DRŽ v souladu s bot.js PLAYER_V
   accel: 140,      // rozjezd — pomalejší, hráč rychlost BUDUJE (víc setrvačnosti, míň frantického svištění
                    // při plném hřišti); top speed zůstává, takže bot pořád obere nosiče (stall guardrail OK)

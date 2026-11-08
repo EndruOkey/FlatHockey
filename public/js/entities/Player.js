@@ -108,7 +108,7 @@ export class PlayerBase {
     // Ostatní hráči: hokejka neprojde tělem ani dříkem cizí hokejky (dřív šla skrz — scripts/stick_contact.mjs)
     if (this._others) for (const o of this._others) {
       if (o === this) continue;
-      if (_STK_BODY && !(_STK_MODE === 'opp' && o.team === this.team) && !(_STK_MODE === 'nopuck' && this.hasPuck)) t = _clipRayCircle(gx, gy, cos, sin, t, o.x, o.y, o.radius + _STK_BODY_PAD);
+      if (_STK_BODY && !(_STK_MODE === 'opp' && o.team === this.team) && !(_STK_MODE === 'nopuck' && this.hasPuck)) t = _clipRayCircle(gx, gy, cos, sin, t, o.x, o.y, PLAYER.bodyRadius + _STK_BODY_PAD);
       if (_STK_STICK && !o.crossCheck) { const q = o.gripPoint, qd = o.carryAngle ?? o.aimAngle;
         t = _clipRayStick(gx, gy, cos, sin, t, q.x, q.y, Math.cos(qd), Math.sin(qd), o._dispReach ?? PLAYER.stickLen); }
     }
@@ -261,7 +261,7 @@ export class PlayerBase {
 
   // Souboj těl — dva hráči se přetlačí (clona, box-out, scramble před brankou)
   collideWith(other) {
-    const minDist = this.radius + other.radius;
+    const minDist = 2 * PLAYER.bodyRadius;
     const dx = other.x - this.x, dy = other.y - this.y;
     const dist = Math.hypot(dx, dy);
     if (dist >= minDist || dist === 0) return;
