@@ -917,6 +917,9 @@ const guestHits = new Map();
 function socketIp(socket) {
   const a = socket.handshake.address || '';
   if (a === '127.0.0.1' || a === '::1' || a === '::ffff:127.0.0.1') {
+    // Cloudflare Tunnel (cloudflared → localhost) posílá skutečnou IP hráče v CF-Connecting-IP
+    const cf = String(socket.handshake.headers['cf-connecting-ip'] || '').trim();
+    if (cf) return cf;
     const xff = String(socket.handshake.headers['x-forwarded-for'] || '').split(',').pop().trim();
     if (xff) return xff;
   }
