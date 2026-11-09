@@ -161,7 +161,7 @@ export class PlayerBase {
     const bladeDir = (this.carryAngle ?? this.aimAngle) + (this.handed ?? 1) * Math.PI / 6.5;
     const bx = tip.x + Math.cos(bladeDir) * 6, by = tip.y + Math.sin(bladeDir) * 6;
     const d = Math.min(Math.hypot(puck.x - tip.x, puck.y - tip.y), Math.hypot(puck.x - bx, puck.y - by));
-    return d <= PLAYER.pickupTipRadius * 0.92;
+    return d <= PLAYER.stealR;
   }
 
   stealFrom(carrier, puck) {

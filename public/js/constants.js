@@ -37,6 +37,7 @@ export const PLAYER = {
   stickLen: _penv('FH_STICK', 16),    // dosah hole na puk (= balanc, NEzkracovat: 14 rozbilo bot_1v1 a stall). Vizuální délka se krátí zvlášť přes stickDraw.
   stickDraw: _penv('FH_STICKDRAW', 0.86),   // jen VIZUÁLNÍ zkrácení kreslené hole (dřík+čepel), nemění dosah/pickup → hůl nepůsobí dlouhá u menšího těla
   pickupTipRadius: 10,
+  stealR: _penv('FH_STEALR', 10),   // obrání = stejná zóna jako převzetí (zelený kroužek). Dřív 9,2 → "najedu do hole a nic" (scripts/steal_match.mjs)
   // Ochrana po převzetí puku (s): tak dlouho ho soupeř holí nevyrazí → méně chaosu. Env FH_GRACE pro měření.
   // Kontakt a crosscheck (2026-11-02; env FH_* jen pro měření v Node)
   kbMax:    _penv('FH_KBMAX', 45),     // px/s — strop odrazu při srážce (dřív pevných 85)
@@ -44,7 +45,7 @@ export const PLAYER = {
   ccSpeed:  _penv('FH_CCSPD', 0.9),    // rychlost při crosschecku × top speed (dřív 1.12)
   ccPush:   _penv('FH_CCPUSH', 80),    // px/s — strčení soupeře crosscheckem (dřív 120)
   receiveFirst: _penv('FH_RECV', 1) > 0,   // pas, který jde zpracovat, hráč převezme (dřív se od hole náhodně odrazil)
-  stealGrace: ((typeof process !== 'undefined' && process.env && process.env.FH_GRACE != null) ? Number(process.env.FH_GRACE) : 1.5),   // 1.2→1.5: nosič udrží čerstvý puk o kus déle → míň pranic/turnoverů (fel klidnější, víc stavění akcí). Měřeno rubrikou.
+  stealGrace: ((typeof process !== 'undefined' && process.env && process.env.FH_GRACE != null) ? Number(process.env.FH_GRACE) : 0.8),   // 2026-11-09 1.5→0.8: neviditelná ochrana blokovala 29 % kontaktů (steal_match). Dřív 1.2→1.5: nosič udrží čerstvý puk o kus déle → míň pranic/turnoverů (fel klidnější, víc stavění akcí). Měřeno rubrikou.
   pickupMaxRelSpeed: 420,
   // Adresát přihrávky má větší zónu převzetí (pas míří na tělo, čepel je 16 px před ním). Soupeř zachytává normálně.
   passRecvRadius: _penv('FH_RECVR', 18),

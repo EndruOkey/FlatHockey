@@ -29,8 +29,17 @@ const STANDOFF    = 12;           // px za puk (směrem od soupeře)
 const LOOK        = 120;          // px — jak daleko dopředu hledá soupeře v cestě
 const CLEAR       = 26;           // px — boční odstup od soupeře na dráze (poloměry 7+7 + rezerva)
 const PRESS_R     = (typeof process !== 'undefined' && Number(process.env.FH_PRESS)) || 20;           // px — soupeř takhle blízko = nátlak → pas
-const PASS_MIN    = 50, PASS_MAX = 260, PASS_CD = TT(90);   // px / ticky pauzy mezi pasy
-const PASS_FAR    = 150;          // px od branky: dál než to se vyplatí přihrát lepšímu
+const _envE = (k, d) => (typeof process !== 'undefined' && process.env[k] != null && process.env[k] !== '') ? Number(process.env[k]) : d;
+const PASS_MIN    = 50, PASS_MAX = 260, PASS_CD = TT(_envE('FH_PCD', 60));   // px / ticky pauzy mezi pasy
+const PASS_FAR    = _envE('FH_PFAR', 150);   // px od branky: dál než to se vyplatí přihrát lepšímu
+const PASS_SCORE  = _envE('FH_PSCORE', 70);  // skóre příjemce (posun + volnost), od kterého se přihraje i blízko branky
+const PASS_ADV    = _envE('FH_PADV', 20);    // px — o kolik musí být příjemce blíž k brance
+// TRASY ÚTOKU (2026-11-09): nosič si na začátku držení (seedovaně) vybere cestu — přímo / po kraji / přejezd
+// na druhou stranu — a teprve od bodu obratu stáčí do slotu. Dřív vždy přímka do středu (bot_style: křivost 1,11).
+const ROUTES      = _envE('FH_ROUTES', 1);
+const ROUTE_X     = _envE('FH_RTX', 185);    // px před brankou — bod obratu
+const ROUTE_W     = _envE('FH_RTW', 90);     // px od osy — šířka kraje
+const ROUTE_MIN   = 260;                     // px od branky — kratší nájezd jede rovnou
 const SUP_AHEAD   = 80, SUP_BACK = 55, SUP_WIDE = 100;  // rozestavení podpory
 const _env = (k, d) => (typeof process !== 'undefined' && process.env[k] != null && process.env[k] !== '') ? Number(process.env[k]) : d;
 // Obrana s odstupem (gap control): napadající bot drží GAP px před nosičem na obranné straně a napadne ho,
@@ -162,10 +171,10 @@ function pickPass(p, match, dir, goalX, goalY, dist) {
     if (score > bestScore) { bestScore = score; best = t; bestDist = tDist; }
   }
   if (!best) return null;
-  const better = bestDist < dist - 20;                   // příjemce je blíž k brance
+  const better = bestDist < dist - PASS_ADV;             // příjemce je blíž k brance
   // Pod tlakem odehraj na kohokoli rozumného; jinak jen když to posune hru dopředu
   if (pressed) return (better || bestScore > 0) ? best : null;
-  return (better && (dist > PASS_FAR || bestScore > 70)) ? best : null;
+  return (better && (dist > PASS_FAR || bestScore > PASS_SCORE)) ? best : null;
 }
 
 function nearestOpp(p, match, x, y) {
@@ -208,7 +217,16 @@ export function botThink(p, inp, match) {
 
   const g = puck.x < RINK.centerX ? match.goalieL : match.goalieR;   // gólman u puku
 
-  if (p.hasPuck && !b.hadPuck) b.lane = -1;   // nové držení → vyber stranu
+  if (p.hasPuck && !b.hadPuck) {   // nové držení → vyber stranu a trasu
+    b.lane = -1; b.route = 0;
+    if (ROUTES) {
+      const gx0 = dir > 0 ? RINK.goalLineRight : RINK.goalLineLeft, gy0 = RINK.goalY + RINK.goalH / 2;
+      if (Math.hypot(gx0 - p.x, gy0 - p.y) > ROUTE_MIN) {
+        const r = b.rng(), mySide = p.y < gy0 - 10 ? -1 : p.y > gy0 + 10 ? 1 : (b.rng() < 0.5 ? -1 : 1);
+        b.route = r < 0.35 ? 0 : r < 0.7 ? mySide : -mySide;   // 0 = přímo, ±1 = kraj (strana)
+      }
+    }
+  }
   b.hadPuck = p.hasPuck;
 
   if (p.hasPuck) {
@@ -216,6 +234,11 @@ export function botThink(p, inp, match) {
     const behind = (p.x - goalX) * dir > -4;               // za brankovou čarou → vyjeď do slotu
     tx = goalX - dir * (behind ? 90 : 110); ty = goalY + (behind ? 0 : b.lane * LANE);
     ax = goalX; ay = goalY;
+    if (b.route) {
+      const wx = goalX - dir * ROUTE_X, wy = goalY + b.route * ROUTE_W;
+      if ((p.x - wx) * dir > -30) b.route = 0;               // bod obratu minut → stoč do slotu
+      else { tx = wx; ty = wy; ax = wx + dir * 60; ay = wy; } // hůl míří po směru jízdy (plynule, CARRY_TURN)
+    }
     const dist = Math.hypot(goalX - p.x, goalY - p.y);
     if (b.passCd > 0) b.passCd -= THINK_EVERY;
     const mate = (b.passCd > 0) ? null : pickPass(p, match, dir, goalX, goalY, dist);
