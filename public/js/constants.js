@@ -25,11 +25,11 @@ export const RINK = {
 };
 
 export const PLAYER = {
-  radius: 7,       // tělo (mírně nad realitou kvůli čitelnosti)
+  radius: _penv('FH_RADIUS', 6),       // tělo (mírně nad realitou kvůli čitelnosti); 7→6 = menší panáci, víc prázdného ledu na pohled (feel „víc prostoru")
   // Srážka hráč–hráč a zastavení hokejky o tělo: podle NAKRESLENÝCH ramen (trup 1.25×radius), jinak se těla
   // na obrazovce překrývala (scripts/body_overlap.mjs: 18 % blízkých dvojic). Braní puku/gólman dál přes radius.
-  bodyRadius: _penv('FH_BODYR', 8.75),
-  speed: 180,      // ~34 ft/s top speed (realistický sprint) — DRŽ v souladu s bot.js PLAYER_V
+  bodyRadius: _penv('FH_BODYR', 7.5),  // 8.75→7.5 = míň skrumáží o tělo (feel klidnější), drženo úměrně k menšímu radiusu
+  speed: _penv('FH_PSPEED', 165),      // 180→165 (−8 %): pomalejší relativní tempo = víc času číst hru (náhrada „bigger rink" pocitu). 165 = změřené bezpečné dno (150 už rozbije stall). DRŽ v souladu s bot.js PLAYER_V (čte stejný FH_PSPEED)
   accel: 140,      // rozjezd — pomalejší, hráč rychlost BUDUJE (víc setrvačnosti, míň frantického svištění
                    // při plném hřišti); top speed zůstává, takže bot pořád obere nosiče (stall guardrail OK)
   decel: 70,       // skluz při puštění (glide), ale kontrolovatelný
@@ -43,7 +43,7 @@ export const PLAYER = {
   ccSpeed:  _penv('FH_CCSPD', 0.9),    // rychlost při crosschecku × top speed (dřív 1.12)
   ccPush:   _penv('FH_CCPUSH', 80),    // px/s — strčení soupeře crosscheckem (dřív 120)
   receiveFirst: _penv('FH_RECV', 1) > 0,   // pas, který jde zpracovat, hráč převezme (dřív se od hole náhodně odrazil)
-  stealGrace: ((typeof process !== 'undefined' && process.env && process.env.FH_GRACE != null) ? Number(process.env.FH_GRACE) : 1.2),   // 1.2 = změřeno scripts/tempo_sweep.mjs (2026-11-02)     // dosah čepele na puk (velkorysejší úchop)
+  stealGrace: ((typeof process !== 'undefined' && process.env && process.env.FH_GRACE != null) ? Number(process.env.FH_GRACE) : 1.5),   // 1.2→1.5: nosič udrží čerstvý puk o kus déle → míň pranic/turnoverů (fel klidnější, víc stavění akcí). Měřeno rubrikou.
   pickupMaxRelSpeed: 420,
   // Adresát přihrávky má větší zónu převzetí (pas míří na tělo, čepel je 16 px před ním). Soupeř zachytává normálně.
   passRecvRadius: _penv('FH_RECVR', 18),

@@ -20,7 +20,7 @@ const CORNER_IN   = 2;            // px od horní tyčky, kam míří
 const CREASE_OUT  = 140;          // px před brankou — kam se stáhne, když gólman drží puk
 const PUCK_LEAD   = 0.25;         // s — jede tam, kam puk dojede, ne kde je
 const LEAD_MAX     = 0.7;          // s — strop předstihu při pronásledování
-const PLAYER_V     = 180;          // px/s — rychlost bruslaře (= PLAYER.speed, drž v souladu)
+const PLAYER_V     = (typeof process !== 'undefined' && process.env.FH_PSPEED != null && process.env.FH_PSPEED !== '') ? Number(process.env.FH_PSPEED) : 165;          // px/s — rychlost bruslaře (= PLAYER.speed, čte stejný FH_PSPEED)
 const AVOID_R     = 26;           // px — puk blíž než tohle k soupeři → najeď z druhé strany
 const REACH       = 13;           // px — dosah čepele před tělem při aimDist 40
 const PICK_NEAR   = 45;           // px — od téhle vzdálenosti k puku bot zastaví tělo tak, aby čepel dosáhla
