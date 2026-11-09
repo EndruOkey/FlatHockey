@@ -191,12 +191,12 @@ export class NetGame {
   // HLÁŠKY skillu / kombo (match-core _detectFx): plovoucí text nad hráčem; KOMBO GÓL velký pod GOAL.
   _onFx(e) {
     const L = (this._fxList || (this._fxList = []));
-    const txt = { combo: t('fx_combo', e.n), combogoal: t('fx_combogoal', e.n), perfect: t('fx_perfect'),
+    const txt = { bonus: t('fx_bonus'), combo: t('fx_combo', e.n), combogoal: t('fx_combogoal', e.n), perfect: t('fx_perfect'),
                   onetimer: t('fx_onetimer'), fake: t('fx_fake'), screen: t('fx_screen') }[e.k];
     if (!txt) return;
     for (const f of L) if (f.id === e.id && f.k === 'combo' && e.k === 'combo') f.t = 0;   // nové kombo nahradí staré
-    const col = { combo: '#19c37d', combogoal: '#ffcf3a', perfect: '#ffd23a', onetimer: '#ff7a1e', fake: '#b07cff', screen: '#22ccee' }[e.k];
-    L.push({ k: e.k, id: e.id, txt, col, t: e.k === 'combogoal' ? 2.4 : 1.3, T: e.k === 'combogoal' ? 2.4 : 1.3, big: e.k === 'combogoal' });
+    const col = { bonus: '#ffcf3a', combo: '#19c37d', combogoal: '#ffcf3a', perfect: '#ffd23a', onetimer: '#ff7a1e', fake: '#b07cff', screen: '#22ccee' }[e.k];
+    L.push({ k: e.k, id: e.id, txt, col, t: e.k === 'combogoal' || e.k === 'bonus' ? 2.4 : 1.3, T: e.k === 'combogoal' || e.k === 'bonus' ? 2.4 : 1.3, big: e.k === 'combogoal' || e.k === 'bonus', row: e.k === 'bonus' ? 1 : 0 });
   }
 
   _drawFx(ctx, W, H) {
@@ -206,7 +206,7 @@ export class NetGame {
     for (const f of L) {
       const age = f.T - f.t, a = Math.min(1, f.t / 0.35, age / 0.08), pop = 1 + 0.35 * Math.max(0, 1 - age / 0.15);
       let x, y;
-      if (f.big) { x = W / 2; y = H / 2 + 56; }
+      if (f.big) { x = W / 2; y = H / 2 + 56 + (f.row || 0) * 42; }
       else { const ent = this.players.get(f.id)?.ent; if (!ent) continue;
         x = cam.ox + ent.x * cam.scale; y = cam.oy + ent.y * cam.scale - 30 - age * 22 - stack * 4; stack++; }
       ctx.globalAlpha = a;
@@ -290,7 +290,7 @@ export class NetGame {
       this._lastSnapAt = now; }
     this.score = s.score;
     if (s.clk !== undefined) {
-      this.clk = s.clk; this.per = s.per; this.pers = s.pers;
+      this.clk = s.clk; this.per = s.per; this.pers = s.pers; this.weekRule = s.wr || null;
       if (s.end && !this.ended) this._endedAt = Date.now();
       this.ended = !!s.end;
     }
@@ -642,6 +642,10 @@ export class NetGame {
     ctx.fillText(`${mm}:${String(ss).padStart(2, '0')}`, cx, 36);
     ctx.font = '11px monospace'; ctx.fillStyle = '#8aa';
     ctx.fillText(t('period_of', this.per, this.pers), cx, 54);
+    if (this.weekRule) {   // týdenní pravidlo (rychlá hra) pod tabulí
+      ctx.font = '700 12px "Segoe UI", sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#ffcf3a';
+      ctx.fillText(t('week_rule', t('wr_' + this.weekRule)), cx, 76);
+    }
     // skóre + jména týmů
     ctx.font = 'bold 26px monospace';
     ctx.textAlign = 'right'; ctx.fillStyle = tm.home.color; ctx.fillText(this.score.home, cx - 80, 44);

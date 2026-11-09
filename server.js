@@ -21,7 +21,8 @@ import { updateStats, updateRankAndCredits, getRankPosition, getLeaderboard, get
 
 import { World } from './public/js/world.js';
 import { Player } from './public/js/entities/Player.js';
-import { _detectFx } from './public/js/match-core.js';   // hlášky (kombo/skill) — sdílený detektor
+import { _detectFx } from './public/js/match-core.js';
+import { weekRuleFor, weekBonus } from './public/js/weekly.js';   // hlášky (kombo/skill) — sdílený detektor
 import { Puck } from './public/js/entities/Puck.js';
 import { Goalie } from './public/js/entities/Goalie.js';
 import { Rink } from './public/js/entities/Rink.js';
@@ -437,7 +438,11 @@ function createMatch(lobbyId, seed) {
     if (match.offside || match.icing) return;
     if (match.ended) return;   // po konci zápasu se góly nepočítají (nešlo by farmit skóre dál)
     const scoringTeam = result === 'goal-home' ? 'home' : 'away';
+    const goalsBefore = match.score.home + match.score.away;
     if (result === 'goal-away') match.score.away++; else match.score.home++;
+    // Týdenní pravidlo (jen rychlá hra): bonusový bod
+    const bonus = match.weekRule ? weekBonus(match.weekRule, { team: scoringTeam, shot: match._lastShot, clock: match.clock, lastPeriod: match.period >= match.periods, goalsBefore }) : 0;
+    if (bonus) { match.score[scoringTeam] += bonus; (match._fx || (match._fx = [])).push({ k: 'bonus', id: match._lastTouchSid, team: scoringTeam }); }
 
     const isHuman = (sid) => sid && !sid.startsWith('bot:');   // boti se nepočítají do střelce/MVP
     const scorerMem = match._lastTouchSid ? lobbies.get(lobbyId)?.members.get(match._lastTouchSid) : null;
@@ -577,6 +582,7 @@ function startMatch(lobby) {
   match.minutes = lobby.settings.minutes;
   match.period  = 1;
   match.clock   = match.minutes * 60;   // sekundy do konce třetiny
+  match.weekRule = lobby.settings.quick ? weekRuleFor(new Date()) : null;
   match.ended   = false;
   // Pravidla (icing/offside)
   match.rules     = !!lobby.settings.rules;
@@ -795,6 +801,7 @@ function broadcast(match) {
     lock: match.world._goalLock ? 1 : 0,
     clk: Math.max(0, Math.ceil(match.clock)), per: match.period, pers: match.periods, end: match.ended ? 1 : 0,
     pnd: pendingFlags(match),
+    ...(match.weekRule ? { wr: match.weekRule } : {}),
     ...(match._fx && match._fx.length ? { fx: match._fx.splice(0) } : {}),
   });
 }
@@ -829,6 +836,7 @@ function sanitizeSettings(s) {
     periods: [1, 3].includes(s.periods) ? s.periods : 3,
     minutes: [5, 10, 15].includes(s.minutes) ? s.minutes : 10,
     rules:   !!s.rules,
+    quick:   !!s.quick,   // rychlá hra (HRÁT) → týdenní pravidlo
     max:     [2, 4, 6, 8, 10].includes(s.max) ? s.max : 10,
     botFill: s.botFill === undefined ? 1 : clampBots(s.botFill),   // doplnit tým na N hráčů boty (0–5; default 1 = původní auto-dorovnání)
     password: String(s.password || '').slice(0, 24),   // prázdné = bez hesla

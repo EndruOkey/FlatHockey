@@ -1323,7 +1323,7 @@ function playNow() {
   // Plynulost online řeší netcode (viz WebTransport plán); lokální offline režim (NetGame offline:true)
   // zůstává v kódu jako hotová schopnost pro případný „Trénink", ale HRÁT = multiplayer.
   net.createLobby({ name: nameInput.value.trim() || 'Lobby', teams: { home: { name: t('home_ph'), color: '#3a9fff', style: 'solid' }, away: { name: t('away_ph'), color: '#ff4455', style: 'solid' } },
-    periods: 1, minutes: 5, max: 4, botFill: 2, rules: false, password: '' }, profile());   // rychlé kolo = 1 třetina (5 min), ne 15 min — pro drop-in hráče. Plný zápas přes „Založit zápas".
+    periods: 1, minutes: 5, max: 4, botFill: 2, rules: false, quick: true, password: '' }, profile());   // rychlé kolo = 1 třetina (5 min), ne 15 min — pro drop-in hráče. Plný zápas přes „Založit zápas".
 }
 $('go-play').onclick = playNow;
 // OFFLINE zápas proti botům — celá simulace v prohlížeči (match-core), žádná síť → bez sekání.
