@@ -364,6 +364,7 @@ export function stepMatch(match) {
 
   const _pv0spd = Math.hypot(match.puck.vx, match.puck.vy), _pv0vx = match.puck.vx;
 
+  const _sc0 = match.score.home + match.score.away, _h0 = match.score.home;
   match.world.update(DT * TEMPO);   // fyzika v herním tempu; časomíra běží reálně
   // Puk přes mantinel u střídaček (Puck._out) → píšťalka + buly uprostřed (platí i bez pravidel, jinak by puk zmizel)
   if (match.puck._out) { match.puck._out = false; if (!match.stoppage && !match.ended) callStoppage(match, 'out', null, RINK.centerX, RINK.h / 2); }
@@ -394,5 +395,38 @@ export function stepMatch(match) {
     }
     match.lastTouch = p.team; match.touchX = match.puck.x; match._lastTouchSid = sid;
   }
+  _detectFx(match, match.score.home + match.score.away !== _sc0 ? (match.score.home !== _h0 ? 'home' : 'away') : null);
   if (match.rules && !match.stoppage && !match.world._goalLock && !match.ended) checkRules(match);
+}
+
+// HLÁŠKY (2026-11-09): kombo přihrávek, ONE-TIMER, PŘESNĚ, FINTA, CLONA → match._fx (jen pozorování, simulaci nemění).
+// Server je pošle ve snapshotu (fx), offline klient je čte přímo. Kombo = po sobě jdoucí převzetí v týmu bez ztráty;
+// střela řetěz uzavře (počet pasů si nese do případného gólu: KOMBO GÓL od 3 pasů).
+export function _detectFx(match, goalTeam) {
+  const fx = match._fx || (match._fx = []);
+  const push = e => { fx.push(e); if (fx.length > 24) fx.shift(); };
+  const live = !match.setup && !match.stoppage && !match.world._goalLock;
+  let car = null; for (const p of match.players.values()) if (p.hasPuck) { car = p; break; }
+  const sh = match.puck._shot;
+  if (sh && sh !== match._lastShot) {
+    match._lastShot = sh;
+    sh.combo = match._chain && match._chain.team === sh.team ? match._chain.n : 0;
+    if (sh.pf) push({ k: 'perfect', id: sh.id, team: sh.team });
+    if (sh.ot) push({ k: 'onetimer', id: sh.id, team: sh.team });
+    match._chain = { team: sh.team, n: 0, sid: sh.id };
+  }
+  if (car && live) {
+    const c = match._chain;
+    if (!c || c.team !== car.team) match._chain = { team: car.team, n: 0, sid: car.id };
+    else if (c.sid !== car.id) { c.n++; c.sid = car.id; if (c.n >= 2) push({ k: 'combo', n: c.n, id: car.id, team: car.team }); }
+  }
+  for (const g of [match.goalieL, match.goalieR]) if (g._fakeEv) { g._fakeEv = false; if (car) push({ k: 'fake', id: car.id, team: car.team }); }
+  if (goalTeam) {
+    const s = match._lastShot, g = goalTeam === 'home' ? match.goalieR : match.goalieL;
+    if (s && s.team === goalTeam) {
+      if (s.combo >= 3) push({ k: 'combogoal', n: s.combo, id: s.id, team: goalTeam });
+      if ((g._screen || 0) > 0.3 && !((g._fakeT || 0) > 0)) push({ k: 'screen', id: s.id, team: goalTeam });   // clona hráčem, ne doznívající finta
+    }
+    match._chain = null;
+  } else if (!live) match._chain = null;
 }

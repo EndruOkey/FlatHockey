@@ -191,6 +191,7 @@ export class PlayerBase {
 
   shoot(puck, charge, perfect = false) {
     this.hasPuck = false;
+    puck._shot = { id: this.id, team: this.team, ot: !!this._oneTimer, pf: !!perfect };   // pro hlášky (match-core: ONE-TIMER / PŘESNĚ / kombo gól)
     this._shootCooldown = 0.18;
     const tip = this.stickTip;
     puck.x = tip.x;

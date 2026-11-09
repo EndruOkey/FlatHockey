@@ -169,6 +169,7 @@ export class NetGame {
     const snap = () => new Map(objs().map(o => [o, { x: o.x, y: o.y }]));
     while (this._acc >= CORE_DT && n++ < 5) { this._smPrev = snap(); stepMatch(m); this._acc -= CORE_DT; }
     if (this._acc > CORE_DT) this._acc = 0;   // po velkém zdržení nedohánět donekonečna
+    if (m._fx && m._fx.length) for (const e of m._fx.splice(0)) this._onFx(e);
     this._smCur = snap();
     if (this._smPrev) {
       const a = Math.min(1, this._acc / CORE_DT);
@@ -185,6 +186,35 @@ export class NetGame {
     this.locked = !!m.world._goalLock;
     if (wasLocked && !this.locked && !this.goalFlash) SFX.whistle();
     this.pnd = pendingFlags(m);
+  }
+
+  // HLÁŠKY skillu / kombo (match-core _detectFx): plovoucí text nad hráčem; KOMBO GÓL velký pod GOAL.
+  _onFx(e) {
+    const L = (this._fxList || (this._fxList = []));
+    const txt = { combo: t('fx_combo', e.n), combogoal: t('fx_combogoal', e.n), perfect: t('fx_perfect'),
+                  onetimer: t('fx_onetimer'), fake: t('fx_fake'), screen: t('fx_screen') }[e.k];
+    if (!txt) return;
+    for (const f of L) if (f.id === e.id && f.k === 'combo' && e.k === 'combo') f.t = 0;   // nové kombo nahradí staré
+    const col = { combo: '#19c37d', combogoal: '#ffcf3a', perfect: '#ffd23a', onetimer: '#ff7a1e', fake: '#b07cff', screen: '#22ccee' }[e.k];
+    L.push({ k: e.k, id: e.id, txt, col, t: e.k === 'combogoal' ? 2.4 : 1.3, T: e.k === 'combogoal' ? 2.4 : 1.3, big: e.k === 'combogoal' });
+  }
+
+  _drawFx(ctx, W, H) {
+    const L = this._fxList, cam = this._cam; if (!L || !L.length || !cam) return;
+    ctx.save(); ctx.textAlign = 'center'; ctx.lineJoin = 'round';
+    let stack = 0;
+    for (const f of L) {
+      const age = f.T - f.t, a = Math.min(1, f.t / 0.35, age / 0.08), pop = 1 + 0.35 * Math.max(0, 1 - age / 0.15);
+      let x, y;
+      if (f.big) { x = W / 2; y = H / 2 + 56; }
+      else { const ent = this.players.get(f.id)?.ent; if (!ent) continue;
+        x = cam.ox + ent.x * cam.scale; y = cam.oy + ent.y * cam.scale - 30 - age * 22 - stack * 4; stack++; }
+      ctx.globalAlpha = a;
+      ctx.font = `900 ${Math.round((f.big ? 34 : 17) * pop)}px "Segoe UI", sans-serif`;
+      ctx.lineWidth = f.big ? 6 : 4; ctx.strokeStyle = 'rgba(10,18,30,0.85)'; ctx.strokeText(f.txt, x, y);
+      ctx.fillStyle = f.col; ctx.fillText(f.txt, x, y);
+    }
+    ctx.restore();
   }
 
   // kompat s main.js (applyProfile/menu) — vlastní hráč (může být null před 1. snapem)
@@ -247,9 +277,11 @@ export class NetGame {
     }
     this.input.flush();
     if (this.goalFlash > 0) this.goalFlash -= dt;
+    if (this._fxList) { for (const f of this._fxList) f.t -= dt; this._fxList = this._fxList.filter(f => f.t > 0); }
   }
 
   _onSnap(s) {
+    if (s.fx) for (const e of s.fx) this._onFx(e);
     // Debug: interval mezi snapshoty (jitter) — vysoký/kolísavý = síť; stabilní ~33ms = OK
     { const now = performance.now();
       if (this._lastSnapAt) { const iv = now - this._lastSnapAt;
@@ -622,6 +654,8 @@ export class NetGame {
       ctx.fillStyle = `rgba(220,230,245,${0.85 * a})`;
       ctx.fillText(this._notice.text, cx, 80);
     }
+
+    this._drawFx(ctx, W, H);
 
     if (this.goalFlash > 0) {
       const a = Math.min(1, this.goalFlash);
@@ -1317,6 +1351,7 @@ export class SandboxGame {
     }
 
     if (this.goalFlash > 0) this.goalFlash -= dt;
+    if (this._fxList) { for (const f of this._fxList) f.t -= dt; this._fxList = this._fxList.filter(f => f.t > 0); }
     if (this._whistleBanner && this._whistleBanner.t > 0) this._whistleBanner.t -= dt;
     if (this._goalZone && this._goalZone.t > 0) this._goalZone.t -= dt;
     if (this._prePassT > 0) this._prePassT -= dt;

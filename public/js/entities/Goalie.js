@@ -123,7 +123,7 @@ export class Goalie {
     {
       let car = null; for (const p of world.players) if (p.hasPuck && p.team !== this.team && !p.isDefender && !p.isPasser) { car = p; break; }
       const winding = !!car && (car.charge || 0) > 0.35 && rawDist < 300;
-      if (this._readWind && car && car === this._windBy && !(car.charge > 0.05)) this._fakeT = FAKE_T;   // nápřah zmizel, puk pořád u nosiče = finta
+      if (this._readWind && car && car === this._windBy && !(car.charge > 0.05)) { this._fakeT = FAKE_T; this._fakeEv = true; }   // nápřah zmizel, puk pořád u nosiče = finta
       this._readWind = winding; this._windBy = car;
       // po fintě jako clona: horší sledování, reakce i dosah (existující cesta _screen) — doznívá s časem
       if (this._fakeT > 0) { this._fakeT -= dt; lag *= FAKE_LAG; this._screen = Math.max(this._screen, FAKE_SCREEN * Math.min(1, this._fakeT / 0.3)); }

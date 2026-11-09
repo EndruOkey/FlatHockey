@@ -21,6 +21,7 @@ import { updateStats, updateRankAndCredits, getRankPosition, getLeaderboard, get
 
 import { World } from './public/js/world.js';
 import { Player } from './public/js/entities/Player.js';
+import { _detectFx } from './public/js/match-core.js';   // hlášky (kombo/skill) — sdílený detektor
 import { Puck } from './public/js/entities/Puck.js';
 import { Goalie } from './public/js/entities/Goalie.js';
 import { Rink } from './public/js/entities/Rink.js';
@@ -728,6 +729,7 @@ function stepMatch(match) {
   // Rychlost puku PŘED updatem (pro detekci „save" = zastavení tvrdé střely na vlastní branku)
   const _pv0spd = Math.hypot(match.puck.vx, match.puck.vy), _pv0vx = match.puck.vx;
 
+  const _sc0 = match.score.home + match.score.away, _h0 = match.score.home;
   match.world.update(DT * TEMPO);   // fyzika v herním tempu; časomíra (match.clock) běží reálně
   // Puk přes mantinel u střídaček (Puck._out) → píšťalka + buly uprostřed (platí i bez pravidel, jinak by puk zmizel)
   if (match.puck._out) { match.puck._out = false; if (!match.stoppage && !match.ended) callStoppage(match, 'out', null, RINK.centerX, RINK.h / 2); }
@@ -760,6 +762,7 @@ function stepMatch(match) {
     match.lastTouch = p.team; match.touchX = match.puck.x; match._lastTouchSid = sid;
   }
   // Kontrola pravidel (jen když je zapnuto a hraje se)
+  _detectFx(match, match.score.home + match.score.away !== _sc0 ? (match.score.home !== _h0 ? 'home' : 'away') : null);
   if (match.rules && !match.stoppage && !match.world._goalLock && !match.ended) checkRules(match);
   // Odeslání snapshotu NENÍ tady — řeší ho smyčka rovnoměrně (1× za fire), ať se při doháněním
   // kroku neposílají snapshoty v nárazech (burst → mezera = trhání u klienta).
@@ -792,6 +795,7 @@ function broadcast(match) {
     lock: match.world._goalLock ? 1 : 0,
     clk: Math.max(0, Math.ceil(match.clock)), per: match.period, pers: match.periods, end: match.ended ? 1 : 0,
     pnd: pendingFlags(match),
+    ...(match._fx && match._fx.length ? { fx: match._fx.splice(0) } : {}),
   });
 }
 
