@@ -17,7 +17,7 @@ import { botTarget, clampBots } from './bot-target.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import authRouter, { linkRouter, verifySession, requireAuth, bearerToken, createGuestAccount } from './auth.js';
-import { updateStats, updateRankAndCredits, getRankPosition, getLeaderboard, getStoreItems, getUserUnlocks, buyItem, getPuckCredits, getActiveSeason, logMetric, cleanOldMetrics } from './db.js';
+import { updateStats, updateRankAndCredits, getRankPosition, getLeaderboard, getStoreItems, getUserUnlocks, buyItem, getPuckCredits, getActiveSeason, logMetric, cleanOldMetrics, recordReferral, rewardReferralIfPending } from './db.js';
 
 import { World } from './public/js/world.js';
 import { Player } from './public/js/entities/Player.js';
@@ -666,13 +666,22 @@ function stepMatch(match) {
               + (isWin ? 50 : isLoss ? 10 : 15)
               + goals * 15 + assists * 10;
 
+            let founderUnlocked = false;
             try {
               updateStats(userId, { goals, assists, saves, games_played: 1, wins: isWin ? 1 : 0, losses: isLoss ? 1 : 0 });
               updateRankAndCredits(userId, { rankDelta, creditsDelta, plusMinusDelta: pm });
+              // Pozvaný dohrál zápas → odměna Founder oběma (jednou). Referrera notifikuj živě, je-li online.
+              const rr = rewardReferralIfPending(userId);
+              if (rr) {
+                founderUnlocked = true;
+                for (const [, s] of io.sockets.sockets) {
+                  if (s.data?.userId === rr.referrerId) { s.emit('founder_unlocked', { role: 'referrer' }); break; }
+                }
+              }
             } catch {}
 
             // Pošli hráči výsledek s jeho odměnami
-            sock.emit('match_rewards', { goals, assists, isWin, isMVP, rankDelta, creditsDelta, pm });
+            sock.emit('match_rewards', { goals, assists, isWin, isMVP, rankDelta, creditsDelta, pm, founderUnlocked });
           }
         }
         match.rematchTimer = setTimeout(() => {
@@ -1027,13 +1036,19 @@ io.on('connection', (socket) => {
     sendLobbyList();
   });
 
-  socket.on('lobby:join', ({ id, profile, password }) => {
+  socket.on('lobby:join', ({ id, profile, password, invited }) => {
     if (!rateOk(socket, 'join', 500)) return;
     if (typeof id !== 'string') return;
     const l = lobbies.get(id);
     if (!l || (l.state !== 'waiting' && l.state !== 'playing')) { socket.emit('lobby:error', 'err_unavailable'); return; }
     if (l.settings.password && l.settings.password !== String(password || '')) { socket.emit('lobby:error', 'err_password'); return; }
     if (l.members.size >= l.settings.max) { socket.emit('lobby:error', 'err_full'); return; }
+    // Pozvánka kamaráda: přišel přes sdílený odkaz (?join=…). Zvoucí = hostitel lobby.
+    // Zapíšeme vztah; odměna (titul Founder oběma) padne, až pozvaný dohraje zápas.
+    if (invited) {
+      const hostUserId = io.sockets.sockets.get(l.hostId)?.data?.userId;
+      if (hostUserId && socket.data.userId) { try { recordReferral(socket.data.userId, hostUserId); } catch {} }
+    }
     leaveCurrentLobby(socket);
     const m = makeMember(profile, balanceTeam(l));
     l.members.set(socket.id, m);

@@ -35,6 +35,7 @@ export class Net {
     this.onPeerLeft        = null;
     this.onMatchRewards    = null;
     this.onOnlineCount     = null;
+    this.onFounderUnlocked = null;
     this.onDisconnect      = null;  // fired on unexpected drop
     this.onReconnect       = null;  // fired when socket reconnects after a drop
 
@@ -62,11 +63,12 @@ export class Net {
     this.socket.on('peer-left',       () => this.onPeerLeft?.());
     this.socket.on('match_rewards',   d  => this.onMatchRewards?.(d));
     this.socket.on('online_count',    d  => this.onOnlineCount?.(d));
+    this.socket.on('founder_unlocked', d => this.onFounderUnlocked?.(d));
   }
 
   listLobbies()                        { this.socket.emit('lobby:list'); }
   createLobby(settings, profile)       { this.socket.emit('lobby:create', { settings, profile }); }
-  joinLobby(id, profile, password)     { this.socket.emit('lobby:join', { id, profile, password }); }
+  joinLobby(id, profile, password, invited) { this.socket.emit('lobby:join', { id, profile, password, invited: !!invited }); }
   setTeam(team)                        { this.socket.emit('lobby:team', { team }); }
   updateSettings(settings)             { this.socket.emit('lobby:settings', { settings }); }
   startLobby()                         { this.socket.emit('lobby:start'); }

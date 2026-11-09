@@ -89,6 +89,14 @@ db.exec(`
     purchased_at INTEGER NOT NULL DEFAULT (unixepoch()),
     PRIMARY KEY (user_id, item_id)
   );
+
+  -- Pozvánky kamarádů: každý pozvaný (invitee) má max jednoho zvoucího (referrer), odměna se udělí jednou.
+  CREATE TABLE IF NOT EXISTS referrals (
+    invitee_id   INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    referrer_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at   INTEGER NOT NULL DEFAULT (unixepoch()),
+    rewarded_at  INTEGER
+  );
 `);
 
 // ── Migrace existujících tabulek (idempotentní) ──────────────────────────────
@@ -173,6 +181,17 @@ if (storeCount === 0) {
     ['Alpha Ice',       'Exkluzivní trail Alpha Season',   'trail_color',  'trail',  '#00E5FF',        200, sid,  51],
   ];
   for (const [i, row] of items.entries()) insertItem.run(...row);
+}
+
+// ── Founder titul (odměna za pozvání kamaráda) — idempotentně, i na už naseedované DB ──
+// is_active=0 → nejde koupit v obchodě, uděluje se JEN přes referral. price 0.
+{
+  const exists = db.prepare("SELECT id FROM store_items WHERE item_type='title' AND item_value='Founder'").get();
+  if (!exists) {
+    db.prepare(`INSERT INTO store_items (name, description, category, item_type, item_value, price, season_id, is_active, sort_order)
+                VALUES ('Founder','Exkluzivní titul za pozvání kamaráda do hry','title','title','Founder',0,?,0,49)`)
+      .run(alphaSeason.id);
+  }
 }
 
 // ── Připravené příkazy pro výkon ─────────────────────────────────────────────
@@ -501,6 +520,39 @@ const _buyTxn = db.transaction((user_id, item_id) => {
 
 export function buyItem(user_id, item_id) {
   return _buyTxn(user_id, item_id);
+}
+
+// ── Pozvánky kamarádů (referral) ────────────────────────────────────────────
+// Zaznamená: pozvaný (invitee) přišel přes pozvánku od referrer. Jen jednou za invitee,
+// nikdy sám na sebe. Vrací true, když se zápis povedl (nový vztah).
+export function recordReferral(inviteeId, referrerId) {
+  inviteeId = Number(inviteeId); referrerId = Number(referrerId);
+  if (!inviteeId || !referrerId || inviteeId === referrerId) return false;
+  if (!getUserById(inviteeId) || !getUserById(referrerId)) return false;
+  try {
+    const r = db.prepare('INSERT OR IGNORE INTO referrals (invitee_id, referrer_id) VALUES (?, ?)').run(inviteeId, referrerId);
+    return r.changes > 0;
+  } catch { return false; }
+}
+
+function grantFounderTitle(userId) {
+  const item = db.prepare("SELECT id FROM store_items WHERE item_type='title' AND item_value='Founder'").get();
+  db.prepare('INSERT OR IGNORE INTO profiles (user_id) VALUES (?)').run(userId);
+  if (item) db.prepare('INSERT OR IGNORE INTO user_unlocks (user_id, item_id) VALUES (?, ?)').run(userId, item.id);
+  // Nastav jako aktivní titul jen když hráč žádný nemá (nepřepisuj zvolený).
+  db.prepare("UPDATE profiles SET title = 'Founder' WHERE user_id = ? AND (title IS NULL OR title = '')").run(userId);
+}
+
+// Pozvaný dohrál zápas → odměň OBA (invitee i referrer) titulem Founder, jednou.
+// Vrací { referrerId, inviteeId } když se právě teď odměnilo, jinak null.
+export function rewardReferralIfPending(inviteeId) {
+  inviteeId = Number(inviteeId);
+  const r = db.prepare('SELECT referrer_id, rewarded_at FROM referrals WHERE invitee_id = ?').get(inviteeId);
+  if (!r || r.rewarded_at) return null;
+  db.prepare('UPDATE referrals SET rewarded_at = unixepoch() WHERE invitee_id = ?').run(inviteeId);
+  grantFounderTitle(inviteeId);
+  grantFounderTitle(r.referrer_id);
+  return { referrerId: r.referrer_id, inviteeId };
 }
 
 // ── Anonymní metrika (bez IP, bez cookies): pid = náhodné id z localStorage ──

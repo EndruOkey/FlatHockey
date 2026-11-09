@@ -1075,7 +1075,7 @@ $('profile-done').onclick = () => {
   if (!commitProfile()) return;
   if (_pendingJoinId) {
     const id = _pendingJoinId; _pendingJoinId = null;
-    showView('browse'); net.joinLobby(id, profile(), null);
+    showView('browse'); net.joinLobby(id, profile(), null, true);   // invited = přišel přes pozvánku kamaráda
   } else {
     showView('main');
   }
@@ -1457,22 +1457,32 @@ net.onLobbyError  = (code) => { _botPending = false; setStatus(t(code), '#ff4455
 document.querySelectorAll('.pick-btn').forEach(b => b.addEventListener('click', () => net.setTeam(b.dataset.team)));
 $('start-btn').onclick   = () => net.startLobby();
 $('wait-leave').onclick  = () => { net.leaveLobby(); lastLobbyId = null; localStorage.removeItem('fh_last_lobby'); showView('browse'); net.listLobbies(); };
-$('share-btn').addEventListener('click', () => {
-  if (!lastLobbyId) return;
-  const url = location.origin + '/?join=' + lastLobbyId;
-  // Pozvánka kamaráda. V iframe (portály) clipboard API chybí → optional chaining dřív celé
-  // spadlo a tlačítko tiše nic neudělalo. Teď: clipboard když je, jinak ukázat odkaz k ruční kopii.
+// Pozvánka kamaráda — odkaz do konkrétní lobby (?join=…), jinak na web. Když kamarád přijde přes
+// tenhle odkaz a dohraje s tebou zápas, OBA získáte exkluzivní titul Founder 👑.
+function copyInvite() {
+  const url = lastLobbyId ? (location.origin + '/?join=' + lastLobbyId) : location.origin;
+  // V iframe (portály) clipboard API chybí → ukázat odkaz k ruční kopii místo tichého selhání.
   if (navigator.clipboard?.writeText) {
     navigator.clipboard.writeText(url).then(
-      () => setStatus(t('link_copied'), '#6ee0a0'),
+      () => setStatus('🔗 ' + t('invite_copied'), '#6ee0a0'),
       () => setStatus(url, '#b6c4ff')
     );
   } else { setStatus(url, '#b6c4ff'); }
-});
+}
+$('share-btn').addEventListener('click', copyInvite);
+$('mr-invite-btn')?.addEventListener('click', copyInvite);
+$('wait-invite-btn')?.addEventListener('click', copyInvite);
+$('menu-invite-btn')?.addEventListener('click', copyInvite);
 
 // ── Post-match summary ────────────────────────────────────────────────
 let _lastMatchRewards = null;
 net.onMatchRewards = (data) => { _lastMatchRewards = data; };
+
+// Pozvánka kamaráda se povedla → titul Founder (referrer dostane živou hlášku; invitee vidí na výsledkové obrazovce)
+net.onFounderUnlocked = () => {
+  setStatus('👑 ' + t('founder_unlocked'), '#ffd700');
+  if (typeof loadSession === 'function') loadSession();   // refresh profilu → titul se projeví
+};
 
 function showMatchResult(rewards, game) {
   stopGame();
@@ -1498,6 +1508,10 @@ function showMatchResult(rewards, game) {
   eloEl.className = 'mr-reward-val ' + (elo > 0 ? 'elo-pos' : elo < 0 ? 'elo-neg' : 'elo-zero');
   $('mr-credits').textContent = '+' + cred + ' ⊙';
   $('mr-mvp-badge').style.display = rewards.isMVP ? '' : 'none';
+  // Founder: pozvaný právě dohrál → odemčen titul oběma
+  const fb = $('mr-founder');
+  if (fb) { if (rewards.founderUnlocked) { fb.textContent = '👑 ' + t('founder_unlocked'); fb.style.display = ''; } else fb.style.display = 'none'; }
+  const cta = $('mr-invite-cta'); if (cta) cta.textContent = t('invite_cta');
   $('match-result').style.display = 'flex';
   if (rewards.isWin) cgHappy();
 }
@@ -1764,7 +1778,7 @@ loadSession().then(() => {
       setStatus(t('join_found'), '#ffcf3a');
     } else if (commitProfile()) {
       showView('browse');
-      net.joinLobby(_joinParam, profile(), null);
+      net.joinLobby(_joinParam, profile(), null, true);   // invited = přišel přes pozvánku kamaráda
     }
   } else {
     initFlow();

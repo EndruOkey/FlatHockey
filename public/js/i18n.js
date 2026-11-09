@@ -187,6 +187,12 @@ const DICT = {
     // Sdílení lobby
     share_lobby: '🔗 Sdílet lobby',
     link_copied: '✓ Odkaz zkopírován!',
+    invite_friend: 'POZVI KAMARÁDA',
+    invite_copied: 'Odkaz zkopírován — pošli ho kamarádovi!',
+    invite_cta: 'Hraješ s boty. Pozvi kamaráda — až s tebou dohraje, OBA získáte titul Founder 👑',
+    invite_card_title: '👑 CHYBÍ HRÁČI? POZVI KAMARÁDA',
+    invite_card_sub: 'Až s tebou kamarád dohraje zápas, OBA získáte exkluzivní titul Founder.',
+    founder_unlocked: 'Odemkl jsi exkluzivní titul Founder!',
     join_found: 'Lobby nalezeno — nastav si přezdívku a klikni HOTOVO',
   },
   en: {
@@ -322,6 +328,12 @@ const DICT = {
     // Sdílení lobby
     share_lobby: '🔗 Share lobby',
     link_copied: '✓ Link copied!',
+    invite_friend: 'INVITE A FRIEND',
+    invite_copied: 'Link copied — send it to a friend!',
+    invite_cta: 'Playing with bots. Invite a friend — when they finish a match with you, you BOTH get the Founder title 👑',
+    invite_card_title: '👑 NEED PLAYERS? INVITE A FRIEND',
+    invite_card_sub: 'When a friend finishes a match with you, you BOTH get the exclusive Founder title.',
+    founder_unlocked: 'You unlocked the exclusive Founder title!',
     join_found: 'Lobby found — set a nickname and click DONE',
     // Auth & splash
     auth_login_h: 'Sign in',

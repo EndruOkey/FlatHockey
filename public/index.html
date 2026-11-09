@@ -2761,6 +2761,11 @@
               <div><div class="k3 k3-amber" data-i18n="m_season_k">SEZÓNA 1: ALPHA</div><div class="c3 m3-season-name">Velocity Ice</div></div>
               <div class="m3-season-r"><div class="c3 m3-season-elo" id="vm-footer-rank">1000</div><div class="m3-muted"><span>ELO</span> · <span data-i18n="m_pos">Pozice</span> <span id="m3-pos">#—</span></div></div>
             </section>
+            <section class="g3 g3-cut" id="vm-invite-card" style="border:1px solid rgba(255,215,0,.35);background:linear-gradient(135deg,rgba(58,44,0,.5),rgba(107,82,0,.3))">
+              <div class="k3 k3-amber" data-i18n="invite_card_title">👑 CHYBÍ HRÁČI? POZVI KAMARÁDA</div>
+              <p class="m3-text" style="margin:6px 0 10px" data-i18n="invite_card_sub">Až s tebou kamarád dohraje zápas, OBA získáte exkluzivní titul Founder.</p>
+              <button id="menu-invite-btn" class="primary" data-i18n="invite_friend">POZVI KAMARÁDA</button>
+            </section>
           </aside>
           <!-- skryté prvky, na které sahá _loadStats (zachovány kvůli kompatibilitě) -->
           <div hidden><span id="vm-footer-games"></span><span id="vm-footer-credits"></span><div id="vm-footer-guest"></div><button id="footer-signin-btn"></button></div>
@@ -3077,6 +3082,11 @@
             </div>
             <button id="start-btn" class="primary" data-i18n="start">START</button>
           </div>
+          <div id="wait-invite-card" style="margin:14px auto 0;max-width:460px;padding:14px 18px;border-radius:14px;border:1px solid rgba(255,215,0,.35);background:linear-gradient(90deg,rgba(58,44,0,.5),rgba(107,82,0,.35));text-align:center">
+            <div style="color:#ffd700;font-weight:800;font-size:15px;margin-bottom:4px" data-i18n="invite_card_title">👑 CHYBÍ HRÁČI? POZVI KAMARÁDA</div>
+            <div style="color:#cdd6ea;font-size:13px;margin-bottom:10px" data-i18n="invite_card_sub">Až s tebou kamarád dohraje zápas, OBA získáte exkluzivní titul Founder.</div>
+            <button id="wait-invite-btn" class="primary" data-i18n="invite_friend">POZVI KAMARÁDA</button>
+          </div>
           <button id="wait-leave" class="wait-leave-btn" data-i18n="leave">ODEJÍT</button>
         </div>
       </div>
@@ -3201,7 +3211,10 @@
           <label data-i18n="puck_credits">PUCK CREDITS</label>
         </div>
       </div>
+      <div id="mr-founder" style="display:none;margin:4px 0 2px;padding:9px 14px;border-radius:12px;background:linear-gradient(90deg,#3a2c00,#6b5200);color:#ffd700;font-weight:800;text-align:center;letter-spacing:.3px"></div>
+      <div id="mr-invite-cta" style="margin:2px 0 8px;font-size:13px;color:#b6c4ff;text-align:center"></div>
       <div class="mr-footer">
+        <button id="mr-invite-btn" class="ghost" data-i18n="invite_friend">POZVI KAMARÁDA</button>
         <button id="mr-rematch-btn" class="ghost" data-i18n="rematch">HRÁT ZNOVU</button>
         <button id="mr-close-btn" class="primary" data-i18n="back_menu">BACK TO MENU</button>
       </div>
