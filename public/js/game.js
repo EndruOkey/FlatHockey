@@ -1021,8 +1021,8 @@ export class SandboxGame {
     if (d3 && !this._d3Was) this._setDrill(2);
     this._d1Was = d1; this._d2Was = d2; this._d3Was = d3;
 
-    // E — cycle goalie difficulty
-    const eDown = !!this.input.keys['KeyE'];
+    // G — cycle goalie difficulty (E = žádost o přihrávku)
+    const eDown = !!this.input.keys['KeyG'];
     if (eDown && !this._eWas) {
       this._diffIdx = (this._diffIdx + 1) % _SB_DIFFS.length;
       this._applyDifficulty();
@@ -3419,9 +3419,9 @@ const _TUT = [
   {
     id: 'mmb',
     title: { cs: 'Přihraj zpátky!', en: 'Call for the pass!' },
-    desc:  { cs: 'Nahrávač má puk — stiskni MMB (kolečko myši)', en: 'Teammate has the puck — press MMB (scroll wheel click)' },
-    sub:   { cs: 'MMB = žádost o přihrávku · nahrávač pošle puk zpět k tobě', en: 'MMB = request pass · teammate sends puck back to you' },
-    keys:  ['MMB'],
+    desc:  { cs: 'Nahrávač má puk — stiskni E nebo MMB (kolečko myši)', en: 'Teammate has the puck — press E or MMB (scroll wheel click)' },
+    sub:   { cs: 'E / MMB = žádost o přihrávku · nahrávač pošle puk zpět k tobě', en: 'E / MMB = request pass · teammate sends puck back to you' },
+    keys:  ['E', 'MMB'],
     setup(g) {
       g._goalLock = false; g.world._goalLock = false; g.goalFlash = 0;
       g.local.hasPuck = false;

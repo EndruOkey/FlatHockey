@@ -15,8 +15,13 @@ export class Input {
     window.addEventListener('keydown', e => {
       if (e.code === 'Tab') e.preventDefault();
       this.keys[e.code] = true;
+      // E = žádost o přihrávku (stejně jako MMB)
+      if (e.code === 'KeyE' && !e.repeat) { this._mmbKey = true; this.mmb = true; this.mmbJustPressed = true; }
     });
-    window.addEventListener('keyup', e => { this.keys[e.code] = false; });
+    window.addEventListener('keyup', e => {
+      this.keys[e.code] = false;
+      if (e.code === 'KeyE') { this._mmbKey = false; this.mmb = !!this._mmbBtn; }
+    });
 
     canvas.addEventListener('mousemove', e => {
       const r = canvas.getBoundingClientRect();
@@ -26,14 +31,14 @@ export class Input {
 
     canvas.addEventListener('mousedown', e => {
       if (e.button === 0) { this.lmb = true; this.lmbJustPressed = true; }
-      if (e.button === 1) { e.preventDefault(); this.mmb = true; this.mmbJustPressed = true; }
+      if (e.button === 1) { e.preventDefault(); this._mmbBtn = true; this.mmb = true; this.mmbJustPressed = true; }
       if (e.button === 2) { this.rmb = true; this.rmbJustPressed = true; }
     });
 
     // Use window so release outside canvas is caught (prevents stuck lmb/rmb)
     window.addEventListener('mouseup', e => {
       if (e.button === 0) { this.lmb = false; this.lmbJustReleased = true; }
-      if (e.button === 1) { this.mmb = false; }
+      if (e.button === 1) { this._mmbBtn = false; this.mmb = !!this._mmbKey; }
       if (e.button === 2) { this.rmb = false; }
     });
 
@@ -43,7 +48,7 @@ export class Input {
     // "stisknutá" a postava se netočí dokola (zaseknutý A/D u tank-steeringu).
     const clearAll = () => {
       this.keys = {};
-      this.lmb = this.rmb = this.mmb = false;
+      this.lmb = this.rmb = this.mmb = this._mmbBtn = this._mmbKey = false;
     };
     window.addEventListener('blur', clearAll);
     document.addEventListener('visibilitychange', () => { if (document.hidden) clearAll(); });
@@ -52,7 +57,7 @@ export class Input {
   // Vynuluj vše (volá se např. při otevření Esc menu — ať nezůstane „zaseknutá" klávesa)
   clear() {
     this.keys = {};
-    this.lmb = this.rmb = this.mmb = false;
+    this.lmb = this.rmb = this.mmb = this._mmbBtn = this._mmbKey = false;
     this.lmbJustPressed = this.lmbJustReleased = this.rmbJustPressed = this.mmbJustPressed = false;
   }
 
