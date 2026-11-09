@@ -95,7 +95,7 @@ export class World {
     if (carrier) {
       if ((carrier._possT ?? 99) >= PLAYER.stealGrace) for (const p of this._fair(puck)) {
         if (p === carrier || p.team === carrier.team) continue;
-        if (p.canSteal(puck)) { p.stealFrom(carrier, puck); break; }   // (iteruje _fair: nejbližší čepel první)
+        if (p.canSteal(puck, carrier)) { p.stealFrom(carrier, puck); break; }   // (iteruje _fair: nejbližší čepel první)
       }
     } else {
       for (const g of this.goalies) g.blockPuck(puck, this);

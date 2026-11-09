@@ -777,7 +777,7 @@ function broadcast(match) {
       x: r1(p.x), y: r1(p.y), ba: r3(p.bodyAngle), aa: r3(p.aimAngle), ca: r3(p.carryAngle),
       sd: r3(p._stickDisp), dr: r1(p._dispReach), dc: r2(p._dispCharge),
       fh: p.forehand ? 1 : 0, hp: p.hasPuck ? 1 : 0, ch: r2(p.charge),
-      hd: p.handed, cc: p.crossCheck ? 1 : 0, ln: r2(p._lean),
+      hd: p.handed, cc: p.crossCheck ? 1 : 0, ln: r2(p._lean), ...(p._shieldT > 0 ? { shd: r2(p._shieldA) } : {}),
       col: p.color || null, num: p.num, js: p.jersey || 'solid',
       hc: p.helmet || null, sh: p.shorts || null, gc: p.gloves || null, tc: p.tape || null,
       sk: p.stick || null, ty: p.tapeStyle || 'full', hy: p.helmetType || 'visor', vc: p.visor || null,

@@ -37,6 +37,7 @@ export const PLAYER = {
   stickLen: _penv('FH_STICK', 16),    // dosah hole na puk (= balanc, NEzkracovat: 14 rozbilo bot_1v1 a stall). Vizuální délka se krátí zvlášť přes stickDraw.
   stickDraw: _penv('FH_STICKDRAW', 0.86),   // jen VIZUÁLNÍ zkrácení kreslené hole (dřík+čepel), nemění dosah/pickup → hůl nepůsobí dlouhá u menšího těla
   pickupTipRadius: 10,
+  shield: _penv('FH_SHIELD', 0.4),   // krytí tělem: cos úhlu (nosič→puk vs nosič→soupeř) pod tímto = kryto; −2 = vypnuto
   stealR: _penv('FH_STEALR', 10),   // obrání = stejná zóna jako převzetí (zelený kroužek). Dřív 9,2 → "najedu do hole a nic" (scripts/steal_match.mjs)
   // Ochrana po převzetí puku (s): tak dlouho ho soupeř holí nevyrazí → méně chaosu. Env FH_GRACE pro měření.
   // Kontakt a crosscheck (2026-11-02; env FH_* jen pro měření v Node)

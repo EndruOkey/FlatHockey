@@ -155,8 +155,18 @@ export class PlayerBase {
   }
 
   // Obrání: soupeřova hůl na puku (puk je u nositelovy hole) → vezme puk.
-  canSteal(puck) {
+  canSteal(puck, carrier) {
     if (this._shootCooldown > 0 || puck.isAirborne) return false;
+    // KRYTÍ TĚLEM (2026-11-09): puk za nosičovým tělem (z mé strany) nejde obrat — stejný test jako Goalie.pokeCheck.
+    if (carrier && PLAYER.shield > -1) {
+      const px = puck.x - carrier.x, py = puck.y - carrier.y, ox = this.x - carrier.x, oy = this.y - carrier.y;
+      const exposed = (px * ox + py * oy) / ((Math.hypot(px, py) || 1) * (Math.hypot(ox, oy) || 1));
+      if (exposed < PLAYER.shield) {   // kryto → zablokovaný pokus (jen v dosahu čepele) rozsvítí štít nosiče
+        const tip = this.stickTip;
+        if (Math.hypot(puck.x - tip.x, puck.y - tip.y) <= PLAYER.stealR) { carrier._shieldT = 0.35; carrier._shieldA = Math.atan2(oy, ox); }
+        return false;
+      }
+    }
     const tip = this.stickTip;
     const bladeDir = (this.carryAngle ?? this.aimAngle) + (this.handed ?? 1) * Math.PI / 6.5;
     const bx = tip.x + Math.cos(bladeDir) * 6, by = tip.y + Math.sin(bladeDir) * 6;
@@ -481,6 +491,7 @@ export class Player extends PlayerBase {
 
   update(dt, world) {
     if (this.hasPuck) this._possT = (this._possT ?? 0) + dt;
+    if (this._shieldT > 0) this._shieldT -= dt;
     if (this._shootCooldown > 0) this._shootCooldown -= dt;
     if (this._passCooldown  > 0) this._passCooldown  -= dt;
     if (this._deflectCool   > 0) this._deflectCool   -= dt;
@@ -546,6 +557,14 @@ function _renderPlayer(ctx, p, cam) {
   const tapeCol  = p.tape || '#111';
   const tapeSty  = p.tapeStyle || 'full';
 
+  // ŠTÍT: soupeř se pokusil obrat puk krytý tělem → oblouk na straně soupeře (krytí tělem funguje)
+  if (p._shieldT > 0 && p._shieldA != null) {
+    const a = Math.min(1, p._shieldT / 0.2);
+    ctx.save(); ctx.lineCap = 'round';
+    ctx.strokeStyle = `rgba(120,220,255,${0.9 * a})`; ctx.lineWidth = 3 * s;
+    ctx.beginPath(); ctx.arc(sx, sy, (PLAYER.bodyRadius + 4) * s, p._shieldA - 0.9, p._shieldA + 0.9); ctx.stroke();
+    ctx.restore();
+  }
   const vmag  = Math.hypot(p.vx, p.vy);
   const vdir  = Math.atan2(p.vy, p.vx);
 

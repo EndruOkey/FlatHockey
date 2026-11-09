@@ -335,6 +335,7 @@ export class NetGame {
       if (!prevHasPuck && newHasPuck)  SFX.pickup();      // sebral puk
       if ( prevHasPuck && !newHasPuck && !this.goalFlash) SFX.shoot(ent.charge ?? 0.5); // vystřelil
       ent.hasPuck = newHasPuck;
+      if (ps.shd != null) { ent._shieldT = 0.35; ent._shieldA = ps.shd; }   // štít (krytí tělem) ze serveru
 
       if (isMe) {
         e.sx = ps.x; e.sy = ps.y;
@@ -490,6 +491,7 @@ export class NetGame {
         ent._stickDisp = lerpAngle(ent._stickDisp ?? e.tsd, e.tsd, k);
       }
       if (ent.passReq > 0) ent.passReq = Math.max(0, ent.passReq - dt);
+      if (ent._shieldT > 0) ent._shieldT -= dt;
     }
     // Puk: lokálně držený → cradle; jinak interpolace/extrapolace z bufferu (fallback vyhlazení).
     if (this.localEnt && this.localEnt.hasPuck) {
