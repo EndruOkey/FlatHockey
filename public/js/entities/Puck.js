@@ -78,9 +78,16 @@ export class Puck {
   // Puk přesně na vykreslené lopatě majitele — sdíleno hostem i klientem,
   // ať puk drží u hokejky stejně na obou obrazovkách (konzistence).
   _cradleTo(owner) {
-    const stickAng   = owner._stickDisp ?? owner.carryAngle ?? owner.aimAngle;
+    const q = this._cradlePos(owner, 1); this.x = q.x; this.y = q.y; this._carrier = owner; owner._carriedPuck = this;
+    this.vx = owner.vx; this.vy = owner.vy;
+    this.z = 0; this.vz = 0;
+  }
+
+  // Bod na čepeli nosiče. k = měřítko hole: 1 = fyzika (dosah), PLAYER.stickDraw = kreslená (zkrácená) hůl.
+  _cradlePos(owner, k, vis = false) {
+    const stickAng   = (vis && owner._visStick != null) ? owner._visStick : (owner._stickDisp ?? owner.carryAngle ?? owner.aimAngle);
     const dispCharge = owner._dispCharge ?? 0;
-    let   reach      = (owner._dispReach ?? PLAYER.stickLen) * (1 - dispCharge * 0.30);
+    let   reach      = (owner._dispReach ?? PLAYER.stickLen) * (1 - dispCharge * (vis ? PLAYER.windPull : 0.30)) * k;
     const grip       = owner.gripPoint ? owner.gripPoint : { x: owner.x, y: owner.y };
 
     // Oříznutí reach na zadní stěnu branky (stejná logika jako stickTip getter a rendering)
@@ -106,7 +113,7 @@ export class Puck {
     const _bCos = Math.cos(bladeDir);
 
     // Oříznutí along: čepel nesmí přejít zadní stěnou do sítě
-    let along = (0.5 - dispCharge * 0.18) * 12;
+    let along = (0.5 - dispCharge * 0.18) * 12 * k;
     if (grip.y > _gy1 && grip.y < _gy2) {
       const _bwR = RINK.goalLineRight + _gd;
       const _bwL = RINK.goalLineLeft  - _gd;
@@ -121,17 +128,17 @@ export class Puck {
     const bx = heelX + _bCos * along;
     const by = heelY + Math.sin(bladeDir) * along;
     // Spojitá strana puku na čepeli → plynulé míchání forhend↔bekhend (dribling)
-    const bladeSide = owner._cradleSide ?? (owner.forehand !== false ? 1 : -1);
+    // vis: puk na PROHNUTÉ (forhendové) straně čepele — u praváka vlevo/vpředu; fyzika má historicky opačnou stranu (balanc)
+    const bladeSide = (vis ? -1 : 1) * (owner._cradleSide ?? (owner.forehand !== false ? 1 : -1));
     const perpX     = -Math.sin(bladeDir);
     const perpY     =  Math.cos(bladeDir);
     const snug      = 1 - dispCharge * 0.5;
-    this.x = bx + perpX * PUCK.radius * bladeSide * snug;
-    this.y = by + perpY * PUCK.radius * bladeSide * snug;
+    let x = bx + perpX * PUCK.radius * bladeSide * snug;
+    let y = by + perpY * PUCK.radius * bladeSide * snug;
     if (owner._lag > 0) {   // měkké držení: puk zaostává za čepelí proti směru otáčení (vidíš, že jsi na hraně)
-      const s = owner._lagDir || 1; this.x += Math.sin(stickAng) * s * owner._lag; this.y -= Math.cos(stickAng) * s * owner._lag;
+      const s = owner._lagDir || 1; x += Math.sin(stickAng) * s * owner._lag; y -= Math.cos(stickAng) * s * owner._lag;
     }
-    this.vx = owner.vx; this.vy = owner.vy;
-    this.z = 0; this.vz = 0;
+    return { x, y };
   }
 
   // Klient (non-host): puk řídí stav od hosta. Drží-li puk hráč → cradle lokálně
@@ -270,11 +277,16 @@ export class Puck {
     this.goalScored = _resolveGoals(this);
   }
 
-  draw(ctx, cam) {
+  // at = vizuální poloha (nesený puk kreslí hráč přímo na své čepeli → Player._renderPlayer). Bez at: nesený puk
+  // se tady přeskočí (kreslí ho nosič), volný puk se kreslí normálně.
+  draw(ctx, cam, at = null) {
     const s    = cam.scale;
     const { ox, oy } = cam;
-    const sx   = ox + this.x * s;
-    const sy   = oy + this.y * s;
+    const car  = this._carrier && this._carrier.hasPuck ? this._carrier : null;
+    if (car && !at && !car.crossCheck) return;
+    const vp   = at || this;
+    const sx   = ox + vp.x * s;
+    const sy   = oy + vp.y * s;
     const r    = PUCK.radius * s;
     const elev = this.z * s;
     const tcol = this.trailColor || '#9aa3b2';   // barva stopy/overlaye (dle hráče, jinak default šedá)

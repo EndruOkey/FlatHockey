@@ -57,6 +57,7 @@ export class PlayerBase {
     this._dispReach += (tReach - this._dispReach) * Math.min(1, 14 * dt);
     // Základ hole je vždy carry-úhel (spojitý i po ztrátě puku) → žádný skok/záškub
     // Nápřah: hůl se „natáhne" do strany dle ruky (zrcadlí se pro leváka) → čitelnější a správně i pro lefty
+    // SIM (fyzika puku v nápřahu, balanc): původní geometrie. Vizuál nápřahu/švihu řeší jen render (_visStick).
     const windBack = (this.handed ?? 1) * this._dispCharge * 0.85;
     const target = this.crossCheck ? this.bodyAngle : (this.carryAngle - windBack);
     this._stickDisp = lerpAngle(this._stickDisp, target, Math.min(1, 26 * dt));
@@ -670,8 +671,14 @@ function _renderPlayer(ctx, p, cam) {
   if (!p.crossCheck) {
   // ── Stick ──────────────────────────────────────────────────────────────
   // Vyhlazený úhel + charge → wind-up i zrušení charge jsou plynulé (bez skoku)
-  const windAngle = p._stickDisp;
-  const windLen   = (p._dispReach ?? PLAYER.stickLen) * (1 - (p._dispCharge ?? 0) * 0.30) * PLAYER.stickDraw;
+  // VIZUÁL STŘELY TAHEM: nápřah na FORHEND (strana rukou) a k tělu, po ráně švih + dokončení přes směr střely.
+  // Jen kresba: sim úhel (_stickDisp) má nápřah 0,85 rad na druhou stranu → vrátíme ho a přidáme vizuální.
+  const hnd = p.handed ?? 1, dcv = p._dispCharge ?? 0;
+  let follow = 0;
+  if (p._sw) { const u = 1 - p._sw.t / p._sw.T; follow = -hnd * PLAYER.followArc * Math.sin(Math.PI * Math.min(1, u * 1.4)) * (1 - u); }
+  const windAngle = p.crossCheck ? p._stickDisp : p._stickDisp + hnd * dcv * (0.85 + PLAYER.windBack) + follow;
+  p._visStick = windAngle;
+  const windLen   = (p._dispReach ?? PLAYER.stickLen) * (1 - dcv * PLAYER.windPull) * PLAYER.stickDraw;
   const windCos   = Math.cos(windAngle);
   const windSin   = Math.sin(windAngle);
 
@@ -706,51 +713,94 @@ function _renderPlayer(ctx, p, cam) {
 
   const tipX = ox + (gxw + windCos * wt) * s;
   const tipY = oy + (gyw + windSin * wt) * s;
+  // STOPA TAHU: hráč právě vystřelil z nápřahu (puk pryč, nápřah byl nabitý) → oblouk po dráze čepele
+  if (p._visHad && !p.hasPuck && (p._visDc ?? 0) > 0.15) p._sw = { a0: p._visSd, t: 0.22, T: 0.22 };
+  p._visHad = p.hasPuck; p._visDc = p._dispCharge ?? 0; p._visSd = windAngle;
+  if (p._sw) {
+    const now = (typeof performance !== 'undefined' ? performance.now() : 0) / 1000;
+    if (p._sw.last != null) p._sw.t -= Math.min(0.05, now - p._sw.last);
+    p._sw.last = now;
+    if (p._sw.t <= 0) p._sw = null;
+    else {
+      const a = p._sw.t / p._sw.T, a0 = p._sw.a0, d = angleDiff(windAngle, a0), R = (wt + BLADE * 0.6) * s;
+      ctx.save(); ctx.lineCap = 'round';
+      for (const [lw, al] of [[7, 0.18], [3.5, 0.45]]) {
+        ctx.beginPath(); ctx.arc(gx, gy, R, d >= 0 ? a0 : a0 + d, d >= 0 ? a0 + d : a0);
+        ctx.strokeStyle = `rgba(255,255,255,${al * a})`; ctx.lineWidth = lw * s; ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
   const tipCos = windCos;
   const tipSin = windSin;
 
+  // ── DRŽENÍ HOLE podle schématu (2026-11-09) ─────────────────────────────
+  // Pravák (handed 1): hůl vpravo, HORNÍ ruka = levá u konce hole PŘED tělem, DOLNÍ ruka = pravá níž na dříku;
+  // čepel prohnutá DOVNITŘ (forhend = prohnutá strana hledí dopředu k tělu), puk leží na prohnuté straně.
+  // Levák zrcadlově. Jen kresba: špička/čepel = fyzikální poloha (dosah), mění se ruce, dřík, prohnutí, puk.
+  const R0 = PLAYER.radius;
+  const fA = p.bodyAngle ?? windAngle, fC = Math.cos(fA), fS = Math.sin(fA);
+  const sC = Math.cos(fA + Math.PI / 2), sS = Math.sin(fA + Math.PI / 2);   // +strana = hnd 1 (pravá)
+  // horní ruka: před tělem u středu, mírně k bekhendu; v nápřahu se stáhne k forhendovému boku
+  const tF = R0 * (0.55 - 0.35 * dcv), tSd = R0 * (-0.15 + 0.55 * dcv) * hnd;
+  const topW = { x: p.x + fC * tF + sC * tSd, y: p.y + fS * tF + sS * tSd };
+  const tipW = { x: gxw + windCos * wt, y: gyw + windSin * wt };
+  const shDir = Math.atan2(tipW.y - topW.y, tipW.x - topW.x), shC = Math.cos(shDir), shS = Math.sin(shDir);
+  const botW = { x: topW.x + (tipW.x - topW.x) * 0.42, y: topW.y + (tipW.y - topW.y) * 0.42 };
+  p._visTopW = topW; p._visBotW = botW;
+  const tx0 = ox + topW.x * s, ty0 = oy + topW.y * s;
+
   // ── Shaft ─────────────────────────────────────────────────────────────────
   ctx.lineCap = 'round';
-  // Grip wrap (první ~35% — tmavší)
-  ctx.beginPath();
-  ctx.moveTo(gx, gy);
-  ctx.lineTo(gx + windCos * windLen * 0.35 * s, gy + windSin * windLen * 0.35 * s);
+  ctx.beginPath();   // konec hole + omotávka (od horní ruky)
+  ctx.moveTo(tx0, ty0);
+  ctx.lineTo(tx0 + (tipX - tx0) * 0.22, ty0 + (tipY - ty0) * 0.22);
   ctx.strokeStyle = _shade(stickCol, -0.55);
   ctx.lineWidth   = 2.8 * s;
   ctx.stroke();
-  // Hlavní dřík
-  ctx.beginPath();
-  ctx.moveTo(gx + windCos * windLen * 0.30 * s, gy + windSin * windLen * 0.30 * s);
+  ctx.beginPath();   // hlavní dřík
+  ctx.moveTo(tx0 + (tipX - tx0) * 0.18, ty0 + (tipY - ty0) * 0.18);
   ctx.lineTo(tipX, tipY);
   ctx.strokeStyle = stickCol;
   ctx.lineWidth   = 2.8 * s;
   ctx.stroke();
 
   // ── Blade ─────────────────────────────────────────────────────────────────
-  const bladeAngle = (p.handed ?? 1) * Math.PI / 6.5;
+  const HOOK       = Math.PI / 6.5;
+  const bladeDir   = shDir - hnd * HOOK;            // špička se stáčí DOVNITŘ (k forhendu)
   const bladeL     = 12 * s * PLAYER.stickDraw;
 
   let bStartX = tipX;
   let bStartY = tipY;
-  let bEndX   = tipX + Math.cos(windAngle + bladeAngle) * bladeL;
-  let bEndY   = tipY + Math.sin(windAngle + bladeAngle) * bladeL;
-  let bCtrlX  = tipX + windCos * bladeL * 0.55;
-  let bCtrlY  = tipY + windSin * bladeL * 0.55;
+  let bEndX   = tipX + Math.cos(bladeDir) * bladeL;
+  let bEndY   = tipY + Math.sin(bladeDir) * bladeL;
+  let bCtrlX  = tipX + shC * bladeL * 0.55;
+  let bCtrlY  = tipY + shS * bladeL * 0.55;
 
   // Oříznutí čepele na zadní stěnu branky (aby čepel nepronikala sítí zezadu)
   if (gyw > RINK.goalY && gyw < RINK.goalY + RINK.goalH) {
     const _bwRsc = ox + (RINK.goalLineRight + RINK.goalDepth) * s;
     const _bwLsc = ox + (RINK.goalLineLeft  - RINK.goalDepth) * s;
     if (gxw > RINK.goalLineRight + RINK.goalDepth) {
-      // hráč za pravou sítí: čepel nesmí jít doleva za zadní stěnu
       if (bEndX  < _bwRsc) { bEndX  = _bwRsc; }
       if (bCtrlX < _bwRsc) { bCtrlX = _bwRsc; }
     } else if (gxw < RINK.goalLineLeft - RINK.goalDepth) {
-      // hráč za levou sítí: čepel nesmí jít doprava za zadní stěnu
       if (bEndX  > _bwLsc) { bEndX  = _bwLsc; }
       if (bCtrlX > _bwLsc) { bCtrlX = _bwLsc; }
     }
   }
+
+  // PUK NA ČEPELI (nese ho tento hráč): na prohnuté straně, v nápřahu u paty čepele (tah od paty ke špičce)
+  const cp = p.hasPuck && p._carriedPuck && p._carriedPuck._carrier === p ? p._carriedPuck : null;
+  if (cp) {
+    const along = 0.5 - 0.3 * dcv;
+    const mx = bStartX + (bEndX - bStartX) * along, my = bStartY + (bEndY - bStartY) * along;
+    const nA = bladeDir - hnd * Math.PI / 2;        // normála k prohnuté straně
+    const off = PUCK.radius * 1.05 * s;
+    const vx = (mx + Math.cos(nA) * off - ox) / s, vy = (my + Math.sin(nA) * off - oy) / s;
+    p._visPuck = { x: vx, y: vy };
+    cp.draw(ctx, cam, p._visPuck);
+  } else p._visPuck = null;
 
   // Blade shadow
   ctx.beginPath();
@@ -1035,10 +1085,12 @@ function _renderPlayer(ctx, p, cam) {
       const c = Math.cos(sdir), sn = Math.sin(sdir);
       // topH: okraj těla na straně hole (r*0.90 bokem) → viditelná mimo dres
       // botH: podél dříku od gripo → jiný úhel = ne lineární
-      const _sideA = sdir + (p.handed ?? 1) * Math.PI / 2;
-      topH = { x: p.x + Math.cos(_sideA) * PLAYER.radius * 0.90,
-               y: p.y + Math.sin(_sideA) * PLAYER.radius * 0.90 };
-      botH = { x: gp.x + c * 8.0, y: gp.y + sn * 8.0 };
+      if (p._visTopW && p._visBotW) { topH = p._visTopW; botH = p._visBotW; }   // schéma držení (kresba hole výš)
+      else {
+        const _sideA = sdir + (p.handed ?? 1) * Math.PI / 2;
+        topH = { x: p.x + Math.cos(_sideA) * PLAYER.radius * 0.90, y: p.y + Math.sin(_sideA) * PLAYER.radius * 0.90 };
+        botH = { x: gp.x + c * 8.0, y: gp.y + sn * 8.0 };
+      }
     }
     for (const [h, hr] of [[botH, hBot], [topH, hTop]]) {
       const hx = ox + h.x * s, hy = oy + h.y * s;

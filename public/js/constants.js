@@ -39,6 +39,9 @@ export const PLAYER = {
   pickupTipRadius: 10,
   shield: _penv('FH_SHIELD', 0.4),   // krytí tělem: cos úhlu (nosič→puk vs nosič→soupeř) pod tímto = kryto; −2 = vypnuto
   stealR: _penv('FH_STEALR', 10),
+  // VIZUÁL STŘELY TAHEM (2026-11-09): nápřah stáhne hůl dozadu na forhend (windBack rad) a puk k tělu (windPull = podíl
+  // zkrácení dosahu); po ráně švih dopředu s dokončením přes směr střely (followArc rad, followT s).
+  windBack: _penv('FH_WINDBACK', 1.75), windPull: _penv('FH_WINDPULL', 0.5), followArc: _penv('FH_FOLLOW', 0.6), followT: 0.2,
   // MĚKKÉ DRŽENÍ (2026-11-09): puk jezdí za čepelí; obvodová rychlost čepele nad gripV px/s → puk zaostává (lag px),
   // lag > loseLag → ztráta. Deterministické (žádná kostka). 0 = staré náhodné „anti-helikoptéra“.
   softCarry: _penv('FH_SOFT', 1), gripV: _penv('FH_GRIPV', 150), loseLag: _penv('FH_LOSELAG', 6), lagRecover: _penv('FH_LAGREC', 40),
