@@ -28,12 +28,38 @@ export class World {
       .sort((a, b) => (a.d - b.d) || (a.r - b.r)).map(o => o.p);
   }
 
+  // SOUBOJ HOLÍ (deterministický): čepel soupeře na puku sbírá tlak z relativní rychlosti čepel×puk.
+  // Kontrola nosiče klesá s rychlostí jízdy a delší holí. Puk vyskočí ve směru tahu útočníkovy čepele.
+  _stickFight(carrier, puck, dt) {
+    const pvx = carrier.vx, pvy = carrier.vy;
+    const spd = Math.hypot(carrier.vx, carrier.vy), reach = carrier._dispReach ?? PLAYER.stickLen;
+    const ctrl = PLAYER.fightCtrl * (1 - 0.4 * Math.min(1, spd / 165)) * (1 + 0.6 * Math.max(0, 1 - reach / PLAYER.stickLen));
+    const graceOk = (carrier._possT ?? 99) >= PLAYER.stealGrace;
+    for (const p of this._fair(puck)) {
+      if (p === carrier || p.team === carrier.team) continue;
+      const tip = p.stickTip, prev = p._tipPrev;
+      if (graceOk && p.canSteal(puck, carrier)) {
+        const tvx = prev ? (tip.x - prev.x) / dt : 0, tvy = prev ? (tip.y - prev.y) / dt : 0;
+        const rx = tvx - pvx, ry = tvy - pvy, rel = Math.hypot(rx, ry);
+        p._press = (p._press || 0) + (rel + PLAYER.fightBase) * dt;
+        if (p._press > ctrl) {
+          p.stealFrom(carrier, puck);
+          const k = rel > 1 ? 1 / rel : 0, dir = carrier.carryAngle ?? 0;
+          puck.vx = pvx + (k ? rx * k : Math.cos(dir)) * 90; puck.vy = pvy + (k ? ry * k : Math.sin(dir)) * 90;
+          for (const q of this.players) q._press = 0;
+          break;
+        }
+      } else p._press = Math.max(0, (p._press || 0) - PLAYER.fightDecay * dt);
+    }
+  }
+
   update(dt) {
     this.tick++;
     this._attachRng();   // entity přidané po konstrukci (hráči, boti)
     { const pl = this.players; for (const p of pl) p._others = pl; }   // hokejka se zastaví o tělo / hokejku ostatních (stickTip)
     for (const e of this.entities) e.update(dt, this);
     if (this.authoritative) this._resolveInteractions(dt);
+    for (const p of this.players) { const t = p.stickTip; p._tipPrev = { x: t.x, y: t.y }; }   // rychlost čepele pro souboj holí
     if (this._whistleCool > 0) this._whistleCool -= dt;
   }
 
@@ -93,7 +119,8 @@ export class World {
 
     const carrier = this.players.find(p => p.hasPuck);
     if (carrier) {
-      if ((carrier._possT ?? 99) >= PLAYER.stealGrace) for (const p of this._fair(puck)) {
+      if (PLAYER.fight) this._stickFight(carrier, puck, dt);
+      else if ((carrier._possT ?? 99) >= PLAYER.stealGrace) for (const p of this._fair(puck)) {
         if (p === carrier || p.team === carrier.team) continue;
         if (p.canSteal(puck, carrier)) { p.stealFrom(carrier, puck); break; }   // (iteruje _fair: nejbližší čepel první)
       }

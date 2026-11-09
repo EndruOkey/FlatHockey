@@ -127,6 +127,9 @@ export class Puck {
     const snug      = 1 - dispCharge * 0.5;
     this.x = bx + perpX * PUCK.radius * bladeSide * snug;
     this.y = by + perpY * PUCK.radius * bladeSide * snug;
+    if (owner._lag > 0) {   // měkké držení: puk zaostává za čepelí proti směru otáčení (vidíš, že jsi na hraně)
+      const s = owner._lagDir || 1; this.x += Math.sin(stickAng) * s * owner._lag; this.y -= Math.cos(stickAng) * s * owner._lag;
+    }
     this.vx = owner.vx; this.vy = owner.vy;
     this.z = 0; this.vz = 0;
   }

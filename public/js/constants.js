@@ -38,7 +38,17 @@ export const PLAYER = {
   stickDraw: _penv('FH_STICKDRAW', 0.86),   // jen VIZUÁLNÍ zkrácení kreslené hole (dřík+čepel), nemění dosah/pickup → hůl nepůsobí dlouhá u menšího těla
   pickupTipRadius: 10,
   shield: _penv('FH_SHIELD', 0.4),   // krytí tělem: cos úhlu (nosič→puk vs nosič→soupeř) pod tímto = kryto; −2 = vypnuto
-  stealR: _penv('FH_STEALR', 10),   // obrání = stejná zóna jako převzetí (zelený kroužek). Dřív 9,2 → "najedu do hole a nic" (scripts/steal_match.mjs)
+  stealR: _penv('FH_STEALR', 10),
+  // MĚKKÉ DRŽENÍ (2026-11-09): puk jezdí za čepelí; obvodová rychlost čepele nad gripV px/s → puk zaostává (lag px),
+  // lag > loseLag → ztráta. Deterministické (žádná kostka). 0 = staré náhodné „anti-helikoptéra“.
+  softCarry: _penv('FH_SOFT', 1), gripV: _penv('FH_GRIPV', 150), loseLag: _penv('FH_LOSELAG', 6), lagRecover: _penv('FH_LAGREC', 40),
+  shContact: _penv('FH_SHCONTACT', 0.8),   // tělo na tělo (vzdálenost středů < 2×bodyRadius + 6) → práh krytí nižší o tolik (útočník se opře a natáhne hůl kolem)
+  tuckF: _penv('FH_TUCKF', 0.75),   // puk stažený u těla (kurzor < 30 px) → max. rychlost × tuckF (kurzor 10 px = plný postih); 1 = vypnuto
+  softRel: _penv('FH_SOFTREL', 1),   // 1 = do měkkého držení počítej jen pohyb hole VŮČI TĚLU (ruce), ne otáčení těla při jízdě
+  // SOUBOJ HOLÍ: čepel soupeře na puku sbírá tlak = relativní rychlost čepel×puk (px) + základ fightBase px/s;
+  // tlak > kontrola nosiče → puk vyskočí ve směru tahu. 0 = staré pasivní obrání.
+  // 2026-11-09: FCTRL 30 už shodí stall rubriku (95 %), 25 = hrana s rezervou. scripts/carry_lab.mjs + rubrika.
+  fight: _penv('FH_FIGHT', 1), fightCtrl: _penv('FH_FCTRL', 25), fightBase: _penv('FH_FBASE', 15), fightDecay: _penv('FH_FDECAY', 30),   // obrání = stejná zóna jako převzetí (zelený kroužek). Dřív 9,2 → "najedu do hole a nic" (scripts/steal_match.mjs)
   // Ochrana po převzetí puku (s): tak dlouho ho soupeř holí nevyrazí → méně chaosu. Env FH_GRACE pro měření.
   // Kontakt a crosscheck (2026-11-02; env FH_* jen pro měření v Node)
   kbMax:    _penv('FH_KBMAX', 45),     // px/s — strop odrazu při srážce (dřív pevných 85)

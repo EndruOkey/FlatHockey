@@ -109,7 +109,7 @@ export class PlayerBase {
     if (this._others) for (const o of this._others) {
       if (o === this) continue;
       if (_STK_BODY && !(_STK_MODE === 'opp' && o.team === this.team) && !(_STK_MODE === 'nopuck' && this.hasPuck)) t = _clipRayCircle(gx, gy, cos, sin, t, o.x, o.y, PLAYER.bodyRadius + _STK_BODY_PAD);
-      if (_STK_STICK && !o.crossCheck) { const q = o.gripPoint, qd = o.carryAngle ?? o.aimAngle;
+      if (_STK_STICK && !o.crossCheck && !(PLAYER.fight && o.hasPuck)) { const q = o.gripPoint, qd = o.carryAngle ?? o.aimAngle;
         t = _clipRayStick(gx, gy, cos, sin, t, q.x, q.y, Math.cos(qd), Math.sin(qd), o._dispReach ?? PLAYER.stickLen); }
     }
 
@@ -161,7 +161,8 @@ export class PlayerBase {
     if (carrier && PLAYER.shield > -1) {
       const px = puck.x - carrier.x, py = puck.y - carrier.y, ox = this.x - carrier.x, oy = this.y - carrier.y;
       const exposed = (px * ox + py * oy) / ((Math.hypot(px, py) || 1) * (Math.hypot(ox, oy) || 1));
-      if (exposed < PLAYER.shield) {   // kryto → zablokovaný pokus (jen v dosahu čepele) rozsvítí štít nosiče
+      const contact = PLAYER.shContact > 0 && Math.hypot(ox, oy) < PLAYER.bodyRadius * 2 + 6;
+      if (exposed < PLAYER.shield - (contact ? PLAYER.shContact : 0)) {   // kryto → zablokovaný pokus (jen v dosahu čepele) rozsvítí štít nosiče
         const tip = this.stickTip;
         if (Math.hypot(puck.x - tip.x, puck.y - tip.y) <= PLAYER.stealR) { carrier._shieldT = 0.35; carrier._shieldA = Math.atan2(oy, ox); }
         return false;
@@ -250,7 +251,18 @@ export class PlayerBase {
 
     // Anti-helikoptéra: rychlé šermování holí = puk sklouzne.
     // Při nabíjení threshold výrazně vyšší — otáčení těla s charge je záměrná mechanika.
-    if (this.hasPuck) {
+    if (this.hasPuck && PLAYER.softCarry) {
+      const relNow = angleDiff(this.carryAngle, this.bodyAngle);
+      const dA = PLAYER.softRel ? (this._relPrev != null ? angleDiff(relNow, this._relPrev) : 0) : angleDiff(this.carryAngle, prevCarry), reach = this._dispReach ?? PLAYER.stickLen;
+      this._relPrev = relNow;
+      const tv = Math.abs(dA) / Math.max(dt, 0.001) * reach;                        // obvodová rychlost čepele px/s
+      const grip = PLAYER.gripV * ((this.charge ?? 0) > 0.05 ? 2.5 : 1);
+      let ex = Math.max(0, tv - grip) * dt;
+      if (ex > 0) { this._lag = (this._lag || 0) + ex; if (dA) this._lagDir = Math.sign(dA); }
+      else this._lag = Math.max(0, (this._lag || 0) - PLAYER.lagRecover * dt);
+      if (this._lag > PLAYER.loseLag) { this.hasPuck = false; this._shootCooldown = 0.25; this._lag = 0; this._slipT = 0.4; }
+    } else if (!this.hasPuck) { this._lag = 0; this._relPrev = null; }
+    if (this.hasPuck && !PLAYER.softCarry) {
       const stickDelta = Math.abs(angleDiff(this.carryAngle, prevCarry)) / Math.max(dt, 0.001);
       const spinThreshold = (this.charge ?? 0) > 0.05 ? 22 : 7.5;
       if (stickDelta > spinThreshold) {
@@ -380,6 +392,7 @@ export class PlayerBase {
 
     let topSpeed = PLAYER.speed * (crossChecking ? PLAYER.ccSpeed : 1);   // crosscheck = hůl napřed, pomaleji než bruslení
     if (this.hasPuck) topSpeed *= 0.92;
+    if (this.hasPuck && PLAYER.tuckF < 1) topSpeed *= PLAYER.tuckF + (1 - PLAYER.tuckF) * clamp(((this.aimDist ?? 60) - 10) / 20, 0, 1);   // stažený puk = krytý, ale pomalý
     if (charging) topSpeed *= clamp(1 - (this.charge || 0) * 0.85, 0.12, 1);
     // Kurzor blízko = hůl stažená = pohyb výrazně pomalejší (kratší krok)
     const _ad = this.aimDist ?? 60;
