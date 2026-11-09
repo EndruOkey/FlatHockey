@@ -233,6 +233,7 @@ router.post('/crazygames', async (req, res) => {
 router.get('/me', requireAuth, (req, res) => {
   const user = getUserById(req.userId);
   if (!user) return res.status(404).json({ error: 'not_found' });
+  const prof = getProfile(req.userId);
   res.json({
     id: user.id,
     display_name: user.display_name,
@@ -240,6 +241,8 @@ router.get('/me', requireAuth, (req, res) => {
     is_sponsor: !!user.is_sponsor,
     kind: userHasIdentity(user.id, 'discord') || userHasIdentity(user.id, 'crazygames') ? 'account' : 'guest',
     tier: user.is_sponsor ? 'sponsor' : 'registered',
+    title: prof?.title || null,
+    founder: prof?.title === 'Founder',   // korunka u jména
   });
 });
 

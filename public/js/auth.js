@@ -1,12 +1,14 @@
 // Auth state — null = guest, object = přihlášený uživatel
 let _user = null;
 let _kind = null;          // 'account' (Discord) | 'guest' (účet zařízení) | null
+let _founder = false;      // má titul Founder (korunka u jména) — i pro hosta
 const TOKEN_KEY = 'fh_device_token';
 const _listeners = new Set();
 
 export function getUser() { return _user; }
 export function isGuest() { return _user === null; }
 export function getKind() { return _kind; }
+export function isFounder() { return _founder; }
 
 // Token zařízení (hostující účet): funguje i v iframe třetích stran, kde cookies nejdou
 export function getDeviceToken() { try { return localStorage.getItem(TOKEN_KEY); } catch { return null; } }
@@ -37,8 +39,9 @@ export async function loadSession() {
       const u = await res.json();
       _kind = u.kind || 'account';
       _user = _kind === 'account' ? u : null;   // host zůstává „nepřihlášený“ pro UI (jen se mu ukládají statistiky)
+      _founder = !!u.founder;                    // korunka u jména (i pro hosta s device-token účtem)
     } else if (res.status === 401) {
-      _user = null; _kind = null;
+      _user = null; _kind = null; _founder = false;
     }
     // 5xx — stav nezměníme, server je dočasně nedostupný
   } catch {

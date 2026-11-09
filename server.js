@@ -17,7 +17,7 @@ import { botTarget, clampBots } from './bot-target.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import authRouter, { linkRouter, verifySession, requireAuth, bearerToken, createGuestAccount } from './auth.js';
-import { updateStats, updateRankAndCredits, getRankPosition, getLeaderboard, getStoreItems, getUserUnlocks, buyItem, getPuckCredits, getActiveSeason, logMetric, cleanOldMetrics, recordReferral, rewardReferralIfPending } from './db.js';
+import { updateStats, updateRankAndCredits, getRankPosition, getLeaderboard, getStoreItems, getUserUnlocks, buyItem, getPuckCredits, getActiveSeason, logMetric, cleanOldMetrics, recordReferral, rewardReferralIfPending, isFounder } from './db.js';
 
 import { World } from './public/js/world.js';
 import { Player } from './public/js/entities/Player.js';
@@ -534,6 +534,8 @@ function startMatch(lobby) {
   const match = createMatch(lobby.id, seed);
   for (const [sid, m] of lobby.members) {
     const p = buildPlayer(lobby, sid, m);
+    const uid = io.sockets.sockets.get(sid)?.data?.userId;
+    p._founder = uid ? isFounder(uid) : false;   // korunka u jména (spočítáno jednou při startu, do snapshotu)
     match.players.set(sid, p);
     match.inputs.set(sid, p.input);
   }
@@ -746,7 +748,7 @@ function broadcast(match) {
   for (const [id, p] of match.players) {
     const inp = match.inputs.get(id);
     players.push({
-      id, team: p.team, nm: p.name || '', sq: (inp && inp._sq) || 0,
+      id, team: p.team, nm: p.name || '', fn: p._founder ? 1 : 0, sq: (inp && inp._sq) || 0,
       x: r1(p.x), y: r1(p.y), ba: r3(p.bodyAngle), aa: r3(p.aimAngle), ca: r3(p.carryAngle),
       sd: r3(p._stickDisp), dr: r1(p._dispReach), dc: r2(p._dispCharge),
       fh: p.forehand ? 1 : 0, hp: p.hasPuck ? 1 : 0, ch: r2(p.charge),
@@ -1057,6 +1059,7 @@ io.on('connection', (socket) => {
     if (l.state === 'playing' && l.match) {
       // Připojení do běžícího zápasu — přidej hráče a hoď ho rovnou do hry
       const p = buildPlayer(l, socket.id, m);
+      p._founder = socket.data.userId ? isFounder(socket.data.userId) : false;
       p.x = m.team === 'home' ? RINK.w * 0.3 : RINK.w * 0.7;
       p.y = RINK.h / 2;
       l.match.players.set(socket.id, p);

@@ -1047,6 +1047,7 @@ function _renderPlayer(ctx, p, cam) {
     ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(label, sx, by + ph / 2 + 1.5 * s);
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    if (p.founder) _drawCrown(ctx, sx - pw / 2 - 9 * s, by + ph / 2, 7.5 * s);   // korunka vlevo od štítku
   } else
   // Jméno nad hráčem — v barvě týmu, jemný obrys pro čitelnost (tenké)
   if (p.name) {
@@ -1059,8 +1060,31 @@ function _renderPlayer(ctx, p, cam) {
     ctx.strokeText(p.name, sx, ny);
     ctx.fillStyle = color;
     ctx.fillText(p.name, sx, ny);
+    if (p.founder) _drawCrown(ctx, sx - ctx.measureText(p.name).width / 2 - 8 * s, ny - 3 * s, 7 * s);   // korunka vlevo od jména
     ctx.textAlign = 'left';
   }
+}
+
+// Malá vektorová korunka (titul Founder) — jantarová, 3 hroty. (x,y) = levý střed, w = šířka.
+function _drawCrown(ctx, x, y, w) {
+  const h = w * 0.78, topY = y - h / 2, baseY = y + h / 2;
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(x, baseY);
+  ctx.lineTo(x, topY + h * 0.18);
+  ctx.lineTo(x + w * 0.25, topY + h * 0.52);
+  ctx.lineTo(x + w * 0.5, topY);
+  ctx.lineTo(x + w * 0.75, topY + h * 0.52);
+  ctx.lineTo(x + w, topY + h * 0.18);
+  ctx.lineTo(x + w, baseY);
+  ctx.closePath();
+  ctx.fillStyle = '#FFB020';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+  ctx.lineWidth = Math.max(0.6, w * 0.08);
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+  ctx.restore();
 }
 
 // Zkrať paprsek hole tak, aby nevjel do kruhu (hráč/gólman) — vrátí nové tMax

@@ -291,7 +291,7 @@ export class NetGame {
       const ent = e.ent;
       // autoritativní diskrétní stav (pro všechny)
       ent.team = ps.team; ent.forehand = !!ps.fh; ent.charge = ps.ch;
-      ent.handed = ps.hd; ent.name = ps.nm;
+      ent.handed = ps.hd; ent.name = ps.nm; ent.founder = !!ps.fn;
       ent.color = ps.col || null; ent.num = ps.num; ent.jersey = ps.js || 'solid';
       ent.helmet = ps.hc || null; ent.shorts = ps.sh || null; ent.gloves = ps.gc || null; ent.tape = ps.tc || null;
       ent.stick = ps.sk || null; ent.tapeStyle = ps.ty || 'full'; ent.helmetType = ps.hy || 'visor'; ent.visor = ps.vc || null;

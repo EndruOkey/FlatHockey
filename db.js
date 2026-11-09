@@ -420,6 +420,12 @@ export function getProfile(user_id) {
   return db.prepare('SELECT * FROM profiles WHERE user_id = ?').get(user_id);
 }
 
+// Má hráč titul Founder (za pozvání kamaráda)? Levý dotaz, pro jmenovku ve hře i korunku v menu.
+export function isFounder(user_id) {
+  if (!user_id) return false;
+  return db.prepare("SELECT 1 FROM profiles WHERE user_id = ? AND title = 'Founder'").get(user_id) != null;
+}
+
 export function saveProfile(user_id, fields) {
   const allowed = ['helmet','gloves','tape','trail','stick','tape_style','helmet_type','visor','handed','number'];
   // Přeskoč prázdné hodnoty — number je NOT NULL, zápis null by shodil uložení (500) i otevření šatny

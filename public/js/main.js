@@ -5,7 +5,8 @@ import { Player } from './entities/Player.js';
 import { PLAYER, RINK } from './constants.js';
 import { t, applyI18n, toggleLang, setOnChange } from './i18n.js';
 import { setVolume, getVolume } from './sound.js';
-import { loadSession, onAuthChange, loginWithDiscord, logout, handleOAuthRedirect, getUser, loadServerStats, saveServerProfile, loadRankAndCredits, getKind, requestLinkCode, redeemLinkCode } from './auth.js';
+import { loadSession, onAuthChange, loginWithDiscord, logout, handleOAuthRedirect, getUser, loadServerStats, saveServerProfile, loadRankAndCredits, getKind, requestLinkCode, redeemLinkCode, isFounder } from './auth.js';
+const FOUNDER_CROWN_SVG = '<svg width="13" height="11" viewBox="0 0 14 11" style="vertical-align:-1px" aria-hidden="true"><path d="M1 10 L1 3 L4 6 L7 1 L10 6 L13 3 L13 10 Z" fill="#FFB020" stroke="rgba(0,0,0,.4)" stroke-width="0.8" stroke-linejoin="round"/></svg>';
 import { makeRng, hashSeed } from './rng.js';
 import { initLockerPreview } from './locker-preview.js';
 
@@ -1135,7 +1136,9 @@ if (IS_MOBILE) {
 function _updateNavPlayer(rp = 1000, pos = null, cred = 0) {
   const pr = profile();
   $('nav-p-num').textContent = (pr.number === '' || pr.number == null) ? '#' : pr.number;
-  $('nav-p-name').textContent = (pr.name || t('guest_name')).toUpperCase();
+  const nameEl = $('nav-p-name');
+  nameEl.textContent = (pr.name || t('guest_name')).toUpperCase();   // textContent = bezpečné proti XSS (jméno je od uživatele)
+  if (isFounder()) { const cr = document.createElement('span'); cr.innerHTML = FOUNDER_CROWN_SVG; cr.style.marginRight = '5px'; cr.title = 'Founder'; nameEl.prepend(cr); }
   $('nav-p-meta').textContent = `ELO ${rp} · ${t('m_pos')} ${pos ? '#' + pos : '#—'}`;
   $('nav-pc-val').textContent = cred;
 }
@@ -1320,7 +1323,7 @@ function playNow() {
   // Plynulost online řeší netcode (viz WebTransport plán); lokální offline režim (NetGame offline:true)
   // zůstává v kódu jako hotová schopnost pro případný „Trénink", ale HRÁT = multiplayer.
   net.createLobby({ name: nameInput.value.trim() || 'Lobby', teams: { home: { name: t('home_ph'), color: '#3a9fff', style: 'solid' }, away: { name: t('away_ph'), color: '#ff4455', style: 'solid' } },
-    periods: 3, minutes: 5, max: 6, botFill: 3, rules: false, password: '' }, profile());
+    periods: 1, minutes: 5, max: 6, botFill: 3, rules: false, password: '' }, profile());   // rychlé kolo = 1 třetina (5 min), ne 15 min — pro drop-in hráče. Plný zápas přes „Založit zápas".
 }
 $('go-play').onclick = playNow;
 // OFFLINE zápas proti botům — celá simulace v prohlížeči (match-core), žádná síť → bez sekání.
@@ -1332,7 +1335,7 @@ function playOffline() {
   if (inGame && currentGame?.stop) currentGame.stop();
   const pr = profile();
   const g = new NetGame(canvas, net, 'me', {
-    offline: true, botFill: 3, periods: 3, minutes: 5, rules: false, difficulty: 'casual',
+    offline: true, botFill: 3, periods: 1, minutes: 5, rules: false, difficulty: 'casual',   // rychlé kolo = 1 třetina
     myName: pr.name, myNum: pr.number,
     teams: { home: { name: t('home_ph'), color: '#3a9fff', style: 'solid' }, away: { name: t('away_ph'), color: '#ff4455', style: 'solid' } },
   });
