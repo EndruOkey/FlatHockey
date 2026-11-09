@@ -34,7 +34,8 @@ export const PLAYER = {
                    // při plném hřišti); top speed zůstává, takže bot pořád obere nosiče (stall guardrail OK)
   decel: 70,       // skluz při puštění (glide), ale kontrolovatelný
   turnRate: 3.8,   // rotace — střed: ovladatelná, ne těžkopádná ani twitchy
-  stickLen: 16,    // úměrně k tělu
+  stickLen: _penv('FH_STICK', 16),    // dosah hole na puk (= balanc, NEzkracovat: 14 rozbilo bot_1v1 a stall). Vizuální délka se krátí zvlášť přes stickDraw.
+  stickDraw: _penv('FH_STICKDRAW', 0.86),   // jen VIZUÁLNÍ zkrácení kreslené hole (dřík+čepel), nemění dosah/pickup → hůl nepůsobí dlouhá u menšího těla
   pickupTipRadius: 10,
   // Ochrana po převzetí puku (s): tak dlouho ho soupeř holí nevyrazí → méně chaosu. Env FH_GRACE pro měření.
   // Kontakt a crosscheck (2026-11-02; env FH_* jen pro měření v Node)

@@ -530,7 +530,7 @@ function _renderPlayer(ctx, p, cam) {
     const stickDir  = baseDir + Math.PI / 2;
     const sDirCos   = Math.cos(stickDir);
     const sDirSin   = Math.sin(stickDir);
-    const halfLen   = PLAYER.stickLen * s * 0.7; // kratší při crosschecku
+    const halfLen   = PLAYER.stickLen * s * 0.7 * PLAYER.stickDraw; // kratší při crosschecku (+ vizuální zkrácení)
     // Offset center to front edge of player body, podél _stickDisp
     const fwdCos    = Math.cos(baseDir);
     const fwdSin    = Math.sin(baseDir);
@@ -560,7 +560,7 @@ function _renderPlayer(ctx, p, cam) {
 
     // Blade bezier at blade end (same curve as normal stick)
     const bladeAngle = Math.PI / 6.5;
-    const bladeL     = 12 * s;
+    const bladeL     = 12 * s * PLAYER.stickDraw;
     const bEndX  = bladeX + Math.cos(stickDir + bladeAngle) * bladeL;
     const bEndY  = bladeY + Math.sin(stickDir + bladeAngle) * bladeL;
     const bCtrlX = bladeX + Math.cos(stickDir) * bladeL * 0.55;
@@ -581,7 +581,7 @@ function _renderPlayer(ctx, p, cam) {
   // ── Stick ──────────────────────────────────────────────────────────────
   // Vyhlazený úhel + charge → wind-up i zrušení charge jsou plynulé (bez skoku)
   const windAngle = p._stickDisp;
-  const windLen   = (p._dispReach ?? PLAYER.stickLen) * (1 - (p._dispCharge ?? 0) * 0.30);
+  const windLen   = (p._dispReach ?? PLAYER.stickLen) * (1 - (p._dispCharge ?? 0) * 0.30) * PLAYER.stickDraw;
   const windCos   = Math.cos(windAngle);
   const windSin   = Math.sin(windAngle);
 
@@ -592,7 +592,7 @@ function _renderPlayer(ctx, p, cam) {
 
   // Display tip — clip dříku I ČEPELE proti všemu: klipuju délku dřík+čepel a pak
   // čepel odečtu zpět → ani zahnutá čepel nepřesahuje mantinel/roh/branku/hráče.
-  const BLADE = 12; // world délka čepele
+  const BLADE = 12 * PLAYER.stickDraw; // world délka čepele (vizuální zkrácení)
   let wt = windLen + BLADE;
   if (windCos < 0 && gxw + windCos * wt < 0)            wt = Math.min(wt, -gxw / windCos);
   if (windCos > 0 && gxw + windCos * wt > RINK.w)        wt = Math.min(wt, (RINK.w - gxw) / windCos);
@@ -638,7 +638,7 @@ function _renderPlayer(ctx, p, cam) {
 
   // ── Blade ─────────────────────────────────────────────────────────────────
   const bladeAngle = (p.handed ?? 1) * Math.PI / 6.5;
-  const bladeL     = 12 * s;
+  const bladeL     = 12 * s * PLAYER.stickDraw;
 
   let bStartX = tipX;
   let bStartY = tipY;

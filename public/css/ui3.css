@@ -90,6 +90,15 @@ kbd, .key3 { display: inline-block; min-width: 30px; text-align: center; border:
 .m3-season-r { text-align: right; }
 .m3-season-elo { font-size: 36px; line-height: 1; }
 .m3-muted { font: 600 13px 'Barlow', sans-serif; color: var(--a3-mute); }
+/* ── Pozvánka kamaráda (CTA) — nativní sklo panel, seříznutý roh, jantarový akcent ── */
+.m3-invite { padding: 20px 28px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; border-left: 3px solid var(--a3-amber); }
+.m3-invite-text { margin: 0; font: 500 14px/1.45 'Barlow', sans-serif; color: var(--a3-mute2); }
+.m3-invite-text b { color: var(--a3-amber); font-weight: 700; }
+.m3-invite-btn { all: unset; cursor: pointer; margin-top: 2px; padding: 9px 22px; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 800;
+  text-transform: uppercase; letter-spacing: .06em; font-size: 19px; color: var(--a3-bg); background: var(--a3-amber);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%); transition: filter .15s; }
+.m3-invite-btn:hover { filter: brightness(1.12); }
+.m3-invite-btn:focus-visible { outline: 3px solid var(--a3-ice); outline-offset: 2px; }
 .keys3 { position: fixed; left: 0; right: 0; bottom: 0; z-index: 2; height: 84px; display: flex; align-items: center; gap: 36px; padding: 0 var(--a3-gut);
   background: linear-gradient(0deg, rgba(0,0,0,.75), rgba(0,0,0,0)); font: 600 16px 'Barlow', sans-serif; color: var(--a3-text); pointer-events: none; }
 #lobby:not(.on-main) .keys3 { display: none; }
