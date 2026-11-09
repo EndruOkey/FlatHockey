@@ -280,7 +280,12 @@ export function botThink(p, inp, match) {
     mates.sort((a, c) => (Math.hypot(a.x - puck.x, a.y - puck.y) - Math.hypot(c.x - puck.x, c.y - puck.y)) || (a.id < c.id ? -1 : 1));
     const rank = mates.indexOf(p);
     const side = puck.y < RINK.h / 2 ? 1 : -1;  // strana ledu OPAČNÁ k puku
-    if (carrier) {
+    // Support/defend podle TÝMOVÉHO držení, ne okamžitého carriera: volný puk (scrum) po NAŠEM doteku =
+    // dál support (forecheck) → míň frantického přepínání support↔defend (role_churn). Obrana zůstává OKAMŽITÁ:
+    // jakmile soupeř puk JASNĚ drží (oppHas), hned defend (bez prodlevy → stall/konverze beze změny).
+    const oppHas = [...match.players.values()].some(o => o.team !== p.team && o.hasPuck);
+    const teamHas = carrier || (!oppHas && match.lastTouch === p.team);
+    if (teamHas) {
       // Náš hráč drží puk: nejbližší jde do útoku na opačné straně (volný pro pas), ostatní se drží za pukem
       if (rank === 0) {
         tx = clampX(puck.x + dir * SUP_AHEAD, goalX, dir); ty = RINK.h / 2 + side * SUP_WIDE;
