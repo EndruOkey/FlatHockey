@@ -126,6 +126,7 @@ function rateOk(socket, key, minMs) {
 const countMatches = () => [...lobbies.values()].filter(l => l.match).length;
 
 // ── Authoritativní simulace ──────────────────────────────────────────────
+const PERFECT_WIN = 0.3;      // s — okno přesné rány po plném nabití (pak puk ujede)
 const CHARGE_RATE = 1.2;       // pomalejší nápřah → slap shot je cítit jako wind-up (méně twitchy)
 const TICK_HZ = 60;
 const SNAP_HZ = 30;            // 30 snapshotů/s (klient plynule interpoluje v game.js _interp) — 60/s
@@ -229,47 +230,66 @@ function playerActions(p, inp, dt, match) {
     if (!p._chargeDecaying) {
       const cap = (p.hasPuck && !p._oneTimer) ? 1 : 0.95;
       p.charge = Math.min(cap, p.charge + CHARGE_RATE * dt);
-      if (p.charge >= 1 && p.hasPuck && !p._oneTimer) { p._chargeDecaying = true; p.overcharged = true; }
+      if (p.charge >= 1 && p.hasPuck && !p._oneTimer) { p._chargeDecaying = true; p.overcharged = true; p._perfT = 0; }
     } else if (p.hasPuck) {
-      p.charge = Math.max(0, p.charge - CHARGE_RATE * 1.8 * dt);
-      if (p.charge <= 0) { p.shoot(match.puck, 0.12); p.charge = 0; p._chargeDecaying = false; p.overcharged = false; }
+      // PLNÉ NABITÍ (2026-11-09): okno PERFECT_WIN s na PŘESNOU ránu (bez rozptylu). Propásneš → puk z čepele
+      // ujede (ztráta), žádná slabá rána sama od sebe. charge zůstává 1 → klient pozná okno ze snapshotu (ch).
+      p._perfT = (p._perfT || 0) + dt;
+      if (p._perfT > PERFECT_WIN) { p.loseBlade(match.puck); p.charge = 0; p._chargeDecaying = false; p.overcharged = false; p._chargeBlocked = true; }
     } else { p._chargeDecaying = false; p.overcharged = false; }
   }
 
   const rmbCancelledCharge = inp.rmbJustPressed && p.hasPuck && p.charge > 0;
   if (inp.lmbJustReleased && !rmbCancelledCharge) {
-    if (p.hasPuck && !p._chargeCancelled) p.shoot(match.puck, p.charge);
+    if (p.hasPuck && !p._chargeCancelled) p.shoot(match.puck, p.charge, !!p.overcharged);   // overcharged = v okně přesné rány
     p.charge = 0; p._chargeDecaying = false; p.overcharged = false; p._chargeCancelled = false; p._oneTimer = false;
   }
 
+  // PŘIHRÁVKA (2026-11-09): ŤUKNUTÍ RMB (< SAUCER_HOLD s) = rychlý pas po ledě; PODRŽENÍ = nadzvednutý pas
+  // přes hole (puk letí vzduchem → nejde zachytit ani obrat, je pomalejší). Pas odejde při PUŠTĚNÍ RMB.
+  // Bot přihrává hned po ledě (jednotikový impuls) — beze změny balancu.
   if (inp.rmbJustPressed && p.hasPuck) {
     if (p.charge > 0.08) { p.charge = 0; p._chargeDecaying = false; p.overcharged = false; p._chargeBlocked = true; p._chargeCancelled = true; }
-    else {
-      // Nahrávka JEN spoluhráči. Bot si vybral příjemce; člověk míří kurzorem + prioritně tomu,
-      // kdo si o nahrávku řekl (vyžádání). Fallback nejbližší.
-      let tgt = null;
-      if (p.isBot && p._passTarget) {
-        const cand = match.players.get(p._passTarget);
-        if (cand && cand !== p && cand.team === p.team) tgt = cand;
-      } else if (!p.isBot) {
-        tgt = pickHumanPass(p, match);
-      }
-      if (!tgt) tgt = nearestTeammate(p, match);
-      p._passTarget = null;
-      if (tgt) {
-        p.charge = 0;
-        const tip = p.stickTip;
-        const dist = Math.hypot(tgt.x - tip.x, tgt.y - tip.y);
-        // Přeměřená síla: dojede ke spoluhráči s rozumným tempem (nepřepálí, neztratí se).
-        // Crisp přihrávka: dorazí s tempem (ne doťapká) → míň slabá/pozdní, hůř zachytitelná.
-        const sp = passSpeedFor(dist);
-        p.pass(match.puck, leadAim(tip, tgt, sp), sp);
-        if (typeof process === 'undefined' || process.env.FH_NOADDR !== '1') { match.puck._passTo = tgt.id; match.puck._passT = 1.2; }   // adresát má větší zónu převzetí
-      }
-    }
+    else if (p.isBot) doPass(p, match, false);
+    else p._rmbHold = 1e-6;
+  }
+  if (p._rmbHold > 0) {
+    if (!p.hasPuck || p.charge > 0.08) p._rmbHold = 0;
+    else if (inp.rmb) p._rmbHold += dt;
+    else { const saucer = p._rmbHold >= SAUCER_HOLD; p._rmbHold = 0; doPass(p, match, saucer); }
   }
 
   if (inp.mmbJustPressed && !p.hasPuck) p.passReq = 0.9;
+}
+
+// Nadzvednutý pas: pomalejší, dopadne ~SAUCER_LAND dráhy před příjemce a dojede mu na hůl.
+const SAUCER_HOLD = 0.15, SAUCER_SPEED = 270, SAUCER_LAND = 0.85, SAUCER_MIN = 60;
+function doPass(p, match, saucer) {
+  let tgt = null;
+  if (p.isBot && p._passTarget) {
+    const cand = match.players.get(p._passTarget);
+    if (cand && cand !== p && cand.team === p.team) tgt = cand;
+  } else if (!p.isBot) {
+    tgt = pickHumanPass(p, match);
+  }
+  if (!tgt) tgt = nearestTeammate(p, match);
+  p._passTarget = null;
+  if (!tgt) return;
+  p.charge = 0;
+  const tip = p.stickTip;
+  const dist = Math.hypot(tgt.x - tip.x, tgt.y - tip.y);
+  if (saucer && dist >= SAUCER_MIN) {
+    const sp = SAUCER_SPEED, ang = leadAim(tip, tgt, sp);
+    p.pass(match.puck, ang, sp);
+    const t = SAUCER_LAND * dist / sp;                              // doba letu do dopadu (ve vzduchu skoro bez tření)
+    match.puck.vz = Math.min(150, PUCK.gravity * t / 2);           // vrchol ≤ ~19 px (pod břevnem)
+    match.puck.z = 2;                                               // hned ve vzduchu (isAirborne > 1.5)
+    match.puck._saucer = true;
+  } else {
+    const sp = passSpeedFor(dist);
+    p.pass(match.puck, leadAim(tip, tgt, sp), sp);
+  }
+  if (typeof process === 'undefined' || process.env.FH_NOADDR !== '1') { match.puck._passTo = tgt.id; match.puck._passT = 1.2 + (saucer ? 0.5 : 0); }   // adresát má větší zónu převzetí
 }
 
 function rebuildEntities(match) {
@@ -709,6 +729,8 @@ function stepMatch(match) {
   const _pv0spd = Math.hypot(match.puck.vx, match.puck.vy), _pv0vx = match.puck.vx;
 
   match.world.update(DT * TEMPO);   // fyzika v herním tempu; časomíra (match.clock) běží reálně
+  // Puk přes mantinel u střídaček (Puck._out) → píšťalka + buly uprostřed (platí i bez pravidel, jinak by puk zmizel)
+  if (match.puck._out) { match.puck._out = false; if (!match.stoppage && !match.ended) callStoppage(match, 'out', null, RINK.centerX, RINK.h / 2); }
 
   // SAVE = polní hráč zastaví tvrdou ránu mířící k VLASTNÍ brance — odrazem od těla (Puck._blockBy)
   // NEBO obranným zachycením (nově získá puk, co byl rychlá střela k jeho brance). Cooldown proti dvojpočtu.

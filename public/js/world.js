@@ -18,6 +18,16 @@ export class World {
 
   _attachRng() { for (const e of this.entities) e.rng = this.rng; }
 
+  // FÉROVÉ POŘADÍ o puk (2026-11-09): kdo má čepel nejblíž puku, zkouší první (obrání / tečování / převzetí).
+  // Dřív pevné pořadí seznamu = při souběhu vždy vyhrál dřív přidaný tým (domácí; balanc 120 zápasů 1,98×).
+  // Shodu vzdálenosti rozhodne rotace podle ticku — deterministické, bez zvýhodnění strany.
+  _fair(puck) {
+    this._ft = (this._ft || 0) + 1;
+    const n = this.players.length, off = this._ft % Math.max(1, n);
+    return this.players.map((p, i) => ({ p, d: Math.hypot(p.stickTip.x - puck.x, p.stickTip.y - puck.y), r: (i - off + n) % n }))
+      .sort((a, b) => (a.d - b.d) || (a.r - b.r)).map(o => o.p);
+  }
+
   update(dt) {
     this.tick++;
     this._attachRng();   // entity přidané po konstrukci (hráči, boti)
@@ -75,7 +85,7 @@ export class World {
       for (const g of this.goalies) {
         if (p.team === g.team) continue;
         const d = Math.hypot(p.x - g.x, p.y - g.y);
-        if (d < (p.radius ?? 7) + 12) {
+        if (d < g.radius + (p.radius ?? 7) + 2) {   // jen SKUTEČNÝ dotyk (dřív +12 px = píšťalka i bez kontaktu → hráč „fauloval" omylem u brankoviště)
           this.whistle('goalie-interference', p.team);
         }
       }
@@ -83,13 +93,13 @@ export class World {
 
     const carrier = this.players.find(p => p.hasPuck);
     if (carrier) {
-      if ((carrier._possT ?? 99) >= PLAYER.stealGrace) for (const p of this.players) {
+      if ((carrier._possT ?? 99) >= PLAYER.stealGrace) for (const p of this._fair(puck)) {
         if (p === carrier || p.team === carrier.team) continue;
-        if (p.canSteal(puck)) { p.stealFrom(carrier, puck); break; }
+        if (p.canSteal(puck)) { p.stealFrom(carrier, puck); break; }   // (iteruje _fair: nejbližší čepel první)
       }
     } else {
       for (const g of this.goalies) g.blockPuck(puck, this);
-      for (const p of this.players) if (p.tryDeflect(puck)) break;
+      for (const p of this._fair(puck)) if (p.tryDeflect(puck)) break;
       for (const g of this.goalies) g.controlLoosePuck(puck);
 
       // Golman drží puk → odpískat po 3.5 s (i bez rules → auto-release + whistle efekt)
@@ -109,7 +119,7 @@ export class World {
 
       const goalieHolding = this.goalies.some(g => g.isHolding);
       if (!goalieHolding) {
-        for (const p of this.players) {
+        for (const p of this._fair(puck)) {
           if (p.tryPickup(puck)) break;
         }
       }

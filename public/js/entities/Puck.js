@@ -27,6 +27,11 @@ function _resolveCorners(puck) {
   }
 }
 
+const GLASS_K = 0.85;          // sklo pruží o kus míň než mantinel
+const OVERNET_MIN_V = 220;     // px/s — od téhle rychlosti do zadního mantinelu letí puk zpět přes branku
+const OVERNET_MIN_Z = 0.5;     // px — puk aspoň trochu nadzvednutý (po ledě přes branku neletí); audit K7
+const OVERNET_LAND = 70;       // px před brankovou čárou, kam dopadne
+
 export class Puck {
   rng = defaultRng;
   constructor() {
@@ -57,6 +62,7 @@ export class Puck {
     this.vy      = Math.sin(kickAngle) * 22;
     this.z       = 0;
     this.vz      = 0;
+    this._out = false; this._overNet = false;
     this.prevX   = this.x;
     this.prevY   = this.y;
     this.prevZ   = this.z;
@@ -194,15 +200,38 @@ export class Puck {
     this.x += this.vx * dt;
     this.y += this.vy * dt;
 
-    if (this.y < PUCK.radius)          { this.y = PUCK.radius;          this.vy =  Math.abs(this.vy) * _reb(this.vy); if (spd > 40) this._ev |= 1; }
-    if (this.y > RINK.h - PUCK.radius) { this.y = RINK.h - PUCK.radius; this.vy = -Math.abs(this.vy) * _reb(this.vy); if (spd > 40) this._ev |= 1; }
-    if (this.x < PUCK.radius)          { this.x = PUCK.radius;          this.vx =  Math.abs(this.vx) * _reb(this.vx); if (spd > 40) this._ev |= 1; }
-    if (this.x > RINK.w - PUCK.radius) { this.x = RINK.w - PUCK.radius; this.vx = -Math.abs(this.vx) * _reb(this.vx); if (spd > 40) this._ev |= 1; }
+    // MANTINEL / PLEXI / STŘÍDAČKY (2026-11-09): puk nad hranou mantinelu (PUCK.boardHeight) narazí do skla
+    // (ev 32, jiný zvuk + záblesk); u střídaček (horní strana mezi modrými čarami) sklo není → puk vyletí ze hry
+    // (ev 64, _out → píšťalka + buly). Zadní mantinel za brankou + tvrdá ZVEDNUTÁ rána = odraz obloukem PŘES branku
+    // do prostoru před ní (_overNet). Pod hranou mantinelu beze změny.
+    const high = this.z >= PUCK.boardHeight;
+    const wallHit = (horiz) => { if (spd > 40) this._ev |= high ? 32 : 1; if (high) { this._glassX = this.x; this._glassY = this.y; } };
+    if (this.y < PUCK.radius) {
+      if (high && this.x > RINK.blueLineLeft && this.x < RINK.blueLineRight) { this.y = PUCK.radius; this.vx = this.vy = 0; this._out = true; this._ev |= 64; }
+      else { this.y = PUCK.radius; this.vy = Math.abs(this.vy) * _reb(this.vy) * (high ? GLASS_K : 1); wallHit(); }
+    }
+    if (this.y > RINK.h - PUCK.radius) { this.y = RINK.h - PUCK.radius; this.vy = -Math.abs(this.vy) * _reb(this.vy) * (high ? GLASS_K : 1); wallHit(); }
+    for (const side of [-1, 1]) {
+      const hit = side < 0 ? this.x < PUCK.radius : this.x > RINK.w - PUCK.radius;
+      if (!hit) continue;
+      const vin = Math.abs(this.vx);
+      this.x = side < 0 ? PUCK.radius : RINK.w - PUCK.radius;
+      this.vx = -side * vin * _reb(this.vx) * (high ? GLASS_K : 1);
+      wallHit();
+      // Odraz přes branku: zadní sklo, v šířce brankoviště ± 60 px, tvrdá rána → oblouk nad sítí, dopad ~OVERNET_LAND px před brankou
+      const gy = RINK.goalY + RINK.goalH / 2;
+      if (this.z > OVERNET_MIN_Z && vin >= OVERNET_MIN_V && Math.abs(this.y - gy) < RINK.goalH / 2 + 60) {   // zvednutá tvrdá rána (ne po ledě)
+        const v = Math.abs(this.vx), d = RINK.goalLineLeft + OVERNET_LAND;   // zeď → brankovou čáru (90) + kus před ni
+        const t = d / Math.max(120, v);
+        this.vz = PUCK.gravity * t / 2 - this.z / t;                          // dopad přesně v čase t z aktuální výšky
+        this._overNet = true;
+      }
+    }
 
     // Rounded corner arcs — puk se odráží od zakřivených rohů
     const _preCornerSpd = Math.hypot(this.vx, this.vy);
     _resolveCorners(this);
-    if (_preCornerSpd > 40 && Math.hypot(this.vx, this.vy) < _preCornerSpd * 0.98) this._ev |= 1;
+    if (_preCornerSpd > 40 && Math.hypot(this.vx, this.vy) < _preCornerSpd * 0.98) this._ev |= high ? 32 : 1;
 
     // Player body blocks puck — prevents passing through
     if (!this.isAirborne) {
@@ -264,16 +293,21 @@ export class Puck {
       const shadowScale = 1 + this.z / 25;
       ctx.beginPath();
       ctx.ellipse(sx + 2, sy + 2.5, r * shadowScale, r * shadowScale * 0.6, 0, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(0,0,0,${Math.max(0.08, 0.3 - this.z / 60)})`;
+      ctx.fillStyle = `rgba(0,0,0,${Math.max(0.18, 0.4 - this.z / 70)})`;   // výraznější stín = kde puk JE na ledě
       ctx.fill();
 
-      // Puck drawn elevated
+      // ČITELNOST VÝŠKY (2026-11-09): svislá čárka stín→puk + kroužek v barvě výšky vůči brance:
+      // nízko (pod lapačkou, žabička / po betonech) šedá · nahoře (lapačka/horní roh) jantar · nad břevnem červená
+      const hc = this.z > PUCK.crossbarHeight ? '230,60,60' : this.z > PUCK.gloveHeight ? '235,160,20' : '120,130,145';
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx, sy - elev);
+      ctx.strokeStyle = `rgba(${hc},0.75)`; ctx.lineWidth = 1.4 * s; ctx.stroke();
+      const rr = r * (1 + this.z / 45);   // výš = o kus větší (blíž ke kameře)
       ctx.beginPath();
-      ctx.arc(sx, sy - elev, r, 0, Math.PI * 2);
+      ctx.arc(sx, sy - elev, rr, 0, Math.PI * 2);
       ctx.fillStyle = '#1a1a1a';
       ctx.fill();
-      ctx.strokeStyle = '#888';
-      ctx.lineWidth = 1.5 * s;
+      ctx.strokeStyle = `rgb(${hc})`;
+      ctx.lineWidth = 1.8 * s;
       ctx.stroke();
     } else {
       // Ground-level puck
@@ -346,6 +380,7 @@ function _insideCage(x, y) {
 // Pevné stěny sítě z VNĚJŠKU — vršek, spodek a zadní stěna jsou pevné; otevřené je
 // jen ústí (přední čára mezi tyčkami). Puk se tak nedostane do branky přes mřížku.
 function _resolveNetWalls(puck) {
+  if (puck.z > PUCK.crossbarHeight) return;   // nad sítí → přeletí (odraz od zadního skla přes branku)
   const r   = PUCK.radius;
   const gy1 = RINK.goalY, gy2 = RINK.goalY + RINK.goalH;
   const d   = RINK.goalDepth;

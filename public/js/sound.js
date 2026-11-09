@@ -255,6 +255,27 @@ export const SFX = {
     }
   },
 
+  // Plexisklo — dutý „bum" (pružící tabule) + vysoké zadrnčení skla v rámu (delší než u mantinelu)
+  glass(intensity = 1) {
+    const ac = _ac(), t = ac.currentTime, sr = ac.sampleRate;
+    const v = Math.min(intensity, 1);
+    for (const [f, a, d] of [[62, 0.42, 0.38], [124, 0.18, 0.22]]) {   // pružení tabule
+      const osc = ac.createOscillator(), g = ac.createGain();
+      osc.connect(g); g.connect(_master); osc.type = 'sine';
+      osc.frequency.setValueAtTime(f * 1.25, t); osc.frequency.exponentialRampToValueAtTime(f, t + 0.06);
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(a * v, t + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.001, t + d);
+      osc.start(t); osc.stop(t + d + 0.01);
+    }
+    const nb = ac.createBuffer(1, Math.ceil(sr * 0.22), sr), nd = nb.getChannelData(0);
+    for (let i = 0; i < nd.length; i++) nd[i] = (Math.random() * 2 - 1) * Math.exp(-i * 4 / nd.length) * (0.6 + 0.4 * Math.sin(i / sr * 2 * Math.PI * 38));   // drnčení v rámu
+    const ns = ac.createBufferSource(), bp = ac.createBiquadFilter(), ng = ac.createGain();
+    ns.buffer = nb; bp.type = 'bandpass'; bp.frequency.value = 2300; bp.Q.value = 2.2;
+    ns.connect(bp); bp.connect(ng); ng.connect(_master);
+    ng.gain.setValueAtTime(0, t); ng.gain.linearRampToValueAtTime(0.13 * v, t + 0.003);
+    ng.gain.exponentialRampToValueAtTime(0.001, t + 0.22); ns.start(t);
+  },
+
   // Mantinel — impakt + nízké tělo + plexisklo rattle
   boards(intensity = 1) {
     const ac = _ac(), t = ac.currentTime, sr = ac.sampleRate;

@@ -180,7 +180,16 @@ export class PlayerBase {
     puck.trailColor = null;
   }
 
-  shoot(puck, charge) {
+  // Propásnuté okno přesné rány: puk sklouzne z čepele dopředu (volný puk), krátce ho nejde znovu vzít.
+  loseBlade(puck) {
+    this.hasPuck = false;
+    this.charge = 0; this._shootCooldown = 0.4;
+    const tip = this.stickTip, a = this.carryAngle ?? this.aimAngle;
+    puck.x = tip.x; puck.y = tip.y; puck.z = 0; puck.vz = 0;
+    puck.vx = this.vx + Math.cos(a) * 60; puck.vy = this.vy + Math.sin(a) * 60;
+  }
+
+  shoot(puck, charge, perfect = false) {
     this.hasPuck = false;
     this._shootCooldown = 0.18;
     const tip = this.stickTip;
@@ -192,11 +201,19 @@ export class PlayerBase {
     // Žabička = malá umístěná rána po ledě; slap = tvrdá rána, zvedne se a je lehce nepřesná.
     const c = clamp(charge, 0, 1);
     const spd    = PUCK.minShotSpeed + (PUCK.maxShotSpeed - PUCK.minShotSpeed) * Math.pow(c, 0.85);
-    const spread = (this.rng.next() - 0.5) * c * 0.10;   // tvrdá rána je nepřesnější (risk/reward)
+    const r = this.rng.next();                           // vždy odeber 1 číslo (determinismus nezávislý na perfect)
+    const spread = perfect ? 0 : (r - 0.5) * c * 0.10;   // tvrdá rána je nepřesnější; v okně přesné rány bez rozptylu
     const dir    = this.carryAngle + spread;
     puck.vx = Math.cos(dir) * spd;
     puck.vy = Math.sin(dir) * spd;
     puck.vz = Math.pow(c, 1.4) * PUCK.maxShotVz;        // zdvih nabíhá dřív: snap přes betony, plný slap do horního rohu
+    // ČLOVĚK MÍŘÍ I VÝŠKU (audit K2, 2026-11-09): vrchol rány podle nabití, ale zdvih se dopočítá tak, aby puk v místě
+    // kurzoru (aimDist) byl ve výšce vrcholu → horní roh jde trefit z 100–250 px, ne jen ze ~150. Bot beze změny (balanc).
+    if (!this.isBot && (this.aimDist ?? 0) > 60) {
+      const zT = Math.min(PUCK.crossbarHeight - 2, Math.pow(c, 1.4) * PUCK.maxShotVz ** 2 / (2 * PUCK.gravity));
+      const t = Math.min(this.aimDist, 320) / spd;
+      puck.vz = Math.min(PUCK.maxShotVz * 1.2, (zT + PUCK.gravity * t * t / 2) / t);
+    }
     puck.trailColor = this.trail || null;               // stopa v barvě střelce
   }
 
@@ -475,6 +492,46 @@ export class Player extends PlayerBase {
     this._move(this.input, dt);
     this._updateStickDisplay(dt);
   }
+}
+
+// ČITELNOST PUKU (jen ovládaný hráč): „magnet" = skutečná zóna převzetí u čepele (PLAYER.pickupTipRadius,
+// stejný střed jako canPickup). Volný puk blízko → kroužek se rozsvítí; v dosahu → zelený (teď ho vezmeš).
+// Převzetí → zelený puls na puku; ztráta (puk odešel pomalu = obrán / sklouzl, ne střela/pas) → červený záblesk.
+const AID_SHOW = 60, AID_PULSE = 0.35;   // px od čepele, kdy se zóna ukáže; s délky pulzu
+function _drawPickupAid(ctx, p, cam) {
+  const puck = p._puckView || p._puckRef; if (!puck) return;
+  const s = cam.scale, now = performance.now() / 1000;
+  const tip = p.stickTip;
+  const bladeDir = (p.carryAngle ?? p.aimAngle) + (p.handed ?? 1) * Math.PI / 6.5;
+  const cx = tip.x + Math.cos(bladeDir) * 3, cy = tip.y + Math.sin(bladeDir) * 3;   // střed lopatky (mezi tipem a koncem čepele)
+  if (p._aidHad !== undefined && p._aidHad !== p.hasPuck) {   // hrana převzetí / ztráty
+    const pv = Math.hypot(puck.vx || 0, puck.vy || 0);
+    if (p.hasPuck) p._aidEv = { t: now, ok: true };
+    else if (pv < 200) p._aidEv = { t: now, ok: false };
+  }
+  p._aidHad = p.hasPuck;
+  ctx.save();
+  const ev = p._aidEv;
+  if (ev && now - ev.t < AID_PULSE) {
+    const k = (now - ev.t) / AID_PULSE;
+    ctx.beginPath(); ctx.arc(cam.ox + puck.x * s, cam.oy + puck.y * s, (6 + 16 * k) * s, 0, Math.PI * 2);
+    ctx.strokeStyle = ev.ok ? `rgba(24,184,90,${0.9 * (1 - k)})` : `rgba(255,70,70,${0.95 * (1 - k)})`;
+    ctx.lineWidth = 3 * s; ctx.stroke();
+  }
+  const held = puck.ownerId != null || (p._others || []).some(o => o.hasPuck);   // klient: ownerId nemusí být ze snapshotu
+  const loose = !p.hasPuck && !held && !(puck.z > 0.5);
+  const d = Math.hypot(puck.x - cx, puck.y - cy);
+  const lossFlash = ev && !ev.ok && now - ev.t < AID_PULSE;   // po ztrátě puk chvíli nejde vzít (cooldown) → zónu neukazuj, ať si neprotiřečí
+  if (loose && !lossFlash && d < AID_SHOW) {
+    const inReach = d <= PLAYER.pickupTipRadius + PUCK.radius;
+    const a = inReach ? 0.95 : 0.25 + 0.55 * (1 - d / AID_SHOW);
+    ctx.beginPath(); ctx.arc(cam.ox + cx * s, cam.oy + cy * s, PLAYER.pickupTipRadius * s, 0, Math.PI * 2);
+    ctx.fillStyle = inReach ? 'rgba(24,184,90,0.22)' : `rgba(31,79,216,${0.10 * a})`; ctx.fill();
+    ctx.setLineDash(inReach ? [] : [3 * s, 2.5 * s]);
+    ctx.strokeStyle = inReach ? 'rgba(24,184,90,0.95)' : `rgba(31,79,216,${a})`;   // tmavá modrá štítku TY = kontrast na bílém ledu
+    ctx.lineWidth = (inReach ? 2.2 : 1.6) * s; ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function _renderPlayer(ctx, p, cam) {
@@ -1022,13 +1079,17 @@ function _renderPlayer(ctx, p, cam) {
     }
   }
 
+  if (p._isLocal) _drawPickupAid(ctx, p, cam);
+
   // Charge arc — jen vlastní hráč (ostatní vidí nabíjení jako nápřah hole, ne ukazatel)
   if (p.charge > 0.05 && p._isLocal) {
-    const blink = p.overcharged && Math.floor(Date.now() / 100) % 2 === 0;
+    // Plné nabití (charge ≥ 0.99, i ze snapshotu) = okno PŘESNÉ rány → zelený pulzující kruh: TEĎ pusť
+    const perfect = p.charge >= 0.99;
+    const pulse = 0.65 + 0.35 * Math.sin(performance.now() / 45);
     ctx.beginPath();
     ctx.arc(sx, sy, r + 5 * s, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p.charge);
-    ctx.strokeStyle = p.overcharged
-      ? `rgba(255, 30, 0, ${blink ? 0.95 : 0.25})`
+    ctx.strokeStyle = perfect
+      ? `rgba(24, 200, 90, ${pulse})`
       : `rgba(255, ${220 - p.charge * 200}, 0, 0.85)`;
     ctx.lineWidth = 3 * s;
     ctx.lineCap = 'round';

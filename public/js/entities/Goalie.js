@@ -15,6 +15,9 @@ const PADLEN   = 9;
 // Nejvyšší dosažitelná výška puku (max. střela): vz²/(2g). Práh horního rohu se měří vůči ní, ne vůči výšce břevna.
 const PEAK_Z   = PUCK.maxShotVz ** 2 / (2 * PUCK.gravity);
 
+const _genv = (k, d) => (typeof process !== 'undefined' && process.env && process.env[k]) ? Number(process.env[k]) : d;
+const FAKE_T = _genv('FH_FAKET', 1.0), FAKE_LAG = _genv('FH_FAKELAG', 0.2), FAKE_SCREEN = _genv('FH_FAKESCR', 1);   // scripts/shot_mech_test.mjs SM_HOLD=20: finta→gól 3/12 vs 0/12   // s zamrznutí po fintě; násobek rychlosti sledování puku
+
 export class Goalie {
   rng = defaultRng;
   constructor(side = 'right', difficulty = 'casual') {
@@ -114,7 +117,17 @@ export class Goalie {
     const diffMult      = this.difficulty === 'competitive' ? 0.75 : this.difficulty === 'easy' ? 1.40 : 1.0;
     const baseLag       = 5.8 * diffMult;
     const distLagFactor = rawDist > 170 ? Math.max(0.28, 1 - (rawDist - 170) / 220) : 1.0;
-    const lag           = baseLag * distLagFactor * (1 - this._screen * 0.55);
+    let lag             = baseLag * distLagFactor * (1 - this._screen * 0.55);
+    // FINTA (2026-11-09): gólman čte nápřah soupeře s pukem (charge > 0,35 do 300 px). Zruší-li ho nosič bez rány
+    // (stále drží puk), gólman „skočí" na fintu: FAKE_T s sleduje puk do strany jen zlomkem rychlosti.
+    {
+      let car = null; for (const p of world.players) if (p.hasPuck && p.team !== this.team && !p.isDefender && !p.isPasser) { car = p; break; }
+      const winding = !!car && (car.charge || 0) > 0.35 && rawDist < 300;
+      if (this._readWind && car && car === this._windBy && !(car.charge > 0.05)) this._fakeT = FAKE_T;   // nápřah zmizel, puk pořád u nosiče = finta
+      this._readWind = winding; this._windBy = car;
+      // po fintě jako clona: horší sledování, reakce i dosah (existující cesta _screen) — doznívá s časem
+      if (this._fakeT > 0) { this._fakeT -= dt; lag *= FAKE_LAG; this._screen = Math.max(this._screen, FAKE_SCREEN * Math.min(1, this._fakeT / 0.3)); }
+    }
     // Percepce X: za brankou puk fixuj na goal line (golman nesleduje puk za sebou),
     // ale jen pokud NENÍ v retrieve fázi — tam potřebujeme skutečnou pozici.
     const pxRaw   = this._retrieving

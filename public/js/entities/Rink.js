@@ -96,7 +96,31 @@ export class Rink {
     // Goals drawn outside clip — cage protrudes behind boards
     _drawGoal(ctx, cam, RINK.goalLineLeft,  -1, '#3a9fff');
     _drawGoal(ctx, cam, RINK.goalLineRight, +1, '#ff4455');
+    _drawGlassAndBenches(ctx, cam);
   }
+}
+
+// PLEXISKLO + STŘÍDAČKY (2026-11-09): světlá linka skla kolem mantinelu; nahoře mezi modrými čarami sklo NENÍ
+// (střídačky) → tam může vysoký puk vyletět ven (Puck._out). Střídačky = tmavé lavice v barvách týmů nad ledem.
+function _drawGlassAndBenches(ctx, cam) {
+  const s = cam.scale, { ox, oy } = cam, g = 4 * s;          // sklo kreslené 4 px vně mantinelu
+  const bl = RINK.blueLineLeft, br = RINK.blueLineRight, cx = RINK.centerX;
+  ctx.save();
+  // střídačky
+  const bh = 22 * s, by = oy - g - bh - 2 * s, gap = 14;
+  for (const [x0, x1, col] of [[bl + 8, cx - gap, '#3a9fff'], [cx + gap, br - 8, '#ff4455']]) {
+    ctx.fillStyle = 'rgba(20,28,44,0.92)'; ctx.fillRect(ox + x0 * s, by, (x1 - x0) * s, bh);
+    ctx.fillStyle = col; ctx.globalAlpha = 0.8; ctx.fillRect(ox + x0 * s, by + bh - 3 * s, (x1 - x0) * s, 3 * s); ctx.globalAlpha = 1;
+  }
+  // sklo: obvod zaobleného obdélníku o g větší, s vynechanou mezerou u střídaček (horní strana mezi bl..br)
+  ctx.strokeStyle = 'rgba(170,215,245,0.85)'; ctx.lineWidth = 2.5 * s; ctx.lineCap = 'round';
+  const R = RINK.cornerR * s + g, X0 = ox - g, Y0 = oy - g, X1 = ox + RINK.w * s + g, Y1 = oy + RINK.h * s + g;
+  ctx.beginPath();
+  ctx.moveTo(ox + br * s, Y0); ctx.lineTo(X1 - R, Y0); ctx.arcTo(X1, Y0, X1, Y0 + R, R);
+  ctx.lineTo(X1, Y1 - R); ctx.arcTo(X1, Y1, X1 - R, Y1, R); ctx.lineTo(X0 + R, Y1); ctx.arcTo(X0, Y1, X0, Y1 - R, R);
+  ctx.lineTo(X0, Y0 + R); ctx.arcTo(X0, Y0, X0 + R, Y0, R); ctx.lineTo(ox + bl * s, Y0);
+  ctx.stroke();
+  ctx.restore();
 }
 
 // D-shaped crease: flat side on goal line, arc points into the ice

@@ -48,8 +48,9 @@ Goalie.prototype._markSave = function (type, dur) { if (rec) rec.onSave(this); r
 function setup(id, seed, home, away, rules = false, long = false) {
   const l = { id, hostId: 'h0', state: 'waiting', settings: sanitizeSettings({ rules, minutes: long ? 15 : 5, periods: long ? 3 : 1 }),
               members: new Map(), matchSeq: seed - 1 };
-  for (let i = 0; i < home; i++) l.members.set('h' + i, makeMember({ name: 'H' + i }, 'home'));
-  for (let i = 0; i < away; i++) l.members.set('a' + i, makeMember({ name: 'A' + i }, 'away'));
+  const addH = () => { for (let i = 0; i < home; i++) l.members.set('h' + i, makeMember({ name: 'H' + i }, 'home')); };
+  const addA = () => { for (let i = 0; i < away; i++) l.members.set('a' + i, makeMember({ name: 'A' + i }, 'away')); };
+  if (process.env.FH_AWAYFIRST) { addA(); addH(); } else { addH(); addA(); }   // diagnostika: pořadí iterace hráčů
   lobbies.set(l.id, l);
   startMatch(l);
   const m = l.match; clearInterval(m.loop);
@@ -80,7 +81,8 @@ function newRec(m) {
 
 // ---- 3v3 boti ----
 function sim3v3(seed, minutes) {
-  const { l, m } = setup('B3_' + seed, seed, 3, 3, true);
+  const N = Number(process.env.FH_TEAM || 2);   // hráčů na tým: 2 = hlavní režim HRÁT/Sólo (od 2026-11-09). FH_TEAM=3 → založený zápas 3v3 (známé: home_away 1.72, těsně nad 1.67)
+  const { l, m } = setup('B3_' + seed, seed, N, N, true);
   botify(l, m);
   const r = rec = newRec(m);
   let ph = 0, pa = 0, liveT = 0, carryT = 0, run = 0, runOwner = null, longest = 0, lastTeam = null, teamChanges = 0, runs = 0, runSum = 0;

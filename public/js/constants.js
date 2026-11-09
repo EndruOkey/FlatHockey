@@ -25,10 +25,10 @@ export const RINK = {
 };
 
 export const PLAYER = {
-  radius: _penv('FH_RADIUS', 6),       // tělo (mírně nad realitou kvůli čitelnosti); 7→6 = menší panáci, víc prázdného ledu na pohled (feel „víc prostoru")
+  radius: _penv('FH_RADIUS', 7),       // tělo (mírně nad realitou kvůli čitelnosti). 2026-11-09: zpět 6→7 — místo menších panáků je režim HRÁT/Sólo 2v2 (chaos_meter: skrumáž 8,9→5,0 %)
   // Srážka hráč–hráč a zastavení hokejky o tělo: podle NAKRESLENÝCH ramen (trup 1.25×radius), jinak se těla
   // na obrazovce překrývala (scripts/body_overlap.mjs: 18 % blízkých dvojic). Braní puku/gólman dál přes radius.
-  bodyRadius: _penv('FH_BODYR', 7.5),  // 8.75→7.5 = míň skrumáží o tělo (feel klidnější), drženo úměrně k menšímu radiusu
+  bodyRadius: _penv('FH_BODYR', 8),    // ≈ ramena (1.25 × radius = 8.75); 8 = nejvíc, co drží stall rubriku (8.75 → stall 93.7 % MIMO, 8 → 73.6 %; scripts/stall_only.mjs)
   speed: _penv('FH_PSPEED', 165),      // 180→165 (−8 %): pomalejší relativní tempo = víc času číst hru (náhrada „bigger rink" pocitu). 165 = změřené bezpečné dno (150 už rozbije stall). DRŽ v souladu s bot.js PLAYER_V (čte stejný FH_PSPEED)
   accel: 140,      // rozjezd — pomalejší, hráč rychlost BUDUJE (víc setrvačnosti, míň frantického svištění
                    // při plném hřišti); top speed zůstává, takže bot pořád obere nosiče (stall guardrail OK)
@@ -65,11 +65,15 @@ export const PUCK = {
   gravity: 580,     // px/s² downward
   gloveHeight: 4,   // z above which glove/blocker applies
   crossbarHeight: 21,  // břevno ~4 ft
+  boardHeight: 16,     // hrana mantinelu (~3 ft, mírně pod realitou 3,5 ft, ať je sklo ve hře); výš = plexisklo / u střídaček ven
 };
 
 // Rychlost přihrávky podle vzdálenosti: doklouzání k cíli + rezerva, ať dorazí ostře. JEDINÉ místo
 // (server.js i match-core.js). Env FH_PASSBASE / FH_PASSMAX jen pro měření v Node (scripts/pass_stride.mjs).
+// Spodní mez 400 px/s: i krátký pas je pro soupeře v dráze nad limitem čistého převzetí (420 × 0,9) → odrazí se mu od hole,
+// adresát ho převezme (limit 560). Audit K9 (dřív 210 → pas na 80 px 376 px/s šel soupeři čistě sebrat).
+const PASS_FLOOR = _penv('FH_PASSFLOOR', 400);
 export function passSpeedFor(dist) {
   const base = _penv('FH_PASSBASE', PUCK.passBase), max = _penv('FH_PASSMAX', PUCK.maxPassSpeed);
-  return Math.max(210, Math.min(max, Math.sqrt(2 * PUCK.decel * dist) + base));
+  return Math.max(PASS_FLOOR, Math.min(max, Math.sqrt(2 * PUCK.decel * dist) + base));
 }

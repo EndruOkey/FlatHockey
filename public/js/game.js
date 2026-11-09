@@ -274,6 +274,8 @@ export class NetGame {
     if (ev & 4)  SFX.iceDrop();        // puk dopadl na led
     if (ev & 8)  SFX.crossbar();       // břevno
     if (ev & 16) SFX.spojnice();       // zadní/boční stěna sítě
+    if (ev & 32) { SFX.glass(); this._glassFx = { x: s.puck.x, y: s.puck.y, t: performance.now() / 1000 }; }   // plexisklo
+    if (ev & 64) { SFX.glass(0.5); this._outFx = { x: s.puck.x, y: s.puck.y, t: performance.now() / 1000 }; }   // přes mantinel ven
 
     const seen = new Set();
     for (const ps of s.players) {
@@ -480,10 +482,72 @@ export class NetGame {
     }
   }
 
+  // UKAZATEL PŘÍJEMCE: držíš puk → kroužek na spoluhráči, komu pas půjde (stejné skóre jako server pickHumanPass:
+  // po směru kurzoru, blíž = lépe; kdo si řekl o pas má přednost). Podržení RMB ≥ 0,15 s = nadzvednutý pas → oblouk.
+  _drawPassAim(ctx, cam) {
+    const me = [...this.players.values()].find(e => e.isMe)?.ent;
+    const rmb = !!this.input?.rmb;
+    const now = performance.now() / 1000;
+    if (rmb && me?.hasPuck) { if (this._rmbAt == null) this._rmbAt = now; } else this._rmbAt = null;
+    this._rmbT = this._rmbAt == null ? 0 : now - this._rmbAt;
+    if (!me || !me.hasPuck) return;
+    let best = null, bestScore = -Infinity, req = null, reqD = Infinity;
+    for (const e of this.players.values()) {
+      const o = e.ent; if (o === me || o.team !== me.team) continue;
+      const dx = o.x - me.x, dy = o.y - me.y, d = Math.hypot(dx, dy);
+      if ((o.passReq || 0) > 0 && d < reqD) { reqD = d; req = o; }
+      const diff = Math.abs(((Math.atan2(dy, dx) - (me.aimAngle || 0) + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+      const score = -diff * 2 - d / 400;
+      if (score > bestScore) { bestScore = score; best = o; }
+    }
+    const tgt = req || best; if (!tgt) return;
+    const s = cam.scale, saucer = this._rmbT >= 0.15;
+    const ax = cam.ox + this.puck.x * s, ay = cam.oy + this.puck.y * s, bx = cam.ox + tgt.x * s, by = cam.oy + tgt.y * s;
+    const col = saucer ? '230,150,0' : '31,79,216';   // vzduchem = jantar, po ledě = modrá štítku TY (kontrast na bílém ledu)
+    ctx.save();
+    ctx.setLineDash([5 * s, 4 * s]); ctx.lineWidth = 1.6 * s; ctx.strokeStyle = `rgba(${col},${rmb ? 0.9 : 0.35})`;
+    ctx.beginPath(); ctx.moveTo(ax, ay);
+    if (saucer) { const L = Math.hypot(bx - ax, by - ay) || 1, k = 0.25; ctx.quadraticCurveTo((ax + bx) / 2 - (by - ay) / L * L * k, (ay + by) / 2 + (bx - ax) / L * L * k, bx, by); }   // oblouk = puk letí vzduchem
+    else ctx.lineTo(bx, by);
+    ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(bx, by, (PLAYER.radius + 6) * s, 0, Math.PI * 2);
+    ctx.lineWidth = 2.2 * s; ctx.strokeStyle = `rgba(${col},0.95)`; ctx.stroke();
+    ctx.restore();
+  }
+
+  // Záblesk plexiskla (ev 32) a puk letící přes mantinel ven (ev 64) — na místě nárazu, u nejbližší stěny
+  _drawGlassFx(ctx, cam) {
+    const now = performance.now() / 1000, s = cam.scale;
+    const near = (x, y) => {   // nejbližší stěna: normála ven + tečna
+      const d = [[y, 0, -1], [RINK.h - y, 0, 1], [x, -1, 0], [RINK.w - x, 1, 0]].sort((a, b) => a[0] - b[0])[0];
+      return { nx: d[1], ny: d[2] };
+    };
+    const G = this._glassFx;
+    if (G && now - G.t < 0.45) {
+      const k = (now - G.t) / 0.45, { nx, ny } = near(G.x, G.y), tx = -ny, ty = nx;
+      const px = cam.ox + (G.x + nx * 4) * s, py = cam.oy + (G.y + ny * 4) * s, L = (18 + 30 * k) * s;
+      ctx.save(); ctx.lineCap = 'round';
+      ctx.strokeStyle = `rgba(230,248,255,${0.95 * (1 - k)})`; ctx.lineWidth = 5 * s * (1 - k * 0.6);
+      ctx.shadowColor = '#bfe8ff'; ctx.shadowBlur = 10 * s;
+      ctx.beginPath(); ctx.moveTo(px - tx * L, py - ty * L); ctx.lineTo(px + tx * L, py + ty * L); ctx.stroke();
+      ctx.restore();
+    }
+    const O = this._outFx;
+    if (O && now - O.t < 0.8) {
+      const k = (now - O.t) / 0.8, { nx, ny } = near(O.x, O.y);
+      const px = cam.ox + (O.x + nx * 40 * k) * s, py = cam.oy + (O.y + ny * 40 * k - 30 * Math.sin(Math.PI * k)) * s;
+      ctx.save(); ctx.globalAlpha = 1 - k;
+      ctx.beginPath(); ctx.arc(px, py, PUCK.radius * s * (1.3 - 0.5 * k), 0, Math.PI * 2); ctx.fillStyle = '#1a1a1a'; ctx.fill();
+      ctx.strokeStyle = 'rgb(230,60,60)'; ctx.lineWidth = 1.8 * s; ctx.stroke();
+      ctx.restore();
+    }
+  }
+
   _draw(ctx, cam) {
     ctx.fillStyle = '#07090f';
     ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     this.rink.draw(ctx, cam);
+    this._drawGlassFx(ctx, cam);
     // Pevné objekty pro clip hokejky (hokejka neprojde hráči/gólmany)
     const solids = [];
     for (const e of this.players.values()) solids.push({ ent: e.ent, x: e.ent.x, y: e.ent.y, r: e.ent.radius });
@@ -491,10 +555,12 @@ export class NetGame {
     solids.push({ ent: this.goalieR, x: this.goalieR.x, y: this.goalieR.y, r: this.goalieR.radius });
     const ents = [...this.players.values()].map(e => e.ent);
     this.puck.draw(ctx, cam);   // puk POD hráči → hokejka se kreslí navrch (puk leží na ledě u čepele)
+    this._drawPassAim(ctx, cam);
     for (const e of this.players.values()) {
       e.ent._solids = solids.filter(so => so.ent !== e.ent);
       e.ent._others = ents;   // kontakt hokejek (Player.draw / stickTip)
       e.ent._isLocal = e.isMe;   // charge arc kreslíme jen vlastnímu hráči (ostatní vidí nápřah hole)
+      e.ent._puckView = this.puck;   // zóna převzetí puku (Player._drawPickupAid)
       e.ent.draw(ctx, cam);
     }
     // Golmani navrchu — stejné pořadí jako solo (world: rink→puk→hráč→golman)
@@ -819,6 +885,7 @@ export class SandboxGame {
     if (ev & 4)  SFX.iceDrop();
     if (ev & 8)  { SFX.crossbar(); this.score.posts++; }
     if (ev & 16) SFX.spojnice();
+    if (ev & 32) SFX.glass();
   }
 
   _setDrill(idx) {
@@ -873,13 +940,11 @@ export class SandboxGame {
       if (!this._chargeDecaying) {
         const cap = (this.local.hasPuck && !this._oneTimer) ? 1 : 0.95;
         this.local.charge = Math.min(cap, this.local.charge + CHARGE_RATE * dt);
-        if (this.local.charge >= 1 && this.local.hasPuck && !this._oneTimer) { this._chargeDecaying = true; this.local.overcharged = true; }
+        if (this.local.charge >= 1 && this.local.hasPuck && !this._oneTimer) { this._chargeDecaying = true; this.local.overcharged = true; this._perfT = 0; }
       } else if (this.local.hasPuck) {
-        this.local.charge = Math.max(0, this.local.charge - CHARGE_RATE * 1.8 * dt);
-        if (this.local.charge <= 0) {
-          this.local.shoot(this.puck, 0.12);
-          this.local.charge = 0; this._chargeDecaying = false; this.local.overcharged = false;
-        }
+        // Okno přesné rány (stejně jako server playerActions); propásneš → puk ujede
+        this._perfT = (this._perfT || 0) + dt;
+        if (this._perfT > 0.3) { this.local.loseBlade(this.puck); this.local.charge = 0; this._chargeDecaying = false; this.local.overcharged = false; this._chargeBlocked = true; }
       } else {
         this._chargeDecaying = false; this.local.overcharged = false;
       }
@@ -891,7 +956,7 @@ export class SandboxGame {
 
     const rmbCancelledCharge = this.input.rmbJustPressed && this.local.hasPuck && this.local.charge > 0;
     if (!_wasBuild && this.input.lmbJustReleased && !rmbCancelledCharge && !_uiClick) {
-      if (this.local.hasPuck && !this._chargeCancelled) this.local.shoot(this.puck, this.local.charge);
+      if (this.local.hasPuck && !this._chargeCancelled) this.local.shoot(this.puck, this.local.charge, !!this.local.overcharged);
       this.local.charge = 0; this._chargeDecaying = false; this.local.overcharged = false;
       this._chargeCancelled = false; this._oneTimer = false;
     }

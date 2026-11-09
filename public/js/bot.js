@@ -41,7 +41,8 @@ const PASS_LEAD   = _env('FH_PLEAD', 1);   // dráhu pasu kontroluj k místu set
 const GAP         = _env('FH_GAP', 120);
 const ATTACK_V    = _env('FH_ATTV', 60);   // px/s — rychlost nosiče směrem k naší brance, od které jde o nájezd
 const SECOND_COVER = _env('FH_COVER', 1);   // 1 = druhý bot kryje prostor před brankou místo druhého tlaku na puk
-const DIAG        = 0.38;         // práh pro diagonálu (8 směrů jako WASD)
+const CARRY_TURN  = _env('FH_CTURN', 0.4);   // rad za think (10×/s) — max otočení míření s pukem; 0 = vypnuto
+const DIAG        = 0.38;        // práh pro diagonálu (8 směrů jako WASD)
 
 // Malý seedovaný PRNG (mulberry32) — deterministický, bez Math.random
 function mulberry32(seed) {
@@ -179,6 +180,9 @@ function nearestOpp(p, match, x, y) {
 
 export function botThink(p, inp, match) {
   const b = p.brain;
+  // Zrcadlová ruka: domácí bot pravák, hostující levák → obě strany útočí se stejnou geometrií forehandu vůči brance.
+  // Dřív server dal všem handed = 1 → strukturální výhoda domácích (120 zápasů 2v2: góly 5,02 vs 2,52).
+  if (!b.handSet) { p.handed = p.team === 'away' ? -1 : 1; b.handSet = true; }
   inp.rmb = false;                        // RMB = jen jednotikový impuls (pas); jinak by bez puku dělal crossCheck
   // Nápřah běží → drž LMB, puštěním (hrana) server vystřelí
   if (b.hold > 0) {
@@ -353,6 +357,13 @@ export function botThink(p, inp, match) {
   inp.dy = m > 6 && Math.abs(my) / m > DIAG ? Math.sign(my) : 0;
   inp.lmb = false;
   inp.aim = Math.atan2(ay - p.y, ax - p.x);
+  // S pukem otáčej holí plynule: skok míření (honič→nosič míří najednou jinam) roztočil hůl nad práh
+  // „anti-helikoptéry" a puk bot sám ztratil (chaos_meter: 16 % konců držení = sklouznutí). Člověk myší točí plynule.
+  if (p.hasPuck && CARRY_TURN > 0 && b.lastAim != null) {
+    let d = inp.aim - b.lastAim; d = Math.atan2(Math.sin(d), Math.cos(d));
+    if (Math.abs(d) > CARRY_TURN) inp.aim = b.lastAim + Math.sign(d) * CARRY_TURN;
+  }
+  b.lastAim = inp.aim;
   inp.aimDist = Math.max(40, Math.hypot(ax - p.x, ay - p.y));
   // CRUISE podle režimu: útočná podpora, rozehra s pukem a čekání = pod kontrolou (klid, prostor).
   // OBRANA (chase/gap/defend) zůstává PLNÁ rychlost — zasahovat do ní rozbíjí stall/steal guardrail
