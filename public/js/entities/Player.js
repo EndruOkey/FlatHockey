@@ -624,7 +624,7 @@ function _renderPlayer(ctx, p, cam) {
   if (p.crossCheck) {
     ctx.lineCap = 'round';
     const baseDir   = p._stickDisp;            // dojíždí k bodyAngle (před tělem)
-    const stickDir  = baseDir + Math.PI / 2;
+    const stickDir  = baseDir + (p.handed ?? 1) * Math.PI / 2;   // čepel na straně DOLNÍ ruky (pravák vpravo, levák vlevo)
     const sDirCos   = Math.cos(stickDir);
     const sDirSin   = Math.sin(stickDir);
     const halfLen   = PLAYER.stickLen * s * 0.7 * PLAYER.stickDraw; // kratší při crosschecku (+ vizuální zkrácení)
@@ -656,7 +656,7 @@ function _renderPlayer(ctx, p, cam) {
     ctx.stroke();
 
     // Blade bezier at blade end (same curve as normal stick)
-    const bladeAngle = Math.PI / 6.5;
+    const bladeAngle = -(p.handed ?? 1) * Math.PI / 6.5;   // prohnutí dovnitř (jako normální hůl)
     const bladeL     = 12 * s * PLAYER.stickDraw;
     const bEndX  = bladeX + Math.cos(stickDir + bladeAngle) * bladeL;
     const bEndY  = bladeY + Math.sin(stickDir + bladeAngle) * bladeL;
@@ -1060,7 +1060,7 @@ function _renderPlayer(ctx, p, cam) {
     let topH, botH, hTop = r * 0.30, hBot = r * 0.26;
     if (p.crossCheck) {
       const baseDir  = p._stickDisp;
-      const stickDir = baseDir + Math.PI / 2;
+      const stickDir = baseDir + (p.handed ?? 1) * Math.PI / 2;
       const sc = Math.cos(stickDir), ss = Math.sin(stickDir);
       const half = PLAYER.stickLen * 0.7;
       const cxW = p.x + Math.cos(baseDir) * (PLAYER.radius + 2);

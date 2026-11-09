@@ -626,7 +626,8 @@ export class Goalie {
     this._saveFlash = dur;
     this._saveFlashMax = dur;
     this._saveRecoil = 0.15;
-    this._saveRecoilX = this.rng.next() < 0.5 ? -1 : 1;  // alternating recoil
+    this.rng.next();          // zachovej spotřebu rng (sekvence simulace beze změny)
+    this._saveRecoilX = 1;    // vizuál: tělo odskočí VŽDY od puku (+X lokálně), ne náhodně
   }
 
   _release(world) {
@@ -703,12 +704,14 @@ export class Goalie {
     // Po scale(-inX, 1) se Y NEFLIPUJE, takže musíme stranu explicitně korigovat.
     //   Pravý golman (inX=-1) čelí vlevo → levá ruka = +Y (spodek obrazovky)
     //   Levý golman  (inX=+1) čelí vpravo → levá ruka = -Y (vršek obrazovky)
-    const gY = -this.inX * 7.5 * s;   // Y pozice lapačky (catch glove = levá ruka)
-    const bkY =  this.inX * 7.5 * s;  // Y pozice vyrážečky (blocker = pravá ruka)
+    // 2026-11-09: lapačka tam, kde gólman CHYTÁ (sim: vysoká rána s relY ≤ 0 = horní polovina, oba gólmani —
+    // zrcadlově jako zrcadlení botů). Dřív pravému gólmanovi lapačka dole → chytil nahoře, rozsvítila se dole.
+    const gY = -7.5 * s;   // lapačka nahoře (obrazovka)
+    const bkY = 7.5 * s;   // vyrážečka dole
 
     // ── PAŽE (za tělem, vedou k lapačce a vyrážečce) ──
-    _gArm(ctx, s, bx - r * 0.45, -this.inX * r * 0.3,  -5.5 * s, gY);
-    _gArm(ctx, s, bx - r * 0.45,  this.inX * r * 0.3,  -5.5 * s, bkY);
+    _gArm(ctx, s, bx - r * 0.45, -r * 0.3,  -5.5 * s, gY);
+    _gArm(ctx, s, bx - r * 0.45,  r * 0.3,  -5.5 * s, bkY);
 
     // ── TĚLO — stejný kruh jako hráč ──
     ctx.beginPath();
