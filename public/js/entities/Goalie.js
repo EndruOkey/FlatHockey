@@ -749,7 +749,7 @@ export class Goalie {
 
     // ── HOLDING INDICATOR (mimo lokální transform, ve screen coords) ──
     if (holding) {
-      const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 130);
+      const pulse = 0.5 + 0.5 * Math.sin(((cam && cam.t != null) ? cam.t * 1000 : 0) / 130);
       ctx.beginPath();
       ctx.ellipse(sx, sy, r + 8 * s, r + 6 * s, this._tilt, 0, Math.PI * 2);
       ctx.strokeStyle = `rgba(100,200,255,${0.35 + 0.25 * pulse})`;
@@ -783,7 +783,7 @@ export class Goalie {
       const gxEntrance = gxGoalLine + this.inX * RINK.goalDepth * s;
       const gxL = Math.min(gxGoalLine, gxEntrance);
       const gW  = Math.abs(gxEntrance - gxGoalLine);
-      const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 1100);
+      const pulse = 0.5 + 0.5 * Math.sin(((cam && cam.t != null) ? cam.t * 1000 : 0) / 1100);
 
       ctx.save();
 

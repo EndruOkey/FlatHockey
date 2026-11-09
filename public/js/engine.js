@@ -52,6 +52,8 @@ export class Engine {
     this.onTick?.(sdt, cam);
     this._world.update(sdt);
     this.onAfterTick?.(sdt, cam);
+    // HODINY VYKRESLOVÁNÍ: animace čtou cam.dt / cam.t (ne Date.now) → stejná sekvence snímků = stejný obraz
+    this._rt = (this._rt || 0) + dt; cam.dt = dt; cam.t = this._rt;
     this._world.draw(ctx, cam);
     this.onDraw?.(ctx, cam);
 
