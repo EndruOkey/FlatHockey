@@ -33,6 +33,9 @@ export const STANCE_COVER = {
 };
 const FAKE_T = _genv('FH_FAKET', 1.0), FAKE_LAG = _genv('FH_FAKELAG', 0.2), FAKE_SCREEN = _genv('FH_FAKESCR', 1);   // scripts/shot_mech_test.mjs SM_HOLD=20: finta→gól 3/12 vs 0/12   // s zamrznutí po fintě; násobek rychlosti sledování puku
 
+// Střed brankáře nejblíž POST_IN px od tyčky: kreslené tělo má ±11,5 px → přes tyčku přesáhne jen beton (~3 px), ne půlka těla (2026-11-12)
+const POST_IN = (typeof process !== 'undefined' && process.env?.FH_POSTIN != null) ? +process.env.FH_POSTIN : 8.5;
+
 export class Goalie {
   rng = defaultRng;
   constructor(side = 'right', difficulty = 'casual') {
@@ -197,7 +200,7 @@ export class Goalie {
     const denomRaw  = netX - px;
     const denomSafe = Math.sign(denomRaw || -this.inX) * Math.max(Math.abs(denomRaw), 30);
     const s         = clamp((targetX - px) / denomSafe, -0.15, 1.05);
-    const margin    = COVER_H * 0.45;
+    const margin    = Math.max(COVER_H * 0.45, POST_IN);
     let targetY = py + s * (netY - py) + bite * threat;
     // Y tracking: 60% vždy — sleduje úhel přiměřeně i z dálky
     targetY = netY + (targetY - netY) * (0.60 + 0.40 * threat);
@@ -235,7 +238,7 @@ export class Goalie {
     this._errY = ((this._errY ?? 0) + (errRaw - (this._errY ?? 0)) * Math.min(1, 0.9 * dt));
     // Chyba zrcadlí stranu puku (jinak by časový šum posouval gólmana jedním směrem → asymetrie nahoře/dole)
     const errSide = clamp(dyN / 10, -1, 1);
-    targetY    = clamp(targetY + this._errY * errSide, RINK.goalY + margin * 0.35, RINK.goalY + RINK.goalH - margin * 0.35);
+    targetY    = clamp(targetY + this._errY * errSide, RINK.goalY + POST_IN, RINK.goalY + RINK.goalH - POST_IN);   // tělo uvnitř ústí (dřív margin × 0,35 = 2,2 px → půlka těla za tyčkou)
 
     // ── Wraparound: hráč s pukem za brankou ─────────────────────────────
     // Reálný golman sleduje pohyb hráče podél brankové čáry (neskočí na fixní tyčku)
@@ -256,7 +259,7 @@ export class Goalie {
         // Maximální přitlačení k tyčce — žádná mezírka
         const wrapBias = this.difficulty === 'competitive' ? 0.99 : 0.96;
         targetY = netY + (wrapY - netY) * wrapBias;
-        targetY = clamp(targetY, RINK.goalY + 1, RINK.goalY + RINK.goalH - 1);
+        targetY = clamp(targetY, RINK.goalY + POST_IN, RINK.goalY + RINK.goalH - POST_IN);   // opřený o tyčku zevnitř
         wrapOverride = true;
       }
     }

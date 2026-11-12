@@ -30,7 +30,7 @@ function _resolveCorners(puck) {
 
 const GLASS_K = 0.85;          // sklo pruží o kus míň než mantinel
 // Odraz přes branku = skill shot (scripts/overnet_skill.mjs): jen tvrdá, zvednutá rána přímo za síť. Exportováno kvůli sweepu.
-export const OVERNET = { minV: 300, minZ: 0.5, band: 15, land: 70 };   // 2026-11-12: dřív 220/±60 → vyšla i odbytá rána (39 %), teď 18 %, dobrá 100 %   // px/s, px výška u skla, px pás kolem ústí (± goalH/2 + band), px dopad před čarou
+export const OVERNET = { minV: 300, minZ: 4, maxZ: 10, band: 8, land: 70 };   // v2: sklo jen ve výšce 4–10 px (sweet spot = vzdálenost × síla), dobrá rána 50 %, odbytá 4,7 %   // 2026-11-12: dřív 220/±60 → vyšla i odbytá rána (39 %), teď 18 %, dobrá 100 %   // px/s, px výška u skla, px pás kolem ústí (± goalH/2 + band), px dopad před čarou
 
 export class Puck {
   rng = defaultRng;
@@ -230,7 +230,7 @@ export class Puck {
       wallHit();
       // Odraz přes branku: zadní sklo přímo za sítí (± goalH/2 + OVERNET.band), tvrdá rána → oblouk nad sítí, dopad ~OVERNET_LAND px před brankou
       const gy = RINK.goalY + RINK.goalH / 2;
-      if (this.z > OVERNET.minZ && vin >= OVERNET.minV && Math.abs(this.y - gy) < RINK.goalH / 2 + OVERNET.band) {   // zvednutá tvrdá rána (ne po ledě)
+      if (this.z > OVERNET.minZ && this.z < OVERNET.maxZ && vin >= OVERNET.minV && Math.abs(this.y - gy) < RINK.goalH / 2 + OVERNET.band) {   // zvednutá tvrdá rána (ne po ledě)
         const v = Math.abs(this.vx), d = RINK.goalLineLeft + OVERNET.land;   // zeď → brankovou čáru (90) + kus před ni
         const t = d / Math.max(120, v);
         this.vz = PUCK.gravity * t / 2 - this.z / t;                          // dopad přesně v čase t z aktuální výšky

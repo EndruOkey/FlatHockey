@@ -33,7 +33,8 @@ function evaluate() {
   const S1 = rate(() => true), S2 = rate(s => s.a === 0 && s.c >= 0.8 && Math.abs(s.dy) <= 25), S3 = rate(s => s.c <= 0.6 || Math.abs(s.dy) === 50);
   let low = 0; for (const bx of BX) for (const dy of [-25, 0, 25]) if (fly(bx, GY + dy, 0, 380, 0, 1.5).some(s => s.over)) low++;
   const ang = shots.filter(s => s.over && s.a !== 0 && s.ly != null), steer = ang.length ? ang.filter(s => Math.sign(s.ly) === Math.sign(s.a)).length / ang.length : 1;
-  const pass = [S1 >= 0.10 && S1 <= 0.35, S2 >= 0.70, S3 <= 0.20, low === 0 && steer >= 0.9];
+  // 2026-11-12 v2 (Ondřej: „nemůže to být tak easy“) — přísnější pásma stanovená PŘED během sweepu se sweet spotem výšky
+  const pass = [S1 >= 0.05 && S1 <= 0.15, S2 >= 0.40 && S2 <= 0.75, S3 <= 0.05, low === 0 && steer >= 0.9];
   return { S1, S2, S3, low, steer, pts: pass.filter(Boolean).length, pass };
 }
 const pct = x => (x * 100).toFixed(1).padStart(5) + ' %';
@@ -41,14 +42,15 @@ const line = (r, cfg) => `${cfg}  S1 ${pct(r.S1)}  S2 ${pct(r.S2)}  S3 ${pct(r.S
 
 if (process.argv.includes('--sweep')) {
   const res = [];
-  for (const minV of [220, 300, 340, 380, 410]) for (const minZ of [0.5, 4, 8, 12]) for (const band of [60, 30, 15, 0]) {
-    Object.assign(OVERNET, { minV, minZ, band }); const r = evaluate(); res.push({ cfg: { minV, minZ, band }, r });
+  for (const minV of [300, 340, 380]) for (const minZ of [0.5, 4, 6, 8, 10]) for (const zw of [3, 4, 6, 99]) for (const band of [15, 8, 0]) {
+    const maxZ = minZ + zw; Object.assign(OVERNET, { minV, minZ, maxZ, band }); const r = evaluate(); res.push({ cfg: { minV, minZ, maxZ, band }, r });
   }
-  res.sort((a, b) => b.r.pts - a.r.pts || b.r.S2 - a.r.S2 || Math.abs(a.r.S1 - 0.22) - Math.abs(b.r.S1 - 0.22) || a.cfg.minV - b.cfg.minV || a.cfg.minZ - b.cfg.minZ || b.cfg.band - a.cfg.band);
-  for (const { cfg, r } of res.slice(0, 12)) console.log(line(r, `minV ${String(cfg.minV).padStart(3)} minZ ${String(cfg.minZ).padStart(4)} pás ${String(cfg.band).padStart(2)}`));
+  // pořadí: body, pak S2 nejblíž 0,55 (střed pásma), pak S1 nejblíž 0,10, pak menší změna od nasazených hodnot
+  res.sort((a, b) => b.r.pts - a.r.pts || Math.abs(a.r.S2 - 0.55) - Math.abs(b.r.S2 - 0.55) || Math.abs(a.r.S1 - 0.10) - Math.abs(b.r.S1 - 0.10) || a.cfg.minV - b.cfg.minV || b.cfg.band - a.cfg.band || a.cfg.minZ - b.cfg.minZ);
+  for (const { cfg, r } of res.slice(0, 10)) console.log(line(r, `minV ${String(cfg.minV).padStart(3)} z ${String(cfg.minZ).padStart(4)}–${String(cfg.maxZ).padStart(5)} pás ${String(cfg.band).padStart(2)}`));
 } else {
   const r = evaluate();
-  console.log(line(r, `minV ${OVERNET.minV} minZ ${OVERNET.minZ} pás ${OVERNET.band}`));
-  console.log(['S1 celkem 10–35 %', 'S2 dobrá rána ≥ 70 %', 'S3 odbytá ≤ 20 %', 'S4 po ledě 0 a řízení ≥ 90 %'].map((n, i) => (r.pass[i] ? 'ANO ' : 'NE  ') + n).join('\n'));
+  console.log(line(r, `minV ${OVERNET.minV} z ${OVERNET.minZ}–${OVERNET.maxZ} pás ${OVERNET.band}`));
+  console.log(['S1 celkem 5–15 %', 'S2 dobrá rána 40–75 %', 'S3 odbytá ≤ 5 %', 'S4 po ledě 0 a řízení ≥ 90 %'].map((n, i) => (r.pass[i] ? 'ANO ' : 'NE  ') + n).join('\n'));
   process.exit(r.pts === 4 ? 0 : 1);
 }
