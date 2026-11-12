@@ -10,7 +10,7 @@ const { __test } = await import('../server.js');
 const { makeBotBrain, hashSeed } = await import('../public/js/bot.js');
 const { lobbies, startMatch, stepMatch, makeMember, sanitizeSettings } = __test;
 const GY = RINK.goalY + RINK.goalH / 2, HALF = RINK.goalH / 2, DT = 1 / 60;
-const A = { bodyOut: 0, n: 0, outMouth: 0, inNet: 0, farOut: 0, rev: 0, jumps: 0, flips: 0, live: 0, maxOut: 0, maxDepth: 0 };
+const A = { dekeN: 0, dekeOk: 0, dekeFlip: 0, bodyOut: 0, n: 0, outMouth: 0, inNet: 0, farOut: 0, rev: 0, jumps: 0, flips: 0, live: 0, maxOut: 0, maxDepth: 0 };
 const SEEDS = +(ARG.seeds || 6);
 // Nakreslený obrys brankáře (px od středu, změřeno po pixelech ze skinGoalie, 2026-11-12): up/down/front
 const SIL = { stand: [12.7, 12.3, 13.4], butterfly: [17.5, 17.4, 12.9], 'rvh+': [11.5, 18.1, 11.9], 'rvh-': [18.2, 11.4, 11.9], 'stretch+': [9, 25, 11.9], 'stretch-': [25.1, 8.9, 11.9], cover: [17.5, 21.7, 13.9] };
@@ -55,6 +55,10 @@ for (let s = 1; s <= SEEDS; s++) {
       const vy = g.y - pv.y; if (Math.abs(vy) > 0.15 && Math.abs(pv.vy) > 0.15 && Math.sign(vy) !== Math.sign(pv.vy)) A.rev++;
       if (Math.hypot(g.x - pv.x, g.y - pv.y) > 6) A.jumps++;
       if (g.stance !== pv.st) A.flips++;
+      { const inX2 = g.side === 'left' ? 1 : -1; const c = [...m.players.values()].find(p => p.hasPuck && p.team !== g.team);
+        if (c && (c.x - lineX) * inX2 > 0 && Math.hypot(c.x - g.x, c.y - g.y) < 90 && Math.abs(c.vy || 0) > 90) {   // klička zblízka
+          A.dekeN++; if (g.stance === 'stretch' || g.stance === 'butterfly') A.dekeOk++; if (g.stance !== pv.st) { if ((pv.st === 'stretch' || pv.st === 'butterfly') && g.stance === 'stand') A.dekeFlip++;   // cuknutí = opuštění rozkleku (vstup je správná reakce)
+            const k = pv.st + '>' + g.stance; (A.tr ||= {})[k] = (A.tr[k] || 0) + 1; } } }
     }
   }
   lobbies.delete(l.id);
@@ -63,7 +67,10 @@ const sec = A.n * DT, R = {
   body_out_pct: 100 * A.bodyOut / A.n, out_mouth_pct: 100 * A.outMouth / A.n, max_out_px: A.maxOut, in_net_pct: 100 * A.inNet / A.n, far_out_pct: 100 * A.farOut / A.n, max_depth_px: A.maxDepth,
   jitter_rev_s: A.rev / sec, jumps: A.jumps, stance_flips_s: A.flips / sec,
 };
+// deke_flips_s = opuštění rozkleku/motýlku do stoje za s kličky (opraveno 2026-11-12: dřív počítalo i vstup do rozkleku)
+R.deke_split_pct = 100 * A.dekeOk / Math.max(1, A.dekeN); R.deke_flips_s = A.dekeFlip / Math.max(1e-9, A.dekeN * DT); R.deke_s = A.dekeN * DT;
 R.phantom_save_pct = 100 * S.phantom / Math.max(1, S.saves); R.phantom_med_px = S.phantomPx.sort((a, b) => a - b)[S.phantomPx.length >> 1] || 0; R.ghost_goal_pct = 100 * S.ghost / Math.max(1, S.goals); R.saves = S.saves; R.goals = S.goals;
-const RUB = { phantom_save_pct: 10, ghost_goal_pct: 10, body_out_pct: 1, out_mouth_pct: 5, in_net_pct: 1, far_out_pct: 3, jitter_rev_s: 1.5, jumps: 0, stance_flips_s: 1.2 };
-for (const [k, v] of Object.entries(R)) console.log(`${(k in RUB ? (v <= RUB[k] ? 'OK  ' : 'NE  ') : 'info')} ${k.padEnd(16)} ${v.toFixed(2).padStart(8)}${k in RUB ? `  (≤ ${RUB[k]})` : ''}`);
+const RUB = { deke_split_pct: -70, deke_flips_s: 2, phantom_save_pct: 10, ghost_goal_pct: 10, body_out_pct: 1, out_mouth_pct: 5, in_net_pct: 1, far_out_pct: 3, jitter_rev_s: 1.5, jumps: 0, stance_flips_s: 1.2 };
+for (const [k, v] of Object.entries(R)) console.log(`${(k in RUB ? ((RUB[k] < 0 ? v >= -RUB[k] : v <= RUB[k]) ? 'OK  ' : 'NE  ') : 'info')} ${k.padEnd(16)} ${v.toFixed(2).padStart(8)}${k in RUB ? (RUB[k] < 0 ? `  (≥ ${-RUB[k]})` : `  (≤ ${RUB[k]})`) : ''}`);
+if (process.env.GP_TR) console.log(JSON.stringify(A.tr));
 process.exit(0);

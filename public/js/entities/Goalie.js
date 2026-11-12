@@ -40,6 +40,8 @@ const FAKE_T = FAKE_D + FAKE_W + FAKE_R, FAKE_LAG = _genv('FH_FAKELAG', 0.2), FA
 // Odraz a rozehrání (2026-11-12, scripts/chain_save.mjs + chain_restart.mjs): RB_X/RB_Y poloha puku po zákroku, RB_U0/U1 boční úhel odrazu (°)
 // střed→kraj, RB_MIN min. rychlost ven, RB_NOGRAB s bez přikrytí; G_COV px krytí spoluhráče, G_DUMP px/s odložení puku
 const RB_X = _genv('FH_RBX', 15), RB_Y = _genv('FH_RBY', 0.8), RB_U0 = _genv('FH_RBU0', 5), RB_U1 = _genv('FH_RBU1', 50), RB_MIN = _genv('FH_RBMIN', 60), RB_NOGRAB = _genv('FH_RBNG', 0.15);
+const DEKE_D = _genv('FH_DEKED', 90), DEKE_V = _genv('FH_DEKEV', 90);   // klička: vzdálenost nosiče a rychlost napříč pro rozklek
+const LOW_COVER_V = _genv('FH_LCV', 420), LOW_COVER_Y = _genv('FH_LCY', 8);   // sweep: chyceno 25 → 39/48 %   // přízemní puk do těla → přikrytí
 const RB_CAP = _genv('FH_RBCAP', 150);   // sweep 2026-11-12: U 5–50°, strop 150 → nebezpečné odrazy 16/19 %, dorážka 3,3/1,8 %
 const G_COV = _genv('FH_GCOV', 50), G_DUMP = _genv('FH_GDUMP', 130);
 
@@ -513,6 +515,13 @@ export class Goalie {
         if (low && Math.abs(off) > STRETCH_OFF) { want = 'stretch'; side = off >= 0 ? 1 : -1; }
         else if (low) want = 'butterfly';
       }
+    } else if (carrier && carrier.team !== this.team && front && rawDist < DEKE_D) {
+      // KLIČKA zblízka (2026-11-12): nosič jede rychle napříč → rozklek s vedoucím betonem ve směru kličky; pomalý blízko → motýlek
+      const vyC = carrier.vy || 0;
+      const inSplit = this.stance === 'stretch' || this.stance === 'butterfly';
+      if (Math.abs(vyC) > DEKE_V) { want = 'stretch'; side = vyC >= 0 ? 1 : -1; if (this.stance === 'stretch' && this._stanceT < 0.25) side = this._side; }
+      else if (inSplit && (Math.abs(vyC) > DEKE_V * 0.55 || this._stanceT < 0.25)) { want = this.stance; side = this._side; }   // hystereze: necukej kolem prahu
+      else if (rawDist < DEKE_D * 0.6) want = 'butterfly';
     } else if (free && front && Math.hypot(puck.x - this.x, puck.y - this.y) < 40 && Math.hypot(puck.vx, puck.vy) < 140) want = 'butterfly';   // skrumáž: zavři led
     if (want === this.stance) { if (want === 'rvh') this._side = side; return; }
     const committed = this._stanceT < (STANCE_MIN[this.stance] ?? 0);
@@ -662,6 +671,14 @@ export class Goalie {
       return true;
     }
 
+    // Přízemní pomalejší puk přímo do těla → přikryje (dřív se puk po ledě nikdy nepodržel: chyceno jen 25 %, chain_save)
+    if (!high && Math.hypot(puck.vx, puck.vy) < LOW_COVER_V && Math.abs(relY) < LOW_COVER_Y) {
+      this._holdTimer = GSTANCE ? 1.1 : 0.7;
+      this._heldPuck  = puck;
+      this._markSave('cover', 0.4);
+      puck.vx = 0; puck.vy = 0; puck.vz = 0; puck.z = 0;
+      return true;
+    }
     // Zákrok = fyzikální odraz od padu + rozehrávka na spoluhráče
     puck.x  = this.x + this.inX * RB_X;            // odraz od místa zásahu (dřív +15 px a y × 0,35 → puk přeskočil o ~7 px)
     puck.y  = this.y + relY * RB_Y;

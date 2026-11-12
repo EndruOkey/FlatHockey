@@ -85,7 +85,7 @@ function run(size) {
           const hp = e.type === 'glove' ? H.glove : H.block; R.handDist.push(Math.abs(hp[1] - iy));   // svisle (shora je to osa, podle které oko čte stranu)
         }
         if (e.type === 'pads') { R.lowN++; if (high) R.hiPads++; }
-        if (e.type === 'glove') { R.caught++; continue; }
+        if (e.type === 'glove' || e.type === 'cover') { R.caught++; continue; }   // cover = přízemní puk přikrytý přímo ze zákroku
         R.defl++;
         const v = e.post, ang = Math.atan2(v.vy, v.vx * g.inX) * 180 / Math.PI, sp = Math.hypot(v.vx, v.vy);
         R.ang.push(Math.abs(ang)); R.spd.push(sp); R.snap.push(Math.abs(v.y - iy)); R.off.push(Math.abs(iy - g.y));
