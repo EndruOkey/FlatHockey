@@ -1,3 +1,4 @@
+import { VIS, HGT, hScale } from '../vis.js';
 import { RINK, PUCK, PLAYER } from '../constants.js';
 import { defaultRng } from '../rng.js';
 
@@ -278,6 +279,34 @@ export class Puck {
 
   // at = vizuální poloha (nesený puk kreslí hráč přímo na své čepeli → Player._renderPlayer). Bez at: nesený puk
   // se tady přeskočí (kreslí ho nosič), volný puk se kreslí normálně.
+  // KRESBA VÝŠKY SHORA (vis.js HGT, 2026-11-12): puk zůstává na své poloze (kamera kolmo shora), výška = zvětšení + stín
+  // odsunutý vpravo dolů; tvrdá rána = šmouha za pukem úměrná rychlosti (letí rovně, ne obloukem nahoru jako lob).
+  _drawTop(ctx, cam, sx, sy, r, tcol) {
+    const s = cam.scale, { ox, oy } = cam, z = Math.max(0, this.z), bar = PUCK.crossbarHeight;
+    const k = hScale(z, bar), rr = r * k, shx = sx + z * HGT.lx * s, shy = sy + z * HGT.ly * s;
+    const v = Math.hypot(this.vx, this.vy);
+    // stopa po ledě (polohy, ne výška) — jemná
+    const tr = this._trail || (this._trail = []);
+    tr.push({ x: this.x, y: this.y }); if (tr.length > 14) tr.shift();
+    for (let i = 0; i < tr.length - 1; i++) { const p = tr[i], f = i / tr.length;
+      ctx.beginPath(); ctx.arc(ox + p.x * s, oy + p.y * s, r * (0.35 + 0.65 * f), 0, Math.PI * 2); ctx.fillStyle = _alpha(tcol, f * 0.12); ctx.fill(); }
+    // stín (ve výšce dál od puku, větší a světlejší)
+    ctx.beginPath(); ctx.ellipse(z > 0.5 ? shx : sx + 1.5 * s * 0.5, z > 0.5 ? shy : sy + 1.2 * s, r * (0.95 + z / 60), r * (0.6 + z / 90), 0, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(10,20,40,${z > 0.5 ? Math.max(0.16, 0.38 - z / 80) : 0.35})`; ctx.fill();
+    // šmouha rychlosti: od 260 px/s, délka ~ dráha za 45 ms, zužuje se dozadu
+    if (v > 260) { const L = Math.min(40, v * 0.045) * s, ux = this.vx / v, uy = this.vy / v, a = Math.min(0.55, (v - 260) / 300);
+      const g = ctx.createLinearGradient(sx, sy, sx - ux * L, sy - uy * L); g.addColorStop(0, `rgba(20,24,32,${a})`); g.addColorStop(1, 'rgba(20,24,32,0)');
+      ctx.beginPath(); ctx.moveTo(sx + uy * rr * 0.9, sy - ux * rr * 0.9); ctx.lineTo(sx - ux * L, sy - uy * L); ctx.lineTo(sx - uy * rr * 0.9, sy + ux * rr * 0.9); ctx.closePath();
+      ctx.fillStyle = g; ctx.fill(); }
+    // spojnice stín → puk (čte výšku) + kroužek v barvě výšky vůči brance
+    const hc = z > bar ? '230,60,60' : z > PUCK.gloveHeight ? '235,160,20' : '120,130,145';
+    if (z > 0.5) { ctx.beginPath(); ctx.moveTo(shx, shy); ctx.lineTo(sx, sy); ctx.strokeStyle = `rgba(${hc},0.55)`; ctx.lineWidth = 1 * s; ctx.stroke(); }
+    ctx.beginPath(); ctx.arc(sx, sy, rr, 0, Math.PI * 2); ctx.fillStyle = '#1a1a1a'; ctx.fill();
+    ctx.strokeStyle = z > 0.5 ? `rgb(${hc})` : '#555'; ctx.lineWidth = (z > 0.5 ? 1.6 : 1) * s; ctx.stroke();
+    // lesk navrch (objem)
+    ctx.beginPath(); ctx.arc(sx - rr * 0.3, sy - rr * 0.3, rr * 0.35, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fill();
+  }
+
   draw(ctx, cam, at = null) {
     const s    = cam.scale;
     const { ox, oy } = cam;
@@ -290,6 +319,7 @@ export class Puck {
     const elev = this.z * s;
     const tcol = this.trailColor || '#9aa3b2';   // barva stopy/overlaye (dle hráče, jinak default šedá)
 
+    if (VIS.p) return this._drawTop(ctx, cam, sx, sy, r, tcol);
     // Trail — větší a širší, ale jemná (méně výrazná)
     const tr = this._trail || (this._trail = []);
     tr.push({ x: this.x, y: this.y, z: this.z });

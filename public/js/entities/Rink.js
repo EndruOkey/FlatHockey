@@ -1,4 +1,4 @@
-import { VIS } from '../vis.js';
+import { VIS, HGT } from '../vis.js';
 import { RINK, PUCK } from '../constants.js';
 import { SKIN_OUT } from './skin.js';
 
@@ -199,7 +199,7 @@ function _drawGoal(ctx, cam, glx, dir, postColor) {
   const x = ox + glx * s, xB = x + dir * RINK.goalDepth * s;
   const y1 = oy + RINK.goalY * s, y2 = oy + (RINK.goalY + RINK.goalH) * s;
   if (VIS.g === 1) return _drawGoalTop(ctx, s, x, xB, y1, y2, dir, postColor);
-  if (VIS.g === 3 || VIS.g === 4) return _drawGoalPersp(ctx, s, x, xB, y1, y2, dir, postColor, VIS.g === 4 ? 1.45 : 1.25);
+  if (VIS.g === 3 || VIS.g === 4) return _drawGoalPersp(ctx, s, x, xB, y1, y2, dir, postColor, VIS.g === 4 ? 1.45 : 1 + HGT.k, PUCK.crossbarHeight * s);
   const H = PUCK.crossbarHeight * s * (VIS.g === 2 ? 0.35 : 1), HB = H * 0.55;
   const poly = (pts, fill, stroke, lw) => { ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (const q of pts.slice(1)) ctx.lineTo(q[0], q[1]); ctx.closePath();
     if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.stroke(); } };
@@ -259,7 +259,7 @@ function _drawGoalTop(ctx, s, x, xB, y1, y2, dir, postColor) {
 }
 // G3/G4 „top-down s hloubkou" (2026-11-12): kamera kolmo NAD brankou → vyšší body se zobrazí dál od středu branky
 // (perspektiva, žádný posun nahoru jako u šikmé projekce). kH = zvětšení v úrovni břevna; zadní horní hrana sítě je níž (× 0.55 výšky).
-function _drawGoalPersp(ctx, s, x, xB, y1, y2, dir, postColor, kH) {
+function _drawGoalPersp(ctx, s, x, xB, y1, y2, dir, postColor, kH, Hs) {
   const cx = (x + xB) / 2, cy = (y1 + y2) / 2;
   const P = (px, py, zr) => { const k = 1 + (kH - 1) * zr; return [cx + (px - cx) * k, cy + (py - cy) * k]; };   // zr = výška / břevno
   const F1 = [x, y1], F2 = [x, y2], B1 = [xB, y1], B2 = [xB, y2];
@@ -272,8 +272,12 @@ function _drawGoalPersp(ctx, s, x, xB, y1, y2, dir, postColor, kH) {
     ctx.stroke();
   };
   ctx.save(); ctx.lineJoin = ctx.lineCap = 'round';
-  // stín na ledu (půdorys, světlo vlevo nahoře)
-  ctx.fillStyle = 'rgba(20,40,70,0.18)'; ctx.fill(path([[F1[0] + 2 * s, F1[1] + 2 * s], [B1[0] + 2 * s, B1[1] + 2 * s], [B2[0] + 2 * s, B2[1] + 2 * s], [F2[0] + 2 * s, F2[1] + 2 * s]]));
+  // stín na ledu: půdorys ∪ horní rám posunutý o výšku × směr světla (HGT, stejně jako stín puku) — jedna cesta = bez dvojité tmy
+  const sh = new Path2D(), off = (q, h) => [q[0] + h * HGT.lx, q[1] + h * HGT.ly], Hb = Hs * 0.55;
+  const ring = pts => { sh.moveTo(pts[0][0], pts[0][1]); for (const v of pts.slice(1)) sh.lineTo(v[0], v[1]); sh.closePath(); };
+  ring([F1, B1, B2, F2]); ring([off(F1, Hs), off(B1, Hb), off(B2, Hb), off(F2, Hs)]);
+  ring([F1, off(F1, Hs), off(F2, Hs), F2]); ring([B1, off(B1, Hb), off(B2, Hb), B2]); ring([F1, off(F1, Hs), off(B1, Hb), B1]); ring([F2, off(F2, Hs), off(B2, Hb), B2]);
+  ctx.fillStyle = 'rgba(20,40,70,0.16)'; ctx.fill(sh, 'nonzero');
   // podlaha sítě (led uvnitř) o tón tmavší = hloubka
   ctx.fillStyle = 'rgba(150,175,200,0.35)'; ctx.fill(path([F1, B1, B2, F2]));
   // stěny sítě: zadní, boční (lichoběžníky mezi ledem a horním rámem)
