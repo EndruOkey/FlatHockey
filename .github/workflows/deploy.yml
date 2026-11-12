@@ -36,6 +36,7 @@ jobs:
       - run: npm run test:dev
       - run: npm run test:steer
       - run: npm run test:goalzone
+      - run: npm run test:kick
 
   deploy:
     needs: test

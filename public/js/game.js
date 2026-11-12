@@ -268,7 +268,7 @@ export class NetGame {
     const msg = {
       dx: this.input.dx, dy: this.input.dy, an: !!this.input.steer,
       space: !!this.input.keys['Space'],
-      lmb: this.input.lmb, rmb: this.input.rmb, mmb: this.input.mmb,
+      lmb: this.input.lmb, rmb: this.input.rmb, mmb: this.input.mmb, kq: !!this.input.kq || performance.now() < (this.input._kqT || 0),   // ťuknutí Q drž ≥ 60 ms, ať ho server nepropásne
       aim, aimDist,
     };
     if (this.offline) { this._lastMsg = msg; }   // vstup spotřebuje _localStep (žádná síť)
@@ -277,7 +277,7 @@ export class NetGame {
       // (strop 150/s) zbytek sekundy ZAHODIL → ztracené klávesy/střely, hráč „lítal" (scripts/play_probe.mjs).
       // Změna tlačítka/směru odejde hned, ať se žádný stisk neztratí.
       const now = performance.now(), last = this._sent;
-      const changed = !last || last.space !== msg.space || last.lmb !== msg.lmb || last.rmb !== msg.rmb || last.mmb !== msg.mmb || last.dx !== msg.dx || last.dy !== msg.dy;
+      const changed = !last || last.space !== msg.space || last.lmb !== msg.lmb || last.rmb !== msg.rmb || last.mmb !== msg.mmb || last.kq !== msg.kq || last.dx !== msg.dx || last.dy !== msg.dy;
       if (changed || now - (this._sentAt || 0) >= 16) { msg.sq = this._seq = (this._seq || 0) + 1; this.net.input(msg); this._sent = msg; this._sentAt = now; }
       // Historie predikce s pořadím posledního odeslaného vstupu (1 s) — server vrací sq zpracovaného vstupu
       if (me && !this.locked) { const H = this._predHist || (this._predHist = []);
@@ -1002,6 +1002,8 @@ export class SandboxGame {
       _updateAim(this.local, Math.atan2(ady, adx), dt);
     }
 
+    if (!_wasBuild && this.input.kqJustPressed) this.local.trySkateKick(this.puck);   // Q: přikopnutí puku do jízdy (stejně jako match-core)
+    this.local._puckView = this.puck;
     if (this.input.lmbJustPressed && !_uiClick) { this._chargeCancelled = false; this._oneTimer = !this.local.hasPuck; }
     if (!this.input.lmb) this._chargeBlocked = false;
     if (_wasBuild) { this._chargeBlocked = true; this._chargeCancelled = true; }

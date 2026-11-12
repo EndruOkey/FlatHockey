@@ -24,10 +24,10 @@ export const ms2ticks = ms => Math.round(ms * TICK_HZ / 1000);   // herní časo
 // ── Vstupy ───────────────────────────────────────────────────────────────
 export function makeInput() {
   return {
-    dx: 0, dy: 0, lmb: false, rmb: false, mmb: false,
+    dx: 0, dy: 0, lmb: false, rmb: false, mmb: false, kq: false,
     aim: 0, aimDist: 100, keys: { Space: false },
-    lmbJustPressed: false, lmbJustReleased: false, rmbJustPressed: false, mmbJustPressed: false,
-    _p: { lmb: false, rmb: false, mmb: false }, // předchozí stav pro hrany
+    lmbJustPressed: false, lmbJustReleased: false, rmbJustPressed: false, mmbJustPressed: false, kqJustPressed: false,
+    _p: { lmb: false, rmb: false, mmb: false, kq: false }, // předchozí stav pro hrany
   };
 }
 const dir1 = v => (v > 0 ? 1 : v < 0 ? -1 : 0);
@@ -38,7 +38,7 @@ export function applyClientInput(inp, msg, analog = false) {
   if (analog && msg.an && Number.isFinite(l) && l > 0.01) { inp.dx = msg.dx / Math.max(1, l); inp.dy = msg.dy / Math.max(1, l); }
   else { inp.dx = dir1(msg.dx); inp.dy = dir1(msg.dy); }
   inp.keys.Space = !!msg.space;
-  inp.lmb = !!msg.lmb; inp.rmb = !!msg.rmb; inp.mmb = !!msg.mmb;
+  inp.lmb = !!msg.lmb; inp.rmb = !!msg.rmb; inp.mmb = !!msg.mmb; inp.kq = !!msg.kq;   // kq = Q: přikopnutí puku do jízdy
   if (Number.isFinite(msg.aim))     inp.aim     = msg.aim;
   if (Number.isFinite(msg.aimDist)) inp.aimDist = clamp(msg.aimDist, 0, 4000);
   if (Number.isInteger(msg.sq)) inp._sq = msg.sq;   // pořadí vstupu → klient reconciluje přesně (ne odhadem)
@@ -48,7 +48,8 @@ export function computeEdges(inp) {
   inp.lmbJustReleased = !inp.lmb && inp._p.lmb;
   inp.rmbJustPressed  = inp.rmb && !inp._p.rmb;
   inp.mmbJustPressed  = inp.mmb && !inp._p.mmb;
-  inp._p.lmb = inp.lmb; inp._p.rmb = inp.rmb; inp._p.mmb = inp.mmb;
+  inp.kqJustPressed   = !!inp.kq && !inp._p.kq;
+  inp._p.lmb = inp.lmb; inp._p.rmb = inp.rmb; inp._p.mmb = inp.mmb; inp._p.kq = !!inp.kq;
 }
 
 // ── Akce hráče (charge/střela/přihrávka/aim) ───────────────────────────────
@@ -137,6 +138,7 @@ export function playerActions(p, inp, dt, match) {
   }
 
   if (inp.mmbJustPressed && !p.hasPuck) p.passReq = 0.9;
+  if (inp.kqJustPressed) p.trySkateKick(match.puck);   // Q: přikopnutí / zpracování puku bruslí do jízdy
 }
 
 // Nadzvednutý pas: pomalejší, dopadne ~SAUCER_LAND dráhy před příjemce a dojede mu na hůl.

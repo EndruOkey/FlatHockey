@@ -24,9 +24,7 @@ export class Input {
     window.addEventListener('keydown', e => {
       if (e.code === 'Tab') e.preventDefault();
       this.keys[e.code] = true;
-      if (e.code === 'KeyQ' && !e.repeat && globalThis.FH_DEV) { this.mode = this.mode === 'A' ? 'R1' : this.mode === 'R1' ? 'B2' : 'A'; this.modeToggled = true; this.steer = null;
-        try { localStorage.setItem('fh_ctrl', this.mode); } catch {}
-        ctrlToast(this.mode, this.online); window.dispatchEvent(new CustomEvent('fh-ctrl-shown', { detail: this.mode })); }
+      if (e.code === 'KeyQ' && !e.repeat) { this.kq = true; this.kqJustPressed = true; this._kqT = performance.now() + 60; }   // Q = přikopnutí puku do jízdy (dev přepínač ovládání je jen v panelu)
       // E = žádost o přihrávku (stejně jako MMB)
       if (e.code === 'KeyE' && !e.repeat) { this._mmbKey = true; this.mmb = true; this.mmbJustPressed = true; }
       // F = pravé tlačítko (zrušení nápřahu / přihrávka) — záloha pro prohlížeče, které si pravé tlačítko berou pro gesta
@@ -35,6 +33,7 @@ export class Input {
     window.addEventListener('keyup', e => {
       this.keys[e.code] = false;
       if (e.code === 'KeyE') { this._mmbKey = false; this.mmb = !!this._mmbBtn; }
+      if (e.code === 'KeyQ') this.kq = false;
       if (e.code === 'KeyF') { this._rmbKey = false; if (!this._rmbPtr && !this._rmbBtn) this.rmb = false; }
     });
 
@@ -114,6 +113,7 @@ export class Input {
     this.rmbJustPressed  = false;
     this.mmbJustPressed  = false;
     this.modeToggled     = false;
+    this.kqJustPressed   = false;
   }
 }
 

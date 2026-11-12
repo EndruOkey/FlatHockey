@@ -74,7 +74,7 @@ const DICT = {
     peer_left: 'Hráč se odpojil',
     new_host: 'Jsi teď host lobby',
     // Nápověda
-    hint: 'WASD bruslení · Myš míří + vzdálenost = vysunutí hole · LMB střela · RMB / F přihrávka, zrušení nápřahu · E / MMB žádost o nahrávku · Space brzda · Esc menu',
+    hint: 'WASD bruslení · Myš míří + vzdálenost = vysunutí hole · LMB střela · RMB / F přihrávka, zrušení nápřahu · Q přikopnutí puku do jízdy · E / MMB žádost o nahrávku · Space brzda · Esc menu',
     // Ve hře
     covering: 'KRYJE',
     offside: 'OFFSIDE',
@@ -264,7 +264,7 @@ const DICT = {
     resume: 'RESUME',
     disconnect: 'DISCONNECT — BACK TO MENU',
     opp_left: 'OPPONENT DISCONNECTED',
-    hint: 'WASD skate · Mouse aims + distance = stick reach · LMB shoot · RMB / F pass, cancel wind-up · E / MMB request pass · Space brake · Esc menu',
+    hint: 'WASD skate · Mouse aims + distance = stick reach · LMB shoot · RMB / F pass, cancel wind-up · Q kick puck into stride · E / MMB request pass · Space brake · Esc menu',
     covering: 'COVER',
     offside: 'OFFSIDE',
     icing: 'ICING',

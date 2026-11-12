@@ -150,6 +150,32 @@ export class PlayerBase {
     return true;
   }
 
+  // ── PŘIKOPNUTÍ (Q, 2026-11-12): volný puk na ledě do KICK_R px od těla, blížící se → zpracuješ bruslí a jedeš dál,
+  // i když je rychlý (hokejkou čistě jen do 420 px/s). Mimo okno: KICK_CD s nic. Čerstvou ránu soupeře nejde (jako hokejkou).
+  kickWindow(puck) {
+    if (this.hasPuck || !puck || puck.isAirborne || puck.z > 1.5 || puck.faceoffTimer > 0) return -1;
+    if (puck._carrier && puck._carrier.hasPuck) return -1;
+    if (puck._shot && puck._shot.team !== this.team && (puck._shotAge ?? 9) < SHOT_EAT_T) return -1;
+    const dx = puck.x - this.x, dy = puck.y - this.y, d = Math.hypot(dx, dy);
+    const closing = -((puck.vx - this.vx) * dx + (puck.vy - this.vy) * dy) / (d || 1);   // rychlost přibližování (px/s)
+    if (d <= KICK_R && (closing > -KICK_PASS || d < 12)) return 1;   // v okně (i puk, který tě právě minul — brusle za puk)
+    if (d <= KICK_SOON && closing > 60) return 0;             // okno se blíží (nápověda)
+    return -1;
+  }
+  trySkateKick(puck) {
+    if ((this._kickCd || 0) > 0) return false;
+    const w = this.kickWindow(puck);
+    if (w === 0) { this._kickQ = KICK_BUF; return false; }   // o chvilku dřív: stisk podržíme, než puk do okna dojede
+    if (w !== 1) { this._kickCd = KICK_CD; return false; }
+    return this._doKick(puck);
+  }
+  _doKick(puck) {
+    this._kickQ = 0;
+    puck._passTo = null; this._grabPuck(); puck._carrier = this;
+    this._kickFx = 0.35; this._kickN = (this._kickN || 0) + 1;
+    return true;
+  }
+
   _grabPuck() {
     if (!this.hasPuck) this._possT = 0;   // čerstvé převzetí → běží ochrana (PLAYER.stealGrace)
     this.hasPuck    = true;
@@ -516,6 +542,9 @@ export class Player extends PlayerBase {
     if (this.hasPuck) this._possT = (this._possT ?? 0) + dt;
     if (this._shieldT > 0) this._shieldT -= dt;
     if (this._shootCooldown > 0) this._shootCooldown -= dt;
+    if (this._kickCd > 0) this._kickCd -= dt;
+    if (this._kickQ > 0) { this._kickQ -= dt; const pk = world?.puck; if (pk && this.kickWindow(pk) === 1) this._doKick(pk); else if (this._kickQ <= 0) this._kickCd = KICK_CD; }
+    if (this._kickFx > 0) this._kickFx -= dt;
     if (this._passCooldown  > 0) this._passCooldown  -= dt;
     if (this._deflectCool   > 0) this._deflectCool   -= dt;
     // Hůl relativně k tělu (kužel) + forehand dle handedness
@@ -575,7 +604,8 @@ const _rt  = cam => (cam && cam.t != null ? cam.t : 0);
 // Deterministická „náhoda“ pro efekty: hash (id, n, i) → 0..1
 const _hrand = (id, n, i) => { let h = 2166136261 ^ n; const str = String(id); for (let k = 0; k < str.length; k++) h = Math.imul(h ^ str.charCodeAt(k), 16777619); h = Math.imul(h ^ (i * 374761393), 668265263); h ^= h >>> 13; h = Math.imul(h, 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
 // Hokejka — varianty kresby (vis.js): out = obrys dříku, sh = dřík, bl = čepel, blo = obrys čepele (× s), knob = koncovka, hi = odlesk, sh2 = stín na ledu
-const SHOT_EAT_T = 0.25, SHOT_EAT_V = 300, SHOT_NOPICK = 0.1;   // s, px/s — viz canPickup (čerstvá rána soupeře)
+const SHOT_EAT_T = 0.25, SHOT_EAT_V = 300, SHOT_NOPICK = 0.1;
+const KICK_R = 26, KICK_SOON = 70, KICK_CD = 0.4, KICK_BUF = 0.15, KICK_PASS = 260;   // + podržení stisku (s), puk po průjezdu (px/s od tebe)   // přikopnutí (Q): okno px od těla, nápověda od px, zámek po minutí (s)   // s, px/s — viz canPickup (čerstvá rána soupeře)
 let _brakeSfxAt = -1e9;   // globální omezovač zvuku brzdy cizích hráčů (jen kresba/zvuk, ne simulace)
 const STICK_V = [
   { out: 4.8, sh: 2.8, bl: 2.8, blo: 4.8 },
@@ -1065,6 +1095,17 @@ function _renderPlayer(ctx, p, cam) {
   }
 
   if (p._isLocal) _drawPickupAid(ctx, p, cam);
+  if (p._isLocal && p._puckView) {   // nápověda přikopnutí (Q): odznak u puku, zelený v okně
+    const w = p.kickWindow(p._puckView);
+    if (w >= 0) { const s = cam.scale, P = p._puckView, x = cam.ox + P.x * s, y = cam.oy + (P.y - 9) * s, on = w === 1;
+      ctx.save(); ctx.font = `800 ${6.5 * s}px 'Segoe UI', sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.beginPath(); ctx.roundRect(x - 4.2 * s, y - 4.2 * s, 8.4 * s, 8.4 * s, 2 * s);
+      ctx.fillStyle = on ? 'rgba(60,200,110,0.95)' : 'rgba(20,30,50,0.75)'; ctx.fill(); ctx.strokeStyle = on ? '#e9fff1' : 'rgba(255,255,255,0.7)'; ctx.lineWidth = 0.8 * s; ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.fillText('Q', x, y + 0.3 * s); ctx.restore(); }
+  }
+  if (p._kickFx > 0) {   // úspěšné přikopnutí: krátký záblesk u brusle
+    const s = cam.scale, a = p._kickFx / 0.35; ctx.save(); ctx.beginPath(); ctx.arc(cam.ox + p.x * s, cam.oy + p.y * s, (PLAYER.radius + 4 + 6 * (1 - a)) * s, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(60,200,110,${a})`; ctx.lineWidth = 2 * s * a; ctx.stroke(); ctx.restore(); }
 
   // Charge arc — jen vlastní hráč (ostatní vidí nabíjení jako nápřah hole, ne ukazatel)
   if (p.charge > 0.05 && p._isLocal) {
