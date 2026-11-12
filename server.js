@@ -22,7 +22,7 @@ import { updateStats, updateRankAndCredits, getRankPosition, getLeaderboard, get
 
 import { World } from './public/js/world.js';
 import { Player } from './public/js/entities/Player.js';
-import { _detectFx } from './public/js/match-core.js';
+import { _detectFx, createMatch as coreCreateMatch, stepMatch, makeInput, applyClientInput, computeEdges, playerActions, rebuildEntities, faceoffAt, faceoff, pendingFlags, ms2ticks } from './public/js/match-core.js';
 import { weekRuleFor, weekBonus } from './public/js/weekly.js';   // hlášky (kombo/skill) — sdílený detektor
 import { Puck } from './public/js/entities/Puck.js';
 import { Goalie } from './public/js/entities/Goalie.js';
@@ -137,343 +137,29 @@ const TICK_HZ = 60;
 const SNAP_HZ = 30;            // 30 snapshotů/s (klient plynule interpoluje v game.js _interp) — 60/s
                               // zahlcovalo slabší/kolísavá připojení = trhání „jak internet"; 30 je odolnější a půlí provoz
 const DT = 1 / TICK_HZ;
-const ms2ticks = ms => Math.round(ms * TICK_HZ / 1000);   // herní časovače v ticích, ne ve wall-clocku (determinismus)
 const MAX_PLAYERS = 10;        // strop hráčů v lobby (5v5)
 
-function makeInput() {
-  return {
-    dx: 0, dy: 0, lmb: false, rmb: false, mmb: false,
-    aim: 0, aimDist: 100, keys: { Space: false },
-    lmbJustPressed: false, lmbJustReleased: false, rmbJustPressed: false, mmbJustPressed: false,
-    _p: { lmb: false, rmb: false, mmb: false }, // předchozí stav pro hrany
-  };
-}
 
 // Aplikuj přijatý stav vstupu na input objekt + spočítej hrany.
 // Vše je tvrdě validované: směr jen -1/0/1, úhly/vzdálenosti musí být konečné číslo
 // (jinak by NaN/Infinity „otrávil" celou simulaci → NaN pozice pro všechny).
-const dir1 = v => (v > 0 ? 1 : v < 0 ? -1 : 0);
-function applyClientInput(inp, msg) {
-  if (!msg || typeof msg !== 'object') return;
-  inp.dx = dir1(msg.dx); inp.dy = dir1(msg.dy);
-  inp.keys.Space = !!msg.space;
-  inp.lmb = !!msg.lmb; inp.rmb = !!msg.rmb; inp.mmb = !!msg.mmb;
-  if (Number.isFinite(msg.aim))     inp.aim     = msg.aim;
-  if (Number.isFinite(msg.aimDist)) inp.aimDist = clamp(msg.aimDist, 0, 4000);
-  if (Number.isInteger(msg.sq)) inp._sq = msg.sq;   // pořadí vstupu → klient reconciluje přesně (ne odhadem)
-}
 
-function computeEdges(inp) {
-  inp.lmbJustPressed  = inp.lmb && !inp._p.lmb;
-  inp.lmbJustReleased = !inp.lmb && inp._p.lmb;
-  inp.rmbJustPressed  = inp.rmb && !inp._p.rmb;
-  inp.mmbJustPressed  = inp.mmb && !inp._p.mmb;
-  inp._p.lmb = inp.lmb; inp._p.rmb = inp.rmb; inp._p.mmb = inp.mmb;
-}
 
-function _updateAim(p, rawAim, dt) {
-  const d = p.aimDist ?? 100;
-  const rate = clamp(d / 35, 0.12, 1) * 28;
-  p.aimAngle = lerpAngle(p.aimAngle, rawAim, Math.min(1, rate * dt));
-}
 
-const LEAD_K = (typeof process !== 'undefined' && process.env.FH_LEADK) ? Number(process.env.FH_LEADK) : 0.78;  // 0.78: pas do stride (scripts/pass_stride.mjs: offset −13→−6 px) při převzetí ~92 % (pass_test). Drž v souladu s match-core.js.
-function leadAim(from, target, speed) {
-  // Přihrávka DO JÍZDY: místo setkání = kde bude čepel příjemce, až tam puk (zpomalující o PUCK.decel) dojede.
-  // Dřív: tlumené 0.6 × lineární čas bez zpomalení → puk chodil za hráče („na paty“). 3 iterace stačí.
-  const tip = target;   // míří na střed těla příjemce (změřeno: čepel dávala jen 25–33 %)
-  const a = PUCK.decel;
-  let tx = tip.x, ty = tip.y;
-  for (let i = 0; i < 3; i++) {
-    const d = Math.hypot(tx - from.x, ty - from.y) || 1;
-    const disc = speed * speed - 2 * a * d;
-    const t = disc > 0 ? (speed - Math.sqrt(disc)) / a : speed / a;   // doba letu se zpomalením
-    tx = tip.x + (target.vx || 0) * t * LEAD_K; ty = tip.y + (target.vy || 0) * t * LEAD_K;
-  }
-  return Math.atan2(ty - from.y, tx - from.x);
-}
 
-// Výběr příjemce lidské nahrávky: kdo si řekl (passReq) má přednost; jinak nejlíp ve SMĚRU kurzoru
-// (aby šlo zacílit konkrétního spoluhráče/bota), s preferencí bližšího. Boty i lidi jsou kandidáti.
-function pickHumanPass(p, match) {
-  let best = null, bestScore = -Infinity, reqBest = null, reqD = Infinity;
-  for (const o of match.players.values()) {
-    if (o === p || o.team !== p.team) continue;
-    const dx = o.x - p.x, dy = o.y - p.y, d = Math.hypot(dx, dy);
-    if ((o.passReq || 0) > 0 && d < reqD) { reqD = d; reqBest = o; }
-    const ang = Math.atan2(dy, dx);
-    const diff = Math.abs(((ang - (p.aimAngle || 0) + Math.PI * 3) % (Math.PI * 2)) - Math.PI);  // 0..π
-    const score = -diff * 2 - d / 400;   // po směru kurzoru a blíž = lepší
-    if (score > bestScore) { bestScore = score; best = o; }
-  }
-  return reqBest || best;
-}
+// Vstup, akce hráče, přihrávky, buly a pravidla (icing/offside) jsou ve sdíleném public/js/match-core.js.
 
-function nearestTeammate(p, match) {
-  let best = null, bd = Infinity;
-  for (const o of match.players.values()) {
-    if (o === p || o.team !== p.team) continue;
-    const d = Math.hypot(o.x - p.x, o.y - p.y);
-    if (d < bd) { bd = d; best = o; }
-  }
-  return best;
-}
-
-// Autoritativní akce hráče (charge/střela/přihrávka/aim) — z game._tick
-function playerActions(p, inp, dt, match) {
-  p.aimDist = inp.aimDist;
-  _updateAim(p, inp.aim, dt);
-
-  if (inp.lmbJustPressed) { p._chargeCancelled = false; p._oneTimer = !p.hasPuck; }
-  if (!inp.lmb) p._chargeBlocked = false;
-
-  if (inp.rmb && !p.hasPuck && p.charge > 0) {
-    p.charge = 0; p._chargeDecaying = false; p.overcharged = false; p._oneTimer = false;
-  }
-
-  if (inp.lmb && !p._chargeBlocked && !(inp.rmb && !p.hasPuck)) {
-    if (!p._chargeDecaying) {
-      const cap = (p.hasPuck && !p._oneTimer) ? 1 : 0.95;
-      p.charge = Math.min(cap, p.charge + CHARGE_RATE * dt);
-      if (p.charge >= 1 && p.hasPuck && !p._oneTimer) { p._chargeDecaying = true; p.overcharged = true; p._perfT = 0; }
-    } else if (p.hasPuck) {
-      // PLNÉ NABITÍ (2026-11-09): okno PERFECT_WIN s na PŘESNOU ránu (bez rozptylu). Propásneš → puk z čepele
-      // ujede (ztráta), žádná slabá rána sama od sebe. charge zůstává 1 → klient pozná okno ze snapshotu (ch).
-      p._perfT = (p._perfT || 0) + dt;
-      if (p._perfT > PERFECT_WIN) { p.loseBlade(match.puck); p.charge = 0; p._chargeDecaying = false; p.overcharged = false; p._chargeBlocked = true; }
-    } else { p._chargeDecaying = false; p.overcharged = false; }
-  }
-
-  const rmbCancelledCharge = inp.rmbJustPressed && p.hasPuck && p.charge > 0;
-  if (inp.lmbJustReleased && !rmbCancelledCharge) {
-    if (p.hasPuck && !p._chargeCancelled) p.shoot(match.puck, p.charge, !!p.overcharged);   // overcharged = v okně přesné rány
-    p.charge = 0; p._chargeDecaying = false; p.overcharged = false; p._chargeCancelled = false; p._oneTimer = false;
-  }
-
-  // PŘIHRÁVKA (2026-11-09): ŤUKNUTÍ RMB (< SAUCER_HOLD s) = rychlý pas po ledě; PODRŽENÍ = nadzvednutý pas
-  // přes hole (puk letí vzduchem → nejde zachytit ani obrat, je pomalejší). Pas odejde při PUŠTĚNÍ RMB.
-  // Bot přihrává hned po ledě (jednotikový impuls) — beze změny balancu.
-  if (inp.rmbJustPressed && p.hasPuck) {
-    if (p.charge > 0.08) { p.charge = 0; p._chargeDecaying = false; p.overcharged = false; p._chargeBlocked = true; p._chargeCancelled = true; }
-    else if (p.isBot) doPass(p, match, false);
-    else p._rmbHold = 1e-6;
-  }
-  if (p._rmbHold > 0) {
-    if (!p.hasPuck || p.charge > 0.08) p._rmbHold = 0;
-    else if (inp.rmb) p._rmbHold += dt;
-    else { const saucer = p._rmbHold >= SAUCER_HOLD; p._rmbHold = 0; doPass(p, match, saucer); }
-  }
-
-  if (inp.mmbJustPressed && !p.hasPuck) p.passReq = 0.9;
-}
-
-// Nadzvednutý pas: pomalejší, dopadne ~SAUCER_LAND dráhy před příjemce a dojede mu na hůl.
-const SAUCER_HOLD = 0.15, SAUCER_SPEED = 270, SAUCER_LAND = 0.85, SAUCER_MIN = 60;
-function doPass(p, match, saucer) {
-  let tgt = null;
-  if (p.isBot && p._passTarget) {
-    const cand = match.players.get(p._passTarget);
-    if (cand && cand !== p && cand.team === p.team) tgt = cand;
-  } else if (!p.isBot) {
-    tgt = pickHumanPass(p, match);
-  }
-  if (!tgt) tgt = nearestTeammate(p, match);
-  p._passTarget = null;
-  if (!tgt) return;
-  p.charge = 0;
-  const tip = p.stickTip;
-  const dist = Math.hypot(tgt.x - tip.x, tgt.y - tip.y);
-  if (saucer && dist >= SAUCER_MIN) {
-    const sp = SAUCER_SPEED, ang = leadAim(tip, tgt, sp);
-    p.pass(match.puck, ang, sp);
-    const t = SAUCER_LAND * dist / sp;                              // doba letu do dopadu (ve vzduchu skoro bez tření)
-    match.puck.vz = Math.min(150, PUCK.gravity * t / 2);           // vrchol ≤ ~19 px (pod břevnem)
-    match.puck.z = 2;                                               // hned ve vzduchu (isAirborne > 1.5)
-    match.puck._saucer = true;
-  } else {
-    const sp = passSpeedFor(dist);
-    p.pass(match.puck, leadAim(tip, tgt, sp), sp);
-  }
-  if (typeof process === 'undefined' || process.env.FH_NOADDR !== '1') { match.puck._passTo = tgt.id; match.puck._passT = 1.2 + (saucer ? 0.5 : 0); }   // adresát má větší zónu převzetí
-}
-
-function rebuildEntities(match) {
-  match.world.entities = [match.rink, ...match.players.values(), match.goalieL, match.goalieR, match.puck];
-}
-
-// Buly body v pásmech (stejné jako kreslí Rink.js: FO_X 248, FO_Y 114)
-const FO_X = 248, FO_Y = 114;
-function faceoffAt(match, fx, fy) {
-  for (const g of [match.goalieL, match.goalieR]) if (g) { g._holdTimer = 0; g._heldPuck = null; g._froze = false; }
-  // Realistické rozestavení na buly: centr přímo na bodě, křídla po stranách, obránci vzadu.
-  // Každý tým stojí na své OBRANNÉ straně bodu (home brání vlevo, away vpravo), čelem k bodu.
-  const home = [], away = [];
-  for (const p of match.players.values()) (p.team === 'home' ? home : away).push(p);
-  // [vzdálenost ZA bodem (k vlastní brance), odchylka do strany] relativně k buly bodu
-  const SPOTS = [
-    [16,   0],   // centr — na buly bodě
-    [26, -54],   // křídlo
-    [26,  54],   // křídlo
-    [86, -34],   // obránce
-    [86,  34],   // obránce
-  ];
-  const place = (arr, dir) => {   // dir: home = +1 (útočí vpravo), away = -1
-    arr.forEach((p, i) => {
-      const spot = SPOTS[Math.min(i, SPOTS.length - 1)];
-      const back = spot[0] + (i >= SPOTS.length ? (i - SPOTS.length + 1) * 26 : 0);
-      const sideMul = i >= SPOTS.length ? ((i % 2) ? 1 : -1) : 1;
-      p.x = clamp(fx - dir * back, 16, RINK.w - 16);
-      p.y = clamp(fy + spot[1] * sideMul, 24, RINK.h - 24);
-      p.vx = p.vy = 0; p.hasPuck = false; p.charge = 0;
-      p._chargeDecaying = false; p._oneTimer = false;
-      const fa = Math.atan2(fy - p.y, fx - p.x);   // čelem k buly bodu
-      p.bodyAngle = p.skateAngle = p.aimAngle = p.carryAngle = fa;
-    });
-  };
-  place(home, 1);
-  place(away, -1);
-  match.puck.reset();
-  match.puck.x = fx; match.puck.y = fy; match.puck.prevX = fx; match.puck.prevY = fy;
-  match.lastTouch = null; match.touchX = fx;
-  match.icing = null; match.offside = null; match._goalAt = 0; match.stoppage = false; match._whistleAt = 0;
-  // "Set" — lehká prodleva při vhazování: vše zmrazené, hráči čelem k puku, pak živé
-  match.setup = true;
-  match.faceoffUntil = match.tick + ms2ticks(900);
-  match.world._goalLock = true;
-}
-function faceoff(match) { faceoffAt(match, RINK.centerX, RINK.h / 2); }
-
-// ── Pravidla: icing + offside ──────────────────────────────────────────
-function anyInZone(match, team, pred) {
-  for (const p of match.players.values()) if (p.team === team && pred(p)) return true;
-  return false;
-}
-function callStoppage(match, rule, lineX, fx, fy) {
-  match.stoppage = true;
-  match._whistleAt = match.tick;
-  match._faceoff = { x: fx, y: fy };
-  match.world._goalLock = true;              // zmraz interakce (jako u gólu)
-  match.puck.vx = match.puck.vy = 0;
-  io.to(match.room).emit('whistle', { rule, lineX, color: rule === 'offside' ? '#2a6bff' : '#ff3344' });
-}
-function checkRules(match) {
-  const pk = match.puck, px = pk.x, ppx = pk.prevX ?? pk.x, cx = RINK.centerX;
-  const gy1 = RINK.goalY, gy2 = RINK.goalY + RINK.goalH;
-  const inMouthY = pk.y > gy1 && pk.y < gy2;
-  const dotY = pk.y < RINK.h / 2 ? 114 : RINK.h - 114;
-
-  // OFFSIDE — útočník v útočném pásmu dřív než puk (home útočí vpravo, away vlevo).
-  // Píšťalka NEhned: puk necháme dojet (jako icing), zmrazíme jen interakce.
-  if (match.lastTouch === 'home' && ppx < RINK.blueLineRight && px >= RINK.blueLineRight &&
-      anyInZone(match, 'home', p => p.x > RINK.blueLineRight + 8)) {
-    match.offside = { side: 'home', lineX: RINK.blueLineRight, fx: RINK.blueLineRight - 30, fy: dotY, t: match.tick };
-    match.world._goalLock = true; return;
-  }
-  if (match.lastTouch === 'away' && ppx > RINK.blueLineLeft && px <= RINK.blueLineLeft &&
-      anyInZone(match, 'away', p => p.x < RINK.blueLineLeft - 8)) {
-    match.offside = { side: 'away', lineX: RINK.blueLineLeft, fx: RINK.blueLineLeft + 30, fy: dotY, t: match.tick };
-    match.world._goalLock = true; return;
-  }
-
-  // ICING — vyhození zpoza půlky přes soupeřovu brankovou čáru (mimo branku), bez dotyku.
-  // Píšťalka NEhned: puk necháme dojet (physics běží), zmrazíme jen interakce.
-  if (match.lastTouch === 'home' && match.touchX < cx && ppx < RINK.goalLineRight && px >= RINK.goalLineRight && !inMouthY) {
-    match.icing = { side: 'home', lineX: RINK.goalLineRight, fx: 248, fy: dotY, t: match.tick };
-    match.world._goalLock = true; return;     // buly v obr. pásmu home (vlevo)
-  }
-  if (match.lastTouch === 'away' && match.touchX > cx && ppx > RINK.goalLineLeft && px <= RINK.goalLineLeft && !inMouthY) {
-    match.icing = { side: 'away', lineX: RINK.goalLineLeft, fx: RINK.w - 248, fy: dotY, t: match.tick };
-    match.world._goalLock = true; return;     // buly v obr. pásmu away (vpravo)
-  }
-}
-
-// Předběžné varování (pulsující čára) — offside pozice / icing v běhu. Bitmask:
-// 1=offside pravá modrá, 2=offside levá modrá, 4=icing pravá brank. čára, 8=icing levá
-function pendingFlags(match) {
-  if (!match.rules || match.stoppage) return 0;
-  const cx = RINK.centerX, pk = match.puck;
-  let f = 0;
-  // OFFSIDE — během dojezdu drž čáru zvýrazněnou, jinak předběžné varování
-  if (match.offside) {
-    f |= (match.offside.side === 'home' ? 1 : 2);
-  } else if (!match.world._goalLock) {
-    if (pk.x <= RINK.blueLineRight && anyInZone(match, 'home', p => p.x > RINK.blueLineRight + 4)) f |= 1;
-    if (pk.x >= RINK.blueLineLeft  && anyInZone(match, 'away', p => p.x < RINK.blueLineLeft - 4))  f |= 2;
-  }
-  if (match.icing) {
-    f |= (match.icing.side === 'home' ? 4 : 8);
-  } else if (!match.world._goalLock) {
-    if (match.lastTouch === 'home' && match.touchX < cx && pk.x > cx && pk.vx > 30 && pk.x < RINK.goalLineRight) f |= 4;
-    if (match.lastTouch === 'away' && match.touchX > cx && pk.x < cx && pk.vx < -30 && pk.x > RINK.goalLineLeft) f |= 8;
-  }
-  return f;
-}
-
+// Zápas = SDÍLENÁ simulace match-core (createMatch/stepMatch) + serverové háčky (síť, DB). Dřív server měl vlastní kopii simulace
+// (rozjížděla se s offline hrou: oprava jen v jednom souboru). scripts/chain_restart.mjs, test/determinism.test.mjs.
 function createMatch(lobbyId, seed) {
-  const rink = new Rink();
-  const puck = new Puck();
-  const goalieL = new Goalie('left');
-  const goalieR = new Goalie('right');
-  const world = new World([rink, goalieL, goalieR, puck], seed);
-  world.authoritative = true;
-  const match = {
-    room: 'lobby:' + lobbyId, seed, world, rink, puck, goalieL, goalieR,
-    players: new Map(),   // socketId -> Player
-    inputs:  new Map(),   // socketId -> input obj
-    score: { home: 0, away: 0 },
-    tick: 0, _goalAt: 0, loop: null,
-  };
-  // Faul na gólmana (najetí crosscheckem) / gólman drží puk moc dlouho → píšťalka + buly.
-  // Dřív nenapojeno (no-op) → crease-crashing bez postihu. Buly uprostřed = ztráta výhody.
-  world.allowFreeze = true;   // gólman smí pod tlakem podržet puk (buly v pásmu)
-  world.onWhistle = ({ reason, team }) => {
-    if (match.ended || match.stoppage || match.offside || match.icing || match.setup) return;
-    if (reason === 'freeze') {
-      // Gólman podržel puk → buly na bodě v jeho obranném pásmu, na straně puku (jako v hokeji)
-      const fx = team === 'home' ? FO_X : RINK.w - FO_X;
-      const fy = match.puck.y < RINK.h / 2 ? FO_Y : RINK.h - FO_Y;
-      callStoppage(match, 'freeze', null, fx, fy);
-      return;
-    }
-    callStoppage(match, reason, null, RINK.centerX, RINK.h / 2);
-  };
-  world.onGoal = (result) => {
-    if (match.offside || match.icing) return;
-    if (match.ended) return;   // po konci zápasu se góly nepočítají (nešlo by farmit skóre dál)
-    const scoringTeam = result === 'goal-home' ? 'home' : 'away';
-    const goalsBefore = match.score.home + match.score.away;
-    if (result === 'goal-away') match.score.away++; else match.score.home++;
-    // Týdenní pravidlo (jen rychlá hra): bonusový bod
-    const bonus = match.weekRule ? weekBonus(match.weekRule, { team: scoringTeam, shot: match._lastShot, clock: match.clock, lastPeriod: match.period >= match.periods, goalsBefore }) : 0;
-    if (bonus) { match.score[scoringTeam] += bonus; (match._fx || (match._fx = [])).push({ k: 'bonus', id: match._lastTouchSid, team: scoringTeam }); }
-
-    const isHuman = (sid) => sid && !sid.startsWith('bot:');   // boti se nepočítají do střelce/MVP
-    const scorerMem = match._lastTouchSid ? lobbies.get(lobbyId)?.members.get(match._lastTouchSid) : null;
-
-    // Střelec: jen když se naposled dotkl hráč SKÓRUJÍCÍHO týmu (vlastní gól nikomu gól nepřipíše)
-    if (!match._goalScorers) match._goalScorers = [];
-    if (isHuman(match._lastTouchSid) && scorerMem?.team === scoringTeam) match._goalScorers.push(match._lastTouchSid);
-
-    // Asistence: předchozí dotyk ze stejného týmu jako střelec
-    if (!match._assists) match._assists = [];
-    if (match._prevTouchSid && match._prevTouchSid !== match._lastTouchSid && isHuman(match._prevTouchSid)) {
-      const prevMem = lobbies.get(lobbyId)?.members.get(match._prevTouchSid);
-      if (prevMem?.team === scoringTeam) match._assists.push(match._prevTouchSid);
-    }
-
-    // Plus/minus: +1 pro tým který vstřelil, -1 pro druhý
-    if (!match._plusMinus) match._plusMinus = new Map();
-    const endLobbyPM = lobbies.get(lobbyId);
-    if (endLobbyPM) {
-      for (const [sid, mem] of endLobbyPM.members) {
-        match._plusMinus.set(sid, (match._plusMinus.get(sid) || 0) + (mem.team === scoringTeam ? 1 : -1));
-      }
-    }
-
-    { const sh = match.puck._shot, sp = sh ? match.players.get(sh.id) : null, scorer = sp && sp.team === scoringTeam ? String(sp.name || '').slice(0, 24) : '';
-      io.to(match.room).emit('goal', { text: result === 'goal-away' ? 'GOAL! 🔴' : 'GOAL! 🔵', side: scoringTeam, scorer }); }
-    match._goalAt = match.tick;
-  };
+  const room = 'lobby:' + lobbyId;
+  const match = coreCreateMatch(seed, {
+    goal: (result, scoringTeam) => serverGoalHook(match, lobbyId, result, scoringTeam),
+    whistle: (rule, lineX) => io.to(room).emit('whistle', { rule, lineX, color: rule === 'offside' ? '#2a6bff' : '#ff3344' }),
+    period: (period) => io.to(room).emit('period', { period }),
+    gameover: () => serverGameOver(match),
+  });
+  match.room = room;
   // Pevný krok s doháněním: setInterval je nepřesný (Windows volá ~37×/s místo 60 — změřeno) →
   // dorovnej podle skutečně uplynulého času, ať hra běží 60 ticků/s všude. Strop 250 ms = po zaseknutí nedohání donekonečna.
   const STEP_MS = 1000 / TICK_HZ;
@@ -491,6 +177,112 @@ function createMatch(lobbyId, seed) {
     catch (e) { acc = 0; console.error('stepMatch error (lobby ' + lobbyId + '):', e); }
   }, STEP_MS);
   return match;
+}
+
+// Gól (háček match-core goal): týdenní bonus, střelec/asistence/plus-minus, síťová událost — dřív v serverové kopii createMatch
+function serverGoalHook(match, lobbyId, result, scoringTeam) {
+const goalsBefore = match.score.home + match.score.away - 1;   // hook běží PO připsání gólu
+// Týdenní pravidlo (jen rychlá hra): bonusový bod
+const bonus = match.weekRule ? weekBonus(match.weekRule, { team: scoringTeam, shot: match._lastShot, clock: match.clock, lastPeriod: match.period >= match.periods, goalsBefore }) : 0;
+if (bonus) { match.score[scoringTeam] += bonus; (match._fx || (match._fx = [])).push({ k: 'bonus', id: match._lastTouchSid, team: scoringTeam }); }
+
+const isHuman = (sid) => sid && !sid.startsWith('bot:');   // boti se nepočítají do střelce/MVP
+const scorerMem = match._lastTouchSid ? lobbies.get(lobbyId)?.members.get(match._lastTouchSid) : null;
+
+// Střelec: jen když se naposled dotkl hráč SKÓRUJÍCÍHO týmu (vlastní gól nikomu gól nepřipíše)
+if (!match._goalScorers) match._goalScorers = [];
+if (isHuman(match._lastTouchSid) && scorerMem?.team === scoringTeam) match._goalScorers.push(match._lastTouchSid);
+
+// Asistence: předchozí dotyk ze stejného týmu jako střelec
+if (!match._assists) match._assists = [];
+if (match._prevTouchSid && match._prevTouchSid !== match._lastTouchSid && isHuman(match._prevTouchSid)) {
+  const prevMem = lobbies.get(lobbyId)?.members.get(match._prevTouchSid);
+  if (prevMem?.team === scoringTeam) match._assists.push(match._prevTouchSid);
+}
+
+// Plus/minus: +1 pro tým který vstřelil, -1 pro druhý
+if (!match._plusMinus) match._plusMinus = new Map();
+const endLobbyPM = lobbies.get(lobbyId);
+if (endLobbyPM) {
+  for (const [sid, mem] of endLobbyPM.members) {
+    match._plusMinus.set(sid, (match._plusMinus.get(sid) || 0) + (mem.team === scoringTeam ? 1 : -1));
+  }
+}
+
+{ const sh = match.puck._shot, sp = sh ? match.players.get(sh.id) : null, scorer = sp && sp.team === scoringTeam ? String(sp.name || '').slice(0, 24) : '';
+  io.to(match.room).emit('goal', { text: result === 'goal-away' ? 'GOAL! 🔴' : 'GOAL! 🔵', side: scoringTeam, scorer }); }
+}
+
+// Konec zápasu (háček match-core gameover): síť, statistiky, odměny, auto-rematch — přesunuto ze serverového stepMatch (2026-11-12)
+function serverGameOver(match) {
+  io.to(match.room).emit('gameover', { score: match.score });
+  const lobbyId = match.room.replace('lobby:', '');
+  // Aktualizuj statistiky přihlášených hráčů
+  const endLobby = lobbies.get(lobbyId);
+  if (endLobby) {
+    for (const sid of endLobby.members.keys()) logMetric(io.sockets.sockets.get(sid)?.data?.reconnectToken, 'match_end');
+    const winTeam = match.score.home > match.score.away ? 'home' :
+                    match.score.away > match.score.home ? 'away' : null;
+  
+    // Najdi MVP: hráč s nejvyšším počtem gólů+asistencí
+    const scorers = match._goalScorers || [];
+    const assisters = match._assists || [];
+    const contributions = new Map();
+    for (const sid of [...scorers, ...assisters])
+      contributions.set(sid, (contributions.get(sid) || 0) + 1);
+    let mvpSid = null, mvpScore = 0;
+    for (const [sid, n] of contributions)
+      if (n > mvpScore) { mvpScore = n; mvpSid = sid; }
+  
+    const paidUsers = new Set();   // jeden účet = jedna odměna (dvě záložky nefarmí dvojmo)
+    for (const [sid, mem] of endLobby.members) {
+      const sock = io.sockets.sockets.get(sid);
+      const userId = sock?.data?.userId;
+      if (!userId) continue;
+      // Eligibilita přes userId (přežije reconnect); fallback na sid pro jistotu.
+      if (!(match._startUserIds?.has(userId) || match._startSids?.has(sid))) continue;   // pozdě příchozí: bez odměny
+      if (paidUsers.has(userId)) continue;
+      paidUsers.add(userId);
+  
+      const goals   = scorers.filter(s => s === sid).length;
+      const assists = assisters.filter(s => s === sid).length;
+      const saves   = (match._blocks?.get(sid)) || 0;   // zblokované střely (polní „save")
+      const isWin   = !!(winTeam && mem.team === winTeam);
+      const isLoss  = !!(winTeam && mem.team !== winTeam);
+      const isMVP   = sid === mvpSid;
+      const pm      = (match._plusMinus?.get(sid)) || 0;
+  
+      // NHL-style rank delta
+      const rankDelta = (isWin ? 20 : isLoss ? -10 : 0)
+        + goals * 5 + assists * 3 + pm * 2 + (isMVP ? 10 : 0);
+  
+      // Puck Credits earned
+      const creditsDelta = 5
+        + (isWin ? 50 : isLoss ? 10 : 15)
+        + goals * 15 + assists * 10;
+  
+      let founderUnlocked = false;
+      try {
+        updateStats(userId, { goals, assists, saves, games_played: 1, wins: isWin ? 1 : 0, losses: isLoss ? 1 : 0 });
+        updateRankAndCredits(userId, { rankDelta, creditsDelta, plusMinusDelta: pm });
+        // Pozvaný dohrál zápas → odměna Founder oběma (jednou). Referrera notifikuj živě, je-li online.
+        const rr = rewardReferralIfPending(userId);
+        if (rr) {
+          founderUnlocked = true;
+          for (const [, s] of io.sockets.sockets) {
+            if (s.data?.userId === rr.referrerId) { s.emit('founder_unlocked', { role: 'referrer' }); break; }
+          }
+        }
+      } catch {}
+  
+      // Pošli hráči výsledek s jeho odměnami
+      sock.emit('match_rewards', { goals, assists, isWin, isMVP, rankDelta, creditsDelta, pm, founderUnlocked });
+    }
+  }
+  match.rematchTimer = setTimeout(() => {
+    const lb = lobbies.get(lobbyId);
+    if (lb && lb.match === match) autoRematch(lb);
+  }, 10000);
 }
 
 // Vytvoř Player entitu z člena lobby (týmy + dresy z nastavení, doplňky z profilu)
@@ -606,177 +398,6 @@ function startMatch(lobby) {
   for (const sid of lobby.members.keys()) logMetric(io.sockets.sockets.get(sid)?.data?.reconnectToken, 'match_start');
 }
 
-function stepMatch(match) {
-  match.tick++;
-
-  // Faceoff po gólu (oslava 1.2 s)
-  if (match.world._goalLock && match._goalAt && match.tick - match._goalAt >= ms2ticks(1200)) {
-    match._goalAt = 0;
-    faceoff(match);
-  }
-  // Buly po přerušení (offside/icing) — píšťalka 1.3 s, pak vhazování na bodě
-  if (match.stoppage && match.tick - match._whistleAt >= ms2ticks(1300)) {
-    match.stoppage = false;
-    faceoffAt(match, match._faceoff.x, match._faceoff.y);
-  }
-  // Buly "set" — lehká prodleva při vhazování (vše zmrazené, hráči čelem k puku), pak živé
-  if (match.setup) {
-    if (match.tick >= match.faceoffUntil) { match.setup = false; match.world._goalLock = false; }
-    else return;   // zmrazeno; odeslání řeší smyčka rovnoměrně (ne tady)
-  }
-  // Icing v běhu — puk necháme dojet; píšťalka až když zpomalí nebo po timeoutu
-  if (match.icing && !match.stoppage) {
-    const sp = Math.hypot(match.puck.vx, match.puck.vy);
-    if (sp < 45 || match.tick - match.icing.t > ms2ticks(2600)) {
-      const ic = match.icing; match.icing = null;
-      callStoppage(match, 'icing', ic.lineX, ic.fx, ic.fy);
-    }
-  }
-  // Offside v běhu — stejně jako icing: puk necháme dojet, pak píšťalka
-  if (match.offside && !match.stoppage) {
-    const sp = Math.hypot(match.puck.vx, match.puck.vy);
-    if (sp < 45 || match.tick - match.offside.t > ms2ticks(600)) {
-      const off = match.offside; match.offside = null;
-      callStoppage(match, 'offside', off.lineX, off.fx, off.fy);
-    }
-  }
-
-  // Časomíra — běží, když se nehraje oslava gólu a zápas neskončil
-  if (!match.ended && !match.world._goalLock) {
-    match.clock -= DT;
-    if (match.clock <= 0) {
-      if (match.period < match.periods) {
-        match.period++;
-        match.clock = match.minutes * 60;
-        faceoff(match);
-        io.to(match.room).emit('period', { period: match.period });
-      } else {
-        match.clock = 0;
-        match.ended = true;
-        io.to(match.room).emit('gameover', { score: match.score });
-        const lobbyId = match.room.replace('lobby:', '');
-        // Aktualizuj statistiky přihlášených hráčů
-        const endLobby = lobbies.get(lobbyId);
-        if (endLobby) {
-          for (const sid of endLobby.members.keys()) logMetric(io.sockets.sockets.get(sid)?.data?.reconnectToken, 'match_end');
-          const winTeam = match.score.home > match.score.away ? 'home' :
-                          match.score.away > match.score.home ? 'away' : null;
-
-          // Najdi MVP: hráč s nejvyšším počtem gólů+asistencí
-          const scorers = match._goalScorers || [];
-          const assisters = match._assists || [];
-          const contributions = new Map();
-          for (const sid of [...scorers, ...assisters])
-            contributions.set(sid, (contributions.get(sid) || 0) + 1);
-          let mvpSid = null, mvpScore = 0;
-          for (const [sid, n] of contributions)
-            if (n > mvpScore) { mvpScore = n; mvpSid = sid; }
-
-          const paidUsers = new Set();   // jeden účet = jedna odměna (dvě záložky nefarmí dvojmo)
-          for (const [sid, mem] of endLobby.members) {
-            const sock = io.sockets.sockets.get(sid);
-            const userId = sock?.data?.userId;
-            if (!userId) continue;
-            // Eligibilita přes userId (přežije reconnect); fallback na sid pro jistotu.
-            if (!(match._startUserIds?.has(userId) || match._startSids?.has(sid))) continue;   // pozdě příchozí: bez odměny
-            if (paidUsers.has(userId)) continue;
-            paidUsers.add(userId);
-
-            const goals   = scorers.filter(s => s === sid).length;
-            const assists = assisters.filter(s => s === sid).length;
-            const saves   = (match._blocks?.get(sid)) || 0;   // zblokované střely (polní „save")
-            const isWin   = !!(winTeam && mem.team === winTeam);
-            const isLoss  = !!(winTeam && mem.team !== winTeam);
-            const isMVP   = sid === mvpSid;
-            const pm      = (match._plusMinus?.get(sid)) || 0;
-
-            // NHL-style rank delta
-            const rankDelta = (isWin ? 20 : isLoss ? -10 : 0)
-              + goals * 5 + assists * 3 + pm * 2 + (isMVP ? 10 : 0);
-
-            // Puck Credits earned
-            const creditsDelta = 5
-              + (isWin ? 50 : isLoss ? 10 : 15)
-              + goals * 15 + assists * 10;
-
-            let founderUnlocked = false;
-            try {
-              updateStats(userId, { goals, assists, saves, games_played: 1, wins: isWin ? 1 : 0, losses: isLoss ? 1 : 0 });
-              updateRankAndCredits(userId, { rankDelta, creditsDelta, plusMinusDelta: pm });
-              // Pozvaný dohrál zápas → odměna Founder oběma (jednou). Referrera notifikuj živě, je-li online.
-              const rr = rewardReferralIfPending(userId);
-              if (rr) {
-                founderUnlocked = true;
-                for (const [, s] of io.sockets.sockets) {
-                  if (s.data?.userId === rr.referrerId) { s.emit('founder_unlocked', { role: 'referrer' }); break; }
-                }
-              }
-            } catch {}
-
-            // Pošli hráči výsledek s jeho odměnami
-            sock.emit('match_rewards', { goals, assists, isWin, isMVP, rankDelta, creditsDelta, pm, founderUnlocked });
-          }
-        }
-        match.rematchTimer = setTimeout(() => {
-          const lb = lobbies.get(lobbyId);
-          if (lb && lb.match === match) autoRematch(lb);
-        }, 10000);
-      }
-    }
-  }
-
-  // Akce hráčů z jejich vstupů (autoritativně)
-  for (const [id, p] of match.players) {
-    const inp = match.inputs.get(id);
-    if (!inp) continue;
-    if (p.isBot) botThink(p, inp, match);
-    // Zaseknutá/skrytá záložka přestane posílat vstup → po 300 ms hráč nejede dál jedním směrem
-    else if (inp._stamp && Date.now() - inp._stamp > 300) { inp.dx = 0; inp.dy = 0; inp.lmb = false; inp.rmb = false; inp.mmb = false; }
-    computeEdges(inp);
-    if (!match.world._goalLock) playerActions(p, inp, DT * TEMPO, match);
-  }
-
-  // Rychlost puku PŘED updatem (pro detekci „save" = zastavení tvrdé střely na vlastní branku)
-  const _pv0spd = Math.hypot(match.puck.vx, match.puck.vy), _pv0vx = match.puck.vx;
-
-  const _sc0 = match.score.home + match.score.away, _h0 = match.score.home;
-  match.world.update(DT * TEMPO);   // fyzika v herním tempu; časomíra (match.clock) běží reálně
-  // Puk přes mantinel u střídaček (Puck._out) → píšťalka + buly uprostřed (platí i bez pravidel, jinak by puk zmizel)
-  if (match.puck._out) { match.puck._out = false; if (!match.stoppage && !match.ended) callStoppage(match, 'out', null, RINK.centerX, RINK.h / 2); }
-
-  // SAVE = polní hráč zastaví tvrdou ránu mířící k VLASTNÍ brance — odrazem od těla (Puck._blockBy)
-  // NEBO obranným zachycením (nově získá puk, co byl rychlá střela k jeho brance). Cooldown proti dvojpočtu.
-  {
-    let saveSid = null;
-    if (match.puck._blockBy) { saveSid = match.puck._blockBy; match.puck._blockBy = null; match.puck._blockTeam = null; }
-    let curSid = null, curTeam = null;
-    for (const [sid, p] of match.players) if (p.hasPuck) { curSid = sid; curTeam = p.team; break; }
-    if (!saveSid && curSid && curSid !== match._carrierPrev) {
-      const ownGoalDir = curTeam === 'home' ? -1 : 1;   // home brání vlevo (−x), away vpravo (+x)
-      if (_pv0spd > 200 && Math.sign(_pv0vx) === ownGoalDir) saveSid = curSid;
-    }
-    match._carrierPrev = curSid;
-    if (saveSid && !saveSid.startsWith('bot:') && !match.ended && match.tick - (match._lastSaveTick || -99) > 20) {
-      match._lastSaveTick = match.tick;
-      if (!match._blocks) match._blocks = new Map();
-      match._blocks.set(saveSid, (match._blocks.get(saveSid) || 0) + 1);
-    }
-  }
-
-  // Sleduj poslední dotek (tým + hráč + origin pro icing)
-  for (const [sid, p] of match.players) if (p.hasPuck) {
-    if (match._lastTouchSid !== sid) {
-      match._prevTouchSid  = match._lastTouchSid;
-      match._prevTouchTeam = match.lastTouch;
-    }
-    match.lastTouch = p.team; match.touchX = match.puck.x; match._lastTouchSid = sid;
-  }
-  // Kontrola pravidel (jen když je zapnuto a hraje se)
-  _detectFx(match, match.score.home + match.score.away !== _sc0 ? (match.score.home !== _h0 ? 'home' : 'away') : null);
-  if (match.rules && !match.stoppage && !match.world._goalLock && !match.ended) checkRules(match);
-  // Odeslání snapshotu NENÍ tady — řeší ho smyčka rovnoměrně (1× za fire), ať se při doháněním
-  // kroku neposílají snapshoty v nárazech (burst → mezera = trhání u klienta).
-}
 
 function broadcast(match) {
   const players = [];
