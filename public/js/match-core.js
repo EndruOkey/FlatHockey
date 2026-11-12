@@ -187,8 +187,10 @@ export function faceoffAt(match, fx, fy) {
     arr.forEach((p, i) => {
       const spot = SPOTS[Math.min(i, SPOTS.length - 1)];
       const back = spot[0] + (i >= SPOTS.length ? (i - SPOTS.length + 1) * 26 : 0);
-      p.x = fx - dir * back;
-      p.y = RINK.h / 2 + (fy - RINK.h / 2) * 0 + spot[1];
+      const sideMul = i >= SPOTS.length ? ((i % 2) ? 1 : -1) : 1;
+      // 2026-11-11: y podle buly bodu (dřív `(fy − h/2) * 0` → v pásmu stáli hráči uprostřed, puk u mantinelu; scripts/faceoff_audit.mjs 36/36)
+      p.x = Math.max(16, Math.min(RINK.w - 16, fx - dir * back));
+      p.y = Math.max(24, Math.min(RINK.h - 24, fy + spot[1] * sideMul));
       p.vx = p.vy = 0; p.hasPuck = false; p.charge = 0;
       p._chargeDecaying = false; p._oneTimer = false;
       const fa = Math.atan2(fy - p.y, fx - p.x);   // čelem k buly bodu

@@ -272,7 +272,7 @@ export class Puck {
     }
 
     // Pevné stěny sítě (vršek/spodek/záda) — puk projde dovnitř JEN ústím zepředu
-    _resolveNetWalls(this);
+    _resolveNetWalls(this, dt);
     // Jednotná branková mechanika: tyčky+břevno → detekce → udržení v síti
     this.goalScored = _resolveGoals(this);
   }
@@ -392,38 +392,84 @@ function _insideCage(x, y) {
          (x > RINK.goalLineRight  && x < RINK.goalLineRight + d);
 }
 
-// Pevné stěny sítě z VNĚJŠKU — vršek, spodek a zadní stěna jsou pevné; otevřené je
-// jen ústí (přední čára mezi tyčkami). Puk se tak nedostane do branky přes mřížku.
-function _resolveNetWalls(puck) {
-  if (puck.z > PUCK.crossbarHeight) return;   // nad sítí → přeletí (odraz od zadního skla přes branku)
+// GEOMETRIE SÍTĚ = KRESBA (Rink._drawGoal): břevno PUCK.crossbarHeight u brankové čáry, zadní horní hrana
+// NET_BACK_K × břevno (Rink: HB = H * 0.55), mezi nimi rovná svažitá střecha. Boční stěny = lichoběžník,
+// zadní stěna výšky HB. Audit: node scripts/goal_height_audit.mjs (fyzika vs. kresba, má být 0 nesouladů).
+const NET_BACK_K = 0.55;   // MUSÍ sedět s Rink.js _drawGoal (HB = H * 0.55); audit to čte přímo z Rink.js
+const CBAR_T     = 2;      // tloušťka břevna nad PUCK.crossbarHeight (kresba 3,5 px) — výš puk břevno přeletí
+const NET_SLOPE  = PUCK.crossbarHeight * (1 - NET_BACK_K) / RINK.goalDepth;   // spád střechy (px výšky / px hloubky)
+const ROOF_ACC   = PUCK.gravity * NET_SLOPE / (1 + NET_SLOPE * NET_SLOPE);    // zrychlení puku po střeše dozadu (px/s²)
+// výška stěny/střechy sítě v hloubce u (0 = branková čára, goalDepth = zadní stěna)
+export function netRoofH(u) {
+  const d = RINK.goalDepth, k = u <= 0 ? 0 : u >= d ? 1 : u / d;
+  return PUCK.crossbarHeight * (1 - (1 - NET_BACK_K) * k);
+}
+
+// Pevné stěny sítě z VNĚJŠKU — boky (lichoběžník), záda (HB) a střecha jsou pevné; otevřené je jen ústí
+// (přední čára mezi tyčkami pod břevnem). Nad stěnou puk přeletí; shora dopadne na střechu a sjede dozadu.
+function _resolveNetWalls(puck, dt) {
   const r   = PUCK.radius;
   const gy1 = RINK.goalY, gy2 = RINK.goalY + RINK.goalH;
   const d   = RINK.goalDepth;
-  const px  = puck.prevX ?? puck.x, py = puck.prevY ?? puck.y;
+  const px  = puck.prevX ?? puck.x, py = puck.prevY ?? puck.y, pz = puck.prevZ ?? puck.z;
   const nets = [
     { lineX: RINK.goalLineRight, backX: RINK.goalLineRight + d, dir: +1 },
     { lineX: RINK.goalLineLeft,  backX: RINK.goalLineLeft  - d, dir: -1 },
   ];
   for (const { lineX, backX, dir } of nets) {
+    const u = dir * (puck.x - lineX), pu = dir * (px - lineX);
+    // STŘECHA — úsečka prev→cur nad půdorysem sítě (u ∈ (0, d+r), y ∈ (gy1−r, gy2+r)) protne svažitou střechu
+    // shora dolů → puk dopadne na síť. Vstup přední rovinou pod břevnem (gól / břevno) řeší _resolveOneGoal.
+    if (!puck._inNet) {
+      let kE = 0, kX = 1;
+      const clip = (a, b, lim, lower) => {   // lower: podmínka a > lim, jinak a < lim
+        const da = b - a, inside0 = lower ? a > lim : a < lim;
+        if (Math.abs(da) < 1e-12) { if (!inside0) kE = 2; return; }
+        const k = (lim - a) / da;
+        if (inside0) { if ((lower ? b <= lim : b >= lim)) kX = Math.min(kX, k); } else kE = Math.max(kE, k);
+      };
+      clip(pu, u, 0, true); clip(pu, u, d + r, false); clip(py, puck.y, gy1 - r, true); clip(py, puck.y, gy2 + r, false);
+      if (kE < kX) {
+        const at = (k) => ({ u: pu + (u - pu) * k, y: py + (puck.y - py) * k, z: pz + (puck.z - pz) * k });
+        const E = at(kE), X = at(kX);
+        const front = pu <= 0 && E.u <= 1e-9 && E.z <= PUCK.crossbarHeight + CBAR_T;
+        if (!front && E.z >= netRoofH(E.u) - 1e-6 && X.z < netRoofH(X.u)) {
+          const sp = -puck.vz;
+          puck.z = kX >= 1 ? netRoofH(u) : netRoofH(X.u);   // leží na střeše (nebo sjel přes její hranu)
+          puck.vz = sp > 60 ? sp * 0.2 : 0;                 // tvrdý dopad cvrnkne, jinak puk leží na síti
+          if (sp > 35) puck._ev |= 16;
+          puck.vx = puck.vx * 0.97 + dir * ROOF_ACC * dt;   // síť brzdí, svah táhne dozadu (puk sjede za branku)
+          puck.vy *= 0.97;
+          continue;
+        }
+      }
+    }
     const lo = Math.min(lineX, backX), hi = Math.max(lineX, backX);
     // Použij sjednocení prev+cur pro X/Y rozsah — zachytí diagonální průnik
     const inX = (puck.x > lo - r && puck.x < hi + r) || (px > lo - r && px < hi + r);
     const inY = (puck.y > gy1    && puck.y < gy2)    || (py > gy1    && py < gy2);
+    // výška/hloubka puku v místě, kde trajektorie protne rovinu stěny (ne až na konci ticku)
+    const atY = (Y) => { const k = Math.abs(puck.y - py) > 1e-9 ? Math.min(1, Math.max(0, (Y - py) / (puck.y - py))) : 1;
+      return { u: pu + (u - pu) * k, z: pz + (puck.z - pz) * k }; };
+    const under = (c) => c.z <= netRoofH(c.u);   // pod horní hranou lichoběžníkové boční stěny → náraz
 
-    // Vrchní mantinel — blokuj puk přicházející ZESHORA (py < gy1)
-    if (inX && py < gy1 && puck.y >= gy1 - r) {
+    // Horní boční stěna — blokuj puk přicházející ZESHORA (py < gy1)
+    if (inX && py < gy1 && puck.y >= gy1 - r && under(atY(gy1 - r))) {
       puck.y = gy1 - r;
       if (puck.vy > 0) { const sp = Math.abs(puck.vy); puck.vy = -sp * _reb(puck.vy); if (sp > 35) puck._ev |= 16; }
     }
-    // Spodní mantinel — blokuj zdola (py > gy2)
-    if (inX && py > gy2 && puck.y <= gy2 + r) {
+    // Spodní boční stěna — blokuj zdola (py > gy2)
+    if (inX && py > gy2 && puck.y <= gy2 + r && under(atY(gy2 + r))) {
       puck.y = gy2 + r;
       if (puck.vy < 0) { const sp = Math.abs(puck.vy); puck.vy =  sp * _reb(puck.vy); if (sp > 35) puck._ev |= 16; }
     }
-    // Zadní stěna — blokuj z vnějšku (za brankou)
-    if (inY) {
-      if (dir > 0 && px > hi && puck.x <= hi + r) { puck.x = hi + r; if (puck.vx < 0) { const sp = Math.abs(puck.vx); puck.vx =  sp * _reb(puck.vx); if (sp > 35) puck._ev |= 16; } }
-      if (dir < 0 && px < lo && puck.x >= lo - r) { puck.x = lo - r; if (puck.vx > 0) { const sp = Math.abs(puck.vx); puck.vx = -sp * _reb(puck.vx); if (sp > 35) puck._ev |= 16; } }
+    // Zadní stěna (výška HB) — blokuj z vnějšku (za brankou), výška v okamžiku průletu rovinou
+    if (inY && pu > d && u <= d + r) {
+      const k = Math.min(1, Math.max(0, (pu - (d + r)) / Math.max(1e-9, pu - u)));
+      if (pz + (puck.z - pz) * k <= netRoofH(d)) {
+        puck.x = dir > 0 ? hi + r : lo - r;
+        if (dir * puck.vx < 0) { const sp = Math.abs(puck.vx); puck.vx = dir * sp * _reb(puck.vx); if (sp > 35) puck._ev |= 16; }
+      }
     }
   }
 }
@@ -478,6 +524,8 @@ function _resolveOneGoal(puck, lineX, backX, dir, result) {
   // (1) Tyčky — swept test zachytí i rychlé puky co by jinak protuneloval
   for (const py of [gy1, gy2]) {
     if (puck.z > cbar) continue;
+    const uIn = dir * (puck.x - lineX);
+    if (uIn > 0 && puck.z >= netRoofH(uIn) - 1e-6) continue;   // leží/klouže po střeše sítě → tyčky jsou pod ní
     const dx = puck.x - lineX, dy = puck.y - py;
     const dist = Math.hypot(dx, dy);
     const minD = r + POST_R;
@@ -525,18 +573,21 @@ function _resolveOneGoal(puck, lineX, backX, dir, result) {
     const t   = Math.abs(dxm) > 1e-9 ? (lineX - prevX) / dxm : 0;
     const yAt = (puck.prevY ?? puck.y) + (puck.y - (puck.prevY ?? puck.y)) * t;
     const zAt = (puck.prevZ ?? puck.z) + (puck.z - (puck.prevZ ?? puck.z)) * t;
-    if (yAt > gy1 + GOAL_Y_MARG && yAt < gy2 - GOAL_Y_MARG) {
+    // „tyčka a dovnitř": průlet mezi středy tyček a tyčka puk odrazila do klece → taky gól (jinak by ležel v síti bez gólu)
+    const uNow = dir * (puck.x - lineX);
+    const postIn = yAt > gy1 && yAt < gy2 && uNow > 0 && uNow < RINK.goalDepth && puck.y > gy1 && puck.y < gy2;
+    if ((yAt > gy1 + GOAL_Y_MARG && yAt < gy2 - GOAL_Y_MARG) || postIn) {
       if (zAt <= cbar) {
         goal = true;
         puck._goalEntryY = yAt;                   // přesná Y pro zone detection
         puck._inNet = true;                       // od teď puk tvrdě držíme v boxu sítě
         puck._netLo = Math.min(lineX, backX);
         puck._netHi = Math.max(lineX, backX);
-      } else {
-        // Trefil břevno — odraz zpět a dolů, není gól
+      } else if (zAt <= cbar + CBAR_T) {
+        // Trefil břevno — odraz zpět a dolů, není gól (výš nad břevnem puk přeletí → střecha / za branku)
         puck.x  = lineX - dir * (r + 0.5);
         puck.vx = -dir * Math.abs(puck.vx) * _reb(puck.vx);
-        puck.z  = cbar;
+        puck.z  = zAt;
         puck.vz = -Math.abs(puck.vz) * 0.4;
         puck._ev |= 8; // břevno
       }
@@ -547,7 +598,8 @@ function _resolveOneGoal(puck, lineX, backX, dir, result) {
 }
 
 // Puk usazený v brance — TVRDÝ box (žádné tunelování): vletí dovnitř, odrazí se od
-// zadní/boční stěny a mesh ho během ~1 s utlumí. Ústím ven nevyletí.
+// zadní/boční stěny a mesh ho během ~1 s utlumí. Ústím ven nevyletí. Výška: padá gravitací
+// (Puck.update), shora ho drží svažitá střecha sítě (netRoofH) — žádný skok na led.
 function _containInNet(puck) {
   if (!puck._inNet) return;
   const r   = PUCK.radius;
@@ -555,9 +607,13 @@ function _containInNet(puck) {
   const xLo = puck._netLo + r, xHi = puck._netHi - r;
   const yLo = gy1 + r,         yHi = gy2 - r;
   const MESH = 0.92, REST = 0.45;
-  puck.vx *= MESH; puck.vy *= MESH; puck.vz = 0; puck.z = 0;
+  puck.vx *= MESH; puck.vy *= MESH;
   if (puck.x < xLo) { puck.x = xLo; if (puck.vx < 0) puck.vx = -puck.vx * REST; }
   if (puck.x > xHi) { puck.x = xHi; if (puck.vx > 0) puck.vx = -puck.vx * REST; }
   if (puck.y < yLo) { puck.y = yLo; if (puck.vy < 0) puck.vy = -puck.vy * REST; }
   if (puck.y > yHi) { puck.y = yHi; if (puck.vy > 0) puck.vy = -puck.vy * REST; }
+  const right = puck._netLo >= RINK.centerX, lineX = right ? puck._netLo : puck._netHi;
+  const h = netRoofH((right ? 1 : -1) * (puck.x - lineX));
+  if (puck.z > h) { puck.z = h; if (puck.vz > 0) puck.vz = -puck.vz * 0.3; }
+  if (puck.z < 0) { puck.z = 0; puck.vz = 0; }
 }

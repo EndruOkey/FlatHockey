@@ -791,6 +791,7 @@ function broadcast(match) {
   }
   const g = (gg) => ({ x: r1(gg.x), y: r1(gg.y), t: r3(gg._tilt), h: gg._holdTimer > 0 ? 1 : 0,
                        st: gg._saveType, sf: r2(gg._saveFlash), sm: r2(gg._saveFlashMax), sc: r2(gg._screen),
+                       ps: gg.stance || 'stand', pd: gg._side || 1, pt: r2(Math.min(1, gg._stanceT || 0)),   // postoj gólmana (vizuál)
                        col: gg.color || null });
   io.to(match.room).emit('snap', {
     n: match.tick,
