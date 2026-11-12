@@ -35,6 +35,7 @@ jobs:
       - run: npm run test:bot
       - run: npm run test:dev
       - run: npm run test:steer
+      - run: npm run test:goalzone
 
   deploy:
     needs: test

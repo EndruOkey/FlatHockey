@@ -521,7 +521,7 @@ function _carryGoalCheck(puck) {
     const t   = Math.abs(dxm) > 1e-9 ? (lineX - prevX) / dxm : 0;
     const yAt = prevY + (puck.y - prevY) * t;
     if (yAt > gy1 + GOAL_Y_MARG && yAt < gy2 - GOAL_Y_MARG && puck.z <= cbar) {
-      puck._goalEntryY = yAt;
+      puck._goalEntryY = yAt; puck._goalEntryZ = puck.z;
       puck._inNet = true;
       puck._netLo = dir > 0 ? lineX : lineX - RINK.goalDepth;
       puck._netHi = dir > 0 ? lineX + RINK.goalDepth : lineX;
@@ -611,6 +611,7 @@ function _resolveOneGoal(puck, lineX, backX, dir, result) {
       if (zAt <= cbar) {
         goal = true;
         puck._goalEntryY = yAt;                   // přesná Y pro zone detection
+        puck._goalEntryZ = zAt;                   // výška při průletu čárou (oznámení místa gólu)
         puck._inNet = true;                       // od teď puk tvrdě držíme v boxu sítě
         puck._netLo = Math.min(lineX, backX);
         puck._netHi = Math.max(lineX, backX);

@@ -1,6 +1,7 @@
 import { RINK, PLAYER, PUCK, TEMPO } from './constants.js';
 import { lerpAngle, clamp } from './utils.js';
 import { t } from './i18n.js';
+import { goalZone } from './goalzone.js';
 import { Input } from './input.js';
 import { Engine, fromScreen, toScreen, viewW, viewH } from './engine.js';
 import { World } from './world.js';
@@ -3214,12 +3215,7 @@ export class SandboxGame {
       this._streak = (this._streak ?? 0) + 1;
       if (this._streak > (this._bestStreak ?? 0)) this._bestStreak = this._streak;
       const _goalLang = document.documentElement.lang === 'en' ? 'en' : 'cs';
-      const entryY = this.puck._goalEntryY ?? this.puck.y;
-      const rel    = (entryY - RINK.goalY) / RINK.goalH;
-      let zone;
-      if      (rel < 0.33) zone = _goalLang === 'cs' ? '— HORNÍ ROH' : '— TOP CORNER';
-      else if (rel > 0.67) zone = _goalLang === 'cs' ? '— DOLNÍ ROH' : '— BOTTOM CORNER';
-      else                 zone = _goalLang === 'cs' ? '— PĚTKA'     : '— FIVE-HOLE';
+      const zone = '— ' + goalZone(this.puck._goalEntryY ?? this.puck.y, this.puck._goalEntryZ ?? this.puck.z, _goalLang);   // strana + výška (goalzone.js)
       this._goalZone = { text: zone, t: 2.5 };
 
       // E2: po 3 gólech ze stejného místa posune passer na novou pozici
