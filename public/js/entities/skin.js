@@ -166,9 +166,11 @@ export function skinGoalie(c, G, K, o) {
   const st = o.stance, r = 8, rb = r * G.bodyScale * 1.04, lx = 0.7 * (o.inX || 1), ly = -0.7, cover = st === 'cover' || o.holding;
   const lod = lodSmall(c);   // malé měřítko (< 2 px na jednotku): bez drobných linek výstroje — v 1× by splynuly ve šum
   // hokejka (vizuální; sim ji nemá): čepel na ledě před pady, paddle, dřík k vyrážečce
+  // úchop hole = vyrážečka VE STEJNÉM rámci jako ruka (posun těla, odskok, náklon) → hůl se od ruky neodtrhne (2026-11-12)
+  const bmS = new DOMMatrix().translate(G.bodyX + (o.recoil || 0), G.bodyY).rotate((o.tilt || 0) * 180 / Math.PI);
   let stk = null;
-  if (cover) stk = { hx: G.handX + 2 + G.bodyX, hy: G.blockY + 1 + G.bodyY, b0: { x: -1, y: 18 }, b1: { x: -6.5, y: 19.5 } };
-  else { const hx = G.handX + G.bodyX, hy = G.blockY + G.bodyY, bx = Math.min(hx - 5, -9); stk = { hx, hy, b0: { x: bx, y: hy * 0.55 }, b1: { x: bx - 0.6, y: hy * 0.55 - 7.5 * Math.sign(hy || 1) } }; }
+  if (cover) { const h = bmS.transformPoint({ x: G.handX + 2, y: G.blockY + 1 }); stk = { hx: h.x, hy: h.y, b0: { x: -1, y: 18 }, b1: { x: -6.5, y: 19.5 } }; }
+  else { const h = bmS.transformPoint({ x: G.handX, y: G.blockY }), hx = h.x, hy = h.y, bx = Math.min(hx - 5, -9); stk = { hx, hy, b0: { x: bx, y: hy * 0.55 }, b1: { x: bx - 0.6, y: hy * 0.55 - 7.5 * Math.sign(hy || 1) } }; }
   // pady (rámec padu jako Goalie.js _gPad)
   const padPaths = G.pads.map(pd => { const P = new Path2D(), m = new DOMMatrix().translate(pd.kx, pd.ky).rotate(pd.angle * pd.dir * 180 / Math.PI), q = new Path2D(); q.roundRect(-pd.pw / 2, pd.dir > 0 ? 0 : -pd.ph, pd.pw, pd.ph, 2.4); P.addPath(q, m); return P; });
   // tělo v rámci těla (translate bodyX/Y, rotate tilt) — sestavíme cesty v lokálu gólmana přes matici
