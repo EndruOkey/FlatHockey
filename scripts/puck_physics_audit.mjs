@@ -67,15 +67,16 @@ for (const bx of behindX) for (const dy of [-50, -25, 0, 25, 50]) for (const c o
   if (!land) continue;
   overOnly++;
   const inSlot = GX - land.x >= 30 && GX - land.x <= 140 && Math.abs(land.y - GY) < 80;
-  lands.push({ d: GX - land.x, y: land.y - GY, v: land.v, net: crossedNet, a, c });
+  lands.push({ d: GX - land.x, y: land.y - GY, v: land.v, net: crossedNet, a, c, dy });
   if (inSlot && land.v <= PLAYER.pickupMaxRelSpeed && crossedNet > PUCK.crossbarHeight) ok7++;
 }
 const avg = (a, k) => (a.reduce((s, x) => s + x[k], 0) / Math.max(1, a.length));
 // K7 přepsáno: rovná zvednutá rána (a = 0, nabití ≥ 0,45) musí dopadnout do slotu; šikmá rána musí jít OVLÁDAT (dopad na stranu úhlu)
-const straight = lands.filter(l => l.a === 0 && l.c >= 0.45), nStraight = behindX.length * 5 * [0.45, 0.6, 0.8, 1].length;
+// 2026-11-12 skill shot (scripts/overnet_skill.mjs): vyjít musí DOBRÁ rána (rovně, nabití ≥ 0,8, přímo za sítí |dy| ≤ 25), ne každá
+const straight = lands.filter(l => l.a === 0 && l.c >= 0.8 && Math.abs(l.dy) <= 25), nStraight = behindX.length * 3 * [0.8, 1].length;
 const okStraight = straight.filter(l => l.d >= 30 && l.d <= 140 && Math.abs(l.y) < 80 && l.v <= PLAYER.pickupMaxRelSpeed && l.net > PUCK.crossbarHeight).length;
 const angled = lands.filter(l => l.a !== 0), steer = angled.filter(l => Math.sign(l.y) === Math.sign(l.a)).length;   // zadní zeď otočí jen vx, boční složka zůstává
-R('K7 nahrávka přes branku: rovná zvednutá rána ze zadního prostoru dopadne do slotu (30–140 px, |y| < 80) zpracovatelně ≥ 80 %', okStraight / nStraight >= 0.8, `${okStraight}/${nStraight}; dopad prům. ${avg(straight, 'd').toFixed(0)} px před čarou, rychlost ${avg(straight, 'v').toFixed(0)} px/s (limit ${PLAYER.pickupMaxRelSpeed}), výška nad sítí ${avg(straight, 'net').toFixed(1)}`);
+R('K7 nahrávka přes branku (skill shot): dobrá rána — rovně, nabití ≥ 0,8, přímo za sítí — dopadne do slotu (30–140 px, |y| < 80) zpracovatelně ≥ 80 %', okStraight / nStraight >= 0.8, `${okStraight}/${nStraight}; dopad prům. ${avg(straight, 'd').toFixed(0)} px před čarou, rychlost ${avg(straight, 'v').toFixed(0)} px/s (limit ${PLAYER.pickupMaxRelSpeed}), výška nad sítí ${avg(straight, 'net').toFixed(1)}`);
 R('K7c směr nahrávky přes branku jde řídit úhlem rány (šikmá rána dopadne na odpovídající stranu)', angled.length > 0 && steer / angled.length >= 0.9, `${steer}/${angled.length}`);
 // K7b po ledě (žabička) do zadního mantinelu se NEodrazí přes branku
 let wrongOver = 0; for (const bx of behindX) for (const dy of [-25, 0, 25]) { const { tr } = fly(bx, GY + dy, 0, 380, 0, 1.5); if (tr.some(s => s.over)) wrongOver++; }

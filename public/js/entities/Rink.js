@@ -1,4 +1,6 @@
+import { VIS } from '../vis.js';
 import { RINK, PUCK } from '../constants.js';
+import { SKIN_OUT } from './skin.js';
 
 // Circle radius — slightly reduced so circles don't overlap goal mouth
 const CIRCLE_R = 66;
@@ -196,7 +198,8 @@ function _drawGoal(ctx, cam, glx, dir, postColor) {
   const s = cam.scale, { ox, oy } = cam;
   const x = ox + glx * s, xB = x + dir * RINK.goalDepth * s;
   const y1 = oy + RINK.goalY * s, y2 = oy + (RINK.goalY + RINK.goalH) * s;
-  const H = PUCK.crossbarHeight * s, HB = H * 0.55;
+  if (VIS.g === 1) return _drawGoalTop(ctx, s, x, xB, y1, y2, dir, postColor);
+  const H = PUCK.crossbarHeight * s * (VIS.g === 2 ? 0.35 : 1), HB = H * 0.55;
   const poly = (pts, fill, stroke, lw) => { ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (const q of pts.slice(1)) ctx.lineTo(q[0], q[1]); ctx.closePath();
     if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.stroke(); } };
   const mesh = (A, B, C, D, n) => {   // příčky sítě mezi hranami A→B a D→C
@@ -227,6 +230,31 @@ function _drawGoal(ctx, cam, glx, dir, postColor) {
   // dolní tyčka přes ústí — slabší (je to čára u ledu, ne překážka)
   ctx.strokeStyle = _alphaHex(postColor, 0.45); ctx.lineWidth = 1.5 * s;
   ctx.beginPath(); ctx.moveTo(x, y1); ctx.lineTo(x, y2); ctx.stroke();
+}
+// G1 „čistý půdorys": branka shora stejně jako hráči a gólman (bez výšky). Síť = mřížka v půdorysu, tyčky = body v barvě týmu,
+// břevno = čára přes ústí; obrys SKIN_OUT jako u hráčů, ať branka mluví stejným jazykem.
+function _drawGoalTop(ctx, s, x, xB, y1, y2, dir, postColor) {
+  const lo = Math.min(x, xB), w = Math.abs(xB - x), h = y2 - y1, rr = 4 * s;
+  ctx.save(); ctx.lineJoin = ctx.lineCap = 'round';
+  // stín pod brankou (stejný směr světla jako hráči: vlevo nahoře → stín vpravo dole)
+  ctx.fillStyle = 'rgba(20,40,70,0.16)'; ctx.beginPath(); ctx.roundRect(lo + 1.5 * s, y1 + 1.5 * s, w, h, rr); ctx.fill();
+  // tělo sítě: zaoblený obdélník za brankovou čarou (otevřený k ledu)
+  const net = new Path2D(); net.moveTo(x, y1); net.lineTo(xB - dir * rr, y1); net.quadraticCurveTo(xB, y1, xB, y1 + rr);
+  net.lineTo(xB, y2 - rr); net.quadraticCurveTo(xB, y2, xB - dir * rr, y2); net.lineTo(x, y2);
+  ctx.fillStyle = 'rgba(232,240,248,0.92)'; ctx.fill(net);
+  // mřížka sítě
+  ctx.save(); ctx.clip(net); ctx.strokeStyle = 'rgba(120,140,165,0.45)'; ctx.lineWidth = 0.6 * s; ctx.beginPath();
+  for (let gx = 0; gx <= w; gx += 3.2 * s) { const xx = x + dir * gx; ctx.moveTo(xx, y1); ctx.lineTo(xx, y2); }
+  for (let gy = y1; gy <= y2; gy += 3.2 * s) { ctx.moveTo(lo, gy); ctx.lineTo(lo + w, gy); }
+  ctx.stroke(); ctx.restore();
+  // rám sítě: obrys jako hráči + bílá trubka
+  ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = 3.4 * s; ctx.stroke(net);
+  ctx.strokeStyle = '#f4f7fb'; ctx.lineWidth = 1.8 * s; ctx.stroke(net);
+  // břevno přes ústí + tyčky v barvě týmu
+  ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = 3.6 * s; ctx.beginPath(); ctx.moveTo(x, y1); ctx.lineTo(x, y2); ctx.stroke();
+  ctx.strokeStyle = postColor; ctx.lineWidth = 2.2 * s; ctx.beginPath(); ctx.moveTo(x, y1); ctx.lineTo(x, y2); ctx.stroke();
+  for (const yy of [y1, y2]) { ctx.beginPath(); ctx.arc(x, yy, 2.4 * s, 0, Math.PI * 2); ctx.fillStyle = postColor; ctx.fill(); ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = 1.2 * s; ctx.stroke(); }
+  ctx.restore();
 }
 function _alphaHex(h, a) { const n = parseInt(h.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; }
 

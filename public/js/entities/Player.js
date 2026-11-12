@@ -3,6 +3,7 @@ import { clamp, lerpAngle, angleDiff } from '../utils.js';
 import { SFX } from '../sound.js';
 import { defaultRng } from '../rng.js';
 import { skaterKit, skinSkate, skinBody, SKIN_OUT } from './skin.js';
+import { VIS } from '../vis.js';
 
 export class PlayerBase {
   rng = defaultRng;
@@ -566,6 +567,12 @@ const _rdt = cam => (cam && cam.dt != null ? Math.min(0.05, cam.dt) : 1 / 60);
 const _rt  = cam => (cam && cam.t != null ? cam.t : 0);
 // Deterministická „náhoda“ pro efekty: hash (id, n, i) → 0..1
 const _hrand = (id, n, i) => { let h = 2166136261 ^ n; const str = String(id); for (let k = 0; k < str.length; k++) h = Math.imul(h ^ str.charCodeAt(k), 16777619); h = Math.imul(h ^ (i * 374761393), 668265263); h ^= h >>> 13; h = Math.imul(h, 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+// Hokejka — varianty kresby (vis.js): out = obrys dříku, sh = dřík, bl = čepel, blo = obrys čepele (× s), knob = koncovka, hi = odlesk, sh2 = stín na ledu
+const STICK_V = [
+  { out: 4.8, sh: 2.8, bl: 2.8, blo: 4.8 },
+  { out: 3.4, sh: 1.8, bl: 3.8, blo: 5.4, knob: 1 },
+  { out: 3.6, sh: 2.0, bl: 4.2, blo: 5.8, knob: 1, hi: 1, sh2: 1, paddle: 1 },   // paddle = čepel jako plochá lopatka (vyplněný tvar)
+];
 const SKATE_CYCLE = 95;   // px ujeté dráhy na celý cyklus kroku (2 odrazy) — 165 px/s ≈ 1,7 cyklu/s
 function _renderPlayer(ctx, p, cam) {
   const s     = cam.scale;
@@ -730,6 +737,17 @@ function _renderPlayer(ctx, p, cam) {
       fx = -r * 0.9 + (lead > 0 ? push : -rec) * r * 0.12;
       fy = side * r * 0.5 + _latS * (push - rec) * r * 0.25;
       fa = _latS * 0.78 * Math.min(1, Math.abs(_mLoc) / 1.4);
+    } else if (VIS.k) {   // K1/K2: noha pod boky, odraz VEN do boku (vyjede zpod těla = čitelný krok), návrat šikmo vpřed
+      const tilt = _mLoc * 0.5;
+      let pu = push;
+      if (VIS.k === 2) {   // K2: rychlý odraz, dlouhý skluz v natažení, krátký návrat
+        const u = ((ph % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2) / (Math.PI * 2);   // 0..1 v cyklu nohy
+        pu = (u < 0.18 ? u / 0.18 : u < 0.55 ? 1 : u < 0.75 ? 1 - (u - 0.55) / 0.2 : 0) * _sf;
+      }
+      const amp = VIS.k === 2 ? 1.45 : 1.05;               // K2: noha vyjede výrazně do boku
+      fx = -r * 0.35 - pu * r * 0.55 + rec * r * 0.35;
+      fy = side * (r * 0.42 + pu * r * amp);
+      fa = tilt + side * pu * 0.85;
     } else {              // vpřed: odraz šikmo dozadu a ven, špička ven; návrat pod tělo, brusle rovně
       const tilt = _mLoc * 0.5;                            // mírné natočení do zatáčky
       fx = -r * 0.9 - push * r * 0.55 + rec * r * 0.2;
@@ -896,21 +914,36 @@ function _renderPlayer(ctx, p, cam) {
   const tx0 = ox + topW.x * s, ty0 = oy + topW.y * s;
 
   // ── Shaft ─────────────────────────────────────────────────────────────────
+  const SV = STICK_V[VIS.s] || STICK_V[0];
   ctx.lineCap = 'round';
-  ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = 4.8 * s;   // obrys dříku (C-d2)
+  if (SV.sh2) {   // stín hole na ledu (světlo vlevo nahoře → stín vpravo dole)
+    const o = 1.6 * s; ctx.strokeStyle = 'rgba(20,40,70,0.22)'; ctx.lineWidth = SV.sh * s;
+    ctx.beginPath(); ctx.moveTo(tx0 + o, ty0 + o); ctx.lineTo(tipX + o, tipY + o); ctx.stroke();
+  }
+  ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = SV.out * s;   // obrys dříku (C-d2)
   ctx.beginPath(); ctx.moveTo(tx0, ty0); ctx.lineTo(tipX, tipY); ctx.stroke();
   ctx.beginPath();   // konec hole + omotávka (od horní ruky)
   ctx.moveTo(tx0, ty0);
   ctx.lineTo(tx0 + (tipX - tx0) * 0.22, ty0 + (tipY - ty0) * 0.22);
   ctx.strokeStyle = _shade(stickCol, -0.55);
-  ctx.lineWidth   = 2.8 * s;
+  ctx.lineWidth   = SV.sh * s;
   ctx.stroke();
   ctx.beginPath();   // hlavní dřík
   ctx.moveTo(tx0 + (tipX - tx0) * 0.18, ty0 + (tipY - ty0) * 0.18);
   ctx.lineTo(tipX, tipY);
   ctx.strokeStyle = stickCol;
-  ctx.lineWidth   = 2.8 * s;
+  ctx.lineWidth   = SV.sh * s;
   ctx.stroke();
+  if (SV.hi) {   // odlesk podél dříku (na straně ke světlu)
+    const nx = -(tipY - ty0), ny = tipX - tx0, nl = Math.hypot(nx, ny) || 1, k = (nx + ny < 0 ? 1 : -1) * 0.45 * s;
+    ctx.beginPath(); ctx.moveTo(tx0 + (tipX - tx0) * 0.24 + nx / nl * k, ty0 + (tipY - ty0) * 0.24 + ny / nl * k);
+    ctx.lineTo(tipX - (tipX - tx0) * 0.06 + nx / nl * k, tipY - (tipY - ty0) * 0.06 + ny / nl * k);
+    ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 0.6 * s; ctx.stroke();
+  }
+  if (SV.knob) {   // koncovka hole u horní ruky
+    ctx.beginPath(); ctx.arc(tx0, ty0, SV.out * 0.42 * s, 0, Math.PI * 2); ctx.fillStyle = _shade(stickCol, -0.6); ctx.fill();
+    ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = 0.9 * s; ctx.stroke();
+  }
 
   // ── Blade ─────────────────────────────────────────────────────────────────
   const HOOK       = Math.PI / 6.5;
@@ -938,16 +971,33 @@ function _renderPlayer(ctx, p, cam) {
   }
 
   // Obrys čepele (C-d2, místo stínu)
+  if (SV.sh2) { const o = 1.6 * s; ctx.beginPath(); ctx.moveTo(bStartX + o, bStartY + o); ctx.quadraticCurveTo(bCtrlX + o, bCtrlY + o, bEndX + o, bEndY + o);
+    ctx.strokeStyle = 'rgba(20,40,70,0.22)'; ctx.lineWidth = SV.bl * s; ctx.lineCap = 'round'; ctx.stroke(); }
+  if (!SV.paddle) {
   ctx.beginPath();
   ctx.moveTo(bStartX, bStartY);
   ctx.quadraticCurveTo(bCtrlX, bCtrlY, bEndX, bEndY);
   ctx.strokeStyle = SKIN_OUT;
-  ctx.lineWidth   = 4.8 * s;
+  ctx.lineWidth   = SV.blo * s;
   ctx.lineCap     = 'round';
   ctx.stroke();
+  }
 
   // Blade face (tape) — barva + styl tapování
-  _drawBlade(ctx, bStartX, bStartY, bCtrlX, bCtrlY, bEndX, bEndY, tapeCol, tapeSty, 2.8 * s, bladeCol);
+  if (SV.paddle) {   // S2: lopatka — šířka od paty (5,2) ke špičce (3,6), zaoblená špička, jeden obrys
+    const N = 10, L = [], Rr = [];
+    for (let i = 0; i <= N; i++) { const t = i / N, [qx, qy] = _bezPt(bStartX, bStartY, bCtrlX, bCtrlY, bEndX, bEndY, t);
+      const [ax, ay] = _bezPt(bStartX, bStartY, bCtrlX, bCtrlY, bEndX, bEndY, Math.min(1, t + 0.02)), [bx2, by2] = _bezPt(bStartX, bStartY, bCtrlX, bCtrlY, bEndX, bEndY, Math.max(0, t - 0.02));
+      const tx = ax - bx2, ty = ay - by2, tl = Math.hypot(tx, ty) || 1, hw = (5.2 - 1.6 * t) * s / 2;
+      L.push([qx - ty / tl * hw, qy + tx / tl * hw]); Rr.push([qx + ty / tl * hw, qy - tx / tl * hw]); }
+    const blade = new Path2D(); blade.moveTo(L[0][0], L[0][1]); for (const q of L) blade.lineTo(q[0], q[1]);
+    const e = L[N], f = Rr[N]; blade.quadraticCurveTo(bEndX + (bEndX - bCtrlX) * 0.25, bEndY + (bEndY - bCtrlY) * 0.25, f[0], f[1]);
+    for (let i = N; i >= 0; i--) blade.lineTo(Rr[i][0], Rr[i][1]); blade.closePath();
+    ctx.lineJoin = 'round'; ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = 1.8 * s; ctx.stroke(blade);
+    ctx.fillStyle = tapeSty === 'full' || !tapeSty ? tapeCol : bladeCol; ctx.fill(blade);
+    if (tapeSty && tapeSty !== 'full') { ctx.save(); ctx.clip(blade); _drawBlade(ctx, bStartX, bStartY, bCtrlX, bCtrlY, bEndX, bEndY, tapeCol, tapeSty, 5.2 * s, bladeCol); ctx.restore(); }
+  } else
+  _drawBlade(ctx, bStartX, bStartY, bCtrlX, bCtrlY, bEndX, bEndY, tapeCol, tapeSty, SV.bl * s, bladeCol);
   // PUK NA ČEPELI (nese ho tento hráč): na prohnuté straně, v nápřahu u paty čepele (tah od paty ke špičce)
   const cp = p.hasPuck && p._carriedPuck && p._carriedPuck._carrier === p ? p._carriedPuck : null;
   if (cp) {
@@ -976,7 +1026,8 @@ function _renderPlayer(ctx, p, cam) {
     const toL = h => { const dx = h.x - p.x, dy = h.y - p.y; return { x: dx * fcos + dy * fsin, y: -dx * fsin + dy * fcos - leanW }; };
     const llx = Math.cos(-ba) * -0.7 - Math.sin(-ba) * -0.7, lly = Math.sin(-ba) * -0.7 + Math.cos(-ba) * -0.7;   // světlo vlevo nahoře, pevné ve světě
     ctx.save();
-    ctx.translate(sx, sy); ctx.rotate(ba); ctx.translate(0, leanW * s); ctx.scale(s, s);
+    const sway = VIS.k && !p.crossCheck ? Math.sin(p._skatePhase ?? 0) * r * 0.07 * _sf : 0;   // K1/K2: tělo se přenáší nad odrazovou nohu
+    ctx.translate(sx, sy); ctx.rotate(ba); ctx.translate(0, leanW * s + sway); ctx.scale(s, s);
     skinBody(ctx, { feet: feetW, top: toL(topH), bot: toL(botH), hnd: p.handed ?? 1, tw: 0, lx: llx, ly: lly }, K);
     ctx.restore();
   }
