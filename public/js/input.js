@@ -29,10 +29,13 @@ export class Input {
         ctrlToast(this.mode, this.online); window.dispatchEvent(new CustomEvent('fh-ctrl-shown', { detail: this.mode })); }
       // E = žádost o přihrávku (stejně jako MMB)
       if (e.code === 'KeyE' && !e.repeat) { this._mmbKey = true; this.mmb = true; this.mmbJustPressed = true; }
+      // F = pravé tlačítko (zrušení nápřahu / přihrávka) — záloha pro prohlížeče, které si pravé tlačítko berou pro gesta
+      if (e.code === 'KeyF' && !e.repeat) { this._rmbKey = true; if (!this.rmb) { this.rmb = true; this.rmbJustPressed = true; } }
     });
     window.addEventListener('keyup', e => {
       this.keys[e.code] = false;
       if (e.code === 'KeyE') { this._mmbKey = false; this.mmb = !!this._mmbBtn; }
+      if (e.code === 'KeyF') { this._rmbKey = false; if (!this._rmbPtr && !this._rmbBtn) this.rmb = false; }
     });
 
     canvas.addEventListener('mousemove', e => {
@@ -44,23 +47,38 @@ export class Input {
     canvas.addEventListener('mousedown', e => {
       if (e.button === 0) { this.lmb = true; this.lmbJustPressed = true; }
       if (e.button === 1) { e.preventDefault(); this._mmbBtn = true; this.mmb = true; this.mmbJustPressed = true; }
-      if (e.button === 2) { this.rmb = true; this.rmbJustPressed = true; }
+      if (e.button === 2) { this._rmbBtn = true; if (!this.rmb) { this.rmb = true; this.rmbJustPressed = true; } }
     });
 
     // Use window so release outside canvas is caught (prevents stuck lmb/rmb)
     window.addEventListener('mouseup', e => {
       if (e.button === 0) { this.lmb = false; this.lmbJustReleased = true; }
       if (e.button === 1) { this._mmbBtn = false; this.mmb = !!this._mmbKey; }
-      if (e.button === 2) { this.rmb = false; }
+      if (e.button === 2) { this._rmbBtn = false; if (!this._rmbKey && !this._rmbPtr) this.rmb = false; }
     });
 
     canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+    // STAV TLAČÍTEK Z POINTER UDÁLOSTÍ (2026-11-12): některé prohlížeče (Dia, gesta myší) spolknou mousedown PRAVÉHO tlačítka,
+    // když je držené levé → nešlo zrušit nápřah. Druhé tlačítko při drženém prvním chodí jako pointermove se změněným `buttons`
+    // (Pointer Events: chorded buttons) → čteme bitovou masku (1 = levé, 2 = pravé) a dopočítáme hrany.
+    const syncButtons = e => {
+      if (e.pointerType && e.pointerType !== 'mouse') return;
+      const b = e.buttons | 0, L = !!(b & 1), R = !!(b & 2);
+      if (R && !this._rmbPtr) { this._rmbPtr = true; if (!this.rmb) { this.rmb = true; this.rmbJustPressed = true; } }
+      else if (!R && this._rmbPtr) { this._rmbPtr = false; if (!this._rmbKey) this.rmb = false; }
+      if (L && !this.lmb && e.target === canvas) { this.lmb = true; this.lmbJustPressed = true; }
+      else if (!L && this.lmb && e.type !== 'pointerdown') { this.lmb = false; this.lmbJustReleased = true; }
+    };
+    window.addEventListener('pointermove', syncButtons);
+    window.addEventListener('pointerdown', syncButtons);
+    window.addEventListener('pointerup', syncButtons);
 
     // Ztráta fokusu (alt-tab, klik mimo) → vynuluj vstupy, ať klávesa nezůstane
     // "stisknutá" a postava se netočí dokola (zaseknutý A/D u tank-steeringu).
     const clearAll = () => {
       this.keys = {};
-      this.lmb = this.rmb = this.mmb = this._mmbBtn = this._mmbKey = false;
+      this.lmb = this.rmb = this.mmb = this._mmbBtn = this._mmbKey = this._rmbBtn = this._rmbKey = this._rmbPtr = false;
     };
     window.addEventListener('blur', clearAll);
     document.addEventListener('visibilitychange', () => { if (document.hidden) clearAll(); });
@@ -69,7 +87,7 @@ export class Input {
   // Vynuluj vše (volá se např. při otevření Esc menu — ať nezůstane „zaseknutá" klávesa)
   clear() {
     this.keys = {};
-    this.lmb = this.rmb = this.mmb = this._mmbBtn = this._mmbKey = false;
+    this.lmb = this.rmb = this.mmb = this._mmbBtn = this._mmbKey = this._rmbBtn = this._rmbKey = this._rmbPtr = false;
     this.lmbJustPressed = this.lmbJustReleased = this.rmbJustPressed = this.mmbJustPressed = false;
   }
 
