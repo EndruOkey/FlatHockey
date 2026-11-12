@@ -16,6 +16,7 @@ import { Server } from 'socket.io';
 import { botTarget, clampBots } from './bot-target.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { mountDev } from './dev-gate.js';
 import authRouter, { linkRouter, verifySession, requireAuth, bearerToken, createGuestAccount } from './auth.js';
 import { updateStats, updateRankAndCredits, getRankPosition, getLeaderboard, getStoreItems, getUserUnlocks, buyItem, getPuckCredits, getActiveSeason, logMetric, cleanOldMetrics, recordReferral, rewardReferralIfPending, isFounder } from './db.js';
 
@@ -95,6 +96,8 @@ const io = new Server(server, {
   pingTimeout: 20000,
   connectTimeout: 10000,
 });
+
+mountDev(app, express, path.join(__dirname, 'public'), rateLimit('devlogin', 8));   // /dev — playground pod heslem (dev-gate.js)
 
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders: (res) => {

@@ -1028,6 +1028,7 @@ function _renderPlayer(ctx, p, cam) {
     ctx.save();
     const sway = VIS.k && !p.crossCheck ? Math.sin(p._skatePhase ?? 0) * r * 0.07 * _sf : 0;   // K1/K2: tělo se přenáší nad odrazovou nohu
     ctx.translate(sx, sy); ctx.rotate(ba); ctx.translate(0, leanW * s + sway); ctx.scale(s, s);
+    K.headV = VIS.h;
     skinBody(ctx, { feet: feetW, top: toL(topH), bot: toL(botH), hnd: p.handed ?? 1, tw: 0, lx: llx, ly: lly }, K);
     ctx.restore();
   }

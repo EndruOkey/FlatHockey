@@ -108,7 +108,8 @@ export function skinBody(c, B, K) {
   for (let i = 0; i < 2; i++) { capsule(up, S[i].x, S[i].y, 1.9, E[i].x, E[i].y, 1.5); capsule(up, E[i].x, E[i].y, 1.5, H[i].x, H[i].y, 1.25); }   // paže: plynulé zúžení
   const gloves = new Path2D(); for (const g of gl) { const m = new DOMMatrix().translate(g.x, g.y).rotate(g.a * 180 / Math.PI); const q = new Path2D(); q.roundRect(-2.6 * GS + 0.6, -1.9 * GS, 4.6 * GS, 3.8 * GS, 1.5); gloves.addPath(q, m); }
   const helm = new Path2D(); ellP(helm, hx, 0, hrx, hry);
-  body.addPath(up); body.addPath(gloves); body.addPath(helm);
+  const hv = K.headV || 0;   // H0 helma v jedné cestě s tělem; H1/H2 samostatný tvar s vlastním obrysem (dev playground)
+  body.addPath(up); body.addPath(gloves); if (!hv) body.addPath(helm);
   // 2) obrys jednou (pod výplněmi) → zůstane jen vnější hrana
   c.lineJoin = 'round'; c.strokeStyle = SKIN_OUT; c.lineWidth = 2.0; c.stroke(body);
   // 3) výplně v pořadí zdola (y−z): štulpny, kalhoty, trup+paže (jedna barva = bez švu), vzor, číslo, rukavice, helma
@@ -132,12 +133,21 @@ export function skinBody(c, B, K) {
   c.fillStyle = K.glove; c.fill(gloves);   // ruce čte manžeta (záměrná linka), ne šev
   for (const g of gl) { c.save(); c.translate(g.x, g.y); c.rotate(g.a); c.fillStyle = mix(K.glove, K.cuff, 0.75); c.fillRect(-2.6 * GS + 0.6, -1.9 * GS + 0.3, 0.9, 3.8 * GS - 0.6); c.restore(); }
   // helma
-  c.fillStyle = K.helmet === K.jersey ? shade(K.helmet, lt ? -0.18 : -0.24) : K.helmet; c.fill(helm);   // helma v barvě dresu o tón tmavší = hlava se oddělí od ramen c.strokeStyle = shade(K.helmet, -0.38); c.lineWidth = 0.6; c.stroke(helm);   // okraj helmy = hlava a směr pohledu (informační linka)
+  if (!hv) { c.fillStyle = K.helmet === K.jersey ? shade(K.helmet, lt ? -0.18 : -0.24) : K.helmet; c.fill(helm); }   // helma v barvě dresu o tón tmavší = hlava se oddělí od ramen c.strokeStyle = shade(K.helmet, -0.38); c.lineWidth = 0.6; c.stroke(helm);   // okraj helmy = hlava a směr pohledu (informační linka)
   // 4) jedno stínování přes celé tělo (světlo pevné ve světě, předané v lokálu)
   const lx = B.lx ?? -0.5, ly = B.ly ?? -0.5;
   const g = c.createRadialGradient(lx * R * 0.7, ly * R * 0.7, R * 0.2, 0, 0, R * 1.9);
   g.addColorStop(0, 'rgba(255,255,255,0.30)'); g.addColorStop(0.5, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(10,16,40,0.24)');
   c.save(); c.clip(body); c.fillStyle = g; c.fillRect(-R * 2.5, -R * 2.5, R * 5, R * 5); c.restore();
+  if (hv) {   // H1: tón odlišený od dresu; H2: světlá helma jako dřív (pokud hráč nemá vlastní barvu helmy)
+    const own = K.helmet !== K.jersey;
+    const hc = hv === 2 ? (own ? K.helmet : '#eef2f8') : (own ? K.helmet : shade(K.jersey, lt ? -0.45 : 0.42));
+    c.lineJoin = 'round'; c.strokeStyle = SKIN_OUT; c.lineWidth = 2.0; c.stroke(helm);
+    c.fillStyle = hc; c.fill(helm);
+    const hg = c.createRadialGradient(hx + lx * R * 0.25, ly * R * 0.25, R * 0.05, hx, 0, hrx * 1.2);
+    hg.addColorStop(0, 'rgba(255,255,255,0.35)'); hg.addColorStop(1, 'rgba(10,16,40,0.18)'); c.fillStyle = hg; c.fill(helm);
+    K = { ...K, helmet: hc };   // hřebínek a lesk níž počítají s barvou helmy
+  }
   // 5) informační linky navrch: hřebínek helmy, lesk, ochrana obličeje
   c.lineCap = 'round';
   // v 1× (lod) bez hřebínku a lesku helmy (splývají ve skvrnu), směr hlavy nese hledí

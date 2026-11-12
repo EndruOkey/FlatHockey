@@ -33,6 +33,8 @@ jobs:
       - run: npm run test:freeze
       - run: npm run test:cc
       - run: npm run test:bot
+      - run: npm run test:dev
+      - run: npm run test:steer
 
   deploy:
     needs: test

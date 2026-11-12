@@ -14,7 +14,9 @@ export class Input {
     this.rmbJustPressed  = false;
     this.mmbJustPressed  = false;
     // Ovládání: 'A' = WASD ve světě (výchozí), 'B2' = za kurzorem (steer.js). Q přepíná; hra pak dosadí this.steer.
-    this.mode = 'A'; try { const m = localStorage.getItem('fh_ctrl'); if (m === 'B2' || m === 'R1') this.mode = m; } catch {}
+    // Režimy ovládání jsou pokus → jen v dev playgroundu (window.FH_DEV); běžní hráči mají vždy WASD
+    this.mode = 'A'; if (globalThis.FH_DEV) try { const m = localStorage.getItem('fh_ctrl'); if (m === 'B2' || m === 'R1') this.mode = m; } catch {}
+    if (globalThis.FH_DEV) window.addEventListener('fh-ctrl', e => { this.mode = e.detail; this.steer = null; });
     this.steer = null;          // { dx, dy } od hry (jen v režimu B2)
     this.modeToggled = false;   // hrana pro hru
     this.online = false;        // NetGame online nastaví true → B2 se neuplatní (server kvantuje)
@@ -22,9 +24,9 @@ export class Input {
     window.addEventListener('keydown', e => {
       if (e.code === 'Tab') e.preventDefault();
       this.keys[e.code] = true;
-      if (e.code === 'KeyQ' && !e.repeat) { this.mode = this.mode === 'A' ? 'R1' : this.mode === 'R1' ? 'B2' : 'A'; this.modeToggled = true; this.steer = null;
+      if (e.code === 'KeyQ' && !e.repeat && globalThis.FH_DEV) { this.mode = this.mode === 'A' ? 'R1' : this.mode === 'R1' ? 'B2' : 'A'; this.modeToggled = true; this.steer = null;
         try { localStorage.setItem('fh_ctrl', this.mode); } catch {}
-        ctrlToast(this.mode, this.online); }
+        ctrlToast(this.mode, this.online); window.dispatchEvent(new CustomEvent('fh-ctrl-shown', { detail: this.mode })); }
       // E = žádost o přihrávku (stejně jako MMB)
       if (e.code === 'KeyE' && !e.repeat) { this._mmbKey = true; this.mmb = true; this.mmbJustPressed = true; }
     });

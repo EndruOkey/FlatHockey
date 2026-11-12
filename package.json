@@ -18,6 +18,8 @@
     "test:cc": "node test/crosscheck.test.mjs",
     "test:buy": "node test/buy-race.test.mjs",
     "test:scorehack": "node test/score-hack.test.mjs",
+    "test:dev": "node test/dev-gate.test.mjs",
+    "test:steer": "node test/steer.test.mjs",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "engines": {
