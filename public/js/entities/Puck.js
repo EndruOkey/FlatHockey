@@ -467,7 +467,7 @@ function _resolveNetWalls(puck, dt) {
           const sp = -puck.vz;
           puck.z = kX >= 1 ? netRoofH(u) : netRoofH(X.u);   // leží na střeše (nebo sjel přes její hranu)
           puck.vz = sp > 60 ? sp * 0.2 : 0;                 // tvrdý dopad cvrnkne, jinak puk leží na síti
-          if (sp > 35) puck._ev |= 16;
+          if (sp > 35) { puck._ev |= 16; puck._postHit = { x: puck.x, y: puck.y, k: 3, n: (puck._postHit?.n || 0) + 1 }; }
           puck.vx = puck.vx * 0.97 + dir * ROOF_ACC * dt;   // síť brzdí, svah táhne dozadu (puk sjede za branku)
           puck.vy *= 0.97;
           continue;
@@ -486,19 +486,19 @@ function _resolveNetWalls(puck, dt) {
     // Horní boční stěna — blokuj puk přicházející ZESHORA (py < gy1)
     if (inX && py < gy1 && puck.y >= gy1 - r && under(atY(gy1 - r))) {
       puck.y = gy1 - r;
-      if (puck.vy > 0) { const sp = Math.abs(puck.vy); puck.vy = -sp * _reb(puck.vy); if (sp > 35) puck._ev |= 16; }
+      if (puck.vy > 0) { const sp = Math.abs(puck.vy); puck.vy = -sp * _reb(puck.vy); if (sp > 35) puck._ev |= 16; puck._postHit = { x: puck.x, y: gy1, k: 3, n: (puck._postHit?.n || 0) + 1 }; }
     }
     // Spodní boční stěna — blokuj zdola (py > gy2)
     if (inX && py > gy2 && puck.y <= gy2 + r && under(atY(gy2 + r))) {
       puck.y = gy2 + r;
-      if (puck.vy < 0) { const sp = Math.abs(puck.vy); puck.vy =  sp * _reb(puck.vy); if (sp > 35) puck._ev |= 16; }
+      if (puck.vy < 0) { const sp = Math.abs(puck.vy); puck.vy =  sp * _reb(puck.vy); if (sp > 35) puck._ev |= 16; puck._postHit = { x: puck.x, y: gy2, k: 3, n: (puck._postHit?.n || 0) + 1 }; }
     }
     // Zadní stěna (výška HB) — blokuj z vnějšku (za brankou), výška v okamžiku průletu rovinou
     if (inY && pu > d && u <= d + r) {
       const k = Math.min(1, Math.max(0, (pu - (d + r)) / Math.max(1e-9, pu - u)));
       if (pz + (puck.z - pz) * k <= netRoofH(d)) {
         puck.x = dir > 0 ? hi + r : lo - r;
-        if (dir * puck.vx < 0) { const sp = Math.abs(puck.vx); puck.vx = dir * sp * _reb(puck.vx); if (sp > 35) puck._ev |= 16; }
+        if (dir * puck.vx < 0) { const sp = Math.abs(puck.vx); puck.vx = dir * sp * _reb(puck.vx); if (sp > 35) puck._ev |= 16; puck._postHit = { x: backX, y: puck.y, k: 3, n: (puck._postHit?.n || 0) + 1 }; }
       }
     }
   }

@@ -29,16 +29,16 @@ export class Rink {
     const now = (typeof performance !== 'undefined' ? performance.now() : 0), L = this._fx || (this._fx = []), seen = this._fxSeen || (this._fxSeen = new Map());
     const add = (src, h, kind) => { const n = h ? h.n : 0; if (!seen.has(src)) { seen.set(src, n); return; }   // 1. kreslení: jen zapamatuj stav (žádný záblesk ze starého zásahu)
       if (seen.get(src) === n) return; seen.set(src, n); if (h) L.push({ x: h.x, y: h.y, kind, t0: now }); };
-    if (puck) add(puck, puck._postHit, puck._postHit?.k === 2 ? 'bar' : 'post');
+    if (puck) add(puck, puck._postHit, puck._postHit?.k === 2 ? 'bar' : puck._postHit?.k === 3 ? 'net' : 'post');
     for (const g of goalies) if (g) add(g, g._hit, 'goalie');
     const s = cam.scale, DUR = 420;
     for (let i = L.length - 1; i >= 0; i--) {
       const f = L[i], u = (now - f.t0) / DUR; if (u >= 1 || u < 0) { L.splice(i, 1); continue; }
-      const x = cam.ox + f.x * s, y = cam.oy + f.y * s, a = 1 - u, metal = f.kind !== 'goalie';
+      const x = cam.ox + f.x * s, y = cam.oy + f.y * s, a = 1 - u, metal = f.kind === 'post' || f.kind === 'bar';
       ctx.save();
       if (f.kind === 'post') { ctx.beginPath(); ctx.arc(x, y, (2.0 + 1.5 * a) * s, 0, Math.PI * 2); ctx.fillStyle = `rgba(255,255,255,${0.9 * a})`; ctx.fill(); }   // rozsvícená tyčka
       if (f.kind === 'bar') { ctx.beginPath(); ctx.moveTo(x, y - 6 * s); ctx.lineTo(x, y + 6 * s); ctx.strokeStyle = `rgba(255,255,255,${0.9 * a})`; ctx.lineWidth = 2.4 * s; ctx.lineCap = 'round'; ctx.stroke(); }
-      const col = metal ? '235,242,255' : '255,206,40';
+      const col = metal ? '235,242,255' : f.kind === 'net' ? '150,215,255' : '255,206,40';   // tyč/břevno bíle, síť modře, brankář žlutě
       if (u < 0.35) { ctx.beginPath(); ctx.arc(x, y, 3.2 * s * (1 - u), 0, Math.PI * 2); ctx.fillStyle = `rgba(${col},${0.95 * (1 - u / 0.35)})`; ctx.fill(); }   // záblesk v bodě dotyku
       ctx.beginPath(); ctx.arc(x, y, (3 + 8 * u) * s, 0, Math.PI * 2);
       ctx.strokeStyle = `rgba(20,30,50,${0.5 * a})`; ctx.lineWidth = (3.2 - 1.6 * u) * s; ctx.stroke();   // tmavý lem = čitelné i na ledu
@@ -358,6 +358,8 @@ function _drawGoalExact(ctx, s, x, xB, y1, y2, dir, postColor, Hs, part = 'base'
     ctx.fillStyle = g; ctx.fillRect(lo, y1, w, y2 - y1);
     ctx.restore(); return;
   }
+  // závoj sítě: co je pod střechou (puk v brance, záda brankáře), je vidět „za sítí" (2026-11-12)
+  ctx.fillStyle = 'rgba(225,236,248,0.42)'; ctx.fillRect(lo, y1, w, y2 - y1);
   // mřížka střechy (přes puk/brankáře uvnitř sítě)
   ctx.save(); ctx.beginPath(); ctx.rect(lo, y1, w, y2 - y1); ctx.clip();
   ctx.strokeStyle = 'rgba(90,110,135,0.55)'; ctx.lineWidth = 0.6 * s; ctx.beginPath();

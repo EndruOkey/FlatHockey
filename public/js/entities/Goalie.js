@@ -740,7 +740,7 @@ export class Goalie {
     if (Math.hypot(puck.x - this.x, puck.y - this.y) > this.radius + 9) return false;
     this._holdTimer = GSTANCE ? 1.2 : 0.85;
     this._heldPuck  = puck;
-    this._markSave('cover', 0.5);
+    this._markSave('cover', 0.5); this._hit = { x: puck.x, y: puck.y, z: 0, part: 'pads', n: (this._hit?.n || 0) + 1 };   // přikrytí volného puku = zásah (záblesk)
     puck.vx = 0; puck.vy = 0; puck.vz = 0; puck.z = 0;
     return true;
   }
