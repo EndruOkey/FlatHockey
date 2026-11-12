@@ -28,9 +28,8 @@ function _resolveCorners(puck) {
 }
 
 const GLASS_K = 0.85;          // sklo pruží o kus míň než mantinel
-const OVERNET_MIN_V = 220;     // px/s — od téhle rychlosti do zadního mantinelu letí puk zpět přes branku
-const OVERNET_MIN_Z = 0.5;     // px — puk aspoň trochu nadzvednutý (po ledě přes branku neletí); audit K7
-const OVERNET_LAND = 70;       // px před brankovou čárou, kam dopadne
+// Odraz přes branku = skill shot (scripts/overnet_skill.mjs): jen tvrdá, zvednutá rána přímo za síť. Exportováno kvůli sweepu.
+export const OVERNET = { minV: 300, minZ: 0.5, band: 15, land: 70 };   // 2026-11-12: dřív 220/±60 → vyšla i odbytá rána (39 %), teď 18 %, dobrá 100 %   // px/s, px výška u skla, px pás kolem ústí (± goalH/2 + band), px dopad před čarou
 
 export class Puck {
   rng = defaultRng;
@@ -228,10 +227,10 @@ export class Puck {
       this.x = side < 0 ? PUCK.radius : RINK.w - PUCK.radius;
       this.vx = -side * vin * _reb(this.vx) * (high ? GLASS_K : 1);
       wallHit();
-      // Odraz přes branku: zadní sklo, v šířce brankoviště ± 60 px, tvrdá rána → oblouk nad sítí, dopad ~OVERNET_LAND px před brankou
+      // Odraz přes branku: zadní sklo přímo za sítí (± goalH/2 + OVERNET.band), tvrdá rána → oblouk nad sítí, dopad ~OVERNET_LAND px před brankou
       const gy = RINK.goalY + RINK.goalH / 2;
-      if (this.z > OVERNET_MIN_Z && vin >= OVERNET_MIN_V && Math.abs(this.y - gy) < RINK.goalH / 2 + 60) {   // zvednutá tvrdá rána (ne po ledě)
-        const v = Math.abs(this.vx), d = RINK.goalLineLeft + OVERNET_LAND;   // zeď → brankovou čáru (90) + kus před ni
+      if (this.z > OVERNET.minZ && vin >= OVERNET.minV && Math.abs(this.y - gy) < RINK.goalH / 2 + OVERNET.band) {   // zvednutá tvrdá rána (ne po ledě)
+        const v = Math.abs(this.vx), d = RINK.goalLineLeft + OVERNET.land;   // zeď → brankovou čáru (90) + kus před ni
         const t = d / Math.max(120, v);
         this.vz = PUCK.gravity * t / 2 - this.z / t;                          // dopad přesně v čase t z aktuální výšky
         this._overNet = true;
