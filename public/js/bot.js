@@ -115,6 +115,9 @@ const EVADE_W    = _envE('FH_EVW', 1.2);       // rad — max odklon oblouku
 // (stejná rychlost = jen by ujížděl do strany a nedal se dojet; crosscheck 72 nájezdů: oblouk 21, tohle 29, starý bot 30 zásahů). Pak jen uhne ramenem (EVC_W rad).
 const EVC_V = _envE('FH_EVCV', 60), EVC_D = _envE('FH_EVCD', 200), EVC_W = _envE('FH_EVCW', 0.2);
 const ANALOG     = _envE('FH_ANALOG', 1);       // 1 = nosič řídí plynulým směrem (ne 8 směrů)
+const OFF_ANALOG = _envE('FH_OFFANALOG', 1);    // 1 = i bot BEZ puku řídí plynule (8 směrů = 50 % času na osách 45°, cik-cak; scripts/bot_linearity.mjs)
+const OFF_DEF    = new Set(['chase', 'gap', 'defend']);   // FH_OFFANALOG=2: obrana zůstává 8směrová
+const OFF_TURN   = _envE('FH_OFFTURN', 0);      // max změna směru vstupu bez puku za tick (rad); 0 = bez limitu. Změřeno: 0,25 rozbije stall (99 %) a bot 1v1 (7/10); 0,1 a 0,05 brzdí honění
 const WIDE_X = _envE('FH_WIDEX', 165), WIDE_Y = _envE('FH_WIDEY', 100);   // px — bod na kraji pro plán „wide"
 const PRESS_ZONE = _envE('FH_PRZ', 40);        // px — soupeř takhle blízko v pásmu = nečekej (reset nezpomaluje)
 const WEAVE_CHASE = _envE('FH_WVCH', 0);       // px — soupeř ZA nosičem blíž než tohle = žádné vlnění (ztratil by náskok)
@@ -594,6 +597,11 @@ export function botThink(p, inp, match) {
   // Nosič řídí plynule (jednotkový směr, stejná max. rychlost jako diagonála WASD): oblouk místo zubů 8 směrů,
   // které při kličce dělaly ostré „cuty" (carve model za ně bere rychlost → obránce nosiče dojel)
   if (ANALOG && p.hasPuck && m > 6) { inp.dx = mx / m; inp.dy = my / m; }
+  if (OFF_ANALOG && !p.hasPuck && m > 6 && (OFF_ANALOG === 1 || !OFF_DEF.has(p._botMode))) {
+    let a = Math.atan2(my, mx);
+    if (OFF_TURN > 0 && b.lastMv != null) { const d = Math.atan2(Math.sin(a - b.lastMv), Math.cos(a - b.lastMv)); if (Math.abs(d) > OFF_TURN) a = b.lastMv + Math.sign(d) * OFF_TURN; }
+    b.lastMv = a; inp.dx = Math.cos(a); inp.dy = Math.sin(a);
+  } else if (!p.hasPuck) b.lastMv = null;
   inp.lmb = false;
   inp.aim = Math.atan2(ay - p.y, ax - p.x);
   // S pukem otáčej holí plynule: skok míření (honič→nosič míří najednou jinam) roztočil hůl nad práh

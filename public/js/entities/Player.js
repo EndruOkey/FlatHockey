@@ -1232,12 +1232,14 @@ function _resolveGoalCage(p, r) {
 
 // ---------- Pohyb v2 (scripts/movement_feel.mjs --sweep, vítěz sw41: 16/19 rubriky, původní 12/19) ----------
 // Výbušný 1. krok (320 px/s² ze stání → 180 u topu), hokejový stop (po tvrdé brzdě z rychlosti 0,45 s × 2 akcelerace
-// + pod 30 px/s odraz rovnou do směru vstupu), crossover v mírném oblouku (top × 1,08 na 0,5 s), ostrý cut stojí tempo (k 6: 8 shodilo góly 3v3 na 3,77, 4–5 rozbilo stall/góly).
+// + pod 30 px/s odraz rovnou do směru vstupu), crossover v mírném oblouku (top × 1,08 na 0,5 s), ostrý cut stojí tempo (k 4; s plynulými boty bez puku: 3v3 k4 4,7 gólu / k6 neprošlo / k8 4,37 — balance je šumivá).
 // Obal kolem PlayerBase._move → server i klient (sdílený soubor) počítají stejně; deterministické (jen stav entity + dt).
 const _mvEnv = (k, d) => (typeof process !== "undefined" && process.env?.[k] != null) ? +process.env[k] : d;
-const MV = { acurve: [320, 180], stopgo: { k: 2, t: 0.45, pivot: 30 }, carve: { lo: 0.12, hi: 0.75, k: 1.08, hold: 0.5 }, cut: _mvEnv("FH_MVCUT", 6) };
+const MV = { acurve: [320, 180], stopgo: { k: 2, t: 0.45, pivot: 30 }, carve: { lo: 0.12, hi: 0.75, k: 1.08, hold: 0.5 }, cut: _mvEnv("FH_MVCUT", 4) };
 const _baseMove = PlayerBase.prototype._move;
+const MV_OFF = _mvEnv("FH_MV", 1) === 0;
 PlayerBase.prototype._move = function (input, dt) {
+  if (MV_OFF) return _baseMove.call(this, input, dt);
   const accel0 = PLAYER.accel, speed0 = PLAYER.speed;
   const sp = Math.hypot(this.vx, this.vy), top = speed0;
   let acc = MV.acurve[0] + (MV.acurve[1] - MV.acurve[0]) * clamp(sp / top, 0, 1), spd = speed0;
