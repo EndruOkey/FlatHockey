@@ -31,7 +31,15 @@ export const STANCE_COVER = {
   rvh:       { near: [1.30, 0.55], far: [0.60, 0.60] },   // přilepený k bližší tyčce; nad ramenem a na druhou stranu
   stretch:   { near: [_genv('FH_GSXLO', 1.70), 0.50], far: [0.50, 0.50] },   // dlouhý dosah po ledě na jednu stranu, nahoře otevřený
 };
-const FAKE_T = _genv('FH_FAKET', 1.0), FAKE_LAG = _genv('FH_FAKELAG', 0.2), FAKE_SCREEN = _genv('FH_FAKESCR', 1);   // scripts/shot_mech_test.mjs SM_HOLD=20: finta→gól 3/12 vs 0/12   // s zamrznutí po fintě; násobek rychlosti sledování puku
+// FINTA v malém okně (2026-11-12, scripts/feint_probe.mjs): po zrušení nápřahu FAKE_D s gólman ještě stojí na ránu, pak FAKE_W s
+// „skočí" (plný trest), pak FAKE_R s návrat. Dřív FAKE_T = 1 s plného trestu → finta vyšla vždy (okno ~1 s).
+const FAKE_D = _genv('FH_FAKED', 0.08), FAKE_W = _genv('FH_FAKEW', 0.07), FAKE_R = _genv('FH_FAKER', 0.06);
+const FAKE_LOCK = _genv('FH_FAKELOCK', 0.6);   // rána vypuštěná, když je gólman „chycený" (trest ≥ 0,5) → trest drží až do konce rány
+const FAKE_T = FAKE_D + FAKE_W + FAKE_R, FAKE_LAG = _genv('FH_FAKELAG', 0.2), FAKE_SCREEN = _genv('FH_FAKESCR', 1.8);   // 1,8: rána v okně finty vyjde ~62 % (feint_probe sweep 2026-11-12)   // FAKE_LAG = násobek rychlosti sledování puku při plném trestu
+
+// Animace brankáře (jen kresba): FH_GANIM=0 vypne (A/B měření); latence reakce rukou na výstřel (s) — ODHAD dle reakční doby ~0,2 s
+const GANIM = (typeof process !== 'undefined' && process.env?.FH_GANIM != null) ? process.env.FH_GANIM !== '0' : true;
+const ANIM_LAT = 0.12;
 
 // Střed brankáře nejblíž POST_IN px od tyčky: kreslené tělo má ±11,5 px → přes tyčku přesáhne jen beton (~3 px), ne půlka těla (2026-11-12)
 const POST_IN = (typeof process !== 'undefined' && process.env?.FH_POSTIN != null) ? +process.env.FH_POSTIN : 8.5;
@@ -142,7 +150,7 @@ export class Goalie {
     const diffMult      = this.difficulty === 'competitive' ? 0.75 : this.difficulty === 'easy' ? 1.40 : 1.0;
     const baseLag       = 5.8 * diffMult;
     const distLagFactor = rawDist > 170 ? Math.max(0.28, 1 - (rawDist - 170) / 220) : 1.0;
-    let lag             = baseLag * distLagFactor * (1 - this._screen * 0.55);
+    let lag             = baseLag * distLagFactor * Math.max(0.05, 1 - this._screen * 0.55);
     // FINTA (2026-11-09): gólman čte nápřah soupeře s pukem (charge > 0,35 do 300 px). Zruší-li ho nosič bez rány
     // (stále drží puk), gólman „skočí" na fintu: FAKE_T s sleduje puk do strany jen zlomkem rychlosti.
     {
@@ -151,7 +159,17 @@ export class Goalie {
       if (this._readWind && car && car === this._windBy && !(car.charge > 0.05)) { this._fakeT = FAKE_T; this._fakeEv = true; }   // nápřah zmizel, puk pořád u nosiče = finta
       this._readWind = winding; this._windBy = car;
       // po fintě jako clona: horší sledování, reakce i dosah (existující cesta _screen) — doznívá s časem
-      if (this._fakeT > 0) { this._fakeT -= dt; lag *= FAKE_LAG; this._screen = Math.max(this._screen, FAKE_SCREEN * Math.min(1, this._fakeT / 0.3)); }
+      // výstřel = puk bez nosiče náhle letí k brance (stejné pravidlo jako animace)
+      const vInF = puck.vx * -this.inX, shot = !car && vInF > 160 && (this._fkPrevVIn ?? 0) < 80; this._fkPrevVIn = vInF;
+      let pen = 0;
+      if (this._fakeT > 0) {
+        const a = FAKE_T - this._fakeT;   // stáří finty
+        pen = a < FAKE_D ? 0 : a < FAKE_D + FAKE_W ? 1 : Math.max(0, 1 - (a - FAKE_D - FAKE_W) / FAKE_R);
+        this._fakeT -= dt;
+        if (shot && pen >= 0.5) this._fakeLock = FAKE_LOCK;   // trefil okno → gólman zůstane chycený, než rána doletí
+      }
+      if (this._fakeLock > 0) { this._fakeLock -= dt; pen = 1; if (vInF < 40) this._fakeLock = 0; }
+      if (pen > 0) { lag *= 1 - pen * (1 - FAKE_LAG); this._screen = Math.max(this._screen, FAKE_SCREEN * pen); }
     }
     // Percepce X: za brankou puk fixuj na goal line (golman nesleduje puk za sebou),
     // ale jen pokud NENÍ v retrieve fázi — tam potřebujeme skutečnou pozici.
@@ -434,6 +452,39 @@ export class Goalie {
       tilt = clamp(-Math.atan2(this._percY - this.y, Math.abs(this._percX - this.x) + 4), -0.42, 0.42);
     }
     this._tilt += (tilt - this._tilt) * Math.min(1, (wrapOverride ? 12 : 8) * dt);
+    if (GANIM) this._animUpdate(dt, world, puck);
+  }
+
+  // ── ANIMACE (2026-11-12, jen vizuál): sledování → příprava (nápřah) → reakce rukou na výstřel → zákrok → návrat.
+  // Čte stav simulace, zapisuje jen _a* (simulace je nečte), bez rng → góly i zákroky beze změny (goalie_anim_metrics R8).
+  _animUpdate(dt, world, puck) {
+    const A = this._a || (this._a = { hx: 0, gy: 0, by: 0, crouch: 0, rec: 0, kick: 0, stepPh: 0, lastY: this.y, react: null, prevVIn: 0 });
+    const k = (w) => Math.min(1, w * dt), cap = 150 * dt;
+    const spring = (v, tgt, w) => v + clamp((tgt - v) * k(w), -cap, cap);
+    const free = !puck.ownerId && !world.players.some(p => p.hasPuck);
+    const vIn = puck.vx * -this.inX, dyP = puck.y - this.y;
+    // výstřel: puk náhle letí k brance (bez nosiče) → předpověď místa a výšky na brankové čáře
+    if (free && vIn > 160 && A.prevVIn < 80) {
+      const t = Math.max(0, (this.netX - puck.x) / (puck.vx || 1e-6));
+      const yAt = puck.y + puck.vy * t, zAt = Math.max(0, (puck.z || 0) + (puck.vz || 0) * t - 0.5 * PUCK.gravity * t * t);
+      A.react = { t: 0, y: clamp(yAt - this.y, -16, 16), high: zAt > PUCK.gloveHeight };
+    }
+    A.prevVIn = vIn;
+    if (A.react) { A.react.t += dt; if (A.react.t > ANIM_LAT + 0.4 || !free) A.react = null; }
+    // cíle rukou (lokál: −X k puku, +Y dolů): sledování ±1,5 px, příprava = ruce vpřed a od těla, reakce = ruka na straně puku k místu dopadu
+    const set = this._readWind ? 1 : 0;
+    let hx = -1.0 * set, gy = clamp(dyP / 20, -1, 1) * 1.5 - 0.8 * set, by = clamp(dyP / 20, -1, 1) * 1.5 + 0.8 * set;
+    if (A.react && A.react.t >= ANIM_LAT) {
+      const r = A.react; hx -= r.high ? 3 : 2;
+      if (r.y < 0 || r.high) gy += clamp(r.y + 7.5, -4, 4) - (r.high ? 1.5 : 0); else by += clamp(r.y - 7.5, -4, 4);
+    }
+    A.hx = spring(A.hx, hx, A.react ? 40 : 12); A.gy = spring(A.gy, gy, A.react ? 40 : 12); A.by = spring(A.by, by, A.react ? 40 : 12);
+    A.crouch += (set - A.crouch) * k(1 / 0.15 * 3);
+    A.rec = Math.max(0, A.rec - 6 * dt * Math.max(0.3, A.rec));
+    // mikrokroky: každé 3 px posunu jeden krok (střídavě pady „kopnou")
+    A.stepPh += Math.abs(this.y - A.lastY) / 3; A.lastY = this.y;
+    A.kick = Math.max(0, A.kick - dt / 0.08);
+    if (A.stepPh >= 1) { A.stepPh -= Math.floor(A.stepPh); A.kick = 1; A.stepSide = -(A.stepSide || 1); }
   }
 
   // ── Volba postoje (deterministicky ze stavu puku, bez náhody) ──────────
@@ -492,7 +543,7 @@ export class Goalie {
     // Clona zmenší dosah krytí (hráč v zákrytu = hůř chytá)
     // Competitive = lepší pokrytí, casual = snadněji se dostaneš ke gólu
     const screenPenalty = this.difficulty === 'competitive' ? 0.30 : this.difficulty === 'easy' ? 0.68 : 0.42;
-    const sc = 1 - this._screen * screenPenalty;
+    const sc = Math.max(0.15, 1 - this._screen * screenPenalty);   // clona po fintě může být > 1 → dosah nikdy záporný
     const coverXMult = this.difficulty === 'competitive' ? 1.08 : this.difficulty === 'easy' ? 0.82 : 1.0;
     // COVER_H=14 → base=17px. Vyšší mults → debuffs (one-timer/clona/forma) skutečně sníží reachY pod floor
     const coverYMult = this.difficulty === 'competitive' ? 1.55 : this.difficulty === 'easy' ? 1.05 : 1.28;
@@ -706,6 +757,7 @@ export class Goalie {
     this._saveRecoil = 0.15;
     this.rng.next();          // zachovej spotřebu rng (sekvence simulace beze změny)
     this._saveRecoilX = 1;    // vizuál: tělo odskočí VŽDY od puku (+X lokálně), ne náhodně
+    if (this._a) this._a.rec = 1;   // animace: viditelný odskok 1,5 px s útlumem
   }
 
   _release(world) {
@@ -764,6 +816,11 @@ export class Goalie {
     const spread = clamp(Math.abs(this._vy) / 110, 0, 1);
     const drop   = this.stance === 'stand' ? 1 : Math.min(1, this._stanceT / DROP_T);
     const G      = goalieGeom(holding ? 'cover' : this.stance, this._side, spread, drop);
+    const A = GANIM && this._a;
+    if (A && !holding) {   // animace rukou, přikrčení a mikrokroků (jen kresba)
+      G.handX += A.hx; G.gloveY += A.gy; G.blockY += A.by; G.bodyScale *= 1 - 0.05 * A.crouch;
+      if (A.kick > 0) for (const pd of G.pads) if (Math.sign(pd.ky || pd.dir) === (A.stepSide || 1)) pd.kx -= 1.2 * A.kick;
+    }
 
     // Přepneme na lokální souřadnice golmana (−X = směr k puku)
     ctx.save();
@@ -775,7 +832,7 @@ export class Goalie {
     ctx.save();
     ctx.scale(s, s);
     skinGoalie(ctx, G, goalieKit(this, baseColor), {
-      stance: holding ? 'cover' : this.stance, tilt: this._tilt, recoil: recoil, holding, inX: this.inX, drawPuck: false,
+      stance: holding ? 'cover' : this.stance, tilt: this._tilt, recoil: recoil + (A ? A.rec * 1.5 : 0), holding, inX: this.inX, drawPuck: false,
       padFlash: type === 'pads' ? flash : 0, blockFlash: type === 'blocker' ? flash : 0, gloveFlash: (type === 'glove' || type === 'cover') ? flash : 0,
     });
     ctx.restore();
@@ -820,7 +877,7 @@ export class Goalie {
       ctx.save();
       ctx.font = `bold ${Math.round(6 * s)}px monospace`;
       ctx.textAlign = 'center';
-      ctx.fillStyle = `rgba(255,140,90,${0.6 * this._screen})`;
+      ctx.fillStyle = `rgba(255,140,90,${0.6 * Math.min(1, this._screen)})`;
       ctx.fillText('BLOCKED', sx, sy + r + 8 * s);
       ctx.restore();
     }
