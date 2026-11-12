@@ -2,7 +2,7 @@
 import { VIS, setVis } from './vis.js';
 const ROWS = [
   { key: 'ctrl', label: 'Ovládání (Q)', opts: [['A', 'WASD'], ['R1', 'Zaoblené WASD'], ['B2', 'Za kurzorem']] },
-  { key: 'g', label: 'Branka', opts: [[5, 'Shora, přesně (kolize)'], [6, 'G6 čistá'], [7, 'G7 výrazná'], [3, 'Shora s hloubkou'], [4, 'Shora, větší hloubka'], [1, 'Půdorys'], [0, 'Šikmý 3D'], [2, 'Nízký náklon']] },
+  { key: 'g', label: 'Branka', opts: [[5, 'Shora, přesně (kolize)'], [8, 'G8 skutečný tvar (náhled)'], [6, 'G6 čistá'], [7, 'G7 výrazná'], [3, 'Shora s hloubkou'], [4, 'Shora, větší hloubka'], [1, 'Půdorys'], [0, 'Šikmý 3D'], [2, 'Nízký náklon']] },
   { key: 'p', label: 'Výška puku', opts: [[1, 'Shora (jako branka)'], [0, 'Šikmo nahoru (dřív)']] },
   { key: 'h', label: 'Hlava', opts: [[1, 'Oddělená helma'], [0, 'V barvě dresu'], [2, 'Světlá helma']] },
   { key: 's', label: 'Hokejka', opts: [[3, 'Dnešní štíhlejší'], [0, 'Dnešní (původní)'], [1, 'Štíhlá'], [2, 'Lopatka']] },
