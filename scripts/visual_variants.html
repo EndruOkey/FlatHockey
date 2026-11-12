@@ -1,0 +1,1473 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vizuál hráčů</title>
+<!-- FlatHockey — náhled vizuálních směrů hráčů a gólmanů. Samostatné: bez sítě, bez importů ze hry.
+     Kreslicí funkce každého směru (X_player / X_goalie) pracují v SVĚTOVÝCH jednotkách (ctx.scale(s)),
+     takže jdou přenést do Player.js / Goalie.js: pose() = co dnes počítá _renderPlayer (brusle, hůl, ruce),
+     goalieGeom() = KOPIE z public/js/entities/Goalie.js:895 (postoje padů jako v simulaci). -->
+<style>
+  :root { --bg:#0f1420; --panel:#171e2e; --ink:#e9eef7; --mute:#9aa6bb; --acc:#7FD4FF; --ok:#3ecf7a; --bad:#ff6b6b; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 'Segoe UI', system-ui, sans-serif; }
+  main { max-width: 1360px; margin: 0 auto; padding: 20px 16px 40px; }
+  h1 { font-size: 26px; margin: 0 0 4px; } h2 { font-size: 20px; margin: 0 0 2px; }
+  .sub { color: var(--mute); margin: 0 0 14px; }
+  section { background: var(--panel); border-radius: 10px; padding: 14px 16px; margin: 14px 0; }
+  .tag { display:inline-block; font-weight:700; background:var(--acc); color:#0b1730; border-radius:4px; padding:0 7px; margin-right:6px; }
+  canvas { display:block; max-width:100%; border-radius:6px; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { border-bottom: 1px solid #2a3348; padding: 5px 7px; text-align: center; }
+  th:first-child, td:first-child { text-align: left; }
+  td.tot { font-weight: 800; color: var(--acc); }
+  .small { font-size: 12px; color: var(--mute); }
+  .now { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; }
+  .now figure { margin:0; text-align:center; font-size:12px; color:var(--mute); }
+  .now img { display:block; background:#ddeef8; image-rendering:auto; }
+  ol { margin: 4px 0 0 18px; padding: 0; } li { margin: 2px 0; }
+</style>
+</head>
+<body>
+<main>
+<h1>Vizuál hráčů a gólmanů — 4 směry</h1>
+<p class="sub">Pohled shora, herní měřítko: hráč r = 7 px, puk r = 3 px. Ve hře při okně 1280 px je 1 px světa ≈ 1,1 px obrazovky („1×"). Řádky 3× jsou zvětšené pro detail, řádek 1× je skutečná velikost.</p>
+
+<section>
+  <h2>TEĎ — snímek z běžící hry</h2>
+  <p class="small">Playwright, offline zápas (PORT 4950), výřez 44×44 CSS px. Nahoře 3×, dole skutečná velikost 1×.</p>
+  <div class="now" id="now"></div>
+</section>
+
+<section>
+  <h2>Rubrika (napsaná před hodnocením)</h2>
+  <ol class="small">
+    <li><b>R1 Směr pohledu 1×</b> (0/2): kontrast helmy/hlavy vůči dresu ≥ 1,8 : 1 u obou týmů A hlava předsunutá ≥ 0,5 r → 2, jinak 0.</li>
+    <li><b>R2 Hůl 1×</b> (0–2): kontrast dříku vůči ledu ≥ 3 : 1 → +1; šířka dříku × 1,1 ≥ 2,5 px → +1.</li>
+    <li><b>R3a Hrana siluety</b> (0–2): max(kontrast dresu, kontrast obrysu ≥ 1 px) vůči ledu #ddeef8, horší tým: ≥ 3 → 2, ≥ 2 → 1.</li>
+    <li><b>R3b Týmy mezi sebou</b> (0–2): ΔE76 dres–dres ≥ 50 → 2, ≥ 30 → 1.</li>
+    <li><b>R4 Gólman — 5 postojů siluetou</b> (0–2): změřená silueta (šířka W, výška H, posun těžiště A, v px světa); nejbližší dvojice postojů vzdálená ≥ 3 px → 2, ≥ 1,5 px → 1.</li>
+    <li><b>R5 Výkon</b> (0–2): kreslicích operací (fill/stroke/text) za snímek 4 hráči + 2 gólmani: ≤ 300 → 2, ≤ 600 → 1. Čas ms je jen orientační (odhad, závisí na stroji).</li>
+    <li><b>R6 Top-down (y − z)</b> (0–2): stín ve screen space s pevným světlem (stejně jako puk) → +1; vrstvy jdou zdola nahoru (stín → brusle → hůl/puk → kalhoty → trup → ruce → rukavice → helma → puk ve vzduchu) bez porušení → +1.</li>
+    <li><b>R7 Detail</b> (0–2): počet různých částí výstroje (hráč + gólman): ≥ 16 → 2, ≥ 10 → 1.</li>
+  </ol>
+  <p class="small">Vše měří tato stránka sama (níže tabulka). Stejný vstup = stejný výsledek: žádná náhoda, pózy jsou pevné.</p>
+</section>
+
+<div id="variants"></div>
+
+<section>
+  <h2>Hodnocení (změřeno stránkou)</h2>
+  <div id="score"></div>
+  <p class="small" id="scorenote"></p>
+</section>
+<div id="cwrap">
+<section>
+  <h2>C-verze „spice" — předlohy a principy</h2>
+  <p class="sub">Ondřej vybral C „Ilustrace". Níže 4 obměny C, každá s jedním pojmenovaným principem z předloh, se sloty kosmetik a detailním gólmanem (lapačka s palcem, T-webem a manžetou; vyrážečka; maska „kočičí oči" s malbou; betony s válci a bloky; nákoleníky; vesta; hokejka s paddlem) ve všech 5 postojích ze simulace.</p>
+  <ul class="small">
+    <li><b>Windjammers 2</b> — recenze připisují čitelnost postav silnému obrysu a odlišným siluetám → <i>P1 obrys siluety</i>. (shacknews.com/article/128412, gamingbible.com recenze 2022-01-19)</li>
+    <li><b>Otl Aicher, piktogramy Mnichov 1972</b> — figura plná, výbava linkou, přísná geometrie → <i>tělo jako plná týmová hmota, hůl jako linka</i>. (smithsonianmag.com, peoplesgdarchive.org/item/17115)</li>
+    <li><b>LPC top-down průvodce</b> — jeden odstín a krytí stínu pro všechno, jedna kamera → <i>P2 jednotné světlo/stín</i>. (lpc.opengameart.org styleguide)</li>
+    <li><b>Super Mega Baseball; TF2 vs. Overwatch</b> — přehnané proporce a odlišné siluety = okamžitá čitelnost → <i>P4 větší helma/rukavice</i>. (80.lv: comparing TF2 and Overwatch art direction; pcgamer.com SMB2)</li>
+    <li><b>NHL 94</b> — svislá kamera, týmové barvy dresů nesou identitu → <i>P5 týmová barva dominuje siluetě</i>. (thehockeynews.com: making of NHL 94)</li>
+    <li><b>Patenty lapačky US9504900, US5511244</b> — palec, T-web mezi palcem a prsty, kapsa, manžeta → <i>P6 reálná lapačka</i>. (patents.google.com)</li>
+    <li><b>Top-down devlogy (Hotline Miami jako vzor)</b> — kamera shora ukáže málo, sprity se v davu ztrácí → <i>P8 směr pohledu z hlavy, nepřetížit detailem</i>. (slynyrd.com Pixelblog 55; remvst.substack.com)</li>
+    <li><b>12 principů animace</b> (obecné, ne konkrétní hra) — squash & stretch, následná akce → <i>P7 pohyb čitelný z pózy</i>.</li>
+  </ul>
+  <p class="small">Poctivě: vyhledávání vrátilo hlavně recenze a útržky; letecký snímek gólmana z NHL kamery jsem nenašel, Slapshot Rebound / Omega Strikers / Golf Story nedaly konkrétní vizuální princip (jen „cartoon / anime"). Ty jsem nepoužil.</p>
+</section>
+</div>
+<div id="cd2wrap"></div>
+</main>
+
+<script>
+// ═══════════════════════════ SPOLEČNÉ ═══════════════════════════
+const ICE = '#ddeef8', R0 = 7, PUCKR = 3, STICK = 16 * 0.86, BLADE = 12 * 0.86, HOOK = Math.PI / 6.5, GR = 8;
+const LIGHT = { x: 2, y: 2.5 };     // stín ve screen space (stejně jako puk: Puck.js ellipse(sx+2, sy+2.5))
+const RANK = { shadow:0, icefx:0, outline:0.5, skates:1, blades:1, laces:1, gstick:1.5, stick:2, tape:2, knob:2, puck:2, pads:2, padroll:2,
+  socks:3, pants:3, torso:4, stripes:4, number:4, light:4, gbody:4, chest:4, shoulders:5, elbows:5, arms:5, garms:3.5,
+  gloves:6, cuffs:6, glove:6, blocker:6, helmet:7, cage:7, visor:7, mask:7, chevron:7, puckair:8 };
+let LOG = null;                       // pole vrstev (pro R6/R7); null = nelogovat
+const L = t => { if (LOG) LOG.push(t); };
+
+function hex2rgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; }
+function shade(h, a) { const [r, g, b] = hex2rgb(h); const f = v => Math.round(a < 0 ? v * (1 + a) : v + (255 - v) * a); return `rgb(${f(r)},${f(g)},${f(b)})`; }
+function rgba(h, a) { const [r, g, b] = hex2rgb(h); return `rgba(${r},${g},${b},${a})`; }
+function lum(h) { return hex2rgb(h).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }).reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i], 0); }
+function contrast(a, b) { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+function lab(h) { let [r, g, b] = hex2rgb(h).map(v => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
+  let X = (r * 0.4124 + g * 0.3576 + b * 0.1805) / 0.95047, Y = r * 0.2126 + g * 0.7152 + b * 0.0722, Z = (r * 0.0193 + g * 0.1192 + b * 0.9505) / 1.08883;
+  const f = t => t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116; X = f(X); Y = f(Y); Z = f(Z); return [116 * Y - 16, 500 * (X - Y), 200 * (Y - Z)]; }
+function dE(a, b) { const p = lab(a), q = lab(b); return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]); }
+
+const ell = (c, x, y, rx, ry, a = 0) => { c.beginPath(); c.ellipse(x, y, rx, ry, a, 0, Math.PI * 2); };
+const circ = (c, x, y, r) => { c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); };
+const seg = (c, x1, y1, x2, y2) => { c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); };
+function rr(c, x, y, w, h, r) { r = Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2); c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+function bladePath(c, k) { c.beginPath(); c.moveTo(k.tip.x, k.tip.y); c.quadraticCurveTo(k.ctrl.x, k.ctrl.y, k.end.x, k.end.y); }
+// Stín ve screen space (před rotací těla) — jedno světlo pro všechno
+function shadowS(c, x, y, s, rx, ry, a = 0.25) { L('shadow'); ell(c, x + LIGHT.x * s, y + LIGHT.y * s, rx * s, ry * s); c.fillStyle = `rgba(0,0,0,${a})`; c.fill(); }
+// lokální → screen
+const toScr = (x, y, s, ba, lx, ly) => ({ x: x + (Math.cos(ba) * lx - Math.sin(ba) * ly) * s, y: y + (Math.sin(ba) * lx + Math.cos(ba) * ly) * s });
+
+// ── PÓZA HRÁČE (lokálně: +x = dopředu, +y = doprava; pravák). Odpovídá Player.js _renderPlayer:
+//    brusle podle fáze kroku (:918–947), držení hole (:741–754), nápřah windBack 1,75 / windPull 0,5, dokončení followArc 0,6,
+//    crosscheck napříč před tělem (:624–675), puk na prohnuté straně čepele (:797–806).
+function pose(state, hnd = 1) {
+  const S = { stand:{v:0,ph:0,a:0.35}, skate1:{v:160,ph:1.57,a:0.3}, skate2:{v:160,ph:4.71,a:0.3}, puck:{v:120,ph:0.8,a:0.3,carry:1},
+    wind:{v:60,ph:2.2,a:0.3,dcv:1,carry:1}, shot:{v:90,ph:2.8,a:0.3,follow:1,fly:1}, pass:{v:120,ph:1.3,a:0.05,pass:1}, cross:{v:70,ph:0.4,cross:1} }[state];
+  const R = R0, sf = Math.min(1, S.v / 160), feet = [];
+  for (const side of [-1, 1]) {
+    const ph = S.ph + (side === 1 ? 0 : Math.PI), push = Math.max(0, Math.sin(ph)) * sf, rec = Math.max(0, -Math.sin(ph)) * sf;
+    let fx = -R * 0.9 - push * R * 0.55 + rec * R * 0.2, fy = side * (R * 0.38 + push * R * 0.45), fa = side * push * 0.75;
+    if (S.v <= 8) { fx = -R * 0.9; fy = side * R * 0.45; fa = side * 0.18; }
+    feet.push({ x: fx, y: fy, a: fa, push, side });
+  }
+  const P = { feet, sf, state, hnd, puck: null, dcv: S.dcv || 0, lean: 0 };
+  if (S.cross) {
+    const sd = hnd * Math.PI / 2, cs = Math.cos(sd), sn = Math.sin(sd), half = 16 * 0.7 * 0.86, cx = R + 2;
+    const tip = { x: cx + cs * half, y: sn * half }, bd = sd - hnd * HOOK;
+    P.stick = { butt: { x: cx - cs * half, y: -sn * half }, top: { x: cx - cs * half * 0.62, y: -sn * half * 0.62 }, bot: { x: cx + cs * half * 0.42, y: sn * half * 0.42 },
+      tip, ctrl: { x: tip.x + cs * BLADE * 0.55, y: tip.y + sn * BLADE * 0.55 }, end: { x: tip.x + Math.cos(bd) * BLADE, y: tip.y + Math.sin(bd) * BLADE }, cross: true };
+    return P;
+  }
+  const dcv = S.dcv || 0, follow = S.follow ? -hnd * 0.6 * 0.85 : 0;
+  const a = S.a * hnd + hnd * dcv * 1.75 + follow, len = STICK * (1 - dcv * 0.5);
+  const grip = { x: Math.cos(S.a) * R * 0.2 + Math.cos(S.a + hnd * Math.PI / 2) * R * 0.5, y: Math.sin(S.a) * R * 0.2 + Math.sin(S.a + hnd * Math.PI / 2) * R * 0.5 };
+  const tip = { x: grip.x + Math.cos(a) * len, y: grip.y + Math.sin(a) * len };
+  const top = { x: R * (0.55 - 0.35 * dcv), y: R * (-0.15 + 0.55 * dcv) * hnd };
+  const sh = Math.atan2(tip.y - top.y, tip.x - top.x), bd = sh - hnd * HOOK;
+  const bot = { x: top.x + (tip.x - top.x) * 0.42, y: top.y + (tip.y - top.y) * 0.42 };
+  const end = { x: tip.x + Math.cos(bd) * BLADE, y: tip.y + Math.sin(bd) * BLADE };
+  P.stick = { butt: { x: top.x - Math.cos(sh) * 2.2, y: top.y - Math.sin(sh) * 2.2 }, top, bot, tip, end, ctrl: { x: tip.x + Math.cos(sh) * BLADE * 0.55, y: tip.y + Math.sin(sh) * BLADE * 0.55 }, sh };
+  if (S.carry) { const al = 0.5 - 0.3 * dcv, nA = bd - hnd * Math.PI / 2;
+    P.puck = { x: tip.x + (end.x - tip.x) * al + Math.cos(nA) * PUCKR * 1.05, y: tip.y + (end.y - tip.y) * al + Math.sin(nA) * PUCKR * 1.05, z: 0 }; }
+  if (S.fly) P.puck = { x: end.x + 22, y: end.y - 4, z: 6, trail: { dx: -16, dy: 2 } };     // střela: puk letí, z = 6 px
+  if (S.pass) P.puck = { x: end.x + 16, y: end.y + 1, z: 0, trail: { dx: -13, dy: -1 } };   // přihrávka po ledě
+  return P;
+}
+
+// Puk — na ledě v lokálním rámci (vrstva 'puck'), ve vzduchu ve screen space s y − z (vrstva 'puckair')
+function puckLocal(c, P, style) {
+  if (!P.puck || P.puck.z > 0) return; L('puck'); const q = P.puck;
+  if (q.trail) { c.strokeStyle = 'rgba(40,50,70,0.22)'; c.lineWidth = PUCKR * 1.4; c.lineCap = 'round'; seg(c, q.x + q.trail.dx, q.y + q.trail.dy, q.x, q.y); c.stroke(); }
+  circ(c, q.x, q.y, PUCKR); c.fillStyle = style.puck || '#111318'; c.fill();
+  if (style.puckRim) { c.strokeStyle = style.puckRim; c.lineWidth = 0.7; c.stroke(); }
+}
+function puckAir(c, x, y, s, ba, P, style) {
+  if (!P.puck || !(P.puck.z > 0)) return; L('puckair'); const q = P.puck, g = toScr(x, y, s, ba, q.x, q.y);
+  ell(c, g.x + LIGHT.x * s, g.y + LIGHT.y * s, PUCKR * 1.2 * s, PUCKR * 0.75 * s); c.fillStyle = 'rgba(0,0,0,0.28)'; c.fill();     // stín na ledě
+  if (q.trail) { const t = toScr(x, y, s, ba, q.x + q.trail.dx, q.y + q.trail.dy); c.strokeStyle = 'rgba(40,50,70,0.22)'; c.lineWidth = PUCKR * 1.4 * s; c.lineCap = 'round'; seg(c, t.x, t.y - q.z * 0.6 * s, g.x, g.y - q.z * s); c.stroke(); }
+  circ(c, g.x, g.y - q.z * s, PUCKR * s); c.fillStyle = style.puck || '#111318'; c.fill();     // projekce: y − z
+  if (style.puckRim) { c.strokeStyle = style.puckRim; c.lineWidth = 0.7 * s; c.stroke(); }
+}
+
+// ── GEOMETRIE GÓLMANA — doslovná kopie public/js/entities/Goalie.js:895 (ať varianty odpovídají simulaci)
+function goalieGeom(stance, side = 1, spread = 0, drop = 1) {
+  const Lr = (a, b) => a + (b - a) * drop;
+  const stand = { pads: [
+      { kx: -spread * 1.5, ky: -2.5, dir: -1, angle: 0.26 + spread * spread * 0.55, ph: 8, pw: 6.5 },
+      { kx: -spread * 1.5, ky:  2.5, dir:  1, angle: 0.26 + spread * spread * 0.55, ph: 8, pw: 6.5 } ],
+    bodyX: 0, bodyY: 0, bodyScale: 1, gloveY: -7.5, blockY: 7.5, handX: -5.5 };
+  if (stance === 'stand' || !stance) return stand;
+  if (stance === 'butterfly' || stance === 'cover') {
+    const cov = stance === 'cover';
+    return { pads: [
+        { kx: Lr(0, -1.5), ky: Lr(-2.5, -1.5), dir: -1, angle: Lr(0.26, -0.22), ph: Lr(8, 15), pw: Lr(6.5, 7) },
+        { kx: Lr(0, -1.5), ky: Lr( 2.5,  1.5), dir:  1, angle: Lr(0.26, -0.22), ph: Lr(8, 15), pw: Lr(6.5, 7) } ],
+      bodyX: Lr(0, -1), bodyY: 0, bodyScale: Lr(1, 0.86), gloveY: cov ? -3.5 : Lr(-7.5, -10), blockY: cov ? 3.5 : Lr(7.5, 10), handX: cov ? -8 : Lr(-5.5, -4) };
+  }
+  if (stance === 'rvh') {
+    return { pads: [
+        { kx: 0,  ky: side * 2.5,  dir:  side, angle: Lr(0.26, -0.35), ph: Lr(8, 15), pw: Lr(6.5, 7) },
+        { kx: -1, ky: -side * 2.5, dir: -side, angle: 0.3, ph: 8, pw: 6.5 } ],
+      bodyX: Lr(0, 1), bodyY: Lr(0, side * 2.5), bodyScale: Lr(1, 0.92),
+      gloveY: Lr(-7.5, side < 0 ? -9 : -7), blockY: Lr(7.5, side > 0 ? 9 : 7), handX: -5 };
+  }
+  if (stance === 'stretch') {
+    return { pads: [
+        { kx: -1, ky: side * 3,  dir:  side, angle: Lr(0.26, -0.05), ph: Lr(8, 21), pw: Lr(6.5, 7) },
+        { kx: 0,  ky: -side * 2, dir: -side, angle: Lr(0.26, 0.9), ph: Lr(8, 7), pw: 6.5 } ],
+      bodyX: 0, bodyY: Lr(0, side * 3), bodyScale: Lr(1, 0.9),
+      gloveY: Lr(-7.5, side < 0 ? -12 : -6), blockY: Lr(7.5, side > 0 ? 12 : 6), handX: Lr(-5.5, -3) };
+  }
+  return stand;
+}
+// Pad v lokálním rámci gólmana (jako Goalie.js _gPad): koleno (kx,ky), otočení angle*dir, pad od kolena směrem dir
+function padXf(c, pd) { c.save(); c.translate(pd.kx, pd.ky); c.rotate(pd.angle * pd.dir); return { y0: pd.dir > 0 ? 0 : -pd.ph, w: pd.pw, h: pd.ph }; }
+// Transformace gólmana: screen (x,y) → lokál (−X = k puku), světové jednotky
+function gBegin(c, x, y, s, inX) { c.save(); c.translate(x, y); c.scale(-inX * s, s); }
+// Hůl gólmana (vizuální; sim ji nemá) — čepel na ledě před pady, dřík k vyrážečce
+function gStickPts(G, stance) {
+  if (stance === 'cover') return { hx: G.handX + 2, hy: G.blockY + 1, b0: { x: -1, y: 18 }, b1: { x: -6.5, y: 19.5 } };   // cover: hůl odložená podél padu
+  const hx = G.handX + G.bodyX, hy = G.blockY + G.bodyY, bx = Math.min(G.handX + G.bodyX - 5, -9);
+  return { hx, hy, b0: { x: bx, y: hy * 0.55 }, b1: { x: bx - 0.6, y: hy * 0.55 - 7.5 * Math.sign(hy || 1) } };
+}
+
+// ═══════════════════════════ T — TEĎ (přepis dnešní kresby, pro stejné měření) ═══════════════════════════
+const T = { id:'T', name:'TEĎ (přepis hry)', desc:'Dnešní kresba z Player.js / Goalie.js přepsaná na stejnou pózu — jen kvůli srovnání v tabulce.',
+  kit: { home: { jersey:'#3a9fff', gk:'#2f6db0', helmet:'#eef2f8', stick:'#7a5015', glove:'#242c38', num:19 },
+         away: { jersey:'#ff4455', gk:'#c0392b', helmet:'#eef2f8', stick:'#7a5015', glove:'#242c38', num:22 } },
+  spec: { headFwd: 0.68 * R0, stickW: 2.8, outline: '#909ba1', outlineW: 1.4 },  // obrys rgba(0,0,0,.35) na ledě ≈ #909ba1
+  style: {},
+  shadowFirst: true,    // stín ve screen space ano; ale hůl PŘED bruslemi (Player.js:757 vs :953) → vrstvy mimo pořadí
+};
+T.player = function (c, x, y, s, ba, P, K) {
+  shadowS(c, x, y, s, 0.9 * R0, 0.6 * R0);
+  c.save(); c.translate(x, y); c.rotate(ba); c.scale(s, s); c.lineCap = 'round';
+  const k = P.stick; L('stick');
+  c.strokeStyle = shade(K.stick, -0.55); c.lineWidth = 2.8; seg(c, k.top.x, k.top.y, k.top.x + (k.tip.x - k.top.x) * 0.22, k.top.y + (k.tip.y - k.top.y) * 0.22); c.stroke();
+  c.strokeStyle = K.stick; seg(c, k.top.x + (k.tip.x - k.top.x) * 0.18, k.top.y + (k.tip.y - k.top.y) * 0.18, k.tip.x, k.tip.y); c.stroke();
+  c.strokeStyle = 'rgba(0,0,0,0.35)'; c.lineWidth = 4; bladePath(c, k); c.stroke();
+  L('tape'); c.strokeStyle = '#111'; c.lineWidth = 2.8; bladePath(c, k); c.stroke();
+  puckLocal(c, P, this.style);
+  for (const f of P.feet) { c.save(); c.translate(f.x, f.y); c.rotate(f.a); L('skates'); ell(c, 0, 0, R0 * 0.58, R0 * 0.23); c.fillStyle = '#0c0e14'; c.fill(); c.strokeStyle = 'rgba(255,255,255,0.13)'; c.lineWidth = 0.7; c.stroke();
+    L('laces'); c.strokeStyle = 'rgba(255,255,255,0.42)'; c.lineWidth = 0.55; for (const lx of [-R0 * 0.21, 0, R0 * 0.21]) { seg(c, lx, -R0 * 0.18, lx, R0 * 0.18); c.stroke(); }
+    L('blades'); seg(c, -R0 * 0.62, 0, R0 * 0.62, 0); c.strokeStyle = '#b8c4d4'; c.lineWidth = 0.85; c.stroke(); c.restore(); }
+  L('torso'); ell(c, -1, 0, R0 * 1.05, R0 * 1.25); c.fillStyle = K.jersey; c.fill(); c.strokeStyle = 'rgba(0,0,0,0.35)'; c.lineWidth = 1.4; c.stroke();
+  ell(c, -R0 * 0.5, 0, R0 * 0.5, R0 * 0.95); c.fillStyle = shade(K.jersey, -0.28); c.fill();
+  L('light'); ell(c, R0 * 0.15, -R0 * 0.35, R0 * 0.55, R0 * 0.6); c.fillStyle = 'rgba(255,255,255,0.10)'; c.fill();
+  L('number'); c.save(); c.translate(-R0 * 0.42, 0); c.rotate(Math.PI / 2); c.font = `bold ${R0 * 1.05}px 'Segoe UI', sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.lineWidth = 1.4; c.strokeStyle = 'rgba(0,0,0,0.55)'; c.lineJoin = 'round'; c.strokeText(K.num, 0, 0); c.fillStyle = 'rgba(255,255,255,0.95)'; c.fillText(K.num, 0, 0); c.restore();
+  L('gloves'); for (const [h, hr] of [[k.bot, R0 * 0.26], [k.top, R0 * 0.30]]) { circ(c, h.x, h.y, hr + 1.4); c.fillStyle = 'rgba(0,0,0,0.38)'; c.fill(); circ(c, h.x, h.y, hr); c.fillStyle = K.glove; c.fill(); }
+  L('helmet'); circ(c, R0 * 0.68, 0, R0 * 0.52); c.fillStyle = K.helmet; c.fill(); c.strokeStyle = 'rgba(0,0,0,0.4)'; c.lineWidth = 1.2; c.stroke();
+  L('visor'); c.beginPath(); c.arc(R0 * 0.68, 0, R0 * 0.4, -Math.PI * 0.35, Math.PI * 0.35); c.strokeStyle = '#bfe0ff'; c.lineWidth = 2; c.stroke();
+  for (const sg of [-1, 1]) { seg(c, R0 * 0.68, sg * R0 * 0.28, R0 * 0.68 + R0 * 0.35, sg * R0 * 0.28); c.lineWidth = 1.5; c.stroke(); }
+  c.restore();
+  puckAir(c, x, y, s, ba, P, this.style);
+};
+T.goalie = function (c, x, y, s, inX, stance, side, K) {
+  const G = goalieGeom(stance, side), r = GR;
+  if (!MEASURE) shadowS(c, x, y, s, r * 0.9, r * 0.6, 0.22);
+  gBegin(c, x, y, s, inX);
+  L('pads'); for (const pd of G.pads) { const q = padXf(c, pd); rr(c, -q.w / 2, q.y0, q.w, q.h, 2.5); c.fillStyle = '#eef0f3'; c.fill(); c.strokeStyle = 'rgba(40,55,80,0.9)'; c.lineWidth = 1.4; c.stroke();
+    rr(c, -q.w / 2 + 0.5, q.y0 + (pd.dir > 0 ? q.h * 0.33 : q.h * 0.45), q.w - 1, q.h * 0.22, 1); c.fillStyle = 'rgba(40,80,160,0.55)'; c.fill(); c.restore(); }
+  if (stance === 'cover') puckCover(c, G, this.style);
+  c.translate(G.bodyX, G.bodyY);
+  L('garms'); for (const hy of [G.gloveY, G.blockY]) { c.strokeStyle = 'rgba(18,22,36,0.72)'; c.lineWidth = 1.9; c.lineCap = 'round'; seg(c, -r * 0.45, Math.sign(hy) * r * 0.3, G.handX, hy); c.stroke(); }
+  const rb = r * G.bodyScale; L('gbody'); circ(c, 0, 0, rb); c.fillStyle = K.gk; c.fill(); c.strokeStyle = 'rgba(255,255,255,0.4)'; c.lineWidth = 1.5; c.stroke();
+  L('mask'); circ(c, -rb * 0.52, 0, 4 * G.bodyScale); c.fillStyle = 'rgba(255,255,255,0.85)'; c.fill();
+  L('glove'); ell(c, G.handX, G.gloveY, 2.5, 2.2); c.fillStyle = stance === 'cover' ? '#e8a020' : '#2a2a2a'; c.fill(); c.strokeStyle = 'rgba(0,0,0,0.5)'; c.lineWidth = 0.8; c.stroke();
+  L('blocker'); rr(c, G.handX - 2, G.blockY - 2, 4, 4, 1); c.fillStyle = '#2a2a2a'; c.fill(); c.stroke();
+  c.restore();
+};
+function puckCover(c, G, st) { L('puck'); circ(c, G.handX + G.bodyX - 1.2, G.bodyY, PUCKR); c.fillStyle = st.puck || '#111318'; c.fill(); }
+
+// ═══════════════════════════ A — ČISTÝ TOKEN ═══════════════════════════
+const A = { id:'A', name:'Čistý token', desc:'Dnešní tvar, ale tmavší sytější dresy, tmavý obrys, helma s tmavým štítem jako jasná „šipka" dopředu, tmavá hůl. Nejméně práce na přenos.',
+  kit: { home: { jersey:'#1f5fd6', gk:'#1f5fd6', helmet:'#f4f7fb', visor:'#16213a', stick:'#262b36', glove:'#151b28', num:19 },
+         away: { jersey:'#d42a3c', gk:'#d42a3c', helmet:'#f4f7fb', visor:'#16213a', stick:'#262b36', glove:'#151b28', num:22 } },
+  spec: { headFwd: 0.7 * R0, stickW: 2.4, outline: '#0e1626', outlineW: 1.1 },
+  style: { puck: '#0b0d12' }, shadowFirst: true };
+A.player = function (c, x, y, s, ba, P, K) {
+  shadowS(c, x, y, s, 0.95 * R0, 0.62 * R0);
+  c.save(); c.translate(x, y); c.rotate(ba); c.scale(s, s); c.lineCap = 'round'; c.lineJoin = 'round';
+  for (const f of P.feet) { c.save(); c.translate(f.x, f.y); c.rotate(f.a); L('skates'); ell(c, 0, 0, R0 * 0.58, R0 * 0.24); c.fillStyle = '#0c0e14'; c.fill();
+    L('blades'); seg(c, -R0 * 0.62, 0, R0 * 0.62, 0); c.strokeStyle = '#c9d3e0'; c.lineWidth = 0.8; c.stroke(); c.restore(); }
+  const k = P.stick; L('stick'); c.strokeStyle = K.stick; c.lineWidth = 2.4; seg(c, k.butt.x, k.butt.y, k.tip.x, k.tip.y); c.stroke();
+  L('tape'); c.strokeStyle = '#0b0d12'; c.lineWidth = 2.8; bladePath(c, k); c.stroke();
+  puckLocal(c, P, this.style);
+  L('torso'); ell(c, -1, 0, R0 * 1.05, R0 * 1.25); c.fillStyle = K.jersey; c.fill(); c.strokeStyle = this.spec.outline; c.lineWidth = 1.1; c.stroke();
+  ell(c, -R0 * 0.5, 0, R0 * 0.5, R0 * 0.95); c.fillStyle = shade(K.jersey, -0.25); c.fill();
+  L('number'); c.save(); c.translate(-R0 * 0.45, 0); c.rotate(Math.PI / 2); c.font = `800 ${R0 * 1.0}px 'Segoe UI', sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#fff'; c.fillText(K.num, 0, 0.3); c.restore();
+  L('gloves'); for (const [h, hr] of [[k.bot, R0 * 0.28], [k.top, R0 * 0.31]]) { circ(c, h.x, h.y, hr); c.fillStyle = K.glove; c.fill(); c.strokeStyle = '#fff'; c.lineWidth = 0.6; c.stroke(); }
+  L('helmet'); circ(c, R0 * 0.7, 0, R0 * 0.52); c.fillStyle = K.helmet; c.fill(); c.strokeStyle = this.spec.outline; c.lineWidth = 1.0; c.stroke();
+  L('visor'); c.beginPath(); c.arc(R0 * 0.7, 0, R0 * 0.52, -0.95, 0.95); c.closePath(); c.fillStyle = K.visor; c.fill();
+  c.restore();
+  puckAir(c, x, y, s, ba, P, this.style);
+};
+A.goalie = function (c, x, y, s, inX, stance, side, K) {
+  const G = goalieGeom(stance, side), r = GR;
+  if (!MEASURE) shadowS(c, x, y, s, r * 0.95, r * 0.65, 0.24);
+  gBegin(c, x, y, s, inX); c.lineCap = 'round';
+  L('pads'); for (const pd of G.pads) { const q = padXf(c, pd); rr(c, -q.w / 2, q.y0, q.w, q.h, 2.5); c.fillStyle = '#f7f9fc'; c.fill(); c.strokeStyle = '#0e1626'; c.lineWidth = 1.2; c.stroke();
+    rr(c, -q.w / 2 + 0.6, q.y0 + q.h * 0.4, q.w - 1.2, q.h * 0.2, 1); c.fillStyle = K.gk; c.fill(); c.restore(); }
+  if (stance === 'cover') puckCover(c, G, this.style);
+  c.translate(G.bodyX, G.bodyY);
+  L('garms'); for (const hy of [G.gloveY, G.blockY]) { c.strokeStyle = shade(K.gk, -0.35); c.lineWidth = 2.2; seg(c, -r * 0.45, Math.sign(hy) * r * 0.3, G.handX, hy); c.stroke(); }
+  const rb = r * G.bodyScale; L('gbody'); circ(c, 0, 0, rb); c.fillStyle = K.gk; c.fill(); c.strokeStyle = '#0e1626'; c.lineWidth = 1.1; c.stroke();
+  L('glove'); ell(c, G.handX, G.gloveY, 2.8, 2.5); c.fillStyle = stance === 'cover' ? '#e8a020' : '#151b28'; c.fill(); c.strokeStyle = '#fff'; c.lineWidth = 0.6; c.stroke();
+  L('blocker'); rr(c, G.handX - 2.2, G.blockY - 2.2, 4.4, 4.4, 1); c.fillStyle = '#151b28'; c.fill(); c.stroke();
+  L('mask'); circ(c, -rb * 0.45, 0, 3.6 * G.bodyScale); c.fillStyle = '#f4f7fb'; c.fill(); c.beginPath(); c.arc(-rb * 0.45, 0, 3.6 * G.bodyScale, Math.PI - 0.95, Math.PI + 0.95); c.closePath(); c.fillStyle = '#16213a'; c.fill();
+  c.restore();
+};
+
+// ═══════════════════════════ B — VÝSTROJ ═══════════════════════════
+const B = { id:'B', name:'Výstroj', desc:'Anatomie výstroje: brusle (bota + držák + nůž + tkaničky), štulpny, kalhoty, dres s rukávovými pruhy, chrániče ramen, lokty, velké rukavice s manžetou, helma s mřížkou, hůl s omotávkou koncovky a čepele. Gólman: pady s válci, lapačka s kapsou, vyrážečka, maska s mřížkou, hůl.',
+  kit: { home: { jersey:'#1e56c8', trim:'#ffffff', pants:'#13254f', glove:'#13254f', cuff:'#ffffff', helmet:'#f2f5f9', cage:'#2b2f36', stick:'#1b1f27', num:19, gk:'#1e56c8' },
+         away: { jersey:'#c8243a', trim:'#ffffff', pants:'#3a0c14', glove:'#3a0c14', cuff:'#ffffff', helmet:'#f2f5f9', cage:'#2b2f36', stick:'#1b1f27', num:22, gk:'#c8243a' } },
+  spec: { headFwd: 0.72 * R0, stickW: 2.3, outline: '#0e1626', outlineW: 0.9 },
+  style: { puck: '#0b0d12' }, shadowFirst: true };
+function bTorsoPath(c) {   // dres shora: široká ramena, užší pas (lokálně, x dopředu)
+  const R = R0; c.beginPath(); c.moveTo(R * 0.35, -R * 1.2); c.quadraticCurveTo(R * 0.75, -R * 0.6, R * 0.55, 0); c.quadraticCurveTo(R * 0.75, R * 0.6, R * 0.35, R * 1.2);
+  c.quadraticCurveTo(-R * 0.15, R * 1.42, -R * 0.75, R * 0.85); c.quadraticCurveTo(-R * 1.05, 0, -R * 0.75, -R * 0.85); c.quadraticCurveTo(-R * 0.15, -R * 1.42, R * 0.35, -R * 1.2); c.closePath(); }
+function bSkate(c, f, light) {
+  c.save(); c.translate(f.x, f.y); c.rotate(f.a);
+  L('blades'); seg(c, -R0 * 0.66, 0, R0 * 0.7, 0); c.strokeStyle = '#d7dee8'; c.lineWidth = 1.0; c.stroke();
+  L('skates'); rr(c, -R0 * 0.6, -R0 * 0.22, R0 * 1.1, R0 * 0.44, R0 * 0.2); c.fillStyle = '#14161c'; c.fill();
+  rr(c, R0 * 0.25, -R0 * 0.2, R0 * 0.3, R0 * 0.4, R0 * 0.15); c.fillStyle = '#e9edf3'; c.fill();     // špička (toe cap)
+  L('laces'); c.strokeStyle = 'rgba(255,255,255,0.55)'; c.lineWidth = 0.45; c.beginPath(); for (const lx of [-0.3, -0.05, 0.2]) { c.moveTo(R0 * lx, -R0 * 0.13); c.lineTo(R0 * lx, R0 * 0.13); } c.stroke();
+  c.restore();
+}
+B.player = function (c, x, y, s, ba, P, K) {
+  shadowS(c, x, y, s, 1.0 * R0, 0.68 * R0);
+  c.save(); c.translate(x, y); c.rotate(ba); c.scale(s, s); c.lineCap = 'round'; c.lineJoin = 'round';
+  for (const f of P.feet) bSkate(c, f);
+  const k = P.stick;
+  L('stick'); c.strokeStyle = K.stick; c.lineWidth = 2.3; seg(c, k.butt.x, k.butt.y, k.tip.x, k.tip.y); c.stroke();
+  c.strokeStyle = K.jersey; c.lineWidth = 0.9; const m0 = 0.55, m1 = 0.75; seg(c, k.butt.x + (k.tip.x - k.butt.x) * m0, k.butt.y + (k.tip.y - k.butt.y) * m0, k.butt.x + (k.tip.x - k.butt.x) * m1, k.butt.y + (k.tip.y - k.butt.y) * m1); c.stroke();
+  L('knob'); circ(c, k.butt.x, k.butt.y, 1.35); c.fillStyle = '#f4f6fa'; c.fill();
+  L('tape'); c.strokeStyle = '#0b0d12'; c.lineWidth = 2.9; bladePath(c, k); c.stroke(); c.strokeStyle = 'rgba(255,255,255,0.35)'; c.lineWidth = 0.5; bladePath(c, k); c.stroke();
+  puckLocal(c, P, this.style);
+  L('socks'); c.strokeStyle = K.jersey; c.lineWidth = 2.6; for (const f of P.feet) { seg(c, -R0 * 0.55, f.side * R0 * 0.55, f.x - 0.4, f.y); c.stroke(); }
+  L('pants'); for (const sd of [-1, 1]) { ell(c, -R0 * 0.62, sd * R0 * 0.62, R0 * 0.5, R0 * 0.46); c.fillStyle = K.pants; c.fill(); }
+  L('torso'); bTorsoPath(c); c.fillStyle = K.jersey; c.fill(); c.strokeStyle = this.spec.outline; c.lineWidth = 0.9; c.stroke();
+  L('stripes'); c.save(); bTorsoPath(c); c.clip(); c.fillStyle = K.trim; c.fillRect(-R0 * 1.2, -R0 * 1.5, R0 * 2.4, R0 * 0.32); c.fillRect(-R0 * 1.2, R0 * 1.18, R0 * 2.4, R0 * 0.32);
+  c.fillStyle = shade(K.jersey, -0.3); ell(c, -R0 * 0.55, 0, R0 * 0.45, R0 * 0.8); c.fill(); c.restore();
+  L('number'); c.save(); c.translate(-R0 * 0.42, 0); c.rotate(Math.PI / 2); c.font = `900 ${R0 * 1.0}px 'Segoe UI', sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.lineWidth = 0.9; c.strokeStyle = shade(K.jersey, -0.55); c.strokeText(K.num, 0, 0.3); c.fillStyle = K.trim; c.fillText(K.num, 0, 0.3); c.restore();
+  L('shoulders'); for (const sd of [-1, 1]) { ell(c, R0 * 0.1, sd * R0 * 0.88, R0 * 0.42, R0 * 0.36); c.fillStyle = shade(K.jersey, 0.18); c.fill(); }
+  // paže: rameno → loket → rukavice
+  const sh = [{ x: R0 * 0.25, y: -R0 * 0.9 }, { x: R0 * 0.25, y: R0 * 0.9 }];
+  const hands = P.hnd > 0 ? [k.top, k.bot] : [k.bot, k.top];
+  L('arms'); for (let i = 0; i < 2; i++) { const a = sh[i], h = hands[i], ex = (a.x + h.x) / 2 + R0 * 0.1, ey = (a.y + h.y) / 2 + (i ? 1 : -1) * R0 * 0.25;
+    c.strokeStyle = K.jersey; c.lineWidth = 2.8; c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(ex, ey); c.lineTo(h.x, h.y); c.stroke();
+    L('elbows'); circ(c, ex, ey, 1.1); c.fillStyle = shade(K.jersey, -0.35); c.fill(); }
+  L('gloves'); for (const h of [k.bot, k.top]) { rr(c, h.x - 2.3, h.y - 1.9, 4.6, 3.8, 1.4); c.fillStyle = K.glove; c.fill(); }
+  L('cuffs'); for (const h of [k.bot, k.top]) { rr(c, h.x - 2.3, h.y - 1.9, 4.6, 3.8, 1.4); c.strokeStyle = K.cuff; c.lineWidth = 0.7; c.stroke(); }
+  const hx = R0 * 0.72;
+  L('helmet'); ell(c, hx, 0, R0 * 0.55, R0 * 0.5); c.fillStyle = K.helmet; c.fill(); c.strokeStyle = this.spec.outline; c.lineWidth = 0.9; c.stroke();
+  c.strokeStyle = K.jersey; c.lineWidth = 0.8; seg(c, hx - R0 * 0.5, 0, hx + R0 * 0.1, 0); c.stroke();                     // hřebínek helmy v barvě týmu
+  L('cage'); c.strokeStyle = K.cage; c.lineWidth = 0.55; c.beginPath(); c.arc(hx, 0, R0 * 0.62, -0.9, 0.9); for (const yy of [-0.22, 0, 0.22]) { c.moveTo(hx + R0 * 0.32, R0 * yy); c.lineTo(hx + R0 * 0.62 * Math.cos(Math.asin(yy / 0.62)), R0 * yy); } c.stroke();
+  c.restore();
+  puckAir(c, x, y, s, ba, P, this.style);
+};
+function bPad(c, pd, K, col = '#f7f9fc', edge = '#0e1626') {
+  const q = padXf(c, pd); rr(c, -q.w / 2, q.y0, q.w, q.h, 2.4); c.fillStyle = col; c.fill(); c.strokeStyle = edge; c.lineWidth = 1.0; c.stroke();
+  L('padroll'); c.strokeStyle = 'rgba(14,22,38,0.45)'; c.lineWidth = 0.5; c.beginPath(); const n = Math.max(2, Math.round(q.h / 4)); for (let i = 1; i < n; i++) { const yy = q.y0 + q.h * i / n; c.moveTo(-q.w / 2 + 0.8, yy); c.lineTo(q.w / 2 - 0.8, yy); } c.stroke();
+  rr(c, -q.w / 2 + 0.7, q.y0 + q.h * 0.42, q.w - 1.4, q.h * 0.18, 0.8); c.fillStyle = K.gk; c.fill();
+  c.restore();
+}
+B.goalie = function (c, x, y, s, inX, stance, side, K) {
+  const G = goalieGeom(stance, side), r = GR, st = gStickPts(G, stance);
+  if (!MEASURE) shadowS(c, x, y, s, r * 1.0, r * 0.7, 0.24);
+  gBegin(c, x, y, s, inX); c.lineCap = 'round'; c.lineJoin = 'round';
+  if (st) { L('gstick'); c.strokeStyle = '#1b1f27'; c.lineWidth = 3.0; seg(c, st.b0.x, st.b0.y, st.b1.x, st.b1.y); c.stroke(); c.lineWidth = 1.6; seg(c, st.b0.x, st.b0.y, st.hx, st.hy); c.stroke(); }
+  L('pads'); for (const pd of G.pads) bPad(c, pd, K);
+  if (stance === 'cover') puckCover(c, G, this.style);
+  c.translate(G.bodyX, G.bodyY);
+  const rb = r * G.bodyScale;
+  L('garms'); for (const hy of [G.gloveY, G.blockY]) { c.strokeStyle = shade(K.gk, -0.2); c.lineWidth = 2.8; seg(c, -rb * 0.2, Math.sign(hy) * rb * 0.75, G.handX, hy); c.stroke(); }
+  L('gbody'); ell(c, 0, 0, rb * 0.85, rb * 1.08); c.fillStyle = K.gk; c.fill(); c.strokeStyle = '#0e1626'; c.lineWidth = 0.9; c.stroke();
+  L('chest'); ell(c, rb * 0.1, -rb * 0.55, rb * 0.42, rb * 0.36); c.fillStyle = shade(K.gk, 0.2); c.fill(); ell(c, rb * 0.1, rb * 0.55, rb * 0.42, rb * 0.36); c.fill();
+  c.save(); ell(c, 0, 0, rb * 0.85, rb * 1.08); c.clip(); c.fillStyle = '#fff'; c.fillRect(rb * 0.25, -rb * 1.1, rb * 0.22, rb * 2.2); c.restore();
+  L('glove'); circ(c, G.handX, G.gloveY, 3.0); c.fillStyle = stance === 'cover' ? '#e8a020' : '#f2f5f9'; c.fill(); c.strokeStyle = '#0e1626'; c.lineWidth = 0.8; c.stroke();
+  c.beginPath(); c.arc(G.handX, G.gloveY, 1.8, 0, Math.PI * 2); c.fillStyle = K.gk; c.fill();                       // kapsa lapačky
+  L('blocker'); rr(c, G.handX - 2.4, G.blockY - 2.8, 4.8, 5.6, 1); c.fillStyle = '#f2f5f9'; c.fill(); c.stroke(); c.fillStyle = K.gk; c.fillRect(G.handX - 1.6, G.blockY - 2.0, 3.2, 1.4);
+  L('mask'); const mx = -rb * 0.42; ell(c, mx, 0, 3.4 * G.bodyScale, 3.1 * G.bodyScale); c.fillStyle = '#f2f5f9'; c.fill(); c.strokeStyle = '#0e1626'; c.lineWidth = 0.8; c.stroke();
+  L('cage'); c.strokeStyle = '#2b2f36'; c.lineWidth = 0.5; c.beginPath(); c.arc(mx, 0, 3.6 * G.bodyScale, Math.PI - 0.9, Math.PI + 0.9); for (const yy of [-1.2, 0, 1.2]) { c.moveTo(mx - 1.6, yy); c.lineTo(mx - 3.5 * G.bodyScale, yy); } c.stroke();
+  c.restore();
+};
+
+// ═══════════════════════════ C — ILUSTRACE ═══════════════════════════
+// Anatomie jako B, ale objem: světlo shora-zleva ve SVĚTĚ (při otáčení těla zůstává na místě), měkký stín, lesk helmy,
+// ocel nožů, stopy bruslí v ledu při odrazu.
+const C = { id:'C', name:'Ilustrace', desc:'Výstroj jako B + objem: světlo shora-zleva pevné ve světě (otáčí se proti tělu), radiální přechody, lesk helmy, kovové nože, měkký dvojitý stín a rýhy v ledu od odrazu.',
+  kit: B.kit, spec: { headFwd: 0.72 * R0, stickW: 2.3, outline: '#0e1626', outlineW: 0.8 }, style: { puck: '#0b0d12', puckRim: '#3a4152' }, shadowFirst: true };
+function cVol(c, cx, cy, rad, col, lx, ly, k = 0.45) {   // radiální přechod: světlo v (lx,ly) lokálně
+  const g = c.createRadialGradient(cx + lx * rad * k, cy + ly * rad * k, rad * 0.1, cx, cy, rad * 1.15);
+  g.addColorStop(0, shade(col, 0.32)); g.addColorStop(0.55, col); g.addColorStop(1, shade(col, -0.35)); return g; }
+C.player = function (c, x, y, s, ba, P, K) {
+  L('shadow'); ell(c, x + LIGHT.x * s * 1.6, y + LIGHT.y * s * 1.6, R0 * 1.25 * s, R0 * 0.95 * s); c.fillStyle = 'rgba(20,40,70,0.10)'; c.fill();
+  shadowS(c, x, y, s, 1.0 * R0, 0.7 * R0, 0.22);
+  const lx = Math.cos(-ba) * -0.7 - Math.sin(-ba) * -0.7, ly = Math.sin(-ba) * -0.7 + Math.cos(-ba) * -0.7;   // světlo (−0,7, −0,7) ve světě → lokálně
+  c.save(); c.translate(x, y); c.rotate(ba); c.scale(s, s); c.lineCap = 'round'; c.lineJoin = 'round';
+  L('icefx'); c.strokeStyle = 'rgba(255,255,255,0.85)'; c.lineWidth = 0.7;
+  for (const f of P.feet) if (f.push > 0.25) { c.beginPath(); c.moveTo(f.x + 3, f.y - f.side * 0.5); c.quadraticCurveTo(f.x - 3, f.y + f.side * 1.2, f.x - 8 * f.push, f.y + f.side * 2.8 * f.push); c.stroke();
+    c.strokeStyle = 'rgba(150,180,210,0.5)'; c.lineWidth = 0.5; c.stroke(); c.strokeStyle = 'rgba(255,255,255,0.85)'; c.lineWidth = 0.7; }
+  for (const f of P.feet) { c.save(); c.translate(f.x, f.y); c.rotate(f.a);
+    L('blades'); const gs = c.createLinearGradient(0, -0.6, 0, 0.6); gs.addColorStop(0, '#ffffff'); gs.addColorStop(1, '#7d8898'); seg(c, -R0 * 0.66, 0, R0 * 0.7, 0); c.strokeStyle = gs; c.lineWidth = 1.1; c.stroke();
+    L('skates'); rr(c, -R0 * 0.6, -R0 * 0.22, R0 * 1.1, R0 * 0.44, R0 * 0.2); c.fillStyle = cVol(c, 0, 0, R0 * 0.5, '#23262e', lx, ly); c.fill();
+    rr(c, R0 * 0.25, -R0 * 0.2, R0 * 0.3, R0 * 0.4, R0 * 0.15); c.fillStyle = '#e9edf3'; c.fill();
+    L('laces'); c.strokeStyle = 'rgba(255,255,255,0.55)'; c.lineWidth = 0.45; c.beginPath(); for (const q of [-0.3, -0.05, 0.2]) { c.moveTo(R0 * q, -R0 * 0.13); c.lineTo(R0 * q, R0 * 0.13); } c.stroke();
+    c.restore(); }
+  const k = P.stick;
+  L('stick'); c.strokeStyle = K.stick; c.lineWidth = 2.3; seg(c, k.butt.x, k.butt.y, k.tip.x, k.tip.y); c.stroke();
+  c.strokeStyle = 'rgba(255,255,255,0.28)'; c.lineWidth = 0.6; seg(c, k.butt.x + lx * 0.6, k.butt.y + ly * 0.6, k.tip.x + lx * 0.6, k.tip.y + ly * 0.6); c.stroke();
+  L('knob'); circ(c, k.butt.x, k.butt.y, 1.35); c.fillStyle = '#f4f6fa'; c.fill();
+  L('tape'); c.strokeStyle = '#0b0d12'; c.lineWidth = 2.9; bladePath(c, k); c.stroke();
+  puckLocal(c, P, this.style);
+  L('socks'); c.strokeStyle = shade(K.jersey, -0.1); c.lineWidth = 2.6; for (const f of P.feet) { seg(c, -R0 * 0.55, f.side * R0 * 0.55, f.x - 0.4, f.y); c.stroke(); }
+  L('pants'); for (const sd of [-1, 1]) { ell(c, -R0 * 0.62, sd * R0 * 0.62, R0 * 0.5, R0 * 0.46); c.fillStyle = cVol(c, -R0 * 0.62, sd * R0 * 0.62, R0 * 0.5, K.pants, lx, ly); c.fill(); }
+  L('torso'); bTorsoPath(c); c.fillStyle = cVol(c, -R0 * 0.1, 0, R0 * 1.25, K.jersey, lx, ly, 0.5); c.fill(); c.strokeStyle = 'rgba(14,22,38,0.75)'; c.lineWidth = 0.8; c.stroke();
+  L('stripes'); c.save(); bTorsoPath(c); c.clip(); c.fillStyle = 'rgba(255,255,255,0.88)'; c.fillRect(-R0 * 1.2, -R0 * 1.5, R0 * 2.4, R0 * 0.32); c.fillRect(-R0 * 1.2, R0 * 1.18, R0 * 2.4, R0 * 0.32); c.restore();
+  L('number'); c.save(); c.translate(-R0 * 0.42, 0); c.rotate(Math.PI / 2); c.font = `900 ${R0 * 1.0}px 'Segoe UI', sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillStyle = 'rgba(0,0,0,0.35)'; c.fillText(K.num, 0.35, 0.65); c.fillStyle = '#fff'; c.fillText(K.num, 0, 0.3); c.restore();
+  L('shoulders'); for (const sd of [-1, 1]) { ell(c, R0 * 0.1, sd * R0 * 0.88, R0 * 0.42, R0 * 0.36); c.fillStyle = cVol(c, R0 * 0.1, sd * R0 * 0.88, R0 * 0.42, K.jersey, lx, ly, 0.6); c.fill(); }
+  const sh = [{ x: R0 * 0.25, y: -R0 * 0.9 }, { x: R0 * 0.25, y: R0 * 0.9 }], hands = P.hnd > 0 ? [k.top, k.bot] : [k.bot, k.top];
+  L('arms'); for (let i = 0; i < 2; i++) { const a = sh[i], h = hands[i], ex = (a.x + h.x) / 2 + R0 * 0.1, ey = (a.y + h.y) / 2 + (i ? 1 : -1) * R0 * 0.25;
+    c.strokeStyle = shade(K.jersey, -0.12); c.lineWidth = 2.8; c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(ex, ey); c.lineTo(h.x, h.y); c.stroke();
+    L('elbows'); circ(c, ex, ey, 1.1); c.fillStyle = shade(K.jersey, -0.35); c.fill(); }
+  L('gloves'); for (const h of [k.bot, k.top]) { rr(c, h.x - 2.3, h.y - 1.9, 4.6, 3.8, 1.4); c.fillStyle = cVol(c, h.x, h.y, 2.4, K.glove, lx, ly, 0.6); c.fill(); }
+  L('cuffs'); for (const h of [k.bot, k.top]) { rr(c, h.x - 2.3, h.y - 1.9, 4.6, 3.8, 1.4); c.strokeStyle = 'rgba(255,255,255,0.9)'; c.lineWidth = 0.7; c.stroke(); }
+  const hx = R0 * 0.72;
+  L('helmet'); ell(c, hx, 0, R0 * 0.55, R0 * 0.5); c.fillStyle = cVol(c, hx, 0, R0 * 0.55, '#e3e8ef', lx, ly, 0.55); c.fill(); c.strokeStyle = 'rgba(14,22,38,0.8)'; c.lineWidth = 0.8; c.stroke();
+  ell(c, hx + lx * R0 * 0.22, ly * R0 * 0.22, R0 * 0.16, R0 * 0.1); c.fillStyle = 'rgba(255,255,255,0.95)'; c.fill();      // lesk
+  L('cage'); c.strokeStyle = '#2b2f36'; c.lineWidth = 0.55; c.beginPath(); c.arc(hx, 0, R0 * 0.62, -0.9, 0.9); for (const yy of [-0.22, 0, 0.22]) { c.moveTo(hx + R0 * 0.32, R0 * yy); c.lineTo(hx + R0 * 0.62 * Math.cos(Math.asin(yy / 0.62)), R0 * yy); } c.stroke();
+  c.restore();
+  puckAir(c, x, y, s, ba, P, this.style);
+};
+C.goalie = function (c, x, y, s, inX, stance, side, K) {
+  const G = goalieGeom(stance, side), r = GR, st = gStickPts(G, stance);
+  if (!MEASURE) { L('shadow'); ell(c, x + LIGHT.x * s * 1.6, y + LIGHT.y * s * 1.6, r * 1.5 * s, r * 1.2 * s); c.fillStyle = 'rgba(20,40,70,0.10)'; c.fill(); shadowS(c, x, y, s, r * 1.0, r * 0.72, 0.22); }
+  const lx = -0.7 * -inX, ly = -0.7;   // světlo ve světě → lokál gólmana (zrcadlení scale(−inX))
+  gBegin(c, x, y, s, inX); c.lineCap = 'round'; c.lineJoin = 'round';
+  if (st) { L('gstick'); c.strokeStyle = '#1b1f27'; c.lineWidth = 3.0; seg(c, st.b0.x, st.b0.y, st.b1.x, st.b1.y); c.stroke(); c.lineWidth = 1.6; seg(c, st.b0.x, st.b0.y, st.hx, st.hy); c.stroke(); }
+  L('pads'); for (const pd of G.pads) { const q = padXf(c, pd); rr(c, -q.w / 2, q.y0, q.w, q.h, 2.4);
+    const g = c.createLinearGradient(-q.w / 2 * Math.sign(lx || 1), 0, q.w / 2 * Math.sign(lx || 1), 0); g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#c9d2de'); c.fillStyle = g; c.fill(); c.strokeStyle = 'rgba(14,22,38,0.85)'; c.lineWidth = 0.9; c.stroke();
+    L('padroll'); c.strokeStyle = 'rgba(14,22,38,0.35)'; c.lineWidth = 0.5; c.beginPath(); const n = Math.max(2, Math.round(q.h / 4)); for (let i = 1; i < n; i++) { const yy = q.y0 + q.h * i / n; c.moveTo(-q.w / 2 + 0.8, yy); c.lineTo(q.w / 2 - 0.8, yy); } c.stroke();
+    rr(c, -q.w / 2 + 0.7, q.y0 + q.h * 0.42, q.w - 1.4, q.h * 0.18, 0.8); c.fillStyle = K.gk; c.fill(); c.restore(); }
+  if (stance === 'cover') puckCover(c, G, this.style);
+  c.translate(G.bodyX, G.bodyY); const rb = r * G.bodyScale;
+  L('garms'); for (const hy of [G.gloveY, G.blockY]) { c.strokeStyle = shade(K.gk, -0.25); c.lineWidth = 2.8; seg(c, -rb * 0.2, Math.sign(hy) * rb * 0.75, G.handX, hy); c.stroke(); }
+  L('gbody'); ell(c, 0, 0, rb * 0.85, rb * 1.08); c.fillStyle = cVol(c, 0, 0, rb * 1.05, K.gk, lx, ly, 0.5); c.fill(); c.strokeStyle = 'rgba(14,22,38,0.75)'; c.lineWidth = 0.8; c.stroke();
+  L('chest'); c.save(); ell(c, 0, 0, rb * 0.85, rb * 1.08); c.clip(); c.fillStyle = 'rgba(255,255,255,0.85)'; c.fillRect(rb * 0.25, -rb * 1.1, rb * 0.22, rb * 2.2); c.restore();
+  L('glove'); circ(c, G.handX, G.gloveY, 3.0); c.fillStyle = stance === 'cover' ? '#e8a020' : cVol(c, G.handX, G.gloveY, 3, '#eef1f5', lx, ly); c.fill(); c.strokeStyle = 'rgba(14,22,38,0.85)'; c.lineWidth = 0.8; c.stroke();
+  circ(c, G.handX, G.gloveY, 1.8); c.fillStyle = K.gk; c.fill();
+  L('blocker'); rr(c, G.handX - 2.4, G.blockY - 2.8, 4.8, 5.6, 1); c.fillStyle = cVol(c, G.handX, G.blockY, 3, '#eef1f5', lx, ly); c.fill(); c.stroke(); c.fillStyle = K.gk; c.fillRect(G.handX - 1.6, G.blockY - 2.0, 3.2, 1.4);
+  L('mask'); const mx = -rb * 0.42; ell(c, mx, 0, 3.4 * G.bodyScale, 3.1 * G.bodyScale); c.fillStyle = cVol(c, mx, 0, 3.4, '#e3e8ef', lx, ly, 0.55); c.fill(); c.strokeStyle = 'rgba(14,22,38,0.8)'; c.lineWidth = 0.8; c.stroke();
+  L('cage'); c.strokeStyle = '#2b2f36'; c.lineWidth = 0.5; c.beginPath(); c.arc(mx, 0, 3.6 * G.bodyScale, Math.PI - 0.9, Math.PI + 0.9); for (const yy of [-1.2, 0, 1.2]) { c.moveTo(mx - 1.6, yy); c.lineTo(mx - 3.5 * G.bodyScale, yy); } c.stroke();
+  c.restore();
+};
+
+// ═══════════════════════════ D — SAMOLEPKA (stolní hokej) ═══════════════════════════
+// Plochá figurka se SPOLEČNÝM tmavým obrysem celé siluety (2 průchody: obrys → výplně), bílá šipka na helmě = směr.
+const D = { id:'D', name:'Samolepka / figurka', desc:'Plochá „stolní" figurka: jeden tmavý obrys kolem celé siluety (čte se na ledě i na čarách), velké číslo přes ramena, bílá šipka na helmě míří kam hráč kouká. Gólman: pady v barvě týmu.',
+  kit: { home: { jersey:'#2a6cf0', dark:'#163a8a', helmet:'#163a8a', glove:'#ffffff', stick:'#ffffff', tape:'#ffd23f', num:19, gk:'#2a6cf0' },
+         away: { jersey:'#ee3446', dark:'#8c1626', helmet:'#8c1626', glove:'#ffffff', stick:'#ffffff', tape:'#ffd23f', num:22, gk:'#ee3446' } },
+  spec: { headFwd: 0.7 * R0, stickW: 2.0 + 2.2, outline: '#121a2c', outlineW: 1.1, stickCol: '#121a2c' },
+  style: { puck: '#121a2c' }, shadowFirst: true };
+D.player = function (c, x, y, s, ba, P, K) {
+  shadowS(c, x, y, s, 1.05 * R0, 0.7 * R0, 0.2);
+  c.save(); c.translate(x, y); c.rotate(ba); c.scale(s, s); c.lineCap = 'round'; c.lineJoin = 'round';
+  const k = P.stick, O = '#121a2c', W = 2.2;
+  const parts = [   // [tvar, výplň, extra tloušťka pro čáry]
+    () => { for (const f of P.feet) { c.save(); c.translate(f.x, f.y); c.rotate(f.a); ell(c, 0, 0, R0 * 0.6, R0 * 0.26); c.restore(); doIt(c, '#121a2c'); } },
+  ];
+  let mode = 'o';
+  function doIt(cc, fill) { if (mode === 'o') { cc.strokeStyle = O; cc.lineWidth = W; cc.stroke(); } else { cc.fillStyle = fill; cc.fill(); } }
+  function line(x1, y1, x2, y2, w, col) { seg(c, x1, y1, x2, y2); if (mode === 'o') { c.strokeStyle = O; c.lineWidth = w + W; } else { c.strokeStyle = col; c.lineWidth = w; } c.stroke(); }
+  function blade(col) { bladePath(c, k); if (mode === 'o') { c.strokeStyle = O; c.lineWidth = 2.6 + W; } else { c.strokeStyle = col; c.lineWidth = 2.6; } c.stroke(); }
+  for (mode of ['o', 'f']) {
+    L(mode === 'o' ? 'outline' : 'skates'); parts[0]();
+    if (mode === 'f') L('stick'); line(k.butt.x, k.butt.y, k.tip.x, k.tip.y, 2.0, K.stick);
+    if (mode === 'f') L('tape'); blade(K.tape);
+    if (P.puck && P.puck.z === 0 && mode === 'f') puckLocal(c, P, this.style);
+    if (mode === 'f') L('pants'); for (const sd of [-1, 1]) { ell(c, -R0 * 0.6, sd * R0 * 0.6, R0 * 0.48, R0 * 0.44); doIt(c, K.dark); }
+    if (mode === 'f') L('torso'); rr(c, -R0 * 0.85, -R0 * 1.2, R0 * 1.55, R0 * 2.4, R0 * 0.7); doIt(c, K.jersey);
+    if (mode === 'f') {
+    L('stripes'); c.fillStyle = '#ffffff'; c.fillRect(-R0 * 0.08, -R0 * 1.15, R0 * 0.24, R0 * 2.3);       // pruh přes ramena
+    L('number'); c.save(); c.translate(-R0 * 0.55, 0); c.rotate(Math.PI / 2); c.font = `900 ${R0 * 0.95}px 'Segoe UI', sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#fff'; c.fillText(K.num, 0, 0.35); c.restore();
+    }
+    if (mode === 'f') L('gloves'); for (const h of [k.bot, k.top]) { circ(c, h.x, h.y, 2.1); doIt(c, K.glove); }
+    if (mode === 'f') L('helmet'); circ(c, R0 * 0.62, 0, R0 * 0.56); doIt(c, K.helmet);
+    if (mode === 'o' && P.puck && P.puck.z === 0) { circ(c, P.puck.x, P.puck.y, PUCKR); c.strokeStyle = '#fff'; c.lineWidth = 1.2; c.stroke(); }  // bílý lem puku = čitelný na tmavé čepeli
+  }
+  L('chevron'); c.beginPath(); c.moveTo(R0 * 1.02, 0); c.lineTo(R0 * 0.48, -R0 * 0.34); c.lineTo(R0 * 0.6, 0); c.lineTo(R0 * 0.48, R0 * 0.34); c.closePath(); c.fillStyle = '#fff'; c.fill();
+  c.restore();
+  puckAir(c, x, y, s, ba, P, this.style);
+};
+D.goalie = function (c, x, y, s, inX, stance, side, K) {
+  const G = goalieGeom(stance, side), r = GR, st = gStickPts(G, stance), O = '#121a2c', W = 2.2;
+  if (!MEASURE) shadowS(c, x, y, s, r * 1.0, r * 0.7, 0.2);
+  gBegin(c, x, y, s, inX); c.lineCap = 'round'; c.lineJoin = 'round';
+  let mode = 'o'; const doIt = f => { if (mode === 'o') { c.strokeStyle = O; c.lineWidth = W; c.stroke(); } else { c.fillStyle = f; c.fill(); } };
+  const rb = r * G.bodyScale;
+  for (mode of ['o', 'f']) {
+    if (mode === 'o') L('outline');
+    if (st) { if (mode === 'f') L('gstick'); seg(c, st.b0.x, st.b0.y, st.b1.x, st.b1.y); c.strokeStyle = mode === 'o' ? O : '#fff'; c.lineWidth = mode === 'o' ? 3 + W : 3; c.stroke(); seg(c, st.b0.x, st.b0.y, st.hx, st.hy); c.lineWidth = mode === 'o' ? 1.6 + W : 1.6; c.stroke(); }
+    if (mode === 'f') L('pads'); for (const pd of G.pads) { const q = padXf(c, pd); rr(c, -q.w / 2, q.y0, q.w, q.h, 2.6); doIt(K.gk); if (mode === 'f') { c.fillStyle = '#fff'; c.fillRect(-q.w / 2, q.y0 + q.h * 0.4, q.w, q.h * 0.2); } c.restore(); }
+    if (mode === 'f' && stance === 'cover') puckCover(c, G, this.style);
+    c.save(); c.translate(G.bodyX, G.bodyY);
+    if (mode === 'f') L('garms'); for (const hy of [G.gloveY, G.blockY]) { seg(c, -rb * 0.2, Math.sign(hy) * rb * 0.7, G.handX, hy); c.strokeStyle = mode === 'o' ? O : K.dark; c.lineWidth = mode === 'o' ? 2.6 + W : 2.6; c.stroke(); }
+    if (mode === 'f') L('gbody'); rr(c, -rb * 0.85, -rb * 1.05, rb * 1.6, rb * 2.1, rb * 0.7); doIt(K.gk);
+    if (mode === 'f') L('glove'); circ(c, G.handX, G.gloveY, 3.0); doIt(stance === 'cover' ? '#ffd23f' : '#fff');
+    if (mode === 'f') L('blocker'); rr(c, G.handX - 2.4, G.blockY - 2.8, 4.8, 5.6, 1.2); doIt('#fff');
+    if (mode === 'f') L('mask'); circ(c, -rb * 0.4, 0, 3.6 * G.bodyScale); doIt(K.dark);
+    c.restore();
+  }
+  c.translate(G.bodyX, G.bodyY);
+  L('chevron'); const mx = -rb * 0.4, m = 3.6 * G.bodyScale; c.beginPath(); c.moveTo(mx - m * 1.05, 0); c.lineTo(mx + m * 0.25, -m * 0.6); c.lineTo(mx - m * 0.1, 0); c.lineTo(mx + m * 0.25, m * 0.6); c.closePath(); c.fillStyle = '#fff'; c.fill();
+  c.restore();
+};
+
+// ═══════════════════════════ KRESLENÍ STRÁNKY ═══════════════════════════
+let MEASURE = false;
+const VARS = [A, B, C, D], ALL = [T, ...VARS];
+const STATES = [['stand', 'stojí'], ['skate1', 'krok L'], ['skate2', 'krok P'], ['puck', 's pukem'], ['wind', 'nápřah'], ['shot', 'střela'], ['pass', 'přihrávka'], ['cross', 'crosscheck']];
+const GST = [['stand', 'stoj'], ['butterfly', 'motýlek'], ['rvh', 'RVH'], ['stretch', 'roztažení'], ['cover', 'cover (puk)']];
+const DPR = Math.max(1, window.devicePixelRatio || 1);
+
+function mkCanvas(w, h) { const cv = document.createElement('canvas'); cv.width = w * DPR; cv.height = h * DPR; cv.style.width = w + 'px'; cv.style.height = h + 'px'; const c = cv.getContext('2d'); c.scale(DPR, DPR); return [cv, c]; }
+function ice(c, x, y, w, h) { c.fillStyle = ICE; c.fillRect(x, y, w, h); }
+function label(c, t, x, y, col = '#5d6b82', size = 11) { c.fillStyle = col; c.font = `600 ${size}px 'Segoe UI', sans-serif`; c.textAlign = 'center'; c.textBaseline = 'alphabetic'; c.fillText(t, x, y); }
+
+function drawVariant(V) {
+  const W = 1328, cellP = 160, cellG = 176, s3 = 3.3, s1 = 1.1;
+  const H = cellP * 2 + 4 + cellG + 4 + 26 + 66 + 22 + 312 + 8;
+  const [cv, c] = mkCanvas(W, H);
+  c.fillStyle = '#171e2e'; c.fillRect(0, 0, W, H);
+  let y0 = 0;
+  // 3× hráči — domácí (doprava) a hosté (doleva)
+  for (const [ti, team] of [[0, 'home'], [1, 'away']]) {
+    for (let i = 0; i < STATES.length; i++) {
+      const x = i * 166, y = y0 + ti * cellP; ice(c, x, y, 160, cellP - 6);
+      const ba = team === 'home' ? -0.35 : Math.PI + 0.35, cx = x + 80 + (team === 'home' ? -18 : 18), cy = y + cellP / 2 - 2;
+      V.player(c, cx, cy, s3, ba, pose(STATES[i][0]), V.kit[team]);
+      label(c, (ti === 0 ? STATES[i][1] : '') + '', x + 80, y + 15);
+    }
+  }
+  y0 += cellP * 2 + 4;
+  // 3× gólmani
+  for (let i = 0; i < GST.length; i++) for (const [ti, team] of [[0, 'home'], [1, 'away']]) {
+    const x = (i * 2 + ti) * 132.8, y = y0; ice(c, x, y, 127, cellG - 6);
+    V.goalie(c, x + 63 + (team === 'home' ? 10 : -10), y + cellG / 2 - 6, s3, team === 'home' ? 1 : -1, GST[i][0], 1, V.kit[team]);
+  }
+  for (let i = 0; i < GST.length; i++) label(c, GST[i][1], i * 2 * 132.8 + 63, y0 + 15);
+  y0 += cellG + 4;
+  label(c, 'SKUTEČNÁ VELIKOST 1× (stejné pózy, 1 px světa = 1,1 px)', 230, y0 + 18, '#9aa6bb', 12);
+  y0 += 26;
+  ice(c, 0, y0, W, 60);
+  let xx = 22;
+  for (const team of ['home', 'away']) for (const [st] of STATES) { V.player(c, xx, y0 + 32, s1, team === 'home' ? -0.35 : Math.PI + 0.35, pose(st), V.kit[team]); xx += 46; }
+  xx += 14;
+  for (const team of ['home', 'away']) for (const [st] of GST) { V.goalie(c, xx, y0 + 30, s1, team === 'home' ? 1 : -1, st, 1, V.kit[team]); xx += 32; }
+  y0 += 66;
+  // 1× mini scéna: 2v2 + gólmani u branky, čáry (kontrast vůči červené/modré)
+  label(c, 'SCÉNA 1×: 2 na 2 + gólmani (vlevo) — a stejná scéna 2× (vpravo)', 248, y0 + 16, '#9aa6bb', 12);
+  y0 += 22;
+  for (const [sx0, sc] of [[0, 1.1], [420, 2.2]]) {
+    const w = sc === 1.1 ? 400 : 908, h = sc === 1.1 ? 156 : 312; c.save(); c.beginPath(); c.rect(sx0, y0, w, h); c.clip(); ice(c, sx0, y0, w, h);
+    const X = wx => sx0 + 10 + wx * sc, Y = wy => y0 + 6 + wy * sc;
+    c.strokeStyle = '#cc2233'; c.lineWidth = 2.2 * sc; c.beginPath(); c.moveTo(X(28), Y(-10)); c.lineTo(X(28), Y(200)); c.stroke();
+    c.strokeStyle = '#2255cc'; c.lineWidth = 5 * sc; c.beginPath(); c.moveTo(X(250), Y(-10)); c.lineTo(X(250), Y(200)); c.stroke();
+    c.fillStyle = 'rgba(80,140,230,0.25)'; c.beginPath(); c.moveTo(X(28), Y(46)); c.arc(X(28), Y(66), 20 * sc, -Math.PI / 2, Math.PI / 2); c.fill();
+    c.fillStyle = 'rgba(255,255,255,0.7)'; c.fillRect(X(14), Y(54), 14 * sc, 24 * sc); c.strokeStyle = '#cc2233'; c.lineWidth = 1.5 * sc; c.strokeRect(X(14), Y(54), 14 * sc, 24 * sc);
+    V.goalie(c, X(38), Y(66), sc, 1, 'butterfly', 1, V.kit.home);
+    V.player(c, X(150), Y(40), sc, Math.PI - 0.25, pose('puck'), V.kit.away);
+    V.player(c, X(118), Y(98), sc, Math.PI + 0.5, pose('skate1'), V.kit.away);
+    V.player(c, X(108), Y(52), sc, -0.4, pose('cross'), V.kit.home);
+    V.player(c, X(200), Y(108), sc, Math.PI * 0.85, pose('skate2'), V.kit.home);
+    V.goalie(c, X(330), Y(70), sc, -1, 'stand', 1, V.kit.away);
+    c.restore();
+  }
+  return cv;
+}
+
+// ═══════════════════════════ MĚŘENÍ ═══════════════════════════
+function counter(real) {   // proxy kontextu: počítá kreslicí operace
+  const n = { draw: 0, all: 0, grad: 0 };
+  const DRAW = new Set(['fill', 'stroke', 'fillRect', 'strokeRect', 'fillText', 'strokeText', 'drawImage']);
+  const px = new Proxy(real, { get(t, p) { const v = t[p]; if (typeof v === 'function') return (...a) => { n.all++; if (DRAW.has(p)) n.draw++; if (p.startsWith('create')) n.grad++; return v.apply(t, a); }; return v; },
+    set(t, p, v) { t[p] = v; return true; } });
+  return [px, n];
+}
+function measureOps(V) {
+  const cv = document.createElement('canvas'); cv.width = 400; cv.height = 300; const [px, n] = counter(cv.getContext('2d'));
+  const sts = ['skate1', 'puck', 'skate2', 'cross']; sts.forEach((st, i) => V.player(px, 60 + i * 80, 100, 2.5, 0.3, pose(st), V.kit[i % 2 ? 'away' : 'home']));
+  V.goalie(px, 60, 220, 2.5, 1, 'butterfly', 1, V.kit.home); V.goalie(px, 300, 220, 2.5, -1, 'stand', 1, V.kit.away);
+  return n;
+}
+function benchMs(V, N = 200) {   // orientační čas (ODHAD — závisí na stroji/prohlížeči)
+  const cv = document.createElement('canvas'); cv.width = 1200; cv.height = 500; const c = cv.getContext('2d');
+  const t0 = performance.now();
+  for (let k = 0; k < N; k++) { c.fillStyle = ICE; c.fillRect(0, 0, 1200, 500); ['skate1', 'puck', 'skate2', 'cross'].forEach((st, i) => V.player(c, 150 + i * 250, 200, 2.5, 0.3 + k * 0.01, pose(st), V.kit[i % 2 ? 'away' : 'home']));
+    V.goalie(c, 80, 380, 2.5, 1, 'butterfly', 1, V.kit.home); V.goalie(c, 1100, 380, 2.5, -1, 'stand', 1, V.kit.away); }
+  return (performance.now() - t0) / N;
+}
+function silhouette(V, st) {   // bbox + těžiště neprůhledných pixelů gólmana (bez stínu), v px světa
+  const S = 6, cv = document.createElement('canvas'); cv.width = 400; cv.height = 400; const c = cv.getContext('2d');
+  MEASURE = true; V.goalie(c, 200, 200, S, 1, st, 1, V.kit.home); MEASURE = false;
+  const d = c.getImageData(0, 0, 400, 400).data; let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, sy = 0, cnt = 0;
+  for (let y = 0; y < 400; y++) for (let x = 0; x < 400; x++) if (d[(y * 400 + x) * 4 + 3] > 60) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); sy += y; cnt++; }
+  return { W: (x1 - x0) / S, H: (y1 - y0) / S, A: (sy / cnt - 200) / S };
+}
+function layers(V) {   // pořadí vrstev hráče (s pukem i střela) + gólmana; kontrola monotónnosti RANK
+  const cv = document.createElement('canvas'); cv.width = 200; cv.height = 200; const c = cv.getContext('2d'); const res = { ok: true, bad: '', tags: new Set() };
+  for (const st of ['puck', 'shot', 'skate1']) { LOG = []; V.player(c, 100, 100, 2, 0, pose(st), V.kit.home); chk(LOG); }
+  for (const st of ['butterfly', 'cover']) { LOG = []; V.goalie(c, 100, 100, 2, 1, st, 1, V.kit.home); chk(LOG, true); }
+  LOG = null; return res;
+  function chk(log, gk) { let m = -1; for (const t of log) { res.tags.add((gk ? 'g:' : 'p:') + t); const r = RANK[t]; if (r == null) continue; if (r < m && res.ok) { res.ok = false; res.bad = `${log[log.indexOf(t) - 1] || ''} → ${t}`; } m = Math.max(m, r); } }
+}
+
+function score(V) {
+  const kh = V.kit.home, ka = V.kit.away, sp = V.spec, out = {};
+  const cHead = Math.min(contrast(kh.helmet, kh.jersey), contrast(ka.helmet, ka.jersey));
+  out.r1 = (cHead >= 1.8 && sp.headFwd >= 0.5 * R0) ? 2 : 0; out.cHead = cHead;
+  const stickCol = sp.stickCol || kh.stick, cStick = contrast(stickCol, ICE);
+  out.r2 = (cStick >= 3 ? 1 : 0) + (sp.stickW * 1.1 >= 2.5 ? 1 : 0); out.cStick = cStick;
+  const cJ = Math.min(contrast(kh.jersey, ICE), contrast(ka.jersey, ICE)), cO = sp.outlineW * 1.1 >= 1 ? contrast(sp.outline, ICE) : 0, cE = Math.max(cJ, cO);
+  out.r3a = cE >= 3 ? 2 : cE >= 2 ? 1 : 0; out.cJ = cJ; out.cE = cE;
+  const de = dE(kh.jersey, ka.jersey); out.r3b = de >= 50 ? 2 : de >= 30 ? 1 : 0; out.de = de;
+  const sil = GST.map(([st]) => silhouette(V, st)); let mn = 1e9, pair = '';
+  for (let i = 0; i < 5; i++) for (let j = i + 1; j < 5; j++) { const a = sil[i], b = sil[j], dd = Math.hypot(a.W - b.W, a.H - b.H, a.A - b.A); if (dd < mn) { mn = dd; pair = GST[i][1] + '–' + GST[j][1]; } }
+  out.r4 = mn >= 3 ? 2 : mn >= 1.5 ? 1 : 0; out.sil = mn; out.pair = pair; out.silAll = sil;
+  const n = measureOps(V); out.ops = n.draw; out.grad = n.grad; out.r5 = n.draw <= 300 ? 2 : n.draw <= 600 ? 1 : 0;
+  out.ms = benchMs(V);
+  const ly = layers(V); out.r6 = (V.shadowFirst ? 1 : 0) + (ly.ok ? 1 : 0); out.lyBad = ly.bad;
+  out.parts = ly.tags.size; out.r7 = out.parts >= 16 ? 2 : out.parts >= 10 ? 1 : 0;
+  out.tot = out.r1 + out.r2 + out.r3a + out.r3b + out.r4 + out.r5 + out.r6 + out.r7;
+  return out;
+}
+
+// ═══════════════════════════ SESTAVENÍ ═══════════════════════════
+const NOW = [{"tag": "puk", "img": "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"}, {"tag": "g-stand", "img": "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"}, {"tag": "g-butterfly", "img": "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"}];
+{ const box = document.getElementById('now');
+  const nm = { puk: 'hráč s pukem', 'g-stand': 'gólman stoj', 'g-butterfly': 'gólman motýlek' };
+  for (const o of NOW) { const f = document.createElement('figure'); f.innerHTML = `<img src="data:image/png;base64,${o.img}" width="132" height="132"><img src="data:image/png;base64,${o.img}" width="44" height="44" style="margin:6px auto 0">${nm[o.tag] || o.tag}`; box.appendChild(f); } }
+
+const host = document.getElementById('variants');
+for (const V of VARS) {
+  const sec = document.createElement('section');
+  sec.innerHTML = `<h2><span class="tag">${V.id}</span>${V.name}</h2><p class="sub">${V.desc}</p>`;
+  sec.appendChild(drawVariant(V)); host.appendChild(sec);
+}
+const rows = ALL.map(V => [V, score(V)]);
+const f1 = v => v.toFixed(1), f2 = v => v.toFixed(2);
+document.getElementById('score').innerHTML = `<table><thead><tr><th>Směr</th><th>R1 směr<br><span class="small">helma:dres</span></th><th>R2 hůl<br><span class="small">kontrast</span></th>
+<th>R3a hrana<br><span class="small">vs led</span></th><th>R3b týmy<br><span class="small">ΔE76</span></th><th>R4 gólman<br><span class="small">min. vzdál. px</span></th>
+<th>R5 výkon<br><span class="small">ops/snímek · ms*</span></th><th>R6 y−z<br><span class="small">vrstvy</span></th><th>R7 detail<br><span class="small">části</span></th><th>Σ /16</th></tr></thead><tbody>
+${rows.map(([V, o]) => `<tr><td><b>${V.id}</b> ${V.name}</td><td>${o.r1} <span class="small">${f1(o.cHead)}</span></td><td>${o.r2} <span class="small">${f1(o.cStick)}</span></td>
+<td>${o.r3a} <span class="small">${f1(o.cE)} (dres ${f1(o.cJ)})</span></td><td>${o.r3b} <span class="small">${f1(o.de)}</span></td><td>${o.r4} <span class="small">${f1(o.sil)} ${o.pair}</span></td>
+<td>${o.r5} <span class="small">${o.ops}${o.grad ? ' +' + o.grad + ' grad.' : ''} · ${f2(o.ms)}</span></td><td>${o.r6} <span class="small">${o.lyBad || 'ok'}</span></td><td>${o.r7} <span class="small">${o.parts}</span></td><td class="tot">${o.tot}</td></tr>`).join('')}
+</tbody></table>`;
+document.getElementById('scorenote').textContent = '* ms = průměr 200 snímků 4 hráči + 2 gólmani na tomto stroji — ODHAD, nehodnotí se. 60 fps = rozpočet 16,7 ms na celý snímek (led, čáry, HUD, efekty). TEĎ je přepis dnešní kresby (bez efektů štítu/stopy); jeho R6 = 1, protože hra kreslí hůl před bruslemi (Player.js:757 vs :953).';
+window.__scores = rows.map(([V, o]) => ({ id: V.id, ...o, silAll: o.silAll.map(q => [f1(q.W), f1(q.H), f1(q.A)]) }));
+</script>
+<script>
+// ═══════════════════════════ C-VERZE (spice) — C „Ilustrace" ve 4 obměnách + kosmetické sloty + detailní gólman ═══════════════════════════
+// Jeden parametrický renderer: F = příznaky verze. Kreslí ve SVĚTOVÝCH jednotkách (ctx.scale(s)) → přenositelné do Player.js/Goalie.js.
+Object.assign(RANK, { speed:0, smear:1.8, kneepad:2, rim:4, crest:7, paint:7, thumb:6, web:6, pocket:6, gcuff:6, board:6 });
+const OUT = '#121a2c';
+const CV = [
+  { id:'C-a', name:'Cel + obrys', F:{ outline:1, cel:1 }, src:'Windjammers 2 (silný obrys), Aicher (plná figura, výbava linkou)',
+    desc:'Jednotný tmavý obrys kolem celé siluety a tvrdé dvoutónové stínování (cel-shading) místo přechodů. Nejčitelnější na ledě i na čarách, bez gradientů.' },
+  { id:'C-b', name:'Světlo a dlouhý stín', F:{ longShadow:1, gloss:1 }, src:'LPC top-down průvodce (jednotný stín), dramatické světlo',
+    desc:'Měkké objemy jako C + dlouhý vržený stín od pevného světla vlevo nahoře a lesk (helma, rukavice, betony). Nejvíc „ilustrace", nejméně grafiky.' },
+  { id:'C-c', name:'Pohyb', F:{ motion:1 }, src:'12 principů animace (squash & stretch, následná akce)',
+    desc:'Póza nese děj: trup se při odrazu protáhne, při nápřahu/střele se ramena natočí (twist), rychlostní čáry a „šmouha" čepele při střele.' },
+  { id:'C-d', name:'Týmová grafika', F:{ graphics:1, outline:1 }, src:'NHL 94 (týmová barva dominuje), SMB / TF2–OW (přehnané rysy)',
+    desc:'Větší helma a rukavice, velké číslo, znak na helmě, výrazné malování masky a betony v týmových barvách. Kosmetika je vidět i v 1×.' },
+];
+// Kosmetické sloty: jersey, pattern (8 vzorů), accent, pants, glove, cuff, helmet, helmetType (visor|cage|shield|none), visor,
+// tape, tapeStyle (full|toe|heel|candy), blade, stick, laces, num.   Gólman: gk, accent, pad, padAccent, glove, gloveAccent, mask (team|stripe|flame|split).
+const PATTERNS = ['solid', 'shoulder', 'stripes', 'sleeves', 'diagonal', 'checker', 'gradient', 'retro'];
+const TEAMKIT = {
+  home: { jersey:'#1e56c8', pattern:'stripes', accent:'#ffffff', pants:'#13254f', glove:'#13254f', cuff:'#ffffff', helmet:'#f2f5f9', helmetType:'cage', visor:'#bfe0ff', tape:'#111318', tapeStyle:'full', blade:'#15171c', stick:'#1b1f27', num:19,
+          gk:'#1e56c8', gaccent:'#ffffff', pad:'#f6f8fb', padAccent:'#1e56c8', gglove:'#f6f8fb', gloveAccent:'#1e56c8', mask:'team' },
+  away: { jersey:'#c8243a', pattern:'shoulder', accent:'#ffffff', pants:'#3a0c14', glove:'#3a0c14', cuff:'#ffffff', helmet:'#f2f5f9', helmetType:'visor', visor:'#39414e', tape:'#111318', tapeStyle:'full', blade:'#15171c', stick:'#1b1f27', num:22,
+          gk:'#c8243a', gaccent:'#ffffff', pad:'#f6f8fb', padAccent:'#c8243a', gglove:'#f6f8fb', gloveAccent:'#c8243a', mask:'flame' },
+};
+const COSKITS = [   // 8 kombinací kosmetik (hráč + gólman)
+  { label:'plný · plexi', jersey:'#1e56c8', pattern:'solid', accent:'#ffffff', pants:'#13254f', glove:'#13254f', helmet:'#f2f5f9', helmetType:'visor', visor:'#39414e', tape:'#111318', tapeStyle:'full', num:7,
+    gk:'#1e56c8', pad:'#f6f8fb', padAccent:'#1e56c8', gglove:'#f6f8fb', gloveAccent:'#1e56c8', mask:'team' },
+  { label:'sedlo · mřížka', jersey:'#c8243a', pattern:'shoulder', accent:'#ffffff', pants:'#1a1f29', glove:'#1a1f29', helmet:'#1a1f29', helmetType:'cage', tape:'#ffffff', tapeStyle:'candy', num:11,
+    gk:'#c8243a', pad:'#c8243a', padAccent:'#ffffff', gglove:'#c8243a', gloveAccent:'#ffffff', mask:'stripe' },
+  { label:'pruhy · akvárko', jersey:'#138a52', pattern:'stripes', accent:'#ffd23f', pants:'#0d3b26', glove:'#ffd23f', helmet:'#ffd23f', helmetType:'shield', visor:'#bfe0ff', tape:'#ffd23f', tapeStyle:'toe', blade:'#0d3b26', num:23,
+    gk:'#138a52', pad:'#ffd23f', padAccent:'#138a52', gglove:'#138a52', gloveAccent:'#ffd23f', mask:'flame' },
+  { label:'rukávy · mřížka', jersey:'#1a1f29', pattern:'sleeves', accent:'#ff7a1a', pants:'#1a1f29', glove:'#ff7a1a', helmet:'#ff7a1a', helmetType:'cage', tape:'#ff7a1a', tapeStyle:'heel', num:88,
+    gk:'#1a1f29', pad:'#1a1f29', padAccent:'#ff7a1a', gglove:'#1a1f29', gloveAccent:'#ff7a1a', mask:'split' },
+  { label:'šerpa · bílý dres', jersey:'#f4f7fb', pattern:'diagonal', accent:'#d81f35', pants:'#d81f35', glove:'#d81f35', helmet:'#d81f35', helmetType:'visor', visor:'#4f8fd6', tape:'#d81f35', tapeStyle:'full', num:4,
+    gk:'#f4f7fb', pad:'#f4f7fb', padAccent:'#d81f35', gglove:'#d81f35', gloveAccent:'#f4f7fb', mask:'stripe' },
+  { label:'šachovnice', jersey:'#13254f', pattern:'checker', accent:'#7fd4ff', pants:'#13254f', glove:'#7fd4ff', helmet:'#f2f5f9', helmetType:'cage', tape:'#7fd4ff', tapeStyle:'candy', num:31,
+    gk:'#13254f', pad:'#7fd4ff', padAccent:'#13254f', gglove:'#7fd4ff', gloveAccent:'#13254f', mask:'split' },
+  { label:'přechod', jersey:'#6b2bd9', pattern:'gradient', accent:'#ff5fb0', pants:'#2a0f5c', glove:'#2a0f5c', helmet:'#ff5fb0', helmetType:'shield', visor:'#cfe7f2', tape:'#ff5fb0', tapeStyle:'full', num:99,
+    gk:'#6b2bd9', pad:'#f6f8fb', padAccent:'#ff5fb0', gglove:'#ff5fb0', gloveAccent:'#6b2bd9', mask:'flame' },
+  { label:'retro', jersey:'#ffcf3a', pattern:'retro', accent:'#5a2d0c', pants:'#5a2d0c', glove:'#5a2d0c', helmet:'#5a2d0c', helmetType:'none', tape:'#f4f7fb', tapeStyle:'full', blade:'#7a5015', stick:'#7a5015', num:9,
+    gk:'#ffcf3a', pad:'#8a5a2b', padAccent:'#ffcf3a', gglove:'#8a5a2b', gloveAccent:'#ffcf3a', mask:'team' },
+];
+const kitOf = k => ({ cuff:'#ffffff', visor:'#bfe0ff', blade:'#15171c', stick:'#1b1f27', gaccent:'#ffffff', ...k });
+
+// ── stínování podle verze: cel (tvrdý půlměsíc) nebo radiální přechod; světlo (lx,ly) v lokálu
+function cShade(c, F, pathFn, col, cx, cy, rad, lx, ly) {
+  if (F.cel) {
+    pathFn(); c.fillStyle = shadeHex(col, -0.32); c.fill();                       // tvrdý stín (celý tvar)
+    c.save(); c.translate(cx + lx * rad * 0.16, cy + ly * rad * 0.16); c.scale(0.8, 0.8); c.translate(-cx, -cy); pathFn(); c.restore(); c.fillStyle = col; c.fill();   // osvětlená část posunutá ke světlu (bez clipu)
+  } else {
+    const g = c.createRadialGradient(cx + lx * rad * 0.45, cy + ly * rad * 0.45, rad * 0.1, cx, cy, rad * 1.15);
+    g.addColorStop(0, shadeHex(col, 0.3)); g.addColorStop(0.55, col); g.addColorStop(1, shadeHex(col, -0.35)); pathFn(); c.fillStyle = g; c.fill();
+  }
+  if (F.innerLine) { pathFn(); c.strokeStyle = OUT; c.lineWidth = 0.55; c.stroke(); }
+}
+function shadeHex(h, a) { const [r, g, b] = hex2rgb(h); const f = v => Math.max(0, Math.min(255, Math.round(a < 0 ? v * (1 + a) : v + (255 - v) * a))); return '#' + [f(r), f(g), f(b)].map(v => v.toString(16).padStart(2, '0')).join(''); }
+const lightLocal = ba => ({ lx: Math.cos(-ba) * -0.7 - Math.sin(-ba) * -0.7, ly: Math.sin(-ba) * -0.7 + Math.cos(-ba) * -0.7 });
+function cTorsoPath(c, g) { const R = R0 * (g ? 1.04 : 1); c.beginPath(); c.moveTo(R * 0.35, -R * 1.2); c.quadraticCurveTo(R * 0.75, -R * 0.6, R * 0.55, 0); c.quadraticCurveTo(R * 0.75, R * 0.6, R * 0.35, R * 1.2);
+  c.quadraticCurveTo(-R * 0.15, R * 1.42, -R * 0.75, R * 0.85); c.quadraticCurveTo(-R * 1.05, 0, -R * 0.75, -R * 0.85); c.quadraticCurveTo(-R * 0.15, -R * 1.42, R * 0.35, -R * 1.2); c.closePath(); }
+function cPattern(c, K, F) {   // vzor dresu — klipnutý do trupu (lokál: +x hruď, záda −x, ramena ±y)
+  const R = R0, a = K.accent; c.fillStyle = a; L('stripes');
+  switch (K.pattern) {
+    case 'shoulder': c.fillRect(R * 0.08, -R * 1.5, R * 1.1, R * 3); break;                                         // sedlo přes ramena/hruď
+    case 'stripes':  c.fillRect(-R * 1.4, -R * 0.66, R * 2.8, R * 0.3); c.fillRect(-R * 1.4, R * 0.36, R * 2.8, R * 0.3); break;  // podélné pruhy
+    case 'sleeves':  c.fillRect(-R * 1.4, -R * 1.5, R * 2.8, R * 0.62); c.fillRect(-R * 1.4, R * 0.88, R * 2.8, R * 0.62); break; // rukávy (+ ramena a pásky na pažích)
+    case 'diagonal': c.save(); c.rotate(-0.75); c.fillRect(-R * 2, -R * 0.36, R * 4, R * 0.72); c.restore(); break;              // šerpa
+    case 'checker':  for (let i = -3; i < 3; i++) for (let j = -3; j < 3; j++) if ((i + j) & 1) c.fillRect(i * R * 0.5, j * R * 0.5, R * 0.5, R * 0.5); break;
+    case 'gradient': { const g = c.createLinearGradient(-R, 0, R * 0.7, 0); g.addColorStop(0, rgba(a, 0)); g.addColorStop(1, a); c.fillStyle = g; c.fillRect(-R * 1.4, -R * 1.5, R * 2.8, R * 3); break; }
+    case 'retro':    c.fillRect(-R * 1.1, -R * 1.5, R * 0.55, R * 3); c.fillStyle = shadeHex(a, 0.55); c.fillRect(-R * 0.5, -R * 1.5, R * 0.12, R * 3); break;   // široký pás na zádech + linka
+  }
+}
+function cBlade(c, k, K) {   // čepel: barva čepele + styl omotávky
+  c.lineCap = 'round'; const st = K.tapeStyle || 'full';
+  if (st === 'full') { bladePath(c, k); c.strokeStyle = K.tape; c.lineWidth = 2.9; c.stroke(); return; }
+  bladePath(c, k); c.strokeStyle = K.blade; c.lineWidth = 2.9; c.stroke();
+  const N = 8; let [px, py] = [k.tip.x, k.tip.y];
+  for (let i = 1; i <= N; i++) { const t = i / N, u = 1 - t, qx = u * u * k.tip.x + 2 * u * t * k.ctrl.x + t * t * k.end.x, qy = u * u * k.tip.y + 2 * u * t * k.ctrl.y + t * t * k.end.y, m = (i - 0.5) / N;
+    const on = st === 'toe' ? m > 0.5 : st === 'heel' ? m < 0.5 : (i % 2 === 0);
+    if (on) { seg(c, px, py, qx, qy); c.strokeStyle = st === 'candy' ? K.tape : K.tape; c.lineWidth = 2.9; c.stroke(); }
+    px = qx; py = qy; }
+}
+
+// ═══ HRÁČ ═══
+function cMakePlayer(F) {
+  return function (c, x, y, s, ba, P, K0) {
+    const K = kitOf(F.graphics ? { ...K0, ...(K0.teamHelmet !== false && K0 === TEAMKIT[K0.side] ? {} : {}) } : K0), R = R0, k = P.stick, { lx, ly } = lightLocal(ba), hnd = P.hnd, gs = F.graphics ? 1.12 : 1;
+    const autoEdge = !F.outline && contrast(K.jersey, ICE) < 3;   // světlý dres bez obrysu → automatický tmavý okraj 1 px
+    // stín(y) — screen space
+    if (!MEASURE) {
+      if (F.longShadow) { L('shadow'); c.save(); c.translate(x + LIGHT.x * s * 2.6, y + LIGHT.y * s * 2.6); c.rotate(Math.atan2(LIGHT.y, LIGHT.x)); ell(c, 0, 0, R * 1.7 * s, R * 0.85 * s); c.fillStyle = 'rgba(25,45,80,0.13)'; c.fill(); c.restore(); }
+      shadowS(c, x, y, s, 1.0 * R, 0.7 * R, F.longShadow ? 0.26 : 0.22);
+    }
+    c.save(); c.translate(x, y); c.rotate(ba); c.scale(s, s); c.lineCap = 'round'; c.lineJoin = 'round';
+    // pohyb: squash/stretch a twist ramen
+    const mp = Math.max(...P.feet.map(f => f.push));
+    const tw = !F.motion ? 0 : P.state === 'wind' ? 0.38 * hnd : P.state === 'shot' ? -0.32 * hnd : P.state === 'pass' ? -0.18 * hnd : P.state === 'cross' ? 0 : 0;
+    const sqx = F.motion ? 1 + 0.09 * mp * P.sf + (P.state === 'cross' ? 0.06 : 0) : 1, sqy = F.motion ? 1 - 0.06 * mp * P.sf : 1;
+    if (F.motion && P.sf > 0.5) { L('speed'); c.strokeStyle = 'rgba(255,255,255,0.95)'; c.lineWidth = 0.8; for (const [yy, ln] of [[-4.5, 9], [0.5, 13], [5, 8]]) { seg(c, -R * 1.3, yy, -R * 1.3 - ln * P.sf, yy); c.stroke(); }
+      c.strokeStyle = 'rgba(70,110,160,0.35)'; c.lineWidth = 0.5; for (const [yy, ln] of [[-4.5, 9], [0.5, 13], [5, 8]]) { seg(c, -R * 1.3, yy + 0.6, -R * 1.3 - ln * P.sf, yy + 0.6); c.stroke(); } }
+    // stopy v ledu
+    L('icefx'); for (const f of P.feet) if (f.push > 0.25) { c.beginPath(); c.moveTo(f.x + 3, f.y - f.side * 0.5); c.quadraticCurveTo(f.x - 3, f.y + f.side * 1.2, f.x - 8 * f.push, f.y + f.side * 2.8 * f.push); c.strokeStyle = 'rgba(255,255,255,0.9)'; c.lineWidth = 0.7; c.stroke(); }
+    const sh = [{ x: R * 0.25, y: -R * 0.9 }, { x: R * 0.25, y: R * 0.9 }].map(p => ({ x: p.x * Math.cos(tw) - p.y * Math.sin(tw), y: p.x * Math.sin(tw) + p.y * Math.cos(tw) }));
+    const hands = hnd > 0 ? [k.top, k.bot] : [k.bot, k.top];
+    const elbows = [0, 1].map(i => ({ x: (sh[i].x + hands[i].x) / 2 + R * 0.1, y: (sh[i].y + hands[i].y) / 2 + (i ? 1 : -1) * R * 0.25 }));
+    // jednotný obrys siluety (pod vším)
+    if (F.outline) {
+      L('outline'); c.strokeStyle = OUT; const W = 2.0;
+      for (const f of P.feet) { c.save(); c.translate(f.x, f.y); c.rotate(f.a); rr(c, -R * 0.6, -R * 0.22, R * 1.1, R * 0.44, R * 0.2); c.lineWidth = W; c.stroke(); c.restore(); }
+      seg(c, k.butt.x, k.butt.y, k.tip.x, k.tip.y); c.lineWidth = 2.3 + W; c.stroke(); bladePath(c, k); c.lineWidth = 2.9 + W; c.stroke();
+      for (let i = 0; i < 2; i++) { c.beginPath(); c.moveTo(sh[i].x, sh[i].y); c.lineTo(elbows[i].x, elbows[i].y); c.lineTo(hands[i].x, hands[i].y); c.lineWidth = 2.8 + W; c.stroke(); }
+      c.save(); c.rotate(tw); c.scale(sqx, sqy); cTorsoPath(c, F.graphics); c.lineWidth = W * 1.2; c.stroke(); for (const sd of [-1, 1]) { ell(c, -R * 0.62, sd * R * 0.62, R * 0.5, R * 0.46); c.stroke(); } c.restore();
+      for (const h of [k.bot, k.top]) { rr(c, h.x - 2.3 * gs, h.y - 1.9 * gs, 4.6 * gs, 3.8 * gs, 1.4); c.lineWidth = W; c.stroke(); }
+      ell(c, R * 0.72, 0, R * 0.55 * gs, R * 0.5 * gs); c.lineWidth = W; c.stroke();
+    }
+    // brusle
+    for (const f of P.feet) { c.save(); c.translate(f.x, f.y); c.rotate(f.a);
+      L('blades'); seg(c, -R * 0.66, 0, R * 0.7, 0); c.strokeStyle = '#dfe5ee'; c.lineWidth = 1.05; c.stroke();
+      L('skates'); rr(c, -R * 0.6, -R * 0.22, R * 1.1, R * 0.44, R * 0.2); c.fillStyle = '#1c1f26'; c.fill();
+      rr(c, R * 0.25, -R * 0.2, R * 0.3, R * 0.4, R * 0.15); c.fillStyle = '#e9edf3'; c.fill();
+      L('laces'); c.strokeStyle = K.laces || 'rgba(255,255,255,0.6)'; c.lineWidth = 0.45; c.beginPath(); for (const q of [-0.3, -0.05, 0.2]) { c.moveTo(R * q, -R * 0.13); c.lineTo(R * q, R * 0.13); } c.stroke();
+      c.restore(); }
+    // šmouha čepele při střele
+    if (F.motion && P.state === 'shot') { L('smear'); c.beginPath(); const a0 = Math.atan2(k.tip.y, k.tip.x), rr0 = Math.hypot(k.tip.x, k.tip.y) + 3; c.arc(0, 0, rr0, a0, a0 + hnd * 1.3, hnd < 0); c.strokeStyle = 'rgba(255,255,255,0.75)'; c.lineWidth = 3.4; c.stroke(); c.strokeStyle = 'rgba(120,160,210,0.35)'; c.lineWidth = 1; c.stroke(); }
+    // hůl
+    L('stick'); c.strokeStyle = K.stick; c.lineWidth = 2.3; seg(c, k.butt.x, k.butt.y, k.tip.x, k.tip.y); c.stroke();
+    c.strokeStyle = 'rgba(255,255,255,0.3)'; c.lineWidth = 0.6; seg(c, k.butt.x + lx * 0.6, k.butt.y + ly * 0.6, k.tip.x + lx * 0.6, k.tip.y + ly * 0.6); c.stroke();
+    L('knob'); circ(c, k.butt.x, k.butt.y, 1.35); c.fillStyle = K.tape === '#111318' ? '#f4f6fa' : K.tape; c.fill();
+    L('tape'); cBlade(c, k, K);
+    puckLocal(c, P, { puck: '#0b0d12', puckRim: F.outline ? '#ffffff' : '#3a4152' });
+    // štulpny, kalhoty
+    L('socks'); c.strokeStyle = shadeHex(K.jersey, -0.1); c.lineWidth = 2.6; for (const f of P.feet) { seg(c, -R * 0.55, f.side * R * 0.55, f.x - 0.4, f.y); c.stroke(); }
+    c.save(); c.rotate(tw * 0.4); c.scale(sqx, sqy);
+    L('pants'); for (const sd of [-1, 1]) cShade(c, F, () => ell(c, -R * 0.62, sd * R * 0.62, R * 0.5, R * 0.46), K.pants, -R * 0.62, sd * R * 0.62, R * 0.5, lx, ly);
+    c.restore();
+    // trup + vzor
+    c.save(); c.rotate(tw); c.scale(sqx, sqy);
+    L('torso'); cShade(c, F, () => cTorsoPath(c, F.graphics), K.jersey, -R * 0.1, 0, R * 1.25, lx, ly);
+    c.save(); cTorsoPath(c, F.graphics); c.clip(); cPattern(c, K, F); ell(c, -R * 0.55, 0, R * 0.5, R * 0.85); c.fillStyle = 'rgba(0,0,0,0.10)'; c.fill(); c.restore();
+    if (F.outline || autoEdge) { cTorsoPath(c, F.graphics); c.strokeStyle = OUT; c.lineWidth = autoEdge ? 1.0 : 0.6; c.stroke(); }
+    // číslo
+    L('number'); c.save(); c.translate(-R * 0.42, 0); c.rotate(Math.PI / 2); const nf = F.graphics ? 1.25 : 1.0; c.font = `900 ${R * nf}px 'Segoe UI', sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle';
+    const light = lum(K.jersey) > 0.4, ncol = light ? '#1a1f29' : '#ffffff';
+    if (F.graphics) { c.lineWidth = 1.1; c.strokeStyle = light ? '#ffffff' : K.accent === '#ffffff' ? shadeHex(K.jersey, -0.5) : K.accent; c.strokeText(K.num, 0, 0.3); }
+    else { c.fillStyle = 'rgba(0,0,0,0.3)'; c.fillText(K.num, 0.35, 0.65); }
+    c.fillStyle = ncol; c.fillText(K.num, 0, 0.3); c.restore();
+    // ramena (u 'sleeves'/'shoulder' v barvě akcentu)
+    L('shoulders'); const shc = K.pattern === 'shoulder' ? K.accent : K.jersey;
+    for (const sd of [-1, 1]) cShade(c, F, () => ell(c, R * 0.1, sd * R * 0.88, R * 0.42 * (F.graphics ? 1.1 : 1), R * 0.36 * (F.graphics ? 1.1 : 1)), shc, R * 0.1, sd * R * 0.88, R * 0.42, lx, ly);
+    if (K.pattern === 'sleeves') for (const sd of [-1, 1]) { seg(c, -R * 0.25, sd * R * 0.88, R * 0.45, sd * R * 0.88); c.strokeStyle = K.accent; c.lineWidth = R * 0.34; c.lineCap = 'butt'; c.stroke(); c.lineCap = 'round'; }
+    c.restore();
+    // paže + lokty (+ rukávový pruh)
+    L('arms'); for (let i = 0; i < 2; i++) { c.strokeStyle = shadeHex(K.jersey, -0.12); c.lineWidth = 2.8; c.beginPath(); c.moveTo(sh[i].x, sh[i].y); c.lineTo(elbows[i].x, elbows[i].y); c.lineTo(hands[i].x, hands[i].y); c.stroke();
+      if (K.pattern === 'sleeves' || K.pattern === 'stripes') { const m = { x: (elbows[i].x + hands[i].x) / 2, y: (elbows[i].y + hands[i].y) / 2 }; circ(c, m.x, m.y, 1.25); c.fillStyle = K.accent; c.fill(); }
+      L('elbows'); circ(c, elbows[i].x, elbows[i].y, 1.1); c.fillStyle = shadeHex(K.jersey, -0.38); c.fill(); }
+    // rukavice + manžeta
+    L('gloves'); for (const h of [k.bot, k.top]) cShade(c, F, () => rr(c, h.x - 2.3 * gs, h.y - 1.9 * gs, 4.6 * gs, 3.8 * gs, 1.4), K.glove, h.x, h.y, 2.4 * gs, lx, ly);
+    L('cuffs'); for (const h of [k.bot, k.top]) { rr(c, h.x - 2.3 * gs, h.y - 1.9 * gs, 4.6 * gs, 3.8 * gs, 1.4); c.strokeStyle = K.cuff; c.lineWidth = 0.7; c.stroke(); }
+    // helma + typ ochrany
+    const hx = R * 0.72, hr = R * 0.55 * gs;
+    L('helmet'); cShade(c, F, () => ell(c, hx, 0, hr, R * 0.5 * gs), K.helmet, hx, 0, hr, lx, ly);
+    if (F.gloss || !F.cel) { ell(c, hx + lx * R * 0.22, ly * R * 0.22, R * 0.16, R * 0.1); c.fillStyle = F.gloss ? 'rgba(255,255,255,0.98)' : 'rgba(255,255,255,0.7)'; c.fill(); }
+    if (F.graphics) { L('crest'); seg(c, hx - hr * 0.9, 0, hx + hr * 0.2, 0); c.strokeStyle = K.helmet === K.jersey ? K.accent : K.jersey; c.lineWidth = 1.3; c.stroke(); }
+    const ht = K.helmetType;
+    if (ht === 'cage') { L('cage'); c.strokeStyle = '#2b2f36'; c.lineWidth = 0.55; c.beginPath(); c.arc(hx, 0, hr * 1.13, -0.9, 0.9); for (const yy of [-0.22, 0, 0.22]) { c.moveTo(hx + R * 0.32, R * yy); c.lineTo(hx + hr * 1.13 * Math.cos(Math.asin(R * yy / (hr * 1.13))), R * yy); } c.stroke(); }
+    else if (ht === 'visor') { L('visor'); c.beginPath(); c.arc(hx, 0, hr * 0.98, -0.85, 0.85); c.strokeStyle = K.visor; c.lineWidth = 1.5; c.stroke(); }
+    else if (ht === 'shield') { L('visor'); c.beginPath(); c.arc(hx, 0, hr * 1.02, -1.1, 1.1); c.closePath(); c.fillStyle = rgba(K.visor, 0.45); c.fill(); c.strokeStyle = shadeHex(K.visor, -0.3); c.lineWidth = 0.6; c.stroke(); }
+    else { L('visor'); ell(c, hx + hr * 0.75, 0, R * 0.16, R * 0.26); c.fillStyle = '#e8b896'; c.fill(); }   // bez ochrany: nos/obličej
+    c.restore();
+    puckAir(c, x, y, s, ba, P, { puck: '#0b0d12', puckRim: F.outline ? '#ffffff' : '#3a4152' });
+  };
+}
+
+// ═══ GÓLMAN (detailní: lapačka s palcem/T-webem/manžetou, vyrážečka, maska „kočičí oči", betony s válci a bloky, nákoleníky, vesta, hokejka) ═══
+function cMakeGoalie(F) {
+  return function (c, x, y, s, inX, stance, side, K0, holding) {
+    const K = kitOf(K0), G = goalieGeom(stance, side), r = GR, st = gStickPts(G, stance), lx = 0.7 * inX, ly = -0.7, O = F.outline;
+    if (!MEASURE) {
+      if (F.longShadow) { L('shadow'); c.save(); c.translate(x + LIGHT.x * s * 2.6, y + LIGHT.y * s * 2.6); c.rotate(Math.atan2(LIGHT.y, LIGHT.x)); ell(c, 0, 0, r * 1.7 * s, r * 1.2 * s); c.fillStyle = 'rgba(25,45,80,0.13)'; c.fill(); c.restore(); }
+      shadowS(c, x, y, s, r * 1.05, r * 0.8, 0.22);
+    }
+    gBegin(c, x, y, s, inX); c.lineCap = 'round'; c.lineJoin = 'round';
+    const edge = () => { if (O) { /* obrys už dělá společný průchod */ } else { c.strokeStyle = 'rgba(14,22,38,0.75)'; c.lineWidth = 0.6; c.stroke(); } };
+    // hokejka gólmana: čepel + široký paddle + dřík
+    if (st) { L('gstick'); const dx = st.b1.x - st.b0.x, dy = st.b1.y - st.b0.y;
+      if (O) { c.strokeStyle = OUT; c.lineWidth = 4.6; seg(c, st.b0.x, st.b0.y, st.b1.x, st.b1.y); c.stroke(); c.lineWidth = 3.4; seg(c, st.b0.x, st.b0.y, st.hx, st.hy); c.stroke(); }
+      c.strokeStyle = '#1b1f27'; c.lineWidth = 3.0; seg(c, st.b0.x, st.b0.y, st.b1.x, st.b1.y); c.stroke();                         // čepel
+      c.strokeStyle = 'rgba(244,246,250,0.9)'; c.lineWidth = 1.0; seg(c, st.b0.x + dx * 0.55, st.b0.y + dy * 0.55, st.b1.x, st.b1.y); c.stroke();    // páska (špička)
+      const px = st.b0.x + (st.hx - st.b0.x) * 0.45, py = st.b0.y + (st.hy - st.b0.y) * 0.45;
+      c.strokeStyle = K.padAccent; c.lineWidth = 2.6; seg(c, st.b0.x, st.b0.y, px, py); c.stroke();                                    // paddle
+      c.strokeStyle = '#1b1f27'; c.lineWidth = 1.5; seg(c, px, py, st.hx, st.hy); c.stroke(); }
+    // betony
+    L('pads'); for (const pd of G.pads) { const q = padXf(c, pd), y0 = q.y0, w = q.w, h = q.h, kneeAtTop = pd.dir > 0;   // koleno je na y=0
+      if (O) { rr(c, -w / 2, y0, w, h, 2.4); c.strokeStyle = OUT; c.lineWidth = 2.0; c.stroke(); }
+      cShade(c, { ...F, outline: 0 }, () => rr(c, -w / 2, y0, w, h, 2.4), K.pad, 0, y0 + h / 2, Math.max(w, h) * 0.6, lx * (pd.dir), ly);
+      L('padroll'); c.fillStyle = shadeHex(K.pad, -0.12); c.fillRect(w / 2 - 1.3, y0 + 1, 1.0, h - 2);                                // vnější válec
+      c.strokeStyle = 'rgba(14,22,38,0.38)'; c.lineWidth = 0.45; c.beginPath(); const n = Math.max(2, Math.round(h / 3.2)); for (let i = 1; i < n; i++) { const yy = y0 + h * i / n; c.moveTo(-w / 2 + 0.7, yy); c.lineTo(w / 2 - 1.3, yy); } c.stroke();
+      const ky = kneeAtTop ? y0 : y0 + h - 2.6; rr(c, -w / 2 + 0.3, ky, w - 0.6, 2.6, 1.2); c.fillStyle = K.padAccent; c.fill();          // kolenní válec
+      const by = y0 + h * (kneeAtTop ? 0.55 : 0.3); c.fillStyle = K.padAccent; c.fillRect(-w / 2 + 0.6, by, w - 1.9, h * 0.13);         // týmový blok
+      const ty = kneeAtTop ? y0 + h - 0.9 : y0 + 0.9; seg(c, -w / 2 + 0.8, ty, w / 2 - 0.8, ty); c.strokeStyle = OUT; c.lineWidth = 0.6; c.stroke();   // špička/řemínek
+      rr(c, -w / 2, y0, w, h, 2.4); edge(); c.restore(); }
+    // nákoleníky (vidět při pádu na kolena)
+    if (stance === 'cover') puckCover(c, G, { puck: '#0b0d12' });
+    for (const pd of G.pads) if (pd.ph > 9) { L('kneepad'); ell(c, pd.kx + 1.6, pd.ky * 0.8, 1.7, 1.3); c.fillStyle = shadeHex(K.padAccent, -0.25); c.fill(); edge(); }
+    c.translate(G.bodyX, G.bodyY); const rb = r * G.bodyScale * (F.graphics ? 1.04 : 1);
+    // paže (rukávy s pruhem)
+    L('garms'); for (const hy of [G.gloveY, G.blockY]) { const x0 = -rb * 0.15, y0 = Math.sign(hy) * rb * 0.78;
+      if (O) { seg(c, x0, y0, G.handX, hy); c.strokeStyle = OUT; c.lineWidth = 4.8; c.stroke(); }
+      seg(c, x0, y0, G.handX, hy); c.strokeStyle = shadeHex(K.gk, -0.15); c.lineWidth = 3.0; c.stroke();
+      const mx = (x0 + G.handX) / 2, my = (y0 + hy) / 2; seg(c, mx - 0.4, my, mx + 0.4, my); c.strokeStyle = K.gaccent; c.lineWidth = 3.0; c.stroke(); }
+    // vesta s velkými rameny
+    L('gbody'); if (O) { ell(c, 0, 0, rb * 0.86, rb * 1.1); c.strokeStyle = OUT; c.lineWidth = 2; c.stroke(); }
+    cShade(c, { ...F, outline: 0 }, () => ell(c, 0, 0, rb * 0.86, rb * 1.1), K.gk, 0, 0, rb * 1.05, lx, ly);
+    L('chest'); for (const sd of [-1, 1]) cShade(c, { ...F, outline: 0 }, () => ell(c, rb * 0.05, sd * rb * 0.68, rb * 0.48, rb * 0.42), shadeHex(K.gk, 0.12), rb * 0.05, sd * rb * 0.68, rb * 0.48, lx, ly);
+    for (const sd of [-1, 1]) { c.beginPath(); c.arc(rb * 0.05, sd * rb * 0.68, rb * 0.4, Math.PI * 0.6, Math.PI * 1.4); c.strokeStyle = K.gaccent; c.lineWidth = 0.9; c.stroke(); }   // lem ramen
+    ell(c, 0, 0, rb * 0.86, rb * 1.1); edge();
+    L('number'); c.save(); c.translate(rb * 0.45, 0); c.rotate(Math.PI / 2 * inX); c.scale(-inX, 1); c.font = `900 ${rb * 0.7}px 'Segoe UI', sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = lum(K.gk) > 0.4 ? '#1a1f29' : '#ffffff'; c.fillText(K.num || 1, 0, 0.3); c.restore();
+    // vyrážečka: deska (hranou k nám) + rukavice za ní
+    const gw = F.graphics ? 1.1 : 1;
+    L('board'); rr(c, G.handX + 0.8, G.blockY - 1.6, 2.6, 3.2, 0.9); c.fillStyle = shadeHex(K.gglove, -0.18); c.fill(); edge();               // ruka
+    if (O) { rr(c, G.handX - 1.6 * gw, G.blockY - 3.5 * gw, 2.8 * gw, 7 * gw, 0.9); c.strokeStyle = OUT; c.lineWidth = 1.8; c.stroke(); }
+    L('blocker'); cShade(c, { ...F, outline: 0 }, () => rr(c, G.handX - 1.6 * gw, G.blockY - 3.5 * gw, 2.8 * gw, 7 * gw, 0.9), K.gglove, G.handX, G.blockY, 3.5, lx, ly);
+    c.fillStyle = K.gloveAccent; c.fillRect(G.handX - 1.0 * gw, G.blockY - 2.6 * gw, 1.6 * gw, 5.2 * gw);                                    // panel
+    rr(c, G.handX - 1.6 * gw, G.blockY - 3.5 * gw, 2.8 * gw, 7 * gw, 0.9); edge();
+    // lapačka: manžeta → dlaň → palec (dovnitř) → T-web kapsa (otevřená k puku, −X)
+    c.save(); c.translate(G.handX, G.gloveY); const inw = -Math.sign(G.gloveY || -1);   // palec k ose těla
+    const active = holding || stance === 'cover';
+    if (O) { ell(c, 0, 0, 3.1 * gw, 3.4 * gw); c.strokeStyle = OUT; c.lineWidth = 2; c.stroke(); }
+    L('gcuff'); rr(c, 1.3 * gw, -2.4 * gw, 3.2 * gw, 4.8 * gw, 1.2); c.fillStyle = K.gloveAccent; c.fill(); edge();
+    if (O) { ell(c, 0, 0, 3.5 * gw, 3.8 * gw); c.strokeStyle = OUT; c.lineWidth = 2; c.stroke(); }
+    L('glove'); cShade(c, { ...F, outline: 0 }, () => ell(c, 0, 0, 3.5 * gw, 3.8 * gw), K.gglove, 0, 0, 3.7 * gw, lx, ly);
+    ell(c, 0, 0, 3.5 * gw, 3.8 * gw); edge();
+    c.beginPath(); c.arc(0.2 * gw, 0, 3.0 * gw, -inw * Math.PI * 0.15 + Math.PI * 0.5 * (1 - inw) , -inw * Math.PI * 0.15 + Math.PI * 0.5 * (1 - inw) + Math.PI * 0.95 * -inw, inw > 0); c.strokeStyle = K.gloveAccent; c.lineWidth = 1.2; c.stroke();   // prsty (týmový lem)
+    L('thumb'); ell(c, -0.6 * gw, inw * 3.0 * gw, 1.9 * gw, 1.15 * gw, -inw * 0.45); c.fillStyle = shadeHex(K.gglove, -0.06); c.fill(); edge(); if (O) { ell(c, -0.6 * gw, inw * 3.0 * gw, 1.9 * gw, 1.15 * gw, -inw * 0.45); c.strokeStyle = OUT; c.lineWidth = 0.7; c.stroke(); }
+    L('pocket'); ell(c, -1.5 * gw, inw * 1.1 * gw, 1.8 * gw, 1.7 * gw); c.fillStyle = active ? '#e8a020' : shadeHex(K.gglove, -0.45); c.fill();
+    L('web'); c.strokeStyle = OUT; c.lineWidth = 0.75; c.beginPath(); c.moveTo(-3.3 * gw, inw * -0.5 * gw); c.lineTo(-3.3 * gw, inw * 2.6 * gw); c.moveTo(-3.3 * gw, inw * 1.05 * gw); c.lineTo(-1.0 * gw, inw * 1.05 * gw); c.stroke();
+    c.fillStyle = '#f4f6fa'; for (const t of [-0.2, 0.6, 1.4, 2.2]) { circ(c, -3.3 * gw, inw * t * gw, 0.3); c.fill(); }                     // šněrování T-webu
+    c.restore();
+    // maska: kopule s malbou + zadní plát + klec „kočičí oči" vpředu (−X)
+    const mx = -rb * 0.5, ms = G.bodyScale * (F.graphics ? 1.12 : 1), mrx = 3.9 * ms, mry = 3.5 * ms;
+    if (O) { ell(c, mx, 0, mrx, mry); c.strokeStyle = OUT; c.lineWidth = 2; c.stroke(); }
+    L('mask'); rr(c, mx + mrx * 0.55, -mry * 0.55, mrx * 0.6, mry * 1.1, 0.8); c.fillStyle = '#f4f6fa'; c.fill();                            // zadní plát
+    cShade(c, { ...F, outline: 0 }, () => ell(c, mx, 0, mrx, mry), K.gk, mx, 0, mrx, lx, ly);
+    L('paint'); c.save(); ell(c, mx, 0, mrx, mry); c.clip();     const pc = K.padAccent === K.gk ? K.gaccent : K.padAccent;
+    c.fillStyle = pc;
+    if (K.mask === 'team') { c.fillRect(mx - mrx, -mry * 0.18, mrx * 2, mry * 0.36); }
+    else if (K.mask === 'stripe') { c.fillRect(mx - mrx, -mry * 0.62, mrx * 2, mry * 0.24); c.fillRect(mx - mrx, mry * 0.38, mrx * 2, mry * 0.24); }
+    else if (K.mask === 'flame') { c.beginPath(); c.moveTo(mx + mrx, -mry); for (let i = 0; i <= 4; i++) { const yy = -mry + i * mry * 0.5; c.quadraticCurveTo(mx - mrx * 0.2, yy + mry * 0.12, mx - mrx * 0.75 + (i & 1) * mrx * 0.45, yy + mry * 0.25); } c.lineTo(mx + mrx, mry); c.closePath(); c.fill(); }
+    else if (K.mask === 'split') { c.fillRect(mx - mrx, -mry, mrx * 2, mry); }
+    c.restore();
+    if (F.gloss || !F.cel) { ell(c, mx + lx * 1.2, ly * 1.2, 0.9 * ms, 0.55 * ms); c.fillStyle = 'rgba(255,255,255,0.85)'; c.fill(); }
+    ell(c, mx, 0, mrx, mry); edge();
+    L('cage'); c.strokeStyle = lum(K.gk) < 0.25 ? '#f4f6fa' : '#20242c'; c.lineWidth = 0.65; c.beginPath(); const cx0 = mx - mrx * 0.45;
+    c.moveTo(cx0, -mry * 0.85); c.quadraticCurveTo(mx - mrx * 1.35, 0, cx0, mry * 0.85);                                                       // rám
+    c.moveTo(cx0 + 0.2, -mry * 0.55); c.quadraticCurveTo(mx - mrx * 1.18, -mry * 0.32, mx - mrx * 1.02, 0);                                    // oko 1
+    c.moveTo(cx0 + 0.2, mry * 0.55); c.quadraticCurveTo(mx - mrx * 1.18, mry * 0.32, mx - mrx * 1.02, 0);                                      // oko 2
+    c.moveTo(mx - mrx * 0.7, 0); c.lineTo(mx - mrx * 1.15, 0); c.stroke();
+    c.restore();
+  };
+}
+const TEAMKIT_D = { home: { ...TEAMKIT.home, helmet: '#1e56c8', glove: '#1e56c8', cuff: '#ffffff' }, away: { ...TEAMKIT.away, helmet: '#c8243a', glove: '#c8243a', cuff: '#ffffff' } };
+CV.forEach(v => { v.player = cMakePlayer(v.F); v.goalie = cMakeGoalie(v.F); v.kit = v.F.graphics ? TEAMKIT_D : TEAMKIT; });
+
+// ═══ KRESLENÍ SEKCE ═══
+function drawCVariant(V) {
+  const W = 1328, cellP = 160, cellG = 176, s3 = 3.3, s1 = 1.1;
+  const H = cellP * 2 + 4 + cellG + 4 + 26 + 66 + 22 + 312 + 8;
+  const [cv, c] = mkCanvas(W, H); c.fillStyle = '#171e2e'; c.fillRect(0, 0, W, H);
+  let y0 = 0;
+  for (const [ti, team] of [[0, 'home'], [1, 'away']]) for (let i = 0; i < STATES.length; i++) {
+    const x = i * 166, y = y0 + ti * cellP; ice(c, x, y, 160, cellP - 6);
+    const ba = team === 'home' ? -0.35 : Math.PI + 0.35;
+    V.player(c, x + 80 + (team === 'home' ? -18 : 18), y + cellP / 2 - 2, s3, ba, pose(STATES[i][0], 1), V.kit[team]);
+    if (ti === 0) label(c, STATES[i][1], x + 80, y + 15);
+  }
+  y0 += cellP * 2 + 4;
+  for (let i = 0; i < GST.length; i++) for (const [ti, team] of [[0, 'home'], [1, 'away']]) {
+    const x = (i * 2 + ti) * 132.8; ice(c, x, y0, 127, cellG - 6);
+    V.goalie(c, x + 63 + (team === 'home' ? 10 : -10), y0 + cellG / 2 - 6, s3, team === 'home' ? 1 : -1, GST[i][0], 1, V.kit[team], false);
+  }
+  for (let i = 0; i < GST.length; i++) label(c, GST[i][1], i * 2 * 132.8 + 63, y0 + 15);
+  y0 += cellG + 4; label(c, 'SKUTEČNÁ VELIKOST 1×', 90, y0 + 18, '#9aa6bb', 12); y0 += 26;
+  ice(c, 0, y0, W, 60); let xx = 22;
+  for (const team of ['home', 'away']) for (const [st] of STATES) { V.player(c, xx, y0 + 32, s1, team === 'home' ? -0.35 : Math.PI + 0.35, pose(st), V.kit[team]); xx += 46; }
+  xx += 14; for (const team of ['home', 'away']) for (const [st] of GST) { V.goalie(c, xx, y0 + 30, s1, team === 'home' ? 1 : -1, st, 1, V.kit[team]); xx += 32; }
+  y0 += 66; label(c, 'SCÉNA 1× (vlevo) a 2× (vpravo)', 110, y0 + 16, '#9aa6bb', 12); y0 += 22;
+  for (const [sx0, sc] of [[0, 1.1], [420, 2.2]]) {
+    const w = sc === 1.1 ? 400 : 908, h = sc === 1.1 ? 156 : 312; c.save(); c.beginPath(); c.rect(sx0, y0, w, h); c.clip(); ice(c, sx0, y0, w, h);
+    const X = wx => sx0 + 10 + wx * sc, Y = wy => y0 + 6 + wy * sc;
+    c.strokeStyle = '#cc2233'; c.lineWidth = 2.2 * sc; seg(c, X(28), Y(-10), X(28), Y(200)); c.stroke();
+    c.strokeStyle = '#2255cc'; c.lineWidth = 5 * sc; seg(c, X(250), Y(-10), X(250), Y(200)); c.stroke();
+    c.fillStyle = 'rgba(80,140,230,0.25)'; c.beginPath(); c.moveTo(X(28), Y(46)); c.arc(X(28), Y(66), 20 * sc, -Math.PI / 2, Math.PI / 2); c.fill();
+    c.fillStyle = 'rgba(255,255,255,0.7)'; c.fillRect(X(14), Y(54), 14 * sc, 24 * sc); c.strokeStyle = '#cc2233'; c.lineWidth = 1.5 * sc; c.strokeRect(X(14), Y(54), 14 * sc, 24 * sc);
+    V.goalie(c, X(38), Y(66), sc, 1, 'butterfly', 1, V.kit.home);
+    V.player(c, X(150), Y(40), sc, Math.PI - 0.25, pose('puck'), V.kit.away);
+    V.player(c, X(118), Y(98), sc, Math.PI + 0.5, pose('skate1'), V.kit.away);
+    V.player(c, X(108), Y(52), sc, -0.4, pose('cross'), V.kit.home);
+    V.player(c, X(200), Y(108), sc, Math.PI * 0.85, pose('skate2'), V.kit.home);
+    V.goalie(c, X(330), Y(70), sc, -1, 'stand', 1, V.kit.away);
+    c.restore();
+  }
+  return cv;
+}
+function drawCosmetics(V) {   // mřížka 8 kombinací: hráč 3× + 1×, gólman (motýlek) 3× + 1×
+  const W = 1328, H = 150 + 60 + 170 + 60; const [cv, c] = mkCanvas(W, H); c.fillStyle = '#171e2e'; c.fillRect(0, 0, W, H);
+  COSKITS.forEach((K, i) => {
+    const x = i * 166; ice(c, x, 0, 160, 144); V.player(c, x + 62, 80, 3.3, -0.35, pose('puck'), K); label(c, K.label, x + 80, 14);
+    ice(c, x, 150, 160, 54); V.player(c, x + 50, 178, 1.1, -0.35, pose('skate1'), K); V.player(c, x + 112, 178, 1.1, Math.PI + 0.35, pose('stand'), K);
+    ice(c, x, 210, 160, 164); V.goalie(c, x + 80, 290, 3.3, 1, 'butterfly', 1, K, false); label(c, 'maska: ' + K.mask, x + 80, 224);
+    ice(c, x, 380, 160, 54); V.goalie(c, x + 50, 407, 1.1, 1, 'stand', 1, K); V.goalie(c, x + 112, 407, 1.1, -1, 'rvh', 1, K);
+  });
+  return cv;
+}
+
+// ═══ MĚŘENÍ (rubrika C-verzí) ═══
+function maskOf(fn, w = 160, h = 160) { const cv = document.createElement('canvas'); cv.width = w; cv.height = h; const c = cv.getContext('2d'); MEASURE = true; fn(c); MEASURE = false; return c.getImageData(0, 0, w, h).data; }
+function iou(a, b) { let i = 0, u = 0; for (let k = 3; k < a.length; k += 4) { const A = a[k] > 60, B = b[k] > 60; if (A && B) i++; if (A || B) u++; } return u ? i / u : 1; }
+function patternDE(V, scale) {   // průměrné ΔE76 po pixelech mezi vzory na ploše trupu (stejný dres #1e56c8 / akcent #fff)
+  const imgs = PATTERNS.map(pt => { const K = { ...COSKITS[0], pattern: pt, jersey: '#1e56c8', accent: '#ffffff' };   // celý hráč (trup, ramena, paže) v 1×, jen vzor se mění
+    const cv = document.createElement('canvas'); cv.width = 60; cv.height = 60; const c = cv.getContext('2d'); MEASURE = true; V.player(c, 30, 30, scale, 0, pose('stand'), K); MEASURE = false; return c.getImageData(0, 0, 60, 60).data; });
+  const labCache = new Map(), labOf = (r, g, b) => { const key = (r << 16) | (g << 8) | b; let v = labCache.get(key); if (!v) { v = lab('#' + key.toString(16).padStart(6, '0')); labCache.set(key, v); } return v; };
+  const TM = (() => { const cv = document.createElement('canvas'); cv.width = 60; cv.height = 60; const c = cv.getContext('2d'); c.translate(30, 30); c.scale(scale, scale); cTorsoPath(c, V.F.graphics); c.fill(); return c.getImageData(0, 0, 60, 60).data; })();
+  let mn = 1e9, pair = '';
+  for (let i = 0; i < imgs.length; i++) for (let j = i + 1; j < imgs.length; j++) { const a = imgs[i], b = imgs[j]; let sum = 0, n = 0;
+    for (let k = 0; k < a.length; k += 4) { if (TM[k + 3] < 200) continue; if (a[k + 3] > 200 && b[k + 3] > 200) { /* jen pixely plochy trupu */ const p = labOf(a[k], a[k + 1], a[k + 2]), q = labOf(b[k], b[k + 1], b[k + 2]); sum += Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]); n++; } }
+    const d = sum / n; if (d < mn) { mn = d; pair = PATTERNS[i] + '–' + PATTERNS[j]; } }
+  return { mn, pair };
+}
+function teamShare(V) {   // P5: podíl pixelů v týmové barvě dresu (ΔE < 20 vůči dresu nebo jeho stínům) na siluetě hráče v 2×
+  const cv = document.createElement('canvas'); cv.width = 120; cv.height = 120; const c = cv.getContext('2d'); MEASURE = true;
+  V.player(c, 60, 60, 2.2, 0, pose('stand'), V.kit.home); MEASURE = false; const d = c.getImageData(0, 0, 120, 120).data;
+  const refs = [-0.35, -0.2, 0, 0.15, 0.3].map(a => lab(shadeHex(V.kit.home.jersey, a))); let tot = 0, team = 0;
+  for (let k = 0; k < d.length; k += 4) if (d[k + 3] > 200) { tot++; const p = lab('#' + ((d[k] << 16) | (d[k + 1] << 8) | d[k + 2]).toString(16).padStart(6, '0')); if (refs.some(q => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]) < 20)) team++; }
+  return team / tot;
+}
+function cScore(V, bench = true) {
+  const o = {}, F = V.F;
+  // K1 kontrast hrany vůči ledu, nejhorší z týmů + 8 kosmetických sad
+  const kits = [TEAMKIT.home, TEAMKIT.away, ...COSKITS];
+  const edge = K => Math.max(contrast(K.jersey, ICE), (F.outline || contrast(K.jersey, ICE) < 3) ? contrast(OUT, ICE) : 0);   // obrys verze nebo auto-okraj světlých dresů (1,0 × 1,1 px)
+  o.cEdge = Math.min(...kits.map(edge)); o.k1 = o.cEdge >= 3 ? 2 : o.cEdge >= 2 ? 1 : 0;
+  // K2 postoje gólmana siluetou
+  const sil = GST.map(([st]) => silhouette(V, st)); let mn = 1e9, pair = '';
+  for (let i = 0; i < 5; i++) for (let j = i + 1; j < 5; j++) { const a = sil[i], b = sil[j], d = Math.hypot(a.W - b.W, a.H - b.H, a.A - b.A); if (d < mn) { mn = d; pair = GST[i][1] + '–' + GST[j][1]; } }
+  o.gSil = mn; o.gPair = pair; o.k2 = mn >= 3 ? 2 : mn >= 1.5 ? 1 : 0;
+  // K3 stavy hráče siluetou v 1× (1 − IoU masek, herní stavy bez fází kroku)
+  const SS = ['stand', 'puck', 'wind', 'shot', 'pass', 'cross'];
+  const masks = SS.map(st => maskOf(c => V.player(c, 80, 80, 1.1, 0, pose(st), TEAMKIT.home)));
+  let mi = 1e9, mp = ''; for (let i = 0; i < SS.length; i++) for (let j = i + 1; j < SS.length; j++) { const d = 1 - iou(masks[i], masks[j]); if (d < mi) { mi = d; mp = SS[i] + '–' + SS[j]; } }
+  o.pSil = mi; o.pPair = mp; o.k3 = mi >= 0.25 ? 2 : mi >= 0.15 ? 1 : 0;
+  // K4 kosmetika: ΔE mezi vzory dresu v 1×
+  const pd = patternDE(V, 1.1); o.patDE = pd.mn; o.patPair = pd.pair; o.k4 = pd.mn >= 15 ? 2 : pd.mn >= 8 ? 1 : 0;
+  // K5 týmy
+  o.teamDE = dE(TEAMKIT.home.jersey, TEAMKIT.away.jersey); o.k5 = o.teamDE >= 50 ? 2 : o.teamDE >= 30 ? 1 : 0;
+  // K6 výkon
+  const n = measureOps(V); o.ops = n.draw; o.grad = n.grad; o.k6 = n.draw <= 300 ? 2 : n.draw <= 600 ? 1 : 0;
+  o.ms = 0; if (bench) { const runs = []; for (let i = 0; i < 5; i++) runs.push(benchMs(V, 60)); runs.sort((a, b) => a - b); o.ms = runs[2]; }
+  // K8 y−z: stín ve screen space + vrstvy
+  const ly = layers(V); o.lyBad = ly.bad; o.k8 = 1 + (ly.ok ? 1 : 0); o.parts = ly.tags.size;
+  // K7 předlohy — předem daný checklist (měřené predikáty)
+  const tags = ly.tags, share = teamShare(V);
+  const tm = maskOf(c => V.player(c, 80, 80, 2.2, 0, pose('stand'), TEAMKIT.home)), tw = maskOf(c => V.player(c, 80, 80, 2.2, 0, pose('wind'), TEAMKIT.home));
+  const P = {
+    P1: !!F.outline,                                                   // obrys ≥ 1 px v 1× (2,0 × 1,1 / 2 strany)
+    P2: o.k8 === 2,                                                    // jednotné světlo + stín, vrstvy y−z
+    P3: !!F.longShadow,                                                // vržený stín ≥ 1,5× posunu stínu puku (2,6×)
+    P4: !!F.graphics,                                                  // přehnané rysy: helma ≥ 0,6 r, rukavice ≥ 2,5 px
+    P5: share >= 0.45,                                                 // týmová barva ≥ 45 % siluety (měřeno)
+    P6: ['g:thumb', 'g:web', 'g:gcuff', 'g:pocket'].every(t => tags.has(t)),   // reálná lapačka
+    P7: tags.has('p:speed') || tags.has('p:smear'),                    // pohyb čitelný z pózy (rychl. čáry/šmouha/twist)
+    P8: ['p:cage', 'p:visor'].some(t => tags.has(t)),                  // směr pohledu z hlavy
+  };
+  o.share = share; o.P = P; const yes = Object.values(P).filter(Boolean).length; o.pYes = yes; o.k7 = yes >= 6 ? 2 : yes >= 4 ? 1 : 0;
+  o.tot = o.k1 + o.k2 + o.k3 + o.k4 + o.k5 + o.k6 + o.k7 + o.k8;
+  return o;
+}
+
+// ═══ SESTAVENÍ SEKCE ═══
+{
+  const wrap = document.getElementById('cwrap');
+  for (const V of CV) {
+    const sec = document.createElement('section');
+    sec.innerHTML = `<h2><span class="tag">${V.id}</span>${V.name}</h2><p class="sub">${V.desc}<br><span class="small">Princip z: ${V.src}</span></p>`;
+    sec.appendChild(drawCVariant(V)); wrap.appendChild(sec);
+  }
+  const cos = document.createElement('section');
+  cos.innerHTML = `<h2>Kosmetika — 8 kombinací (verze C-d)</h2><p class="sub">Sloty: vzor dresu (8), barva dresu/akcentu, kalhoty, rukavice, helma + typ (plexi / mřížka / akvárko / bez), páska + styl (celá / špička / pata / candy), čepel, hůl, číslo. Gólman: maska (4 malby), betony, lapačka/vyrážečka. Nahoře 3×, pod tím 1×.</p>`;
+  cos.appendChild(drawCosmetics(CV[3])); wrap.appendChild(cos);
+  CV.forEach(V => benchMs(V, 30));   // zahřátí JIT, ať pořadí neovlivní ms
+  const rows1 = CV.map(V => [V, cScore(V)]), rows2 = CV.map(V => [V, cScore(V, false)]);
+  const strip = o => JSON.stringify({ ...o, ms: 0 });
+  const stable = rows1.every(([, o], i) => strip(o) === strip(rows2[i][1]));
+  const f1 = v => v.toFixed(1), f2 = v => v.toFixed(2);
+  const sc = document.createElement('section'); sc.id = 'cscore';
+  sc.innerHTML = `<h2>Rubrika C-verzí (napsaná předem, měří stránka)</h2>
+  <ol class="small">
+   <li><b>K1 Kontrast 1×</b>: nejhorší hrana siluety (dres nebo obrys) vůči ledu přes oba týmy + 8 kosmetických sad: ≥ 3 → 2, ≥ 2 → 1.</li>
+   <li><b>K2 Postoje gólmana</b>: změřená silueta (W, H, těžiště), nejbližší dvojice ≥ 3 px → 2, ≥ 1,5 → 1.</li>
+   <li><b>K3 Stavy hráče v 1×</b>: 1 − IoU masek siluet (stojí, s pukem, nápřah, střela, přihrávka, crosscheck), nejbližší dvojice ≥ 0,25 → 2, ≥ 0,15 → 1.</li>
+   <li><b>K4 Kosmetika</b>: průměrné ΔE76 po pixelech mezi vzory dresu na hráči v 1× (pixely plochy trupu; vše ostatní stejné), nejbližší dvojice ≥ 15 → 2, ≥ 8 → 1.</li>
+   <li><b>K5 Týmy</b>: ΔE76 dres–dres ≥ 50 → 2, ≥ 30 → 1.</li>
+   <li><b>K6 Výkon</b>: kreslicí operace 4 hráči + 2 gólmani ≤ 300 → 2, ≤ 600 → 1 (ms = medián 5 běhů, orientačně).</li>
+   <li><b>K7 Předlohy</b>: checklist P1–P8 (níže), ≥ 6 ano → 2, ≥ 4 → 1.</li>
+   <li><b>K8 Projekce y−z</b>: stín ve screen space (+1) a vrstvy zdola nahoru bez porušení (+1).</li>
+  </ol>
+  <table><thead><tr><th>Verze</th><th>K1 kontrast</th><th>K2 gólman px</th><th>K3 stavy 1−IoU</th><th>K4 vzory ΔE</th><th>K5 týmy ΔE</th><th>K6 ops · ms*</th><th>K7 předlohy</th><th>K8 y−z</th><th>Σ /16</th></tr></thead><tbody>
+  ${rows1.map(([V, o]) => `<tr><td><b>${V.id}</b> ${V.name}</td><td>${o.k1} <span class="small">${f1(o.cEdge)}:1</span></td><td>${o.k2} <span class="small">${f1(o.gSil)} ${o.gPair}</span></td>
+   <td>${o.k3} <span class="small">${f2(o.pSil)} ${o.pPair}</span></td><td>${o.k4} <span class="small">${f1(o.patDE)} ${o.patPair}</span></td><td>${o.k5} <span class="small">${f1(o.teamDE)}</span></td>
+   <td>${o.k6} <span class="small">${o.ops}${o.grad ? ' +' + o.grad + ' grad.' : ''} · ${f2(o.ms)}</span></td><td>${o.k7} <span class="small">${o.pYes}/8 (${Object.entries(o.P).filter(e => e[1]).map(e => e[0]).join(' ')})</span></td>
+   <td>${o.k8} <span class="small">${o.lyBad || 'ok'}</span></td><td class="tot">${o.tot}</td></tr>`).join('')}
+  </tbody></table>
+  <p class="small">P1 obrys siluety (Windjammers 2) · P2 jednotné světlo a stín, vrstvy y−z (LPC průvodce) · P3 dlouhý vržený stín · P4 přehnané rysy helma/rukavice (SMB, TF2/Overwatch) · P5 týmová barva ≥ 45 % siluety (NHL 94; změřeno: ${rows1.map(([V, o]) => V.id + ' ' + Math.round(o.share * 100) + ' %').join(', ')}) · P6 reálná lapačka: palec, T-web, kapsa, manžeta (patent US9504900) · P7 pohyb z pózy (squash & stretch) · P8 směr pohledu z hlavy (plexi/mřížka).<br>
+  * ms = medián 5 × 60 snímků na tomto stroji, ODHAD. Opakované měření: ${stable ? 'shodné (stabilní)' : 'LIŠÍ SE'}.</p>`;
+  wrap.appendChild(sc);
+  window.__cscores = rows1.map(([V, o]) => ({ id: V.id, ...o })); window.__cstable = stable;
+}
+
+</script>
+<script>
+/*SKIN-BEGIN*/
+const SKIN = (() => {
+// SKIN „C-d2 Týmová grafika" — kresba hokejisty a gólmana shora (2026-11-11).
+// Sdílí ji hra (Player.js, Goalie.js) i náhled scripts/visual_variants.html (vkládá se skriptem scripts/visual_build.mjs).
+// Vše kreslí ve SVĚTOVÝCH jednotkách: volající nastaví ctx.translate/rotate/scale(s). Bez importů, bez DOM kromě Path2D.
+// Zásady (měřeno v náhledu, sekce C-d2): tělo = JEDNA sjednocená cesta (trup + ramena + paže + kalhoty + štulpny + helma),
+// obrys se kreslí jednou pod výplněmi → zůstane jen na vnější hraně; stínování jedním překryvem přes celé tělo;
+// vnitřní linky jen tam, kde nesou informaci (číslo, vzor dresu, manžeta, mřížka/plexi, hřebínek helmy).
+
+const SKIN_OUT = '#121a2c';
+const SKIN_ICE = '#ddeef8';
+const JERSEY_PATTERNS = ['solid', 'shoulder', 'stripes', 'sleeves', 'diagonal', 'checker', 'gradient', 'retro'];
+const MASK_STYLES = ['team', 'stripe', 'flame', 'split'];
+const R = 7;                      // PLAYER.radius
+const GS = 1.12;                  // přehnané rysy (helma, rukavice)
+
+// ── barvy (s cache — volá se každý snímek)
+const _hx = new Map();
+function rgb(h) { let v = _hx.get(h); if (!v) { const n = parseInt(String(h).slice(1, 7), 16) || 0; v = [n >> 16, (n >> 8) & 255, n & 255]; _hx.set(h, v); } return v; }
+const _sh = new Map();
+function shade(h, a) {
+  const key = h + a; let v = _sh.get(key); if (v) return v;
+  const [r, g, b] = rgb(h), f = x => Math.max(0, Math.min(255, Math.round(a < 0 ? x * (1 + a) : x + (255 - x) * a)));
+  v = '#' + [f(r), f(g), f(b)].map(x => x.toString(16).padStart(2, '0')).join(''); _sh.set(key, v); return v;
+}
+function luma(h) { const [r, g, b] = rgb(h).map(x => { x /= 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; }
+const rgba = (h, a) => { const [r, g, b] = rgb(h); return `rgba(${r},${g},${b},${a})`; };
+function mix(a, b, t) { const p = rgb(a), q = rgb(b); return '#' + p.map((v, i) => Math.round(v + (q[i] - v) * t).toString(16).padStart(2, '0')).join(''); }
+const hex = (c, d) => (typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c)) ? c : d;
+
+// ── KITY: z polí entity (hra posílá col, js, hc, sh, gc, tc, sk, ty, hy, vc; nové: st = akcent/pruh, bl = čepel). Vše má default.
+function skaterKit(p, teamColor) {
+  const jersey = hex(p.color, teamColor || '#3a9fff');
+  const pat = JERSEY_PATTERNS.includes(p.jersey) ? p.jersey : 'solid';
+  return {
+    jersey, pattern: pat, accent: hex(p.stripe, luma(jersey) > 0.55 ? '#1a1f29' : '#f4f7fb'),
+    pants: hex(p.shorts, shade(jersey, -0.62)), glove: hex(p.gloves, shade(jersey, -0.25)), cuff: '#f4f7fb',
+    helmet: hex(p.helmet, jersey), helmetType: ['visor', 'cage', 'shield', 'none'].includes(p.helmetType) ? p.helmetType : 'visor',
+    visor: hex(p.visor, '#bfe0ff'), tape: hex(p.tape, '#111318'), tapeStyle: p.tapeStyle || 'full', blade: hex(p.blade, '#15171c'),
+    stick: hex(p.stick, '#1b1f27'), laces: hex(p.laces, '#e9edf3'), num: p.num ?? autoNum(p.id),
+  };
+}
+function goalieKit(g, teamColor) {
+  const gk = hex(g.color, teamColor || '#2f6db0');
+  return { gk, accent: '#f4f7fb', pad: hex(g.padColor, '#f6f8fb'), padAccent: hex(g.padAccent, gk), glove: hex(g.gloveColor, '#f6f8fb'),
+    gloveAccent: hex(g.gloveAccent, gk), mask: MASK_STYLES.includes(g.maskStyle) ? g.maskStyle : 'team', num: g.num ?? 1 };
+}
+
+// číslo, když ho server/profil nepošle (boti, offline): deterministicky z id (FNV-1a) → 2..98; bez čísla je hráč v 1× beztvarý
+function autoNum(id) { if (id == null) return ''; let h = 2166136261; for (const ch of String(id)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; } return 2 + h % 97; }
+
+// ── geometrie
+function capsule(P, ax, ay, ra, bx, by, rb) {   // zúžená kapsle a→b jako jedna cesta (konvexní obal dvou kruhů) — kladná orientace
+  const dx = bx - ax, dy = by - ay, d = Math.hypot(dx, dy) || 1e-6, ang = Math.atan2(dy, dx);
+  const t = Math.acos(Math.max(-1, Math.min(1, (ra - rb) / d)));      // úhel tečny
+  P.moveTo(ax + Math.cos(ang + t) * ra, ay + Math.sin(ang + t) * ra);
+  P.arc(ax, ay, ra, ang + t, ang + 2 * Math.PI - t, false);
+  P.arc(bx, by, rb, ang - t, ang + t, false);
+  P.closePath();
+}
+function torso(P) {
+  const r = R * 1.04;
+  P.moveTo(r * 0.35, -r * 1.2); P.quadraticCurveTo(r * 0.75, -r * 0.6, r * 0.55, 0); P.quadraticCurveTo(r * 0.75, r * 0.6, r * 0.35, r * 1.2);
+  P.quadraticCurveTo(-r * 0.15, r * 1.42, -r * 0.75, r * 0.85); P.quadraticCurveTo(-r * 1.05, 0, -r * 0.75, -r * 0.85); P.quadraticCurveTo(-r * 0.15, -r * 1.42, r * 0.35, -r * 1.2); P.closePath();
+}
+const ellP = (P, x, y, rx, ry) => { P.moveTo(x + rx, y); P.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2, false); P.closePath(); };
+const rot = (p, a) => ({ x: p.x * Math.cos(a) - p.y * Math.sin(a), y: p.x * Math.sin(a) + p.y * Math.cos(a) });
+
+// ── úroveň detailu podle skutečného měřítka (px zařízení na světovou jednotku); deterministické, bez času
+function lodSmall(c) { const t = c.getTransform(); return Math.hypot(t.a, t.b) < 2; }
+
+// ── BRUSLE (lokální rámec brusle: +x = špička), s obrysem
+function skinSkate(c, K) {
+  c.beginPath(); c.roundRect(-R * 0.62, -R * 0.24, R * 1.14, R * 0.48, R * 0.22); c.strokeStyle = SKIN_OUT; c.lineWidth = 1.6; c.stroke();
+  c.beginPath(); c.moveTo(-R * 0.66, 0); c.lineTo(R * 0.72, 0); c.strokeStyle = '#dfe5ee'; c.lineWidth = 1.05; c.lineCap = 'round'; c.stroke();
+  c.beginPath(); c.roundRect(-R * 0.6, -R * 0.22, R * 1.1, R * 0.44, R * 0.2); c.fillStyle = '#1c1f26'; c.fill();
+  c.beginPath(); c.roundRect(R * 0.25, -R * 0.2, R * 0.3, R * 0.4, R * 0.15); c.fillStyle = '#e9edf3'; c.fill();
+  c.beginPath(); for (const q of [-0.3, -0.05, 0.2]) { c.moveTo(R * q, -R * 0.13); c.lineTo(R * q, R * 0.13); } c.strokeStyle = K.laces; c.lineWidth = 0.45; c.stroke();
+}
+
+// ── VZOR DRESU (klip = trup ∪ ramena). Cíl: ΔE76 mezi vzory na ploše trupu ≥ 15 v 1×.
+function pattern(c, K) {
+  const a = K.accent; c.fillStyle = a;
+  switch (K.pattern) {
+    case 'shoulder': c.fillRect(-R * 0.05, -R * 1.6, R * 1.3, R * 3.2); break;                                                   // sedlo přes ramena a hruď
+    case 'stripes':  c.fillRect(-R * 1.4, -R * 0.74, R * 2.8, R * 0.36); c.fillRect(-R * 1.4, R * 0.38, R * 2.8, R * 0.36); break;  // dva podélné pruhy
+    case 'sleeves':  c.fillRect(-R * 1.4, -R * 1.6, R * 2.8, R * 0.85); c.fillRect(-R * 1.4, R * 0.75, R * 2.8, R * 0.85); break;  // boky + rukávy
+    case 'diagonal': c.save(); c.rotate(-0.75); c.fillRect(-R * 2, -R * 0.42, R * 4, R * 0.84); c.restore(); break;               // šerpa
+    case 'checker':  for (let i = -3; i < 3; i++) for (let j = -4; j < 4; j++) if ((i + j) & 1) c.fillRect(i * R * 0.55, j * R * 0.55, R * 0.55, R * 0.55); break;
+    case 'gradient': { const g = c.createLinearGradient(0, -R * 1.2, 0, R * 1.2); g.addColorStop(0, rgba(a, 0)); g.addColorStop(1, a); c.fillStyle = g; c.fillRect(-R * 1.4, -R * 1.6, R * 2.8, R * 3.2); break; }  // přechod do boku
+    case 'retro':    c.fillRect(-R * 1.2, -R * 1.6, R * 0.62, R * 3.2); c.fillStyle = shade(a, 0.55); c.fillRect(-R * 0.48, -R * 1.6, R * 0.14, R * 3.2); break;   // široký pás na zádech + linka
+  }
+}
+
+// ── TĚLO HRÁČE (lokál: +x = dopředu/obličej, +y = doprava). B = { feet:[{x,y,side}], top, bot (ruce), hnd, tw (natočení ramen), lx, ly (světlo v lokálu) }
+function skinBody(c, B, K) {
+  const tw = B.tw || 0, hnd = B.hnd || 1, lod = lodSmall(c);   // lod: malé měřítko → silnější tóny tvarů, méně drobných linek
+  const S = [{ x: R * 0.25, y: -R * 0.9 }, { x: R * 0.25, y: R * 0.9 }].map(p => rot(p, tw));
+  const H = hnd > 0 ? [B.top, B.bot] : [B.bot, B.top];
+  const E = [0, 1].map(i => ({ x: (S[i].x + H[i].x) / 2 + R * 0.1, y: (S[i].y + H[i].y) / 2 + (i ? 1 : -1) * R * 0.25 }));
+  const hx = R * 0.72, hrx = R * 0.55 * GS, hry = R * 0.5 * GS;
+  // rukavice: natočené podél předloktí (sdílená tečna paže → rukavice)
+  const gl = [0, 1].map(i => ({ x: H[i].x, y: H[i].y, a: Math.atan2(H[i].y - E[i].y, H[i].x - E[i].x) }));
+  // 1) sjednocená cesta těla
+  const body = new Path2D();
+  for (const f of B.feet) capsule(body, -R * 0.55, f.side * R * 0.55, 1.4, f.x - 0.4, f.y, 1.15);           // štulpny
+  ellP(body, -R * 0.62, -R * 0.62, R * 0.5, R * 0.46); ellP(body, -R * 0.62, R * 0.62, R * 0.5, R * 0.46);  // kalhoty
+  const tor = new Path2D(); torso(tor);
+  const up = new Path2D(); torso(up); for (const s of S) ellP(up, s.x - R * 0.12, s.y * 0.98, R * 0.48, R * 0.42);   // trup + ramena
+  for (let i = 0; i < 2; i++) { capsule(up, S[i].x, S[i].y, 1.9, E[i].x, E[i].y, 1.5); capsule(up, E[i].x, E[i].y, 1.5, H[i].x, H[i].y, 1.25); }   // paže: plynulé zúžení
+  const gloves = new Path2D(); for (const g of gl) { const m = new DOMMatrix().translate(g.x, g.y).rotate(g.a * 180 / Math.PI); const q = new Path2D(); q.roundRect(-2.6 * GS + 0.6, -1.9 * GS, 4.6 * GS, 3.8 * GS, 1.5); gloves.addPath(q, m); }
+  const helm = new Path2D(); ellP(helm, hx, 0, hrx, hry);
+  body.addPath(up); body.addPath(gloves); body.addPath(helm);
+  // 2) obrys jednou (pod výplněmi) → zůstane jen vnější hrana
+  c.lineJoin = 'round'; c.strokeStyle = SKIN_OUT; c.lineWidth = 2.0; c.stroke(body);
+  // 3) výplně v pořadí zdola (y−z): štulpny, kalhoty, trup+paže (jedna barva = bez švu), vzor, číslo, rukavice, helma
+  c.fillStyle = shade(K.jersey, -0.1); for (const f of B.feet) { const q = new Path2D(); capsule(q, -R * 0.55, f.side * R * 0.55, 1.4, f.x - 0.4, f.y, 1.15); c.fill(q); }
+  c.fillStyle = K.pants; c.beginPath(); c.ellipse(-R * 0.62, -R * 0.62, R * 0.5, R * 0.46, 0, 0, Math.PI * 2); c.ellipse(-R * 0.62, R * 0.62, R * 0.5, R * 0.46, 0, 0, Math.PI * 2); c.fill();
+  c.fillStyle = K.jersey; c.fill(up);
+  // čitelné tvary v 1× tónem (ne linkou → obrys zůstává jeden): ramena světlejší, rukávy tmavší; vzor dresu jde přes ně
+  const lt = luma(K.jersey) > 0.55;
+  c.fillStyle = shade(K.jersey, (lt ? -0.55 : 1) * (lod ? 0.22 : 0.13)); c.beginPath(); for (const s of S) { c.moveTo(s.x - R * 0.12 + R * 0.48, s.y * 0.98); c.ellipse(s.x - R * 0.12, s.y * 0.98, R * 0.48, R * 0.42, 0, 0, Math.PI * 2); } c.fill();
+  const arms = new Path2D(); for (let i = 0; i < 2; i++) { capsule(arms, S[i].x, S[i].y, 1.9, E[i].x, E[i].y, 1.5); capsule(arms, E[i].x, E[i].y, 1.5, H[i].x, H[i].y, 1.25); }
+  c.fillStyle = shade(K.jersey, lod ? -0.22 : -0.14); c.fill(arms);
+  c.save(); c.clip(up); c.rotate(tw); pattern(c, K); c.restore();
+  // rukávový pruh (sleeves/stripes) — páska na předloktí
+  if (K.pattern === 'sleeves' || K.pattern === 'stripes') for (let i = 0; i < 2; i++) { const mx = (E[i].x + H[i].x) / 2, my = (E[i].y + H[i].y) / 2, a = Math.atan2(H[i].y - E[i].y, H[i].x - E[i].x);
+    c.save(); c.translate(mx, my); c.rotate(a); c.fillStyle = K.accent; c.fillRect(-0.5, -1.45, 1.0, 2.9); c.restore(); }
+  // číslo na zádech (vrchem k hlavě)
+  c.save(); c.rotate(tw); c.translate(-R * 0.42, 0); c.rotate(Math.PI / 2); c.font = `900 ${R * 1.25}px 'Segoe UI', sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle';
+  const lightJ = luma(K.jersey) > 0.4; c.lineJoin = 'round'; c.lineWidth = 1.1; c.strokeStyle = lightJ ? '#ffffff' : (K.accent === '#f4f7fb' || K.accent === '#ffffff') ? shade(K.jersey, -0.5) : K.accent;
+  c.strokeText(String(K.num), 0, 0.3); c.fillStyle = lightJ ? '#1a1f29' : '#ffffff'; c.fillText(String(K.num), 0, 0.3); c.restore();
+  // rukavice + manžeta (záměrná linka výstroje)
+  c.fillStyle = K.glove; c.fill(gloves);   // ruce čte manžeta (záměrná linka), ne šev
+  for (const g of gl) { c.save(); c.translate(g.x, g.y); c.rotate(g.a); c.fillStyle = mix(K.glove, K.cuff, 0.75); c.fillRect(-2.6 * GS + 0.6, -1.9 * GS + 0.3, 0.9, 3.8 * GS - 0.6); c.restore(); }
+  // helma
+  c.fillStyle = K.helmet === K.jersey ? shade(K.helmet, lt ? -0.18 : -0.24) : K.helmet; c.fill(helm);   // helma v barvě dresu o tón tmavší = hlava se oddělí od ramen c.strokeStyle = shade(K.helmet, -0.38); c.lineWidth = 0.6; c.stroke(helm);   // okraj helmy = hlava a směr pohledu (informační linka)
+  // 4) jedno stínování přes celé tělo (světlo pevné ve světě, předané v lokálu)
+  const lx = B.lx ?? -0.5, ly = B.ly ?? -0.5;
+  const g = c.createRadialGradient(lx * R * 0.7, ly * R * 0.7, R * 0.2, 0, 0, R * 1.9);
+  g.addColorStop(0, 'rgba(255,255,255,0.30)'); g.addColorStop(0.5, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(10,16,40,0.24)');
+  c.save(); c.clip(body); c.fillStyle = g; c.fillRect(-R * 2.5, -R * 2.5, R * 5, R * 5); c.restore();
+  // 5) informační linky navrch: hřebínek helmy, lesk, ochrana obličeje
+  c.lineCap = 'round';
+  // v 1× (lod) bez hřebínku a lesku helmy (splývají ve skvrnu), směr hlavy nese hledí
+  if (!lod) { c.beginPath(); c.moveTo(hx - hrx * 0.85, 0); c.lineTo(hx + hrx * 0.15, 0); c.strokeStyle = mix(K.helmet, K.helmet === K.jersey ? K.accent : K.jersey, 0.6); c.lineWidth = 0.9; c.stroke(); }   // hřebínek: tón, ne tvrdá linka
+  if (!lod) { c.beginPath(); c.ellipse(hx + lx * R * 0.22, ly * R * 0.22, R * 0.16, R * 0.1, 0, 0, Math.PI * 2); c.fillStyle = 'rgba(255,255,255,0.8)'; c.fill(); }
+  const ht = K.helmetType;
+  if (ht === 'cage') { c.beginPath(); c.arc(hx, 0, hrx * 1.12, -0.9, 0.9); for (const yy of [-0.22, 0, 0.22]) { c.moveTo(hx + R * 0.34, R * yy); c.lineTo(hx + hrx * 1.12 * Math.cos(Math.asin(R * yy / (hrx * 1.12))), R * yy); } c.strokeStyle = '#2b2f36'; c.lineWidth = 0.5; c.stroke(); }
+  else if (ht === 'visor') { c.beginPath(); c.arc(hx, 0, hrx * 0.98, -0.85, 0.85); c.strokeStyle = K.visor; c.lineWidth = 1.5; c.stroke(); }
+  else if (ht === 'shield') { c.beginPath(); c.arc(hx, 0, hrx * 1.04, -1.1, 1.1); c.closePath(); c.fillStyle = rgba(K.visor, 0.45); c.fill(); c.strokeStyle = shade(K.visor, -0.3); c.lineWidth = 0.6; c.stroke(); }
+  else { c.beginPath(); c.ellipse(hx + hrx * 0.78, 0, R * 0.16, R * 0.26, 0, 0, Math.PI * 2); c.fillStyle = '#e8b896'; c.fill(); }
+}
+
+// ── GÓLMAN (lokál gólmana: −X = k puku, +Y = dolů; po ctx.scale(−inX·s, s)). G = goalieGeom(...) ze simulace (beze změny).
+// o = { stance, tilt, recoil, holding, padFlash, blockFlash, inX }
+function skinGoalie(c, G, K, o) {
+  const st = o.stance, r = 8, rb = r * G.bodyScale * 1.04, lx = 0.7 * (o.inX || 1), ly = -0.7, cover = st === 'cover' || o.holding;
+  const lod = lodSmall(c);   // malé měřítko (< 2 px na jednotku): bez drobných linek výstroje — v 1× by splynuly ve šum
+  // hokejka (vizuální; sim ji nemá): čepel na ledě před pady, paddle, dřík k vyrážečce
+  let stk = null;
+  if (cover) stk = { hx: G.handX + 2 + G.bodyX, hy: G.blockY + 1 + G.bodyY, b0: { x: -1, y: 18 }, b1: { x: -6.5, y: 19.5 } };
+  else { const hx = G.handX + G.bodyX, hy = G.blockY + G.bodyY, bx = Math.min(hx - 5, -9); stk = { hx, hy, b0: { x: bx, y: hy * 0.55 }, b1: { x: bx - 0.6, y: hy * 0.55 - 7.5 * Math.sign(hy || 1) } }; }
+  // pady (rámec padu jako Goalie.js _gPad)
+  const padPaths = G.pads.map(pd => { const P = new Path2D(), m = new DOMMatrix().translate(pd.kx, pd.ky).rotate(pd.angle * pd.dir * 180 / Math.PI), q = new Path2D(); q.roundRect(-pd.pw / 2, pd.dir > 0 ? 0 : -pd.ph, pd.pw, pd.ph, 2.4); P.addPath(q, m); return P; });
+  // tělo v rámci těla (translate bodyX/Y, rotate tilt) — sestavíme cesty v lokálu gólmana přes matici
+  const bm = new DOMMatrix().translate(G.bodyX + (o.recoil || 0), G.bodyY).rotate((o.tilt || 0) * 180 / Math.PI);
+  const B = new Path2D(); { const q = new Path2D(); ellP(q, 0, 0, rb * 0.88, rb * 1.12); for (const sd of [-1, 1]) ellP(q, rb * 0.05, sd * rb * 0.68, rb * 0.5, rb * 0.44);
+    for (const hy of [G.gloveY, G.blockY]) capsule(q, -rb * 0.1, Math.sign(hy) * rb * 0.75, 1.9, G.handX, hy, 1.4);
+    // stehna: tělo → kolena (napojení padů na tělo)
+    for (const pd of G.pads) capsule(q, rb * 0.15, Math.sign(pd.ky || pd.dir) * rb * 0.35, 2.2, pd.kx - G.bodyX, pd.ky - G.bodyY, 2.0);
+    B.addPath(q, bm); }
+  const mx = -rb * 0.5, mrx = 3.9 * G.bodyScale * 1.12, mry = 3.5 * G.bodyScale * 1.12;
+  const M = new Path2D(); { const q = new Path2D(); ellP(q, mx, 0, mrx, mry); M.addPath(q, bm); }
+  const glove = new Path2D(); { const q = new Path2D(); ellP(q, G.handX, G.gloveY, 3.5 * 1.1, 3.8 * 1.1); const cuffQ = new Path2D(); cuffQ.roundRect(G.handX + 1.3 * 1.1, G.gloveY - 2.4 * 1.1, 3.2 * 1.1, 4.8 * 1.1, 1.2); q.addPath(cuffQ); glove.addPath(q, bm); }
+  const block = new Path2D(); { const q = new Path2D(); q.roundRect(G.handX - 1.6 * 1.1, G.blockY - 3.5 * 1.1, 2.8 * 1.1, 7 * 1.1, 0.9); q.roundRect(G.handX + 0.8, G.blockY - 1.6, 2.6, 3.2, 0.9); block.addPath(q, bm); }
+  const all = new Path2D(); for (const p of padPaths) all.addPath(p); all.addPath(B); all.addPath(M); all.addPath(glove); all.addPath(block);
+  // 1) obrys jednou: hokejka + celé tělo s pady
+  c.lineCap = 'round'; c.lineJoin = 'round'; c.strokeStyle = SKIN_OUT;
+  c.lineWidth = 4.6; c.beginPath(); c.moveTo(stk.b0.x, stk.b0.y); c.lineTo(stk.b1.x, stk.b1.y); c.stroke();
+  c.lineWidth = 3.4; c.beginPath(); c.moveTo(stk.b0.x, stk.b0.y); c.lineTo(stk.hx, stk.hy); c.stroke();
+  if (!lod) { const q = t => ({ x: stk.b0.x + (stk.hx - stk.b0.x) * t, y: stk.b0.y + (stk.hy - stk.b0.y) * t }), a = q(0.2), z = q(0.6);   // zesílený úsek dříku u paže = žádná díra hůl–paže (v 1× nevzniká)
+    c.lineWidth = 6.0; c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(z.x, z.y); c.stroke(); }
+  c.lineWidth = 2.0; c.stroke(all);
+  // 2) hokejka
+  const dx = stk.b1.x - stk.b0.x, dy = stk.b1.y - stk.b0.y;
+  c.strokeStyle = '#1b1f27'; c.lineWidth = 3.0; c.beginPath(); c.moveTo(stk.b0.x, stk.b0.y); c.lineTo(stk.b1.x, stk.b1.y); c.stroke();
+  if (!lod) { c.strokeStyle = 'rgba(244,246,250,0.9)'; c.lineWidth = 1.0; c.beginPath(); c.moveTo(stk.b0.x + dx * 0.55, stk.b0.y + dy * 0.55); c.lineTo(stk.b1.x, stk.b1.y); c.stroke(); }
+  const px = stk.b0.x + (stk.hx - stk.b0.x) * 0.45, py = stk.b0.y + (stk.hy - stk.b0.y) * 0.45;
+  c.strokeStyle = K.padAccent; c.lineWidth = 2.6; c.beginPath(); c.moveTo(stk.b0.x, stk.b0.y); c.lineTo(px, py); c.stroke();
+  c.strokeStyle = '#1b1f27'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(px, py); c.lineTo(stk.hx, stk.hy); c.stroke();
+  // 3) betony: výplň + válce/bloky (záměrné linky výstroje)
+  G.pads.forEach((pd, i) => {
+    c.fillStyle = o.padFlash > 0 ? 'rgba(200,220,255,0.98)' : K.pad; c.fill(padPaths[i]);
+    c.save(); c.translate(pd.kx, pd.ky); c.rotate(pd.angle * pd.dir); const y0 = pd.dir > 0 ? 0 : -pd.ph, w = pd.pw, h = pd.ph, kneeTop = pd.dir > 0;
+    c.fillStyle = lod ? mix(K.pad, K.padAccent, 0.3) : shade(K.pad, -0.12); c.fillRect(w / 2 - 1.3, y0 + 1, 1.0, h - 2);   // v 1× nese barvu padu jen boční pruh
+    if (!lod) { c.beginPath(); const n = Math.max(2, Math.round(h / 3.2)); for (let k = 1; k < n; k++) { const yy = y0 + h * k / n; c.moveTo(-w / 2 + 0.7, yy); c.lineTo(w / 2 - 1.3, yy); } c.strokeStyle = 'rgba(14,22,38,0.18)'; c.lineWidth = 0.45; c.stroke(); }
+    if (!lod) { c.fillStyle = mix(K.pad, K.padAccent, 0.22); c.beginPath(); c.roundRect(-w / 2 + 0.3, kneeTop ? y0 : y0 + h - 2.6, w - 0.6, 2.6, 1.2); c.fill();   // kolenní válec (tón, mezistupeň pad → tělo)
+    c.fillStyle = mix(K.pad, K.padAccent, 0.22); c.fillRect(-w / 2 + 0.6, y0 + h * (kneeTop ? 0.55 : 0.3), w - 1.9, h * 0.13); }   // blok jen tónem
+    c.restore();
+  });
+  if (cover && o.drawPuck) { c.beginPath(); c.arc(G.handX + G.bodyX - 1.2, G.bodyY, 3, 0, Math.PI * 2); c.fillStyle = '#0b0d12'; c.fill(); }   // hra kreslí puk sama
+  // 4) tělo (vesta + ramena + paže + stehna jednou barvou = bez švů), lem ramen, číslo
+  c.fillStyle = K.gk; c.fill(B);
+  c.save(); c.setTransform(c.getTransform().multiply(bm));
+  const tone = shade(K.gk, 0.2);   // lem ramen a páska na paži tónem dresu (ne bílou) → čte se tvar, ne šev
+  if (!lod) for (const sd of [-1, 1]) { c.beginPath(); c.arc(rb * 0.05, sd * rb * 0.68, rb * 0.42, Math.PI * 0.6, Math.PI * 1.4); c.strokeStyle = tone; c.lineWidth = 0.9; c.stroke(); }
+  for (const hy of [G.gloveY, G.blockY]) { const mxx = (-rb * 0.1 + G.handX) / 2, myy = (Math.sign(hy) * rb * 0.75 + hy) / 2; c.save(); c.translate(mxx, myy); c.rotate(Math.atan2(hy - Math.sign(hy) * rb * 0.75, G.handX + rb * 0.1)); if (!lod) { c.fillStyle = tone; c.fillRect(-0.45, -1.7, 0.9, 3.4); } c.restore(); }
+  c.save(); c.translate(rb * 0.45, 0); c.rotate(Math.PI / 2 * (o.inX || 1)); c.scale(-(o.inX || 1), 1); c.font = `900 ${rb * 0.7}px 'Segoe UI', sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = luma(K.gk) > 0.4 ? '#1a1f29' : '#ffffff'; c.fillText(String(K.num), 0, 0.3); c.restore();
+  c.restore();
+  // 5) vyrážečka, lapačka, maska
+  c.fillStyle = lod ? K.glove : shade(K.glove, -0.15); c.fill(block);
+  c.save(); c.setTransform(c.getTransform().multiply(bm));
+  const gw = 1.1;
+  c.fillStyle = o.blockFlash > 0 ? 'rgba(220,170,70,0.95)' : K.glove; c.beginPath(); c.roundRect(G.handX - 1.6 * gw, G.blockY - 3.5 * gw, 2.8 * gw, 7 * gw, 0.9); c.fill();
+  if (!lod) { c.fillStyle = mix(K.glove, K.gloveAccent, 0.2); c.fillRect(G.handX - 1.0 * gw, G.blockY - 2.6 * gw, 1.6 * gw, 5.2 * gw); }
+  c.translate(G.handX, G.gloveY); const inw = -Math.sign(G.gloveY || -1);
+  c.fillStyle = lod ? mix(K.glove, K.gloveAccent, 0.2) : K.gloveAccent; c.beginPath(); c.roundRect(1.3 * gw, -2.4 * gw, 3.2 * gw, 4.8 * gw, 1.2); c.fill();                                     // manžeta
+  c.fillStyle = K.glove; c.beginPath(); c.ellipse(0, 0, 3.5 * gw, 3.8 * gw, 0, 0, Math.PI * 2); c.fill();                                                  // dlaň/hřbet
+  if (!lod) { c.beginPath(); c.arc(0.2 * gw, 0, 3.0 * gw, Math.PI * 0.5 * (1 - inw) - inw * Math.PI * 0.15, Math.PI * 0.5 * (1 - inw) - inw * Math.PI * 0.15 - inw * Math.PI * 0.95, inw > 0); c.strokeStyle = mix(K.glove, K.gloveAccent, 0.6); c.lineWidth = 1.0; c.stroke(); }   // prsty
+  c.beginPath(); c.ellipse(-0.6 * gw, inw * 3.0 * gw, 1.9 * gw, 1.15 * gw, -inw * 0.45, 0, Math.PI * 2); c.fillStyle = shade(K.glove, -0.06); c.fill(); c.strokeStyle = SKIN_OUT; c.lineWidth = 0.6; c.stroke();   // palec
+  if (!lod || cover || o.gloveFlash > 0) { c.beginPath(); c.ellipse(-1.5 * gw, inw * 1.1 * gw, 1.8 * gw, 1.7 * gw, 0, 0, Math.PI * 2); c.fillStyle = (cover || o.gloveFlash > 0) ? '#e8a020' : shade(K.glove, -0.14); c.fill(); }   // kapsa
+  if (!lod) { c.beginPath(); c.moveTo(-3.3 * gw, inw * -0.5 * gw); c.lineTo(-3.3 * gw, inw * 2.6 * gw); c.moveTo(-3.3 * gw, inw * 1.05 * gw); c.lineTo(-1.0 * gw, inw * 1.05 * gw); c.strokeStyle = SKIN_OUT; c.lineWidth = 0.75; c.stroke();   // T-web
+  c.fillStyle = '#f4f6fa'; for (const t of [-0.2, 0.6, 1.4, 2.2]) { c.beginPath(); c.arc(-3.3 * gw, inw * t * gw, 0.3, 0, Math.PI * 2); c.fill(); } }
+  c.restore();
+  // maska: zadní plát, kopule s malbou, klec „kočičí oči"
+  c.save(); c.setTransform(c.getTransform().multiply(bm));
+  if (!lod) { c.fillStyle = mix(K.gk, '#f4f6fa', 0.55); c.beginPath(); c.roundRect(mx + mrx * 0.55, -mry * 0.55, mrx * 0.6, mry * 1.1, 0.8); c.fill(); }   // zadní plát masky (v 1× splývá)
+  c.fillStyle = K.gk; c.beginPath(); c.ellipse(mx, 0, mrx, mry, 0, 0, Math.PI * 2); c.fill();
+  c.save(); c.clip(); const pc = mix(K.gk, K.padAccent === K.gk ? K.accent : K.padAccent, lod ? 0.3 : 0.7); c.fillStyle = pc;
+  if (K.mask === 'team') c.fillRect(mx - mrx, -mry * 0.18, mrx * 2, mry * 0.36);
+  else if (K.mask === 'stripe') { c.fillRect(mx - mrx, -mry * 0.62, mrx * 2, mry * 0.24); c.fillRect(mx - mrx, mry * 0.38, mrx * 2, mry * 0.24); }
+  else if (K.mask === 'flame') { c.beginPath(); c.moveTo(mx + mrx, -mry); for (let i = 0; i <= 4; i++) { const yy = -mry + i * mry * 0.5; c.quadraticCurveTo(mx - mrx * 0.2, yy + mry * 0.12, mx - mrx * 0.75 + (i & 1) * mrx * 0.45, yy + mry * 0.25); } c.lineTo(mx + mrx, mry); c.closePath(); c.fill(); }
+  else c.fillRect(mx - mrx, -mry, mrx * 2, mry);
+  c.restore();
+  c.restore();
+  // 6) jedno stínování přes celé tělo gólmana (bez padů — ty leží na ledě)
+  const body = new Path2D(); body.addPath(B); body.addPath(M); body.addPath(glove); body.addPath(block);
+  const gx = G.bodyX + lx * rb * 0.6, gy = G.bodyY + ly * rb * 0.6, gr = c.createRadialGradient(gx, gy, rb * 0.2, G.bodyX, G.bodyY, rb * 1.9);
+  gr.addColorStop(0, 'rgba(255,255,255,0.20)'); gr.addColorStop(0.5, 'rgba(255,255,255,0)'); gr.addColorStop(1, 'rgba(10,16,40,0.22)');   // slabší lesk: přechod lesk → pad nesmí působit jako tmavá linka (spoj pad–tělo < 30)
+  c.save(); c.clip(body); c.fillStyle = gr; c.fillRect(-30, -30, 60, 60); c.restore();
+  // 7) klec masky + lesk navrch
+  c.save(); c.setTransform(c.getTransform().multiply(bm));
+  c.beginPath(); c.ellipse(mx + lx * 1.2, ly * 1.2, 0.9, 0.55, 0, 0, Math.PI * 2); c.fillStyle = 'rgba(255,255,255,0.85)'; c.fill();
+  c.beginPath(); const cx0 = mx - mrx * 0.45;
+  c.moveTo(cx0, -mry * 0.85); c.quadraticCurveTo(mx - mrx * 1.35, 0, cx0, mry * 0.85);
+  c.moveTo(cx0 + 0.2, -mry * 0.55); c.quadraticCurveTo(mx - mrx * 1.18, -mry * 0.32, mx - mrx * 1.02, 0);
+  c.moveTo(cx0 + 0.2, mry * 0.55); c.quadraticCurveTo(mx - mrx * 1.18, mry * 0.32, mx - mrx * 1.02, 0);
+  c.moveTo(mx - mrx * 0.7, 0); c.lineTo(mx - mrx * 1.15, 0);
+  c.strokeStyle = lod ? shade(K.gk, luma(K.gk) < 0.25 ? 0.25 : -0.25) : luma(K.gk) < 0.25 ? '#f4f6fa' : '#20242c'; c.lineWidth = 0.65; c.stroke();   // v 1× klec tónem
+  c.restore();
+}
+
+return { SKIN_OUT, SKIN_ICE, JERSEY_PATTERNS, MASK_STYLES, shade, luma, mix, skaterKit, goalieKit, lodSmall, skinSkate, skinBody, skinGoalie };
+})();
+/*SKIN-END*/
+// ═══════════════════════════ C-d2 — sjednocená silueta (kreslí SKIN = public/js/entities/skin.js, stejný kód jako hra) ═══════════════════════════
+const CD = CV[3];
+const D2 = { id:'C-d2', name:'Týmová grafika — sjednocená', kit: TEAMKIT_D };
+function d2Kit(K0) { return { laces:'#e9edf3', cuff:'#f4f7fb', blade:'#15171c', stick:'#1b1f27', visor:'#bfe0ff', tapeStyle:'full', ...K0 }; }
+function d2GKit(K0) { return { gk: K0.gk, accent: K0.gaccent || '#f4f7fb', pad: K0.pad, padAccent: K0.padAccent, glove: K0.gglove, gloveAccent: K0.gloveAccent, mask: K0.mask, num: K0.num ?? 1 }; }
+D2.player = function (c, x, y, s, ba, P, K0) {
+  const K = d2Kit(K0), k = P.stick, { lx, ly } = lightLocal(ba);
+  if (!MEASURE) shadowS(c, x, y, s, 1.0 * R0, 0.7 * R0, 0.22);
+  c.save(); c.translate(x, y); c.rotate(ba); c.scale(s, s); c.lineCap = 'round'; c.lineJoin = 'round';
+  for (const f of P.feet) if (f.push > 0.25) { c.beginPath(); c.moveTo(f.x + 3, f.y - f.side * 0.5); c.quadraticCurveTo(f.x - 3, f.y + f.side * 1.2, f.x - 8 * f.push, f.y + f.side * 2.8 * f.push); c.strokeStyle = 'rgba(255,255,255,0.9)'; c.lineWidth = 0.7; c.stroke(); }
+  for (const f of P.feet) { c.save(); c.translate(f.x, f.y); c.rotate(f.a); SKIN.skinSkate(c, K); c.restore(); }
+  // hůl s obrysem (jako v Player.js)
+  c.strokeStyle = SKIN.SKIN_OUT; c.lineWidth = 4.3; seg(c, k.butt.x, k.butt.y, k.tip.x, k.tip.y); c.stroke(); bladePath(c, k); c.lineWidth = 4.9; c.stroke();
+  c.strokeStyle = K.stick; c.lineWidth = 2.3; seg(c, k.butt.x, k.butt.y, k.tip.x, k.tip.y); c.stroke();
+  c.strokeStyle = 'rgba(255,255,255,0.3)'; c.lineWidth = 0.6; seg(c, k.butt.x + lx * 0.6, k.butt.y + ly * 0.6, k.tip.x + lx * 0.6, k.tip.y + ly * 0.6); c.stroke();
+  circ(c, k.butt.x, k.butt.y, 1.35); c.fillStyle = K.tape === '#111318' ? '#f4f6fa' : K.tape; c.fill();
+  cBlade(c, k, K);
+  puckLocal(c, P, { puck: '#0b0d12', puckRim: '#ffffff' });
+  SKIN.skinBody(c, { feet: P.feet, top: k.top, bot: k.bot, hnd: P.hnd, tw: 0, lx, ly }, K);
+  c.restore();
+  puckAir(c, x, y, s, ba, P, { puck: '#0b0d12', puckRim: '#ffffff' });
+};
+D2.goalie = function (c, x, y, s, inX, stance, side, K0, holding) {
+  if (!MEASURE) shadowS(c, x, y, s, GR * 1.05, GR * 0.8, 0.22);
+  gBegin(c, x, y, s, inX); SKIN.skinGoalie(c, goalieGeom(stance, side), d2GKit(K0), { stance, inX, holding: !!holding, drawPuck: true }); c.restore();
+};
+
+// ═══ METRIKY BLOKOVOSTI (prahy předem) ═══
+const BT = { seam: 0.6, joint: 30, teeth: 0.7, holes: 0, patDE: 15 };
+function rasterOf(fn, S, W = 220, H = 220) {   // průhledné plátno, bez stínu; vrací {rgba, W, H, S}
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H; const c = cv.getContext('2d'); MEASURE = true; fn(c, W / 2, H / 2, S); MEASURE = false;
+  return { d: c.getImageData(0, 0, W, H).data, W, H, S };
+}
+function lumaMap(r) {   // luma 0..255 po složení na led
+  const [ir, ig, ib] = hex2rgb(ICE), L = new Float32Array(r.W * r.H), M = new Uint8Array(r.W * r.H);
+  for (let i = 0; i < L.length; i++) { const a = r.d[i * 4 + 3] / 255; const R_ = r.d[i * 4] * a + ir * (1 - a), G_ = r.d[i * 4 + 1] * a + ig * (1 - a), B_ = r.d[i * 4 + 2] * a + ib * (1 - a); L[i] = 0.299 * R_ + 0.587 * G_ + 0.114 * B_; M[i] = r.d[i * 4 + 3] > 128 ? 1 : 0; }
+  return { L, M };
+}
+function blockMetrics(r) {
+  const { W, H } = r, { L, M } = lumaMap(r), at = (x, y) => (x < 0 || y < 0 || x >= W || y >= H) ? 0 : M[y * W + x];
+  let boundary = 0, inner = 0; const bpts = []; const DR = Math.round(r.S * 1.0) + 2;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { if (!M[y * W + x]) continue;
+    if (!at(x - 1, y) || !at(x + 1, y) || !at(x, y - 1) || !at(x, y + 1)) { boundary++; bpts.push([x, y]); continue; }
+    let deep = true; for (let dy = -DR; dy <= DR && deep; dy++) for (let dx = -DR; dx <= DR; dx++) if (!at(x + dx, y + dy)) { deep = false; break; }   // za vnějším obrysem (1 px světa) + 2 px
+    if (!deep) continue;
+    const l = (xx, yy) => L[yy * W + xx];
+    const gx = -l(x - 1, y - 1) - 2 * l(x - 1, y) - l(x - 1, y + 1) + l(x + 1, y - 1) + 2 * l(x + 1, y) + l(x + 1, y + 1);
+    const gy = -l(x - 1, y - 1) - 2 * l(x, y - 1) - l(x + 1, y - 1) + l(x - 1, y + 1) + 2 * l(x, y + 1) + l(x + 1, y + 1);
+    if (Math.hypot(gx, gy) > 160) inner++; }
+  // díry: neprůhledné okolí, průhledný pixel nedosažitelný z okraje
+  const seen = new Uint8Array(W * H), st = []; for (let x = 0; x < W; x++) { st.push(x, 0, x, H - 1); } for (let y = 0; y < H; y++) { st.push(0, y, W - 1, y); }
+  while (st.length) { const y = st.pop(), x = st.pop(); if (x < 0 || y < 0 || x >= W || y >= H) continue; const i = y * W + x; if (seen[i] || M[i]) continue; seen[i] = 1; st.push(x + 1, y, x - 1, y, x, y + 1, x, y - 1); }
+  let holes = 0; for (let i = 0; i < W * H; i++) if (!M[i] && !seen[i]) holes++;
+  // obvod konvexního obalu
+  const pts = bpts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]), cr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo = [], hi = []; for (const p of pts) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); }
+  for (let i = pts.length - 1; i >= 0; i--) { const p = pts[i]; while (hi.length >= 2 && cr(hi[hi.length - 2], hi[hi.length - 1], p) <= 0) hi.pop(); hi.push(p); }
+  const hull = lo.slice(0, -1).concat(hi.slice(0, -1)); let hp = 0; for (let i = 0; i < hull.length; i++) { const a = hull[i], b = hull[(i + 1) % hull.length]; hp += Math.hypot(a[0] - b[0], a[1] - b[1]); }
+  // zuby: obrys (Moore tracing největší komponenty od nejlevějšího pixelu), krok k px, zlom > 60°
+  const start = pts[0], dirs = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]], cont = [];
+  let cx = start[0], cy = start[1], dir = 6; for (let n = 0; n < 20000; n++) { cont.push([cx, cy]); let found = false;
+    for (let k = 0; k < 8; k++) { const dd = (dir + 6 + k) % 8, nx = cx + dirs[dd][0], ny = cy + dirs[dd][1]; if (at(nx, ny)) { cx = nx; cy = ny; dir = dd; found = true; break; } }
+    if (!found || (cx === start[0] && cy === start[1] && n > 2)) break; }
+  const k = Math.max(3, Math.round(r.S * 1.6)); let teeth = 0;
+  for (let i = 0; i < cont.length; i += k) { const a = cont[(i - k + cont.length) % cont.length], b = cont[i], c2 = cont[(i + k) % cont.length];
+    const v1 = Math.atan2(b[1] - a[1], b[0] - a[0]), v2 = Math.atan2(c2[1] - b[1], c2[0] - b[0]); let t = Math.abs(v2 - v1); if (t > Math.PI) t = 2 * Math.PI - t; if (t > Math.PI / 3) teeth++; }
+  const holeAt = []; for (let i = 0; i < W * H; i++) if (!M[i] && !seen[i]) holeAt.push([i % W, (i / W) | 0]);
+  return { seam: inner / boundary, inner, boundary, holes, perimRatio: boundary / hp, teeth, holeAt: holeAt.slice(0, 6) };
+}
+function jointDepth(r, x0, y0, x1, y1) {   // tmavá linka ve švu: min(průměr krajů) − min(střed) v luma (px rastru)
+  const { L } = lumaMap(r), n = 40, v = []; for (let i = 0; i <= n; i++) { const x = Math.round(x0 + (x1 - x0) * i / n), y = Math.round(y0 + (y1 - y0) * i / n); v.push(L[y * r.W + x]); }
+  const q = Math.floor(n / 4), mean = a => a.reduce((s, x) => s + x, 0) / a.length;
+  return Math.max(0, Math.min(mean(v.slice(0, q)), mean(v.slice(-q))) - Math.min(...v.slice(q, n - q)));
+}
+function measureBlock(V) {   // měřicí kit: plný dres bez čísla → počítají se jen švy konstrukce, ne záměrné linky (číslo, vzor)
+  const kitP = { ...V.kit.home, pattern: 'solid', num: '' }, out = {};
+  const pr3 = rasterOf((c, x, y, S) => V.player(c, x, y, S, 0, pose('stand'), kitP), 3.3), pr1 = rasterOf((c, x, y, S) => V.player(c, x, y, S, 0, pose('stand'), kitP), 1.1, 80, 80);
+  const gr3 = rasterOf((c, x, y, S) => V.goalie(c, x, y, S, 1, 'butterfly', 1, kitP, false), 3.3), gr1 = rasterOf((c, x, y, S) => V.goalie(c, x, y, S, 1, 'butterfly', 1, kitP, false), 1.1, 80, 80);
+  out.p3 = blockMetrics(pr3); out.p1 = blockMetrics(pr1); out.g3 = blockMetrics(gr3); out.g1 = blockMetrics(gr1);
+  // spoje (3×): rameno→paže ×2, helma→trup; gólman: pad→tělo ×2, paže→tělo ×2. Souřadnice z geometrie pózy 'stand' / goalieGeom('butterfly').
+  const S = 3.3, P = pose('stand'), k = P.stick, Sx = (wx) => 110 + wx * S, Sy = (wy) => 110 + wy * S;
+  const sh = [{ x: R0 * 0.25, y: -R0 * 0.9 }, { x: R0 * 0.25, y: R0 * 0.9 }], H = [k.top, k.bot], E = [0, 1].map(i => ({ x: (sh[i].x + H[i].x) / 2 + R0 * 0.1, y: (sh[i].y + H[i].y) / 2 + (i ? 1 : -1) * R0 * 0.25 }));
+  const J = [];
+  for (let i = 0; i < 2; i++) J.push(['rameno–paže ' + (i ? 'P' : 'L'), jointDepth(pr3, Sx(sh[i].x * 0.4), Sy(sh[i].y * 0.75), Sx(E[i].x), Sy(E[i].y))]);
+  J.push(['helma–trup', jointDepth(pr3, Sx(-R0 * 0.1), Sy(R0 * 0.28), Sx(R0 * 1.0), Sy(R0 * 0.28))]);
+  const G = goalieGeom('butterfly', 1), gx = wx => 110 - wx * S, gy = wy => 110 + wy * S;   // inX=1 → lokální x zrcadlí
+  for (const sd of [-1, 1]) J.push(['pad–tělo ' + (sd < 0 ? 'nahoře' : 'dole'), jointDepth(gr3, gx(G.bodyX + 1.5), gy(sd * 3), gx(G.bodyX + 1.5), gy(sd * 13))]);
+  for (const hy of [G.gloveY, G.blockY]) J.push(['paže–tělo ' + (hy < 0 ? 'lapačka' : 'vyrážečka'), jointDepth(gr3, gx(G.bodyX + 2), gy(Math.sign(hy) * 3), gx(G.bodyX + G.handX * 0.55), gy(hy * 0.62))]);
+  out.joints = J; out.jMax = Math.max(...J.map(j => j[1]));
+  return out;
+}
+function patternDE2(V) {   // ΔE76 mezi vzory na ploše trupu v 1× (jen vzor se mění)
+  const scale = 1.1, imgs = PATTERNS.map(pt => rasterOf((c, x, y, S) => V.player(c, x, y, S, 0, pose('stand'), { ...COSKITS[0], helmet: '#1e56c8', glove: '#1e56c8', pattern: pt, jersey: '#1e56c8', accent: '#ffffff' }), scale, 60, 60).d);
+  const TM = (() => { const cv = document.createElement('canvas'); cv.width = 60; cv.height = 60; const c = cv.getContext('2d'); c.translate(30, 30); c.scale(scale, scale); cTorsoPath(c, true); c.fill(); return c.getImageData(0, 0, 60, 60).data; })();
+  const cache = new Map(), labOf = (r, g, b) => { const key = (r << 16) | (g << 8) | b; let v = cache.get(key); if (!v) { v = lab('#' + key.toString(16).padStart(6, '0')); cache.set(key, v); } return v; };
+  let mn = 1e9, pair = '', all = [];
+  for (let i = 0; i < imgs.length; i++) for (let j = i + 1; j < imgs.length; j++) { const a = imgs[i], b = imgs[j]; let sum = 0, n = 0;
+    for (let q = 0; q < a.length; q += 4) { if (TM[q + 3] < 200 || a[q + 3] < 200 || b[q + 3] < 200) continue; const p = labOf(a[q], a[q + 1], a[q + 2]), r = labOf(b[q], b[q + 1], b[q + 2]); sum += Math.hypot(p[0] - r[0], p[1] - r[1], p[2] - r[2]); n++; }
+    const d = sum / n; all.push(d); if (d < mn) { mn = d; pair = PATTERNS[i] + '–' + PATTERNS[j]; } }
+  return { mn, pair, under: all.filter(d => d < 15).length };
+}
+
+// ═══ SEKCE ═══
+{
+  const wrap = document.getElementById('cd2wrap');
+  const sec = document.createElement('section');
+  sec.innerHTML = `<h2><span class="tag">C-d2</span>Týmová grafika — sjednocená silueta (kreslí kód hry skin.js)</h2><p class="sub">Tělo je jedna cesta (trup, ramena, paže, kalhoty, štulpny, rukavice, helma): obrys jednou kolem celku, paže a ramena stejnou barvou jako dres (bez švů), plynulé zúžení paže k rukavici natočené podél předloktí, jedno stínování přes celé tělo. Gólman: pady, stehna, vesta, paže, maska a rukavice v jednom obrysu; stehna napojují pady na tělo.</p>`;
+  sec.appendChild(drawCVariant(D2)); wrap.appendChild(sec);
+  // před / po zblízka
+  const ba = document.createElement('section'); ba.innerHTML = `<h2>Před (C-d) / po (C-d2) — 4×</h2>`;
+  const [cv, c] = mkCanvas(1328, 250); c.fillStyle = '#171e2e'; c.fillRect(0, 0, 1328, 250);
+  [[CD, 'C-d před'], [D2, 'C-d2 po']].forEach(([V, t], i) => { const x0 = i * 664; ice(c, x0, 0, 656, 244);
+    V.player(c, x0 + 120, 130, 4.4, -0.35, pose('puck'), V.kit.home); V.player(c, x0 + 300, 120, 4.4, Math.PI + 0.35, pose('wind'), V.kit.away);
+    V.goalie(c, x0 + 520, 120, 4.4, 1, 'butterfly', 1, V.kit.home, false); label(c, t, x0 + 60, 18, '#33415c', 13); });
+  ba.appendChild(cv); wrap.appendChild(ba);
+  const cos = document.createElement('section'); cos.innerHTML = `<h2>Kosmetika C-d2 — 8 kombinací</h2>`; cos.appendChild(drawCosmetics(D2)); wrap.appendChild(cos);
+  // měření
+  const mA = measureBlock(CD), mB = measureBlock(D2), pA = patternDE(CD, 1.1), pB = patternDE2(D2);
+  const mA2 = measureBlock(CD), mB2 = measureBlock(D2), stable = JSON.stringify([mA, mB]) === JSON.stringify([mA2, mB2]);
+  CV.forEach(V => 0); benchMs(D2, 30); const runs = []; for (let i = 0; i < 5; i++) runs.push(benchMs(D2, 60)); runs.sort((a, b) => a - b);
+  const runsA = []; for (let i = 0; i < 5; i++) runsA.push(benchMs(CD, 60)); runsA.sort((a, b) => a - b);
+  const ops = measureOps(D2).draw, opsA = measureOps(CD).draw;
+  const f2 = v => v.toFixed(2), f1 = v => v.toFixed(1), ok = b => b ? '<b style="color:#3ecf7a">ano</b>' : '<b style="color:#ff6b6b">ne</b>';
+  const row = (name, a, b, pass) => `<tr><td>${name}</td><td>${a}</td><td>${b}</td><td>${ok(pass)}</td></tr>`;
+  const res = {
+    seam3: mB.p3.seam <= BT.seam * mA.p3.seam, seam1: mB.p1.seam <= BT.seam * mA.p1.seam, gseam3: mB.g3.seam <= BT.seam * mA.g3.seam, gseam1: mB.g1.seam <= BT.seam * mA.g1.seam,
+    joints: mB.jMax < BT.joint, teethP: mB.p3.teeth <= BT.teeth * mA.p3.teeth, teethG: mB.g3.teeth <= BT.teeth * mA.g3.teeth,
+    perim: mB.p3.perimRatio <= mA.p3.perimRatio && mB.g3.perimRatio <= mA.g3.perimRatio, holes: mB.p3.holes + mB.g3.holes + mB.p1.holes + mB.g1.holes === 0, pat: pB.mn >= BT.patDE };
+  const sc = document.createElement('section'); sc.id = 'cd2score';
+  sc.innerHTML = `<h2>Blokovost — měření (prahy napsané předem)</h2>
+  <p class="small">Měřicí kit: plný dres bez čísla (záměrné informační linky se nepočítají). Raster bez stínu, pevná póza (hráč stojí, gólman motýlek), 3× a 1×. Vnitřní šev = pixely uvnitř siluety (dál než vnější obrys 1 px světa + 2 px) se Sobelovým gradientem luma &gt; 160, poměr k délce obrysu. Spoj = tmavá linka ve švu: min(průměr krajů) − min(středu) na úsečce přes šev, luma. Zuby = zlomy obrysu &gt; 60° (krok 1,6 px světa). Díry = průhledné pixely uzavřené siluetou.</p>
+  <table><thead><tr><th>Metrika (práh)</th><th>C-d před</th><th>C-d2 po</th><th>splněno</th></tr></thead><tbody>
+  ${row('Hráč 3×: vnitřní šev / obrys (≤ 60 % před)', f2(mA.p3.seam), f2(mB.p3.seam) + ` (${Math.round(100 * mB.p3.seam / mA.p3.seam)} %)`, res.seam3)}
+  ${row('Hráč 1×: vnitřní šev / obrys (≤ 60 % před)', f2(mA.p1.seam), f2(mB.p1.seam) + ` (${Math.round(100 * mB.p1.seam / mA.p1.seam)} %)`, res.seam1)}
+  ${row('Gólman 3×: vnitřní šev / obrys (≤ 60 % před)', f2(mA.g3.seam), f2(mB.g3.seam) + ` (${Math.round(100 * mB.g3.seam / mA.g3.seam)} %)`, res.gseam3)}
+  ${row('Gólman 1×: vnitřní šev / obrys (≤ 60 % před)', f2(mA.g1.seam), f2(mB.g1.seam) + ` (${Math.round(100 * mB.g1.seam / mA.g1.seam)} %)`, res.gseam1)}
+  ${mA.joints.map((j, i) => row('Spoj ' + j[0] + ' (tmavá linka &lt; 30)', f1(j[1]), f1(mB.joints[i][1]), mB.joints[i][1] < BT.joint)).join('')}
+  ${row('Zuby obrysu hráč 3× (≤ 70 % před)', mA.p3.teeth, mB.p3.teeth, res.teethP)}
+  ${row('Zuby obrysu gólman 3× (≤ 70 % před)', mA.g3.teeth, mB.g3.teeth, res.teethG)}
+  ${row('Obvod / konvexní obal (nehorší) hráč · gólman', f2(mA.p3.perimRatio) + ' · ' + f2(mA.g3.perimRatio), f2(mB.p3.perimRatio) + ' · ' + f2(mB.g3.perimRatio), res.perim)}
+  ${row('Díry mezi díly (= 0)', mA.p3.holes + mA.g3.holes + mA.p1.holes + mA.g1.holes, mB.p3.holes + mB.g3.holes + mB.p1.holes + mB.g1.holes, res.holes)}
+  ${row('Vzory dresu: min ΔE76 na trupu v 1× (≥ 15)', f1(pA.mn) + ' ' + pA.pair, f1(pB.mn) + ' ' + pB.pair + (pB.under ? ` (${pB.under} dvojic &lt; 15)` : ''), res.pat)}
+  ${row('Výkon 4 hráči + 2 gólmani: ops · ms (odhad)', opsA + ' · ' + f2(runsA[2]), ops + ' · ' + f2(runs[2]), runs[2] < 3)}
+  </tbody></table><p class="small">Opakované měření: ${stable ? 'shodné (stabilní)' : 'LIŠÍ SE'}.</p>`;
+  wrap.appendChild(sc);
+  window.__cd2 = { mA, mB, pA, pB, res, stable, ms: runs[2], msA: runsA[2], ops, opsA };
+}
+
+</script>
+</body>
+</html>

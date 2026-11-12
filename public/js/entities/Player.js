@@ -2,6 +2,7 @@ import { RINK, PLAYER, PUCK } from '../constants.js';
 import { clamp, lerpAngle, angleDiff } from '../utils.js';
 import { SFX } from '../sound.js';
 import { defaultRng } from '../rng.js';
+import { skaterKit, skinSkate, skinBody, SKIN_OUT } from './skin.js';
 
 export class PlayerBase {
   rng = defaultRng;
@@ -576,6 +577,8 @@ function _renderPlayer(ctx, p, cam) {
   const stickCol = p.stick || '#7a5015';          // barva hole (šaft)
   const tapeCol  = p.tape || '#111';
   const tapeSty  = p.tapeStyle || 'full';
+  const K = skaterKit(p, PLAYER.colors[p.team]);   // kosmetika C-d2 (defaulty, když server pole nepošle)
+  const bladeCol = K.blade;
 
   // ŠTÍT: soupeř se pokusil obrat puk krytý tělem → oblouk na straně soupeře (krytí tělem funguje)
   if (p._shieldT > 0 && p._shieldA != null) {
@@ -619,6 +622,142 @@ function _renderPlayer(ctx, p, cam) {
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.fill();
 
+  // ── Hockey stop: Space brake trigger + jednoduché bílé sprejové tečky ─────────
+  {
+    const _dtHS  = _rdt(cam);
+
+    const _spd2 = Math.hypot(p.vx ?? 0, p.vy ?? 0);
+    if (_spd2 > 30) p._hsDir = Math.atan2(p.vy ?? 0, p.vx ?? 0);  // uložit směr dokud jedeme
+
+    const _prevS = p._prevRSpd ?? _spd2;
+    p._prevRSpd  = _spd2;
+    if ((p._stopCd ?? 0) > 0) p._stopCd -= _dtHS;
+    if ((p._stopFx ?? 0) > 0) p._stopFx -= _dtHS;
+
+    const _spaceNow  = !!(p.input?.keys?.Space);
+    const _spaceEdge = _spaceNow && !(p._prevSpace ?? false);
+    p._prevSpace = _spaceNow;
+    const _canFire = !((p._stopCd ?? 0) > 0);
+
+    // brzda: Space (lokální hráč) NEBO prudké zpomalení (> 450 px/s² — vidí i ostatní hráči online / boti)
+    if ((_spaceEdge || (_prevS - _spd2) / _dtHS > 450) && _spd2 > 35 && _canFire) {
+      p._stopN = (p._stopN || 0) + 1;
+      const _dir = p._hsDir ?? Math.atan2(p.vy ?? 0, p.vx ?? 0);
+      const _spd = _prevS;
+      p._stopFx  = 0.55 + Math.min(1, (_spd - 35) / 145) * 0.35;  // 0.55–0.90s dle rychlosti
+      p._stopCd  = 1.0;
+      // Spawn 20 bílých šupinek dopředu v úzkém fanu ±45°
+      p._stopPts = [];
+      for (let i = 0; i < 20; i++) {
+        const _a = _dir + (_hrand(p.id, p._stopN, i * 3) - 0.5) * 1.57;
+        const _v = 55 + _hrand(p.id, p._stopN, i * 3 + 1) * _spd * 0.6;
+        p._stopPts.push({ x: p.x, y: p.y, vx: Math.cos(_a) * _v, vy: Math.sin(_a) * _v,
+                          life: 0.15 + _hrand(p.id, p._stopN, i * 3 + 2) * 0.15, maxL: 0.30 });
+      }
+      SFX.iceStop(_spd);
+    }
+
+    if (p._stopPts?.length) {
+      for (const pt of p._stopPts) {
+        pt.x += pt.vx * _dtHS; pt.y += pt.vy * _dtHS;
+        pt.vx *= 0.88; pt.vy *= 0.88;  // vzdušný odpor
+        pt.life -= _dtHS;
+        if (pt.life <= 0) continue;
+        const _al = (pt.life / pt.maxL) * 0.85;
+        ctx.beginPath();
+        ctx.arc(ox + pt.x * s, oy + pt.y * s, Math.max(1, r * 0.30), 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255,255,255,${_al.toFixed(2)})`;
+        ctx.fill();
+      }
+      p._stopPts = p._stopPts.filter(pt => pt.life > 0);
+    }
+
+    // Smooth foot-blend přechod — uvnitř bloku kde máme _dtHS
+    const _st = (p._stopFx ?? 0) > 0 ? 1 : 0;
+    const _stRate = _st > (p._stopTSmooth ?? 0) ? 14 : 5;
+    let _stNew = Math.min(1, Math.max(0,
+      (p._stopTSmooth ?? 0) + (_st - (p._stopTSmooth ?? 0)) * Math.min(1, _stRate * _dtHS)
+    ));
+    if (_stNew < 0.03) { _stNew = 0; p._hsDir = null; } // snap na 0, vyčisti uložený směr
+    p._stopTSmooth = _stNew;
+  }
+
+  // ── Hokejista (top-down) — orientovaný podle facingu (bodyAngle) ──
+  const ba   = p.bodyAngle;
+  const fcos = Math.cos(ba), fsin = Math.sin(ba);
+
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.rotate(ba); // lokálně: +x dopředu (facing), +y doprava
+  // Náklon těla do zatáčky — v lokálním Y (= bok hráče)
+  ctx.translate(0, (p._lean ?? 0) * r * 0.15);
+
+  // ── Brusle (2026-11-09: deterministicky podle UJETÉ DRÁHY, anatomicky) ─────────
+  // Fáze kroku = ujetá dráha / délka kroku (ne hodiny) → stejná dráha = stejná póza, brusle po ledě neklouzají.
+  // Brusle míří VŽDY zhruba tam, kam kouká tělo (max ±45°): vpřed = odraz šikmo dozadu-ven (špička ven),
+  // couvání = C-cuty (odraz do strany vpředu, brusle vpřed), bokem = přešlapování (brusle natočené k pohybu).
+  const _spd = Math.hypot(p.vx ?? 0, p.vy ?? 0);
+  const _sf  = Math.min(1, _spd / 160);
+  {
+    const pv = p._animPrev;
+    if (pv) {
+      const dd = Math.min(30, Math.hypot(p.x - pv.x, p.y - pv.y));             // teleport (buly) nepočítej
+      const dr = Math.abs(angleDiff(ba, pv.ba));
+      p._skatePhase = ((p._skatePhase ?? 0) + dd / SKATE_CYCLE * Math.PI * 2 + Math.min(0.6, dr) * 1.6) % (Math.PI * 2);
+      p._rotSf = Math.min(1, dr / 0.12) * (1 - _sf);                          // otáčení na místě → pivot kroky
+    }
+    p._animPrev = { x: p.x, y: p.y, ba };
+  }
+  const _mLoc = _spd > 8 ? angleDiff(Math.atan2(p.vy ?? 0, p.vx ?? 0), ba) : 0;   // směr pohybu vůči tělu
+  const _back = _spd > 8 && Math.abs(_mLoc) > 2.2;                               // couvání
+  const _lat  = _spd > 8 && !_back && Math.abs(_mLoc) > 0.6;                     // bokem
+  const _latS = Math.sign(_mLoc) || 1;
+  const _stopT = p._stopTSmooth ?? 0;
+
+  ctx.lineCap = 'round';
+  const feetW = [];   // polohy bruslí v lokálu (svět. jednotky) pro štulpny v skinBody
+  for (const side of [-1, 1]) {
+    const ph   = (p._skatePhase ?? 0) + (side === 1 ? 0 : Math.PI);
+    const push = Math.max(0, Math.sin(ph)) * _sf;          // 0 = noha pod tělem (klouže), 1 = plný odraz
+    const rec  = Math.max(0, -Math.sin(ph)) * _sf;         // návrat nohy
+    let fx, fy, fa;                                        // lokální poloha (x vpřed, y do boku) a úhel brusle
+    if (_back) {          // C-cut: noha opisuje oblouk ven a zpět, brusle míří vpřed s patou ven
+      const cp2 = Math.max(0, Math.sin(ph)) * Math.max(_sf, 0.6);   // couvání je pomalejší → C-cut i tak čitelný
+      fx = -r * 0.95 + cp2 * r * 0.3; fy = side * (r * 0.45 + cp2 * r * 0.75);
+      fa = -side * cp2 * 0.7;
+    } else if (_lat) {    // přešlapování bokem: vnější noha se odráží, brusle natočené k pohybu (max 45°)
+      const lead = side === _latS ? 1 : -1;
+      fx = -r * 0.9 + (lead > 0 ? push : -rec) * r * 0.12;
+      fy = side * r * 0.5 + _latS * (push - rec) * r * 0.25;
+      fa = _latS * 0.78 * Math.min(1, Math.abs(_mLoc) / 1.4);
+    } else {              // vpřed: odraz šikmo dozadu a ven, špička ven; návrat pod tělo, brusle rovně
+      const tilt = _mLoc * 0.5;                            // mírné natočení do zatáčky
+      fx = -r * 0.9 - push * r * 0.55 + rec * r * 0.2;
+      fy = side * (r * 0.38 + push * r * 0.45);
+      fa = tilt + side * push * 0.75;
+    }
+    // pivot na místě: krátké přešlapy do strany
+    const pv = p._rotSf ?? 0;
+    if (pv > 0) { fx += Math.cos(ph) * r * 0.25 * pv; fy += side * Math.max(0, Math.sin(ph)) * r * 0.2 * pv; fa += side * 0.3 * pv; }
+    // klid: mírné V (špičky lehce ven)
+    if (_spd <= 8 && pv <= 0) { fx = -r * 0.9; fy = side * r * 0.45; fa = side * 0.18; }
+    // hokejový stop: obě brusle napříč ke směru jízdy
+    const stopA = (p._hsDir != null ? angleDiff(p._hsDir, ba) : 0) + Math.PI / 2;
+    const bx = fx * (1 - _stopT) + (-r * 0.85) * _stopT;
+    const by = fy * (1 - _stopT) + side * r * 0.55 * _stopT;
+    const footAngle = lerpAngle(fa, stopA, _stopT);
+
+    ctx.save();
+    ctx.translate(bx, by);
+    ctx.rotate(footAngle);
+
+    ctx.scale(s, s); skinSkate(ctx, K);   // brusle C-d2 (skin.js), s obrysem
+    ctx.restore();
+    if (p._animDbg) p._animDbg.push({ side, fx, fy, fa: footAngle });
+    feetW.push({ x: bx / s, y: by / s, side });
+  }
+  ctx.restore();   // konec rámce bruslí (hůl a tělo navrch: brusle → hůl/puk → tělo = pořadí y−z)
+
   // Cross-check: hůl držená napříč PŘED TĚLEM. Kreslí se přes vyhlazený úhel
   // _stickDisp (dojíždí k bodyAngle), takže přepnutí RMB hokejku neteleportuje.
   if (p.crossCheck) {
@@ -639,6 +778,9 @@ function _renderPlayer(ctx, p, cam) {
     const bladeX    = cx + sDirCos * halfLen;
     const bladeY    = cy + sDirSin * halfLen;
 
+    // obrys hole (C-d2): pod dříkem i čepelí
+    ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = 4.8 * s;
+    ctx.beginPath(); ctx.moveTo(gripX, gripY); ctx.lineTo(bladeX, bladeY); ctx.stroke();
     // Grip (dark, ~35%)
     ctx.beginPath();
     ctx.moveTo(gripX, gripY);
@@ -667,11 +809,10 @@ function _renderPlayer(ctx, p, cam) {
     ctx.moveTo(bladeX + sDirCos * 1.2 * s, bladeY + sDirSin * 1.2 * s);
     ctx.quadraticCurveTo(bCtrlX + sDirCos * 1.2 * s, bCtrlY + sDirSin * 1.2 * s,
                           bEndX  + sDirCos * 1.2 * s, bEndY  + sDirSin * 1.2 * s);
-    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-    ctx.lineWidth   = 4 * s;
-    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(bladeX, bladeY); ctx.quadraticCurveTo(bCtrlX, bCtrlY, bEndX, bEndY);
+    ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = 4.8 * s; ctx.stroke();   // obrys čepele
 
-    _drawBlade(ctx, bladeX, bladeY, bCtrlX, bCtrlY, bEndX, bEndY, tapeCol, tapeSty, 2.8 * s);
+    _drawBlade(ctx, bladeX, bladeY, bCtrlX, bCtrlY, bEndX, bEndY, tapeCol, tapeSty, 2.8 * s, bladeCol);
   }
 
   if (!p.crossCheck) {
@@ -756,6 +897,8 @@ function _renderPlayer(ctx, p, cam) {
 
   // ── Shaft ─────────────────────────────────────────────────────────────────
   ctx.lineCap = 'round';
+  ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = 4.8 * s;   // obrys dříku (C-d2)
+  ctx.beginPath(); ctx.moveTo(tx0, ty0); ctx.lineTo(tipX, tipY); ctx.stroke();
   ctx.beginPath();   // konec hole + omotávka (od horní ruky)
   ctx.moveTo(tx0, ty0);
   ctx.lineTo(tx0 + (tipX - tx0) * 0.22, ty0 + (tipY - ty0) * 0.22);
@@ -794,6 +937,17 @@ function _renderPlayer(ctx, p, cam) {
     }
   }
 
+  // Obrys čepele (C-d2, místo stínu)
+  ctx.beginPath();
+  ctx.moveTo(bStartX, bStartY);
+  ctx.quadraticCurveTo(bCtrlX, bCtrlY, bEndX, bEndY);
+  ctx.strokeStyle = SKIN_OUT;
+  ctx.lineWidth   = 4.8 * s;
+  ctx.lineCap     = 'round';
+  ctx.stroke();
+
+  // Blade face (tape) — barva + styl tapování
+  _drawBlade(ctx, bStartX, bStartY, bCtrlX, bCtrlY, bEndX, bEndY, tapeCol, tapeSty, 2.8 * s, bladeCol);
   // PUK NA ČEPELI (nese ho tento hráč): na prohnuté straně, v nápřahu u paty čepele (tah od paty ke špičce)
   const cp = p.hasPuck && p._carriedPuck && p._carriedPuck._carrier === p ? p._carriedPuck : null;
   if (cp) {
@@ -805,337 +959,28 @@ function _renderPlayer(ctx, p, cam) {
     p._visPuck = { x: vx, y: vy };
     cp.draw(ctx, cam, p._visPuck);
   } else p._visPuck = null;
-
-  // Blade shadow
-  ctx.beginPath();
-  ctx.moveTo(bStartX + windCos * 1.2 * s, bStartY + windSin * 1.2 * s);
-  ctx.quadraticCurveTo(bCtrlX + windCos * 1.2 * s, bCtrlY + windSin * 1.2 * s,
-                        bEndX  + windCos * 1.2 * s, bEndY  + windSin * 1.2 * s);
-  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-  ctx.lineWidth   = 4 * s;
-  ctx.lineCap     = 'round';
-  ctx.stroke();
-
-  // Blade face (tape) — barva + styl tapování
-  _drawBlade(ctx, bStartX, bStartY, bCtrlX, bCtrlY, bEndX, bEndY, tapeCol, tapeSty, 2.8 * s);
   } // end !crossCheck stick
 
-  // ── Hockey stop: Space brake trigger + jednoduché bílé sprejové tečky ─────────
+  // ── TĚLO C-d2 (skin.js): jedna sjednocená cesta, obrys jednou, jedno stínování; ruce z držení hole ──
   {
-    const _dtHS  = _rdt(cam);
-
-    const _spd2 = Math.hypot(p.vx ?? 0, p.vy ?? 0);
-    if (_spd2 > 30) p._hsDir = Math.atan2(p.vy ?? 0, p.vx ?? 0);  // uložit směr dokud jedeme
-
-    const _prevS = p._prevRSpd ?? _spd2;
-    p._prevRSpd  = _spd2;
-    if ((p._stopCd ?? 0) > 0) p._stopCd -= _dtHS;
-    if ((p._stopFx ?? 0) > 0) p._stopFx -= _dtHS;
-
-    const _spaceNow  = !!(p.input?.keys?.Space);
-    const _spaceEdge = _spaceNow && !(p._prevSpace ?? false);
-    p._prevSpace = _spaceNow;
-    const _canFire = !((p._stopCd ?? 0) > 0);
-
-    // brzda: Space (lokální hráč) NEBO prudké zpomalení (> 450 px/s² — vidí i ostatní hráči online / boti)
-    if ((_spaceEdge || (_prevS - _spd2) / _dtHS > 450) && _spd2 > 35 && _canFire) {
-      p._stopN = (p._stopN || 0) + 1;
-      const _dir = p._hsDir ?? Math.atan2(p.vy ?? 0, p.vx ?? 0);
-      const _spd = _prevS;
-      p._stopFx  = 0.55 + Math.min(1, (_spd - 35) / 145) * 0.35;  // 0.55–0.90s dle rychlosti
-      p._stopCd  = 1.0;
-      // Spawn 20 bílých šupinek dopředu v úzkém fanu ±45°
-      p._stopPts = [];
-      for (let i = 0; i < 20; i++) {
-        const _a = _dir + (_hrand(p.id, p._stopN, i * 3) - 0.5) * 1.57;
-        const _v = 55 + _hrand(p.id, p._stopN, i * 3 + 1) * _spd * 0.6;
-        p._stopPts.push({ x: p.x, y: p.y, vx: Math.cos(_a) * _v, vy: Math.sin(_a) * _v,
-                          life: 0.15 + _hrand(p.id, p._stopN, i * 3 + 2) * 0.15, maxL: 0.30 });
-      }
-      SFX.iceStop(_spd);
-    }
-
-    if (p._stopPts?.length) {
-      for (const pt of p._stopPts) {
-        pt.x += pt.vx * _dtHS; pt.y += pt.vy * _dtHS;
-        pt.vx *= 0.88; pt.vy *= 0.88;  // vzdušný odpor
-        pt.life -= _dtHS;
-        if (pt.life <= 0) continue;
-        const _al = (pt.life / pt.maxL) * 0.85;
-        ctx.beginPath();
-        ctx.arc(ox + pt.x * s, oy + pt.y * s, Math.max(1, r * 0.30), 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255,255,255,${_al.toFixed(2)})`;
-        ctx.fill();
-      }
-      p._stopPts = p._stopPts.filter(pt => pt.life > 0);
-    }
-
-    // Smooth foot-blend přechod — uvnitř bloku kde máme _dtHS
-    const _st = (p._stopFx ?? 0) > 0 ? 1 : 0;
-    const _stRate = _st > (p._stopTSmooth ?? 0) ? 14 : 5;
-    let _stNew = Math.min(1, Math.max(0,
-      (p._stopTSmooth ?? 0) + (_st - (p._stopTSmooth ?? 0)) * Math.min(1, _stRate * _dtHS)
-    ));
-    if (_stNew < 0.03) { _stNew = 0; p._hsDir = null; } // snap na 0, vyčisti uložený směr
-    p._stopTSmooth = _stNew;
-  }
-
-  // ── Hokejista (top-down) — orientovaný podle facingu (bodyAngle) ──
-  const ba   = p.bodyAngle;
-  const fcos = Math.cos(ba), fsin = Math.sin(ba);
-  const pcos = Math.cos(ba + Math.PI / 2), psin = Math.sin(ba + Math.PI / 2);
-  const darker = _shade(color, -0.28);
-
-  ctx.save();
-  ctx.translate(sx, sy);
-  ctx.rotate(ba); // lokálně: +x dopředu (facing), +y doprava
-  // Náklon těla do zatáčky — v lokálním Y (= bok hráče)
-  ctx.translate(0, (p._lean ?? 0) * r * 0.15);
-
-  // ── Brusle (2026-11-09: deterministicky podle UJETÉ DRÁHY, anatomicky) ─────────
-  // Fáze kroku = ujetá dráha / délka kroku (ne hodiny) → stejná dráha = stejná póza, brusle po ledě neklouzají.
-  // Brusle míří VŽDY zhruba tam, kam kouká tělo (max ±45°): vpřed = odraz šikmo dozadu-ven (špička ven),
-  // couvání = C-cuty (odraz do strany vpředu, brusle vpřed), bokem = přešlapování (brusle natočené k pohybu).
-  const _spd = Math.hypot(p.vx ?? 0, p.vy ?? 0);
-  const _sf  = Math.min(1, _spd / 160);
-  {
-    const pv = p._animPrev;
-    if (pv) {
-      const dd = Math.min(30, Math.hypot(p.x - pv.x, p.y - pv.y));             // teleport (buly) nepočítej
-      const dr = Math.abs(angleDiff(ba, pv.ba));
-      p._skatePhase = ((p._skatePhase ?? 0) + dd / SKATE_CYCLE * Math.PI * 2 + Math.min(0.6, dr) * 1.6) % (Math.PI * 2);
-      p._rotSf = Math.min(1, dr / 0.12) * (1 - _sf);                          // otáčení na místě → pivot kroky
-    }
-    p._animPrev = { x: p.x, y: p.y, ba };
-  }
-  const _mLoc = _spd > 8 ? angleDiff(Math.atan2(p.vy ?? 0, p.vx ?? 0), ba) : 0;   // směr pohybu vůči tělu
-  const _back = _spd > 8 && Math.abs(_mLoc) > 2.2;                               // couvání
-  const _lat  = _spd > 8 && !_back && Math.abs(_mLoc) > 0.6;                     // bokem
-  const _latS = Math.sign(_mLoc) || 1;
-  const _stopT = p._stopTSmooth ?? 0;
-
-  ctx.lineCap = 'round';
-  for (const side of [-1, 1]) {
-    const ph   = (p._skatePhase ?? 0) + (side === 1 ? 0 : Math.PI);
-    const push = Math.max(0, Math.sin(ph)) * _sf;          // 0 = noha pod tělem (klouže), 1 = plný odraz
-    const rec  = Math.max(0, -Math.sin(ph)) * _sf;         // návrat nohy
-    let fx, fy, fa;                                        // lokální poloha (x vpřed, y do boku) a úhel brusle
-    if (_back) {          // C-cut: noha opisuje oblouk ven a zpět, brusle míří vpřed s patou ven
-      const cp2 = Math.max(0, Math.sin(ph)) * Math.max(_sf, 0.6);   // couvání je pomalejší → C-cut i tak čitelný
-      fx = -r * 0.95 + cp2 * r * 0.3; fy = side * (r * 0.45 + cp2 * r * 0.75);
-      fa = -side * cp2 * 0.7;
-    } else if (_lat) {    // přešlapování bokem: vnější noha se odráží, brusle natočené k pohybu (max 45°)
-      const lead = side === _latS ? 1 : -1;
-      fx = -r * 0.9 + (lead > 0 ? push : -rec) * r * 0.12;
-      fy = side * r * 0.5 + _latS * (push - rec) * r * 0.25;
-      fa = _latS * 0.78 * Math.min(1, Math.abs(_mLoc) / 1.4);
-    } else {              // vpřed: odraz šikmo dozadu a ven, špička ven; návrat pod tělo, brusle rovně
-      const tilt = _mLoc * 0.5;                            // mírné natočení do zatáčky
-      fx = -r * 0.9 - push * r * 0.55 + rec * r * 0.2;
-      fy = side * (r * 0.38 + push * r * 0.45);
-      fa = tilt + side * push * 0.75;
-    }
-    // pivot na místě: krátké přešlapy do strany
-    const pv = p._rotSf ?? 0;
-    if (pv > 0) { fx += Math.cos(ph) * r * 0.25 * pv; fy += side * Math.max(0, Math.sin(ph)) * r * 0.2 * pv; fa += side * 0.3 * pv; }
-    // klid: mírné V (špičky lehce ven)
-    if (_spd <= 8 && pv <= 0) { fx = -r * 0.9; fy = side * r * 0.45; fa = side * 0.18; }
-    // hokejový stop: obě brusle napříč ke směru jízdy
-    const stopA = (p._hsDir != null ? angleDiff(p._hsDir, ba) : 0) + Math.PI / 2;
-    const bx = fx * (1 - _stopT) + (-r * 0.85) * _stopT;
-    const by = fy * (1 - _stopT) + side * r * 0.55 * _stopT;
-    const footAngle = lerpAngle(fa, stopA, _stopT);
-
-    ctx.save();
-    ctx.translate(bx, by);
-    ctx.rotate(footAngle);
-
-    // Bota
-    ctx.beginPath();
-    ctx.ellipse(0, 0, r * 0.58, r * 0.23, 0, 0, Math.PI * 2);
-    ctx.fillStyle = '#0c0e14';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.13)';
-    ctx.lineWidth = 0.7 * s;
-    ctx.stroke();
-
-    // Šněrování
-    ctx.strokeStyle = 'rgba(255,255,255,0.42)';
-    ctx.lineWidth = 0.55 * s;
-    for (const lx of [-r * 0.21, 0, r * 0.21]) {
-      const hw = r * 0.18;
-      ctx.beginPath();
-      ctx.moveTo(lx, -hw);
-      ctx.lineTo(lx,  hw);
-      ctx.stroke();
-    }
-
-    // Čepel
-    ctx.beginPath();
-    ctx.moveTo(-r * 0.62, 0);
-    ctx.lineTo( r * 0.62, 0);
-    ctx.strokeStyle = '#b8c4d4';
-    ctx.lineWidth = 0.85 * s;
-    ctx.stroke();
-
-    ctx.restore();
-    if (p._animDbg) p._animDbg.push({ side, fx, fy, fa: footAngle });
-  }
-
-  // Šortky — za bruslemi (navrch v Z), do boku od těla, animované s krokem
-  if (p.shorts) {
-    ctx.fillStyle = p.shorts;
-    ctx.strokeStyle = 'rgba(0,0,0,0.32)';
-    ctx.lineWidth = 0.7 * s;
-    for (const _leg of [-1, 1]) {
-      const _legSwing = Math.sin((p._skatePhase ?? 0) + (_leg === -1 ? Math.PI : 0)) * r * 0.15 * _sf;
-      ctx.beginPath();
-      ctx.ellipse(-r * 0.72 + _legSwing, _leg * r * 0.68, r * 0.52, r * 0.44, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-    }
-  }
-
-  // Ramena / trup — širší napříč, kratší dopředu (dres)
-  ctx.beginPath();
-  ctx.ellipse(-1 * s, 0, r * 1.05, r * 1.25, 0, 0, Math.PI * 2);
-  ctx.fillStyle = color;
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-  ctx.lineWidth = 1.4 * s;
-  ctx.stroke();
-  // Záda — tmavší ovál (dres záda / stín objemu)
-  ctx.fillStyle = darker;
-  ctx.beginPath();
-  ctx.ellipse(-r * 0.5, 0, r * 0.5, r * 0.95, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Styl dresu — akcent ořezaný do tvaru trupu → čisté pruhy/yoke, ne blobíky
-  if (p.jersey && p.jersey !== 'solid') {
-    ctx.save();
-    ctx.beginPath();
-    ctx.ellipse(-1 * s, 0, r * 1.05, r * 1.25, 0, 0, Math.PI * 2);
-    ctx.clip();
-    ctx.fillStyle = 'rgba(244,248,252,0.92)';
-    if (p.jersey === 'stripes') {
-      ctx.fillRect(-r * 1.4, -r * 0.64, r * 2.8, r * 0.34);
-      ctx.fillRect(-r * 1.4,  r * 0.30, r * 2.8, r * 0.34);
-    } else if (p.jersey === 'shoulder') {
-      ctx.fillRect(r * 0.08, -r * 1.4, r * 1.1, r * 2.8); // přední yoke (ramena/hruď)
-    }
-    ctx.restore();
-  }
-
-  // jemné nasvícení trupu (objem)
-  ctx.beginPath();
-  ctx.ellipse(r * 0.15, -r * 0.35, r * 0.55, r * 0.6, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(255,255,255,0.10)';
-  ctx.fill();
-
-  ctx.restore();
-
-
-  // Číslo na zádech dresu — otáčí se s tělem (jako reálné číslo na dresu), vrchem k hlavě
-  if (p.num !== null && p.num !== undefined) {
-    const nstr = String(p.num);
-    ctx.save();
-    ctx.translate(sx, sy);
-    ctx.rotate(ba);
-    ctx.translate(-r * 0.42, 0);     // na záda (opačně než helma vepředu)
-    ctx.rotate(Math.PI / 2);         // vrch čísla směřuje k hlavě (dopředu)
-    ctx.font = `bold ${Math.round(r * 1.05)}px 'Segoe UI', sans-serif`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.lineWidth = 1.4 * s; ctx.strokeStyle = 'rgba(0,0,0,0.55)';
-    ctx.lineJoin = 'round';
-    ctx.strokeText(nstr, 0, 0);
-    ctx.fillStyle = 'rgba(255,255,255,0.95)';
-    ctx.fillText(nstr, 0, 0);
-    ctx.restore();
-    ctx.textBaseline = 'alphabetic';
-  }
-
-  // ── Rukavice (ruce na holi) ──────────────────────────────────────────
-  // Horní ruka u konce dříku (vychází z těla), dolní ruka výrazně níž → drží hůl.
-  {
-    let topH, botH, hTop = r * 0.30, hBot = r * 0.26;
+    let topH, botH;
     if (p.crossCheck) {
-      const baseDir  = p._stickDisp;
-      const stickDir = baseDir + (p.handed ?? 1) * Math.PI / 2;
-      const sc = Math.cos(stickDir), ss = Math.sin(stickDir);
-      const half = PLAYER.stickLen * 0.7;
-      const cxW = p.x + Math.cos(baseDir) * (PLAYER.radius + 2);
-      const cyW = p.y + Math.sin(baseDir) * (PLAYER.radius + 2);
+      const baseDir = p._stickDisp, stickDir = baseDir + (p.handed ?? 1) * Math.PI / 2;
+      const sc = Math.cos(stickDir), ss = Math.sin(stickDir), half = PLAYER.stickLen * 0.7;
+      const cxW = p.x + Math.cos(baseDir) * (PLAYER.radius + 2), cyW = p.y + Math.sin(baseDir) * (PLAYER.radius + 2);
       topH = { x: cxW - sc * half * 0.62, y: cyW - ss * half * 0.62 };
       botH = { x: cxW + sc * half * 0.42, y: cyW + ss * half * 0.42 };
-    } else {
-      const gp   = p.gripPoint;
-      const sdir = p._stickDisp ?? p.carryAngle ?? p.aimAngle;
-      const c = Math.cos(sdir), sn = Math.sin(sdir);
-      // topH: okraj těla na straně hole (r*0.90 bokem) → viditelná mimo dres
-      // botH: podél dříku od gripo → jiný úhel = ne lineární
-      if (p._visTopW && p._visBotW) { topH = p._visTopW; botH = p._visBotW; }   // schéma držení (kresba hole výš)
-      else {
-        const _sideA = sdir + (p.handed ?? 1) * Math.PI / 2;
-        topH = { x: p.x + Math.cos(_sideA) * PLAYER.radius * 0.90, y: p.y + Math.sin(_sideA) * PLAYER.radius * 0.90 };
-        botH = { x: gp.x + c * 8.0, y: gp.y + sn * 8.0 };
-      }
-    }
-    for (const [h, hr] of [[botH, hBot], [topH, hTop]]) {
-      const hx = ox + h.x * s, hy = oy + h.y * s;
-      ctx.beginPath(); ctx.arc(hx, hy, hr + 1.4 * s, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(0,0,0,0.38)'; ctx.fill();
-      ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI * 2);
-      ctx.fillStyle = p.gloves || '#242c38'; ctx.fill();
-    }
+    } else if (p._visTopW && p._visBotW) { topH = p._visTopW; botH = p._visBotW; }
+    else { const gp = p.gripPoint; topH = { x: p.x + fcos * PLAYER.radius * 0.5, y: p.y + fsin * PLAYER.radius * 0.5 }; botH = { x: gp.x, y: gp.y }; }
+    const leanW = (p._lean ?? 0) * PLAYER.radius * 0.15;
+    const toL = h => { const dx = h.x - p.x, dy = h.y - p.y; return { x: dx * fcos + dy * fsin, y: -dx * fsin + dy * fcos - leanW }; };
+    const llx = Math.cos(-ba) * -0.7 - Math.sin(-ba) * -0.7, lly = Math.sin(-ba) * -0.7 + Math.cos(-ba) * -0.7;   // světlo vlevo nahoře, pevné ve světě
+    ctx.save();
+    ctx.translate(sx, sy); ctx.rotate(ba); ctx.translate(0, leanW * s); ctx.scale(s, s);
+    skinBody(ctx, { feet: feetW, top: toL(topH), bot: toL(botH), hnd: p.handed ?? 1, tw: 0, lx: llx, ly: lly }, K);
+    ctx.restore();
   }
 
-  // Helma (vepředu, ve směru facingu) — naznačí směr, navrch (hlava nad rukama)
-  const hx = sx + fcos * r * 0.68;
-  const hy = sy + fsin * r * 0.68;
-  ctx.beginPath();
-  ctx.arc(hx, hy, r * 0.52, 0, Math.PI * 2);
-  ctx.fillStyle = p.helmet || '#eef2f8';
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-  ctx.lineWidth = 1.2 * s;
-  ctx.stroke();
-  // Ochrana obličeje dle typu helmy (vepředu, ve směru facingu)
-  const ht = p.helmetType || 'visor';
-  const vcol = p.visor || '#bfe0ff';          // barva vizoru/akvárka (tradiční odstíny)
-  if (ht === 'visor') {                        // klasika — oblouek + nožičky
-    const visorRadius = r * 0.4;
-    const spreadAngle = Math.PI * 0.35;
-    // Oblouek přední části
-    ctx.beginPath();
-    ctx.arc(hx, hy, visorRadius, ba - spreadAngle, ba + spreadAngle);
-    ctx.strokeStyle = vcol; ctx.lineWidth = 2 * s; ctx.stroke();
-    // Dvě nožičky na stranách (drží visor)
-    const legLen = r * 0.35, legX = r * 0.28;
-    ctx.beginPath();
-    ctx.moveTo(hx + pcos * legX, hy + psin * legX);
-    ctx.lineTo(hx + pcos * legX + fcos * legLen, hy + psin * legX + fsin * legLen);
-    ctx.strokeStyle = vcol; ctx.lineWidth = 1.5 * s; ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(hx - pcos * legX, hy - psin * legX);
-    ctx.lineTo(hx - pcos * legX + fcos * legLen, hy - psin * legX + fsin * legLen);
-    ctx.stroke();
-  } else if (ht === 'shield') {                // akvárko — průhledná kupole
-    ctx.beginPath();
-    ctx.arc(hx, hy, r * 0.5, ba - Math.PI * 0.55, ba + Math.PI * 0.55);
-    ctx.globalAlpha = 0.25; ctx.fillStyle = vcol; ctx.fill(); ctx.globalAlpha = 1;
-    ctx.strokeStyle = vcol; ctx.lineWidth = 1.3 * s; ctx.stroke();
-  } else if (ht === 'cage') {                  // mřížka
-    ctx.strokeStyle = 'rgba(15,15,15,0.75)'; ctx.lineWidth = 0.9 * s;
-    for (const o of [-0.28, 0, 0.28]) {        // svislé mříže
-      ctx.beginPath();
-      ctx.moveTo(hx + pcos * r * o + fcos * r * 0.1, hy + psin * r * o + fsin * r * 0.1);
-      ctx.lineTo(hx + pcos * r * o + fcos * r * 0.5, hy + psin * r * o + fsin * r * 0.5);
-      ctx.stroke();
-    }
-    for (const d of [0.27, 0.43]) {            // příčné mříže
-      ctx.beginPath(); ctx.arc(hx, hy, r * d, ba - Math.PI * 0.42, ba + Math.PI * 0.42); ctx.stroke();
-    }
-  } // 'none' → bez ochrany
 
   // Pass-request rings (žádost o nahrávku)
   if (p.passReq > 0) {
@@ -1274,7 +1119,7 @@ function _bezPt(x0, y0, cx, cy, x1, y1, t) {
   return [u * u * x0 + 2 * u * t * cx + t * t * x1, u * u * y0 + 2 * u * t * cy + t * t * y1];
 }
 // Čepel hokejky se stylem tapování: full (celá), toe (špička), heel (pata), candy (pruhy)
-function _drawBlade(ctx, x0, y0, cx, cy, x1, y1, tape, style, lw) {
+function _drawBlade(ctx, x0, y0, cx, cy, x1, y1, tape, style, lw, bare = '#15171c') {
   ctx.lineCap = 'round';
   if (!style || style === 'full') {
     ctx.beginPath(); ctx.moveTo(x0, y0); ctx.quadraticCurveTo(cx, cy, x1, y1);
@@ -1282,8 +1127,8 @@ function _drawBlade(ctx, x0, y0, cx, cy, x1, y1, tape, style, lw) {
     return;
   }
   const N = 9; ctx.lineWidth = lw;
-  const col = t => style === 'toe'   ? (t > 0.5 ? tape : '#15171c')
-                 : style === 'heel'  ? (t < 0.5 ? tape : '#15171c')
+  const col = t => style === 'toe'   ? (t > 0.5 ? tape : bare)
+                 : style === 'heel'  ? (t < 0.5 ? tape : bare)
                  : style === 'candy' ? ((Math.floor(t * 6) % 2 === 0) ? tape : '#f4f7fb')
                  : tape;
   let [px, py] = _bezPt(x0, y0, cx, cy, x1, y1, 0);
@@ -1383,4 +1228,5 @@ function _resolveGoalCage(p, r) {
     }
   }
 }
+
 
