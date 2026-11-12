@@ -572,6 +572,7 @@ const STICK_V = [
   { out: 4.8, sh: 2.8, bl: 2.8, blo: 4.8 },
   { out: 3.4, sh: 1.8, bl: 3.8, blo: 5.4, knob: 1 },
   { out: 3.6, sh: 2.0, bl: 4.2, blo: 5.8, knob: 1, hi: 1, sh2: 1, paddle: 1 },   // paddle = čepel jako plochá lopatka (vyplněný tvar)
+  { out: 4.1, sh: 2.4, bl: 2.5, blo: 4.3 },   // S3 = dnešní, lehce štíhlejší (~15 %) — výchozí od 2026-11-12
 ];
 const SKATE_CYCLE = 95;   // px ujeté dráhy na celý cyklus kroku (2 odrazy) — 165 px/s ≈ 1,7 cyklu/s
 function _renderPlayer(ctx, p, cam) {

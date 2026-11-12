@@ -4,8 +4,8 @@ const ROWS = [
   { key: 'ctrl', label: 'Ovládání (Q)', opts: [['A', 'WASD'], ['R1', 'Zaoblené WASD'], ['B2', 'Za kurzorem']] },
   { key: 'g', label: 'Branka', opts: [[5, 'Shora, přesně (kolize)'], [3, 'Shora s hloubkou'], [4, 'Shora, větší hloubka'], [1, 'Půdorys'], [0, 'Šikmý 3D'], [2, 'Nízký náklon']] },
   { key: 'p', label: 'Výška puku', opts: [[1, 'Shora (jako branka)'], [0, 'Šikmo nahoru (dřív)']] },
-  { key: 'h', label: 'Hlava', opts: [[0, 'V barvě dresu'], [1, 'Oddělená helma'], [2, 'Světlá helma']] },
-  { key: 's', label: 'Hokejka', opts: [[0, 'Dnešní'], [1, 'Štíhlá'], [2, 'Lopatka']] },
+  { key: 'h', label: 'Hlava', opts: [[1, 'Oddělená helma'], [0, 'V barvě dresu'], [2, 'Světlá helma']] },
+  { key: 's', label: 'Hokejka', opts: [[3, 'Dnešní štíhlejší'], [0, 'Dnešní (původní)'], [1, 'Štíhlá'], [2, 'Lopatka']] },
   { key: 'k', label: 'Bruslení', opts: [[0, 'Dnešní'], [1, 'Krok do stran'], [2, 'Velký odraz']] },
 ];
 const css = `#fh-dev{position:fixed;left:12px;bottom:12px;z-index:9998;background:rgba(10,20,35,.94);color:#eef4fb;border:2px solid #4cc3ff;

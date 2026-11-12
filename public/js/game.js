@@ -609,6 +609,7 @@ export class NetGame {
     // Golmani navrchu — stejné pořadí jako solo (world: rink→puk→hráč→golman)
     this.goalieL.draw(ctx, cam);
     this.goalieR.draw(ctx, cam);
+    this.rink.drawFront?.(ctx, cam, this.puck);   // tyčky, břevno a střecha sítě nad brankářem; vysoký puk nad brankou
   }
 
   notify(text) { this._notice = { text, t: 3 }; }

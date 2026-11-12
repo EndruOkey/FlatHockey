@@ -281,13 +281,13 @@ export class Puck {
   // se tady přeskočí (kreslí ho nosič), volný puk se kreslí normálně.
   // KRESBA VÝŠKY SHORA (vis.js HGT, 2026-11-12): puk zůstává na své poloze (kamera kolmo shora), výška = zvětšení + stín
   // odsunutý vpravo dolů; tvrdá rána = šmouha za pukem úměrná rychlosti (letí rovně, ne obloukem nahoru jako lob).
-  _drawTop(ctx, cam, sx, sy, r, tcol) {
+  _drawTop(ctx, cam, sx, sy, r, tcol, again = false) {
     const s = cam.scale, { ox, oy } = cam, z = Math.max(0, this.z), bar = PUCK.crossbarHeight;
     const k = hScale(z, bar), rr = r * k, shx = sx + z * HGT.lx * s, shy = sy + z * HGT.ly * s;
     const v = Math.hypot(this.vx, this.vy);
     // stopa po ledě (polohy, ne výška) — jemná
     const tr = this._trail || (this._trail = []);
-    tr.push({ x: this.x, y: this.y }); if (tr.length > 14) tr.shift();
+    if (!again) { tr.push({ x: this.x, y: this.y }); if (tr.length > 14) tr.shift(); }
     for (let i = 0; i < tr.length - 1; i++) { const p = tr[i], f = i / tr.length;
       ctx.beginPath(); ctx.arc(ox + p.x * s, oy + p.y * s, r * (0.35 + 0.65 * f), 0, Math.PI * 2); ctx.fillStyle = _alpha(tcol, f * 0.12); ctx.fill(); }
     // stín (ve výšce dál od puku, větší a světlejší)
@@ -307,7 +307,7 @@ export class Puck {
     ctx.beginPath(); ctx.arc(sx - rr * 0.3, sy - rr * 0.3, rr * 0.35, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fill();
   }
 
-  draw(ctx, cam, at = null) {
+  draw(ctx, cam, at = null, again = false) {
     const s    = cam.scale;
     const { ox, oy } = cam;
     const car  = this._carrier && this._carrier.hasPuck ? this._carrier : null;
@@ -319,7 +319,7 @@ export class Puck {
     const elev = this.z * s;
     const tcol = this.trailColor || '#9aa3b2';   // barva stopy/overlaye (dle hráče, jinak default šedá)
 
-    if (VIS.p) return this._drawTop(ctx, cam, sx, sy, r, tcol);
+    if (VIS.p) return this._drawTop(ctx, cam, sx, sy, r, tcol, again);
     // Trail — větší a širší, ale jemná (méně výrazná)
     const tr = this._trail || (this._trail = []);
     tr.push({ x: this.x, y: this.y, z: this.z });

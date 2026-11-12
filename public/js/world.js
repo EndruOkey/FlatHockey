@@ -67,6 +67,7 @@ export class World {
     ctx.fillStyle = '#07090f';
     ctx.fillRect(0, 0, ctx.canvas.cssW || ctx.canvas.width, ctx.canvas.cssH || ctx.canvas.height);
     for (const e of this.entities) e.draw(ctx, cam);
+    for (const e of this.entities) e.drawFront?.(ctx, cam, this.puck);   // přední vrstva branky (Rink.drawFront)
   }
 
   get puck()    { return this.entities.find(e => e.isPuck)   ?? null; }
