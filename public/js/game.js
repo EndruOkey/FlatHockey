@@ -11,7 +11,7 @@ import { Passer } from './entities/Passer.js';
 import { Defender } from './entities/Defender.js';
 import { Rink } from './entities/Rink.js';
 import { SFX } from './sound.js';
-import { makeSteer, steerB2 } from './steer.js';
+import { makeSteer, steerB2, steerR1 } from './steer.js';
 import { createMatch, stepMatch, applyClientInput, makeInput, faceoff, rebuildEntities, pendingFlags, DT as CORE_DT } from './match-core.js';
 import { makeBotBrain, hashSeed } from './bot.js';
 
@@ -251,8 +251,9 @@ export class NetGame {
       aim = Math.atan2(mouse.y - me.y, mouse.x - me.x);
       aimDist = Math.hypot(mouse.x - me.x, mouse.y - me.y);
       // Ovládání B2 (za kurzorem) zatím jen offline: online server kvantuje směr na 8 → zůstává WASD
-      this.input.steer = (this.offline && this.input.mode === 'B2')
-        ? steerB2(this._steer || (this._steer = makeSteer()), this.input.wasd, me, mouse, this.input.lmb, this.input.rmb) : null;
+      const st = this._steer || (this._steer = makeSteer()), md = this.offline ? this.input.mode : 'A';
+      this.input.steer = md === 'B2' ? steerB2(st, this.input.wasd, me, mouse, this.input.lmb, this.input.rmb)
+        : md === 'R1' ? steerR1(st, this.input.wasd, me, dt * TEMPO) : null;
       // ONLINE: client-side prediction (vlastní hráč se hýbe hned, server pak koriguje).
       // OFFLINE: NEpredikuj — hráče hýbe přímo lokální simulace (_localStep), žádný drift.
       if (!this.offline) {
@@ -970,8 +971,9 @@ export class SandboxGame {
     if (_uiClick) { this._chargeBlocked = true; this._chargeCancelled = true; }
 
     const mouse = fromScreen(this.input.mouseX, this.input.mouseY, cam);
-    this.input.steer = this.input.mode === 'B2'
-      ? steerB2(this._steer || (this._steer = makeSteer()), this.input.wasd, this.local, mouse, this.input.lmb, this.input.rmb) : null;
+    const st = this._steer || (this._steer = makeSteer()), md = this.input.mode;
+    this.input.steer = md === 'B2' ? steerB2(st, this.input.wasd, this.local, mouse, this.input.lmb, this.input.rmb)
+      : md === 'R1' ? steerR1(st, this.input.wasd, this.local, dt) : null;
     if (!_wasBuild) {
       const adx = mouse.x - this.local.x, ady = mouse.y - this.local.y;
       this.local.aimDist = Math.hypot(adx, ady);

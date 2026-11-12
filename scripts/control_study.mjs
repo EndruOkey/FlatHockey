@@ -34,6 +34,8 @@ const RUBRIC = {
   carve_loss:   { two: [0, 0.08],    one: [0, 0.15],   w: 1, why: 'plynulý oblouk 0,5 rad/s drží rychlost' },
   r90_px:       { two: [30, 70],     one: [20, 90],    w: 1, why: 'poloměr obratu 90° na topu' },
   inputs_mean:  { two: [0, 1.8],     one: [0, 2.5],    w: 1, why: 'průměr současně ovládaných vstupů (klávesy + pohyb myši + tlačítka)' },
+  // 2026-11-12, přidáno PŘED během schémat R1/R2: proxy „zajímavosti" pohybu (tvar dráhy, ne pocit hráče)
+  curve_pct:    { two: [30, 100],    one: [15, 100],   w: 1, why: 'podíl jízdy na trasách v plynulém oblouku (0,3 < |úhlová rychlost kurzu| < 6 rad/s)' },
 };
 const RUB_MAX = Object.values(RUBRIC).reduce((s, r) => s + 2 * r.w, 0);
 
@@ -78,14 +80,26 @@ const SCHEMES = {
       if (w.brake) { S.exitT = 0.45; return { ctA: w.exit ?? w.aim ?? S.ca, dir: null, keys: 0 }; }
       if (S.exitT > 0 && !w.window && w.move != null) { S.exitT -= DT; return { ctA: w.exit ?? w.move, dir: S.ca, keys: 0 }; }
       return SCHEMES.A.map(w); } },
+  R1: { name: 'Zaoblené WASD (stáčení 6 rad/s)', mouse: 'míří hůl', keys: 'WASD = cílový směr, jízda se k němu stáčí obloukem',
+    map(w, S) { return roundDir(SCHEMES.A.map(w), S, () => 6); } },
+  R2: { name: 'Zaoblené WASD podle rychlosti (14 → 4 rad/s)', mouse: 'míří hůl', keys: 'WASD; pomalu ostře, rychle široký oblouk; Space = ostrý stop',
+    map(w, S) { return roundDir(SCHEMES.A.map(w), S, () => 14 + (4 - 14) * clamp(S.sp / TOP, 0, 1)); } },
   G: { name: 'WASD + Shift = jeď ke kurzoru', mouse: 'míří; se Shiftem i řídí (analog)', keys: 'WASD směr; drž Shift = volant myší',
     map(w, S) {
       if (w.move != null && !w.window && Math.abs(angleDiff(w.move, q8(w.move))) > 0.17) return { ctA: w.move, dir: S.ca, keys: 0, shift: 1 };
       return SCHEMES.A.map(w); } },
 };
 
+// Zaoblení: směr jízdy se ke směru kláves stáčí omezenou úhlovou rychlostí (stav S.rd); bez kláves se stav zahodí
+function roundDir(r, S, rate) {
+  if (r.dir == null) { S.rd = null; return r; }
+  if (S.rd == null) S.rd = S.sp > 20 ? S.hd : r.dir;
+  S.rd = wrap(S.rd + clamp(angleDiff(r.dir, S.rd), -rate() * DT, rate() * DT));
+  return { ...r, dir: S.rd };
+}
 // jeden tik: schéma → vstup → Player.update (stejně jako movement_feel.step)
 function tick(p, S, sch, w, rec) {
+  S.sp = spd(p); S.hd = hd(p);
   S.raw = S.ca; S.ca = S.fa; const m = SCHEMES[sch].map(w, S); S.ca = S.raw;
   const ca0 = S.ca, cd0 = S.cd;
   if (m.ctA != null) S.ca += clamp(angleDiff(m.ctA, S.ca), -CUR_W * DT, CUR_W * DT);
@@ -169,7 +183,7 @@ function runCourse(sch, pts, P, seed, rec, sm) {
     const brake = !!(P.bAng && nx && turn > P.bAng && d < P.bDist && spd(p) > P.bFrac * TOP);
     const coast = !!(P.coast && nx && d < P.coast && !brake && turn > 1.2);
     tick(p, S, sch, { move: coast || brake ? null : Math.atan2(ty, tx), brake, exit }, rec); t++;
-    if (sm && spd(p) > 20) { const h = hd(p); if (hPrev != null) { const k = angleDiff(h, hPrev) * HZ; if (kPrev != null) { sm.s += Math.abs(k - kPrev); sm.n++; } kPrev = k; } hPrev = h; } else { hPrev = kPrev = null; }
+    if (sm && spd(p) > 20) { const h = hd(p); if (hPrev != null) { const k = angleDiff(h, hPrev) * HZ; sm.m = (sm.m || 0) + 1; if (Math.abs(k) > 0.3 && Math.abs(k) < 6) sm.c = (sm.c || 0) + 1; if (kPrev != null) { sm.s += Math.abs(k - kPrev); sm.n++; } kPrev = k; } hPrev = h; } else { hPrev = kPrev = null; }
     if (Math.hypot(w.x - p.x, w.y - p.y) < REACH) i++;
   }
   return i < pts.length ? 99 : t / HZ;
@@ -197,7 +211,7 @@ function evaluate(sch) {
   for (const P of GRID) C.forEach((c, j) => { per[j] = Math.min(per[j], runCourse(sch, c, P, 900 + j, null, null)); });
   const nSum = naive.reduce((a, b) => a + b, 0);
   R.course_s = nSum / N_COURSES; R.skill_gap = nSum / per.reduce((a, b) => a + b, 0);
-  R.smooth = sm.s / sm.n; R.quant_err_deg = rec.qe / rec.qn * D2R; R.inputs_mean = rec.inputs / rec.n;
+  R.smooth = sm.s / sm.n; R.curve_pct = 100 * (sm.c || 0) / (sm.m || 1); R.quant_err_deg = rec.qe / rec.qn * D2R; R.inputs_mean = rec.inputs / rec.n;
   return R;
 }
 function points(R, A) {

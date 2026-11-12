@@ -14,7 +14,7 @@ export class Input {
     this.rmbJustPressed  = false;
     this.mmbJustPressed  = false;
     // Ovládání: 'A' = WASD ve světě (výchozí), 'B2' = za kurzorem (steer.js). Q přepíná; hra pak dosadí this.steer.
-    this.mode = 'A'; try { if (localStorage.getItem('fh_ctrl') === 'B2') this.mode = 'B2'; } catch {}
+    this.mode = 'A'; try { const m = localStorage.getItem('fh_ctrl'); if (m === 'B2' || m === 'R1') this.mode = m; } catch {}
     this.steer = null;          // { dx, dy } od hry (jen v režimu B2)
     this.modeToggled = false;   // hrana pro hru
     this.online = false;        // NetGame online nastaví true → B2 se neuplatní (server kvantuje)
@@ -22,7 +22,7 @@ export class Input {
     window.addEventListener('keydown', e => {
       if (e.code === 'Tab') e.preventDefault();
       this.keys[e.code] = true;
-      if (e.code === 'KeyQ' && !e.repeat) { this.mode = this.mode === 'B2' ? 'A' : 'B2'; this.modeToggled = true; this.steer = null;
+      if (e.code === 'KeyQ' && !e.repeat) { this.mode = this.mode === 'A' ? 'R1' : this.mode === 'R1' ? 'B2' : 'A'; this.modeToggled = true; this.steer = null;
         try { localStorage.setItem('fh_ctrl', this.mode); } catch {}
         ctrlToast(this.mode, this.online); }
       // E = žádost o přihrávku (stejně jako MMB)
@@ -77,13 +77,13 @@ export class Input {
     return { w: !!(k.KeyW || k.ArrowUp), a: !!(k.KeyA || k.ArrowLeft), s: !!(k.KeyS || k.ArrowDown), d: !!(k.KeyD || k.ArrowRight) }; }
 
   get dx() {
-    if (this.mode === 'B2' && this.steer) return this.steer.dx;
+    if (this.mode !== 'A' && this.steer) return this.steer.dx;
     return (this.keys['KeyD'] || this.keys['ArrowRight'] ? 1 : 0)
          - (this.keys['KeyA'] || this.keys['ArrowLeft']  ? 1 : 0);
   }
 
   get dy() {
-    if (this.mode === 'B2' && this.steer) return this.steer.dy;
+    if (this.mode !== 'A' && this.steer) return this.steer.dy;
     return (this.keys['KeyS'] || this.keys['ArrowDown']  ? 1 : 0)
          - (this.keys['KeyW'] || this.keys['ArrowUp']    ? 1 : 0);
   }
@@ -99,8 +99,8 @@ export class Input {
 
 // Krátké oznámení po přepnutí ovládání (Q)
 const CTRL_TXT = {
-  cs: { B2: 'Ovládání: ZA KURZOREM · W ke kurzoru, při střele a pasu drží kurz · Q = WASD', A: 'Ovládání: WASD · Q = za kurzorem', on: ' (online zatím WASD)' },
-  en: { B2: 'Controls: FOLLOW CURSOR · W to cursor, course holds while shooting or passing · Q = WASD', A: 'Controls: WASD · Q = follow cursor', on: ' (online stays WASD for now)' },
+  cs: { R1: 'Ovládání: ZAOBLENÉ WASD · jízda se stáčí obloukem · Q = za kurzorem', B2: 'Ovládání: ZA KURZOREM · W ke kurzoru, při střele a pasu drží kurz · Q = WASD', A: 'Ovládání: WASD · Q = zaoblené WASD', on: ' (online zatím WASD)' },
+  en: { R1: 'Controls: CURVED WASD · you skate in arcs · Q = follow cursor', B2: 'Controls: FOLLOW CURSOR · W to cursor, course holds while shooting or passing · Q = WASD', A: 'Controls: WASD · Q = curved WASD', on: ' (online stays WASD for now)' },
 };
 function ctrlToast(mode, online) {
   if (typeof document === 'undefined') return;
@@ -111,6 +111,6 @@ function ctrlToast(mode, online) {
       + 'background:rgba(10,20,35,.92);color:#fff;font:600 15px/1.35 system-ui,sans-serif;pointer-events:none;max-width:min(92vw,640px);text-align:center;'
       + 'border:2px solid #4cc3ff;transition:opacity .25s';
     document.body.appendChild(el); }
-  el.textContent = T[mode] + (online && mode === 'B2' ? T.on : '');
+  el.textContent = T[mode] + (online && mode !== 'A' ? T.on : '');
   el.style.opacity = '1'; clearTimeout(el._t); el._t = setTimeout(() => { el.style.opacity = '0'; }, 2600);
 }
