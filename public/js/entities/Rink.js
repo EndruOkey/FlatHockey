@@ -199,6 +199,7 @@ function _drawGoal(ctx, cam, glx, dir, postColor) {
   const x = ox + glx * s, xB = x + dir * RINK.goalDepth * s;
   const y1 = oy + RINK.goalY * s, y2 = oy + (RINK.goalY + RINK.goalH) * s;
   if (VIS.g === 1) return _drawGoalTop(ctx, s, x, xB, y1, y2, dir, postColor);
+  if (VIS.g === 5) return _drawGoalExact(ctx, s, x, xB, y1, y2, dir, postColor, PUCK.crossbarHeight * s);
   if (VIS.g === 3 || VIS.g === 4) return _drawGoalPersp(ctx, s, x, xB, y1, y2, dir, postColor, VIS.g === 4 ? 1.45 : 1 + HGT.k, PUCK.crossbarHeight * s);
   const H = PUCK.crossbarHeight * s * (VIS.g === 2 ? 0.35 : 1), HB = H * 0.55;
   const poly = (pts, fill, stroke, lw) => { ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (const q of pts.slice(1)) ctx.lineTo(q[0], q[1]); ctx.closePath();
@@ -299,6 +300,36 @@ function _drawGoalPersp(ctx, s, x, xB, y1, y2, dir, postColor, kH, Hs) {
   ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = 4.2 * s; posts(); ctx.strokeStyle = postColor; ctx.lineWidth = 2.6 * s; posts();
   // brankové ústí na ledu (slabá čára, není překážka)
   ctx.strokeStyle = _alphaHex(postColor, 0.45); ctx.lineWidth = 1.2 * s; ctx.beginPath(); ctx.moveTo(F1[0], F1[1]); ctx.lineTo(F2[0], F2[1]); ctx.stroke();
+  ctx.restore();
+}
+// G5 „shora, hloubka stínem" (2026-11-12): rám, tyčky a břevno PŘESNĚ na kolizních čarách (Puck.js: boky y1/y2, záda goalDepth,
+// tyčky POST_R 2 px) → co vidíš, to platí. Výška = jen stín podle HGT (stejné pravidlo jako puk), hloubka = tmavnutí sítě k zádům.
+function _drawGoalExact(ctx, s, x, xB, y1, y2, dir, postColor, Hs) {
+  const lo = Math.min(x, xB), w = Math.abs(xB - x), Hb = Hs * 0.55;
+  const off = (q, h) => [q[0] + h * HGT.lx, q[1] + h * HGT.ly];
+  const F1 = [x, y1], F2 = [x, y2], B1 = [xB, y1], B2 = [xB, y2];
+  ctx.save(); ctx.lineJoin = ctx.lineCap = 'round';
+  // vržený stín: půdorys ∪ rám ve výšce posunutý od světla (vpředu břevno H, vzadu Hb) — jedna cesta, bez dvojité tmy
+  const sh = new Path2D(), ring = pts => { sh.moveTo(pts[0][0], pts[0][1]); for (const v of pts.slice(1)) sh.lineTo(v[0], v[1]); sh.closePath(); };
+  const fo1 = off(F1, Hs), fo2 = off(F2, Hs), bo1 = off(B1, Hb), bo2 = off(B2, Hb);
+  ring([F1, B1, B2, F2]); ring([fo1, bo1, bo2, fo2]); ring([F1, fo1, fo2, F2]); ring([B1, bo1, bo2, B2]); ring([F1, fo1, bo1, B1]); ring([F2, fo2, bo2, B2]);
+  ctx.fillStyle = 'rgba(20,40,70,0.17)'; ctx.fill(sh, 'nonzero');
+  // vnitřek sítě: od ústí (světlé) k zádům (tmavší) = hloubka
+  const g = ctx.createLinearGradient(x, 0, xB, 0); g.addColorStop(0, 'rgba(235,242,250,0.9)'); g.addColorStop(1, 'rgba(150,170,195,0.95)');
+  ctx.fillStyle = g; ctx.fillRect(lo, y1, w, y2 - y1);
+  // mřížka střechy
+  ctx.save(); ctx.beginPath(); ctx.rect(lo, y1, w, y2 - y1); ctx.clip();
+  ctx.strokeStyle = 'rgba(90,110,135,0.4)'; ctx.lineWidth = 0.6 * s; ctx.beginPath();
+  for (let gx = 3.3 * s; gx < w; gx += 3.3 * s) { const xx = x + dir * gx; ctx.moveTo(xx, y1); ctx.lineTo(xx, y2); }
+  for (let gy = y1 + 3.3 * s; gy < y2; gy += 3.3 * s) { ctx.moveTo(lo, gy); ctx.lineTo(lo + w, gy); }
+  ctx.stroke(); ctx.restore();
+  // rám sítě přesně na kolizních stěnách (boky + záda): obrys + bílá trubka
+  const frame = () => { ctx.beginPath(); ctx.moveTo(x, y1); ctx.lineTo(xB, y1); ctx.lineTo(xB, y2); ctx.lineTo(x, y2); ctx.stroke(); };
+  ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = 2.6 * s; frame(); ctx.strokeStyle = '#f4f7fb'; ctx.lineWidth = 1.3 * s; frame();
+  // břevno přes ústí + tyčky (kruh = kolizní tyčka)
+  ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = 2.8 * s; ctx.beginPath(); ctx.moveTo(x, y1); ctx.lineTo(x, y2); ctx.stroke();
+  ctx.strokeStyle = postColor; ctx.lineWidth = 1.6 * s; ctx.beginPath(); ctx.moveTo(x, y1); ctx.lineTo(x, y2); ctx.stroke();
+  for (const yy of [y1, y2]) { ctx.beginPath(); ctx.arc(x, yy, 2.0 * s, 0, Math.PI * 2); ctx.fillStyle = postColor; ctx.fill(); ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = 0.9 * s; ctx.stroke(); }
   ctx.restore();
 }
 function _alphaHex(h, a) { const n = parseInt(h.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; }

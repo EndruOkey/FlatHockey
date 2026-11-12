@@ -1,8 +1,8 @@
 // Vizuální varianty (2026-11-12). Pro všechny platí výchozí hodnoty; pokusy jen v dev playgroundu (/dev pod heslem, window.FH_DEV).
-// g = branka (0 šikmý 3D náklon, 1 čistý půdorys, 2 nízký náklon, 3 top-down s hloubkou = výchozí, 4 top-down s větší hloubkou), s = hokejka (0, 1 štíhlá, 2 lopatka + odlesk + stín),
+// g = branka (0 šikmý 3D náklon, 1 čistý půdorys, 2 nízký náklon, 3 top-down s hloubkou, 4 větší hloubka, 5 shora přesně podle kolize + hloubka stínem = výchozí), s = hokejka (0, 1 štíhlá, 2 lopatka + odlesk + stín),
 // k = bruslení (0, 1 krok do stran, 2 velký odraz + skluz), h = hlava (0 v barvě dresu, 1 oddělená helma, 2 světlá helma jako dřív).
 // Objekt se čte každý snímek → změna z dev panelu platí hned.
-export const DEFAULT_VIS = { g: 3, s: 0, k: 0, h: 0, p: 1 };   // p = kresba výšky puku (0 šikmo nahoru, 1 shora: zvětšení + stín = jako branka)
+export const DEFAULT_VIS = { g: 5, s: 0, k: 0, h: 0, p: 1 };   // p = kresba výšky puku (0 šikmo nahoru, 1 shora: zvětšení + stín = jako branka)
 // JEDNO PRAVIDLO VÝŠKY (kamera kolmo shora): výška = zvětšení (ve výšce břevna × (1 + k)) + stín odsunutý od světla (vlevo nahoře).
 // Branka G3 i puk ho sdílejí → puk ve výšce břevna je stejně velký a má stín stejně daleko jako břevno.
 export const HGT = { k: 0.25, lx: 0.45, ly: 0.6 };                // k = zvětšení na břevnu; lx, ly = posun stínu na 1 px výšky
