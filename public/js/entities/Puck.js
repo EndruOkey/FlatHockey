@@ -209,6 +209,7 @@ export class Puck {
 
     this.x += this.vx * dt;
     this.y += this.vy * dt;
+    if (this._shotAge != null) this._shotAge += dt;
 
     // MANTINEL / PLEXI / STŘÍDAČKY (2026-11-09): puk nad hranou mantinelu (PUCK.boardHeight) narazí do skla
     // (ev 32, jiný zvuk + záblesk); u střídaček (horní strana mezi modrými čarami) sklo není → puk vyletí ze hry
@@ -293,8 +294,8 @@ export class Puck {
     // stín (ve výšce dál od puku, větší a světlejší)
     ctx.beginPath(); ctx.ellipse(z > 0.5 ? shx : sx + 1.5 * s * 0.5, z > 0.5 ? shy : sy + 1.2 * s, r * (0.95 + z / 60), r * (0.6 + z / 90), 0, 0, Math.PI * 2);
     ctx.fillStyle = `rgba(10,20,40,${z > 0.5 ? Math.max(0.16, 0.38 - z / 80) : 0.35})`; ctx.fill();
-    // šmouha rychlosti: od 260 px/s, délka ~ dráha za 45 ms, zužuje se dozadu
-    if (v > 260) { const L = Math.min(40, v * 0.045) * s, ux = this.vx / v, uy = this.vy / v, a = Math.min(0.55, (v - 260) / 300);
+    // šmouha rychlosti: od 400 px/s, délka ~ dráha za 45 ms, zužuje se dozadu
+    if (v > 400) { const L = Math.min(40, v * 0.05) * s, ux = this.vx / v, uy = this.vy / v, a = Math.min(0.6, (v - 400) / 120);   // jen tvrdá rána (dřív 260 = 99,5 % ran, chain_shot)
       const g = ctx.createLinearGradient(sx, sy, sx - ux * L, sy - uy * L); g.addColorStop(0, `rgba(20,24,32,${a})`); g.addColorStop(1, 'rgba(20,24,32,0)');
       ctx.beginPath(); ctx.moveTo(sx + uy * rr * 0.9, sy - ux * rr * 0.9); ctx.lineTo(sx - ux * L, sy - uy * L); ctx.lineTo(sx - uy * rr * 0.9, sy + ux * rr * 0.9); ctx.closePath();
       ctx.fillStyle = g; ctx.fill(); }

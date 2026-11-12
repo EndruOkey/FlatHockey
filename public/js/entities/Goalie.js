@@ -37,6 +37,12 @@ const FAKE_D = _genv('FH_FAKED', 0.08), FAKE_W = _genv('FH_FAKEW', 0.07), FAKE_R
 const FAKE_LOCK = _genv('FH_FAKELOCK', 0.6);   // rána vypuštěná, když je gólman „chycený" (trest ≥ 0,5) → trest drží až do konce rány
 const FAKE_T = FAKE_D + FAKE_W + FAKE_R, FAKE_LAG = _genv('FH_FAKELAG', 0.2), FAKE_SCREEN = _genv('FH_FAKESCR', 1.8);   // 1,8: rána v okně finty vyjde ~62 % (feint_probe sweep 2026-11-12)   // FAKE_LAG = násobek rychlosti sledování puku při plném trestu
 
+// Odraz a rozehrání (2026-11-12, scripts/chain_save.mjs + chain_restart.mjs): RB_X/RB_Y poloha puku po zákroku, RB_U0/U1 boční úhel odrazu (°)
+// střed→kraj, RB_MIN min. rychlost ven, RB_NOGRAB s bez přikrytí; G_COV px krytí spoluhráče, G_DUMP px/s odložení puku
+const RB_X = _genv('FH_RBX', 15), RB_Y = _genv('FH_RBY', 0.8), RB_U0 = _genv('FH_RBU0', 5), RB_U1 = _genv('FH_RBU1', 50), RB_MIN = _genv('FH_RBMIN', 60), RB_NOGRAB = _genv('FH_RBNG', 0.15);
+const RB_CAP = _genv('FH_RBCAP', 150);   // sweep 2026-11-12: U 5–50°, strop 150 → nebezpečné odrazy 16/19 %, dorážka 3,3/1,8 %
+const G_COV = _genv('FH_GCOV', 50), G_DUMP = _genv('FH_GDUMP', 130);
+
 // Animace brankáře (jen kresba): FH_GANIM=0 vypne (A/B měření); latence reakce rukou na výstřel (s) — ODHAD dle reakční doby ~0,2 s
 const GANIM = (typeof process !== 'undefined' && process.env?.FH_GANIM != null) ? process.env.FH_GANIM !== '0' : true;
 const ANIM_LAT = 0.12;
@@ -99,6 +105,7 @@ export class Goalie {
     if (this._pokeCooldown > 0) this._pokeCooldown -= dt;
     if (this._saveFlash   > 0) this._saveFlash = Math.max(0, this._saveFlash - dt);
     if (this._saveRecoil  > 0) this._saveRecoil = Math.max(0, this._saveRecoil - dt * 4);
+    if (this._rbT > 0) this._rbT -= dt;
 
     // ── Forma: pomalý drift výkonnosti (hot/cold streaks) ────────────────
     // Perioda ~90s → zápasové vlny. Form 0=špatný den, 1=skvělý den.
@@ -537,6 +544,7 @@ export class Goalie {
 
     // Puk letící silně OD branky (odraz/přihrávka pryč) nelze zachytit
     const vxTowardGoal = puck.vx * (-this.inX);  // kladné = k brance
+    if (this._rbT > 0 && vxTowardGoal < 120) return false;   // čerstvý odraz neblokuj znovu (jen nová rána)
     if (vxTowardGoal < -120) return false;
 
     const r = PUCK.radius;
@@ -655,8 +663,8 @@ export class Goalie {
     }
 
     // Zákrok = fyzikální odraz od padu + rozehrávka na spoluhráče
-    puck.x  = this.x + this.inX * (COVER_X + PUCK.radius + 2);
-    puck.y  = this.y + relY * 0.35;
+    puck.x  = this.x + this.inX * RB_X;            // odraz od místa zásahu (dřív +15 px a y × 0,35 → puk přeskočil o ~7 px)
+    puck.y  = this.y + relY * RB_Y;
     puck.z = 0; puck.vz = 0;
     // 2026-11-11: dřív puk po zákroku letěl rovnou přesnou přihrávkou na spoluhráče (ťuk do betonu = okamžitá rozehrávka).
     // Teď fyzikální odraz → doraz je šance; gólman rozehrává jen z držení (_release). FH_GSTANCE=0 = staré.
@@ -673,14 +681,17 @@ export class Goalie {
       const damp   = clamp(0.28 + inSpd / 1500, 0.28, 0.52);
       puck.vx = -puck.vx * damp;
       // Zajistit minimální rychlost směrem od branky
-      if (this.inX * puck.vx < 28) puck.vx = this.inX * 28;
-      // Y složka: částečná reflexe + malý boční koponent dle místa dopadu
-      puck.vy = puck.vy * -damp * 0.45 + (relY >= 0 ? 1 : -1) * inSpd * 0.06;
+      if (this.inX * puck.vx < RB_MIN) puck.vx = this.inX * RB_MIN;   // dřív 28 → pomalý odraz zůstal v dosahu a gólman ho ve stejném snímku přikryl
+      // Y složka: odraz DO STRANY — úhel roste s tím, jak daleko od středu puk trefil (střed 20°, kraj 50°); dřív vy × 0,45 → 83 % do slotu
+      const reachN = clamp(Math.abs(relY) / Math.max(1, COVER_H + PUCK.radius), 0, 1);
+      const U = (RB_U0 + (RB_U1 - RB_U0) * reachN) * Math.PI / 180;
+      puck.vy = (relY >= 0 ? 1 : -1) * Math.abs(puck.vx) * Math.tan(U);
       // Clamp celkové výstupní rychlosti
       const exitSpd = Math.hypot(puck.vx, puck.vy);
-      if (exitSpd > 240) { const f = 240 / exitSpd; puck.vx *= f; puck.vy *= f; }
+      if (exitSpd > RB_CAP) { const f = RB_CAP / exitSpd; puck.vx *= f; puck.vy *= f; }
     }
     this._markSave(high ? 'blocker' : 'pads', 0.3);
+    this._rbT = RB_NOGRAB; this._noGrab = Math.max(this._noGrab || 0, RB_NOGRAB);   // odražený puk hned neblokuj ani nepřikrývej (dřív 14,5 % ve 3v3 týž snímek)
     return true;
   }
 
@@ -780,15 +791,17 @@ export class Goalie {
     // jinak puk jen odloží do strany pro obránce.
     const mate = world ? _nearestMate(world, this.team, this) : null;
     const mDist = mate ? Math.hypot(mate.x - p.x, mate.y - p.y) : Infinity;
-    const mateOpen = mate && (!GSTANCE || (mDist < 170 && !world.players.some(o => o.team !== this.team && Math.hypot(o.x - mate.x, o.y - mate.y) < 90)));
+    const mateOpen = mate && (!GSTANCE || (mDist < 170 && !world.players.some(o => o.team !== this.team && Math.hypot(o.x - mate.x, o.y - mate.y) < G_COV)));
     if (mateOpen) {
       const ang  = Math.atan2(mate.y - p.y, mate.x - p.x);
       const sp = GSTANCE ? Math.min(230, Math.sqrt(2 * PUCK.decel * mDist) + 15) : Math.min(PUCK.passSpeed, Math.sqrt(2 * PUCK.decel * mDist) + 35);
       p.vx = Math.cos(ang) * sp; p.vy = Math.sin(ang) * sp;
     } else {
-      const toBoard = this.y < RINK.h / 2 ? -1 : 1;
+      // odlož na stranu DÁL od nejbližšího soupeře (dřív vždy k bližšímu mantinelu 80 px/s → 94 % rozeher, soupeř střílel stejně často jako vlastní tým)
+      let opp = null, od = Infinity; if (world) for (const o of world.players) if (o.team !== this.team) { const d = Math.hypot(o.x - p.x, o.y - p.y); if (d < od) { od = d; opp = o; } }
+      const toBoard = opp ? (opp.y < this.y ? 1 : -1) : (this.y < RINK.h / 2 ? -1 : 1);
       const angle = Math.atan2(toBoard * 60, this.inX * 120);
-      const vs = GSTANCE ? 80 : 130;
+      const vs = GSTANCE ? G_DUMP : 130;
       p.vx = Math.cos(angle) * vs; p.vy = Math.sin(angle) * vs;
     }
   }

@@ -334,7 +334,7 @@ export function stepMatch(match) {
   }
   if (match.offside && !match.stoppage) {
     const sp = Math.hypot(match.puck.vx, match.puck.vy);
-    if (sp < 45 || match.tick - match.offside.t > ms2ticks(2000)) {
+    if (sp < 45 || match.tick - match.offside.t > ms2ticks(600)) {
       const off = match.offside; match.offside = null;
       callStoppage(match, 'offside', off.lineX, off.fx, off.fy);
     }

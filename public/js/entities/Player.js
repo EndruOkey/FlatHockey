@@ -138,7 +138,14 @@ export class PlayerBase {
     if (intended ? (Math.min(dTip, dBlade) > PLAYER.passRecvRadius && dBody > this.radius + 8)
                  : Math.min(dTip, dBlade) > PLAYER.pickupTipRadius) return false;
     // Při nabíjení (one-timer) přijmeš i rychlou nahrávku — usnadní načasování
-    const maxRel = this.charge > 0 ? 9999 : (intended ? PLAYER.passRecvMaxRel : PLAYER.pickupMaxRelSpeed);
+    let maxRel = this.charge > 0 ? 9999 : (intended ? PLAYER.passRecvMaxRel : PLAYER.pickupMaxRelSpeed);
+    // Čerstvá rána SOUPEŘE (≤ SHOT_EAT_T s): čistě převezmeš jen pomalý puk, i při nabíjení — jinak se od hole odrazí jako tečka
+    // (dřív 7,8 % ran soupeř „snědl" hned v 1. tiku: limit 420 / při nabíjení 9999 px/s, rána má medián 381; scripts/chain_shot.mjs)
+    if (puck._shot && puck._shot.team !== this.team) {
+      const age = puck._shotAge ?? 9;
+      if (age < SHOT_NOPICK) return false;                         // v tiku rány čepele soupeřů splývají → puk nejdřív čepel opustí
+      if (age < SHOT_EAT_T) maxRel = Math.min(maxRel, SHOT_EAT_V);
+    }
     if (Math.hypot(puck.vx - this.vx, puck.vy - this.vy) > maxRel) return false;
     return true;
   }
@@ -205,7 +212,7 @@ export class PlayerBase {
 
   shoot(puck, charge, perfect = false) {
     this.hasPuck = false;
-    puck._shot = { id: this.id, team: this.team, ot: !!this._oneTimer, pf: !!perfect };   // pro hlášky (match-core: ONE-TIMER / PŘESNĚ / kombo gól)
+    puck._shot = { id: this.id, team: this.team, ot: !!this._oneTimer, pf: !!perfect }; puck._shotAge = 0;   // pro hlášky (match-core: ONE-TIMER / PŘESNĚ / kombo gól)
     this._shootCooldown = 0.18;
     const tip = this.stickTip;
     puck.x = tip.x;
@@ -568,6 +575,7 @@ const _rt  = cam => (cam && cam.t != null ? cam.t : 0);
 // Deterministická „náhoda“ pro efekty: hash (id, n, i) → 0..1
 const _hrand = (id, n, i) => { let h = 2166136261 ^ n; const str = String(id); for (let k = 0; k < str.length; k++) h = Math.imul(h ^ str.charCodeAt(k), 16777619); h = Math.imul(h ^ (i * 374761393), 668265263); h ^= h >>> 13; h = Math.imul(h, 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
 // Hokejka — varianty kresby (vis.js): out = obrys dříku, sh = dřík, bl = čepel, blo = obrys čepele (× s), knob = koncovka, hi = odlesk, sh2 = stín na ledu
+const SHOT_EAT_T = 0.25, SHOT_EAT_V = 300, SHOT_NOPICK = 0.1;   // s, px/s — viz canPickup (čerstvá rána soupeře)
 const STICK_V = [
   { out: 4.8, sh: 2.8, bl: 2.8, blo: 4.8 },
   { out: 3.4, sh: 1.8, bl: 3.8, blo: 5.4, knob: 1 },

@@ -470,7 +470,8 @@ function createMatch(lobbyId, seed) {
       }
     }
 
-    io.to(match.room).emit('goal', { text: result === 'goal-away' ? 'GOAL! 🔴' : 'GOAL! 🔵' });
+    { const sh = match.puck._shot, sp = sh ? match.players.get(sh.id) : null, scorer = sp && sp.team === scoringTeam ? String(sp.name || '').slice(0, 24) : '';
+      io.to(match.room).emit('goal', { text: result === 'goal-away' ? 'GOAL! 🔴' : 'GOAL! 🔵', side: scoringTeam, scorer }); }
     match._goalAt = match.tick;
   };
   // Pevný krok s doháněním: setInterval je nepřesný (Windows volá ~37×/s místo 60 — změřeno) →
@@ -634,7 +635,7 @@ function stepMatch(match) {
   // Offside v běhu — stejně jako icing: puk necháme dojet, pak píšťalka
   if (match.offside && !match.stoppage) {
     const sp = Math.hypot(match.puck.vx, match.puck.vy);
-    if (sp < 45 || match.tick - match.offside.t > ms2ticks(2000)) {
+    if (sp < 45 || match.tick - match.offside.t > ms2ticks(600)) {
       const off = match.offside; match.offside = null;
       callStoppage(match, 'offside', off.lineX, off.fx, off.fy);
     }

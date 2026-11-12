@@ -82,7 +82,7 @@ export class NetGame {
     if (!this.offline) {
       net.onSnap = s => this._onSnap(s);
       net.onGoal = g => {
-        this.goalFlash = 2.5; this.goalText = g.text;
+        this._goalBanner(g.side || (String(g.text).includes('🔴') ? 'away' : 'home'), g.scorer || '');
         SFX.goalWhistle();
         setTimeout(() => SFX.goalHorn(), 950);
         setTimeout(() => SFX.crowd(3), 700);
@@ -108,7 +108,8 @@ export class NetGame {
     const seed = (settings && settings.seed) || ((Math.random() * 2147483647) >>> 0);
     const hooks = {
       goal: (result) => {
-        this.goalFlash = 2.5; this.goalText = result === 'goal-away' ? 'GOAL! 🔴' : 'GOAL! 🔵';
+        const side = result === 'goal-away' ? 'away' : 'home', sh = this.match?.puck?._shot, sp = sh ? this.match.players.get(sh.id) : null;
+        this._goalBanner(side, sp && sp.team === side ? (sp.name || '') : '');
         SFX.goalWhistle();
         setTimeout(() => SFX.goalHorn(), 950);
         setTimeout(() => SFX.crowd(3), 700);
@@ -331,6 +332,7 @@ export class NetGame {
       }
       const ent = e.ent;
       // autoritativní diskrétní stav (pro všechny)
+      const prevCh = ent.charge || 0;   // síla nápřahu PŘED snapshotem (v tiku výstřelu už server pošle 0)
       ent.team = ps.team; ent.forehand = !!ps.fh; ent.charge = ps.ch;
       ent.handed = ps.hd; ent.name = ps.nm; ent.founder = !!ps.fn;
       ent.color = ps.col || null; ent.num = ps.num; ent.jersey = ps.js || 'solid';
@@ -340,7 +342,7 @@ export class NetGame {
       // Pickup / shoot zvuky z hasPuck přechodu
       const newHasPuck = !!ps.hp;
       if (!prevHasPuck && newHasPuck)  SFX.pickup();      // sebral puk
-      if ( prevHasPuck && !newHasPuck && !this.goalFlash) SFX.shoot(ent.charge ?? 0.5); // vystřelil
+      if ( prevHasPuck && !newHasPuck && !this.goalFlash) SFX.shoot(prevCh > 0.05 ? prevCh : 0.12); // rána = síla nápřahu; pas / ztráta = tiché cvaknutí
       ent.hasPuck = newHasPuck;
       if (ps.shd != null) { ent._shieldT = 0.35; ent._shieldA = ps.shd; }   // štít (krytí tělem) ze serveru
 
@@ -614,6 +616,12 @@ export class NetGame {
 
   notify(text) { this._notice = { text, t: 3 }; }
 
+  // Banner gólu: tým (jeho barvou) + střelec; trvá 2,1 s = pauza po gólu (1,2 s) + příprava buly (0,9 s) → skončí s rozehrou
+  _goalBanner(side, scorer) {
+    const tm = this.settings?.teams?.[side];
+    this.goalFlash = 2.1; this.goalText = t('goal_banner', tm?.name || (side === 'home' ? 'HOME' : 'AWAY'), scorer); this.goalColor = tm?.color || '#ffdc3c';
+  }
+
   _overlay(ctx) {
     // ── Debug (přepínač F3): FPS, max frame time, interval snapshotů ──
     {
@@ -676,8 +684,10 @@ export class NetGame {
     if (this.goalFlash > 0) {
       const a = Math.min(1, this.goalFlash);
       ctx.fillStyle = `rgba(255,220,60,${a * 0.12})`; ctx.fillRect(0, 0, W, H);
-      ctx.font = 'bold 64px monospace'; ctx.textAlign = 'center'; ctx.fillStyle = `rgba(255,220,60,${a})`;
-      ctx.fillText(this.goalText, cx, H / 2);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      let fs = 64; ctx.font = `900 ${fs}px 'Segoe UI', sans-serif`; while (fs > 26 && ctx.measureText(this.goalText).width > W - 32) { fs -= 4; ctx.font = `900 ${fs}px 'Segoe UI', sans-serif`; }
+      ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(4, fs * 0.12); ctx.strokeStyle = `rgba(10,16,30,${a * 0.9})`; ctx.strokeText(this.goalText, cx, H / 2);
+      ctx.globalAlpha = a; ctx.fillStyle = this.goalColor || '#ffdc3c'; ctx.fillText(this.goalText, cx, H / 2); ctx.globalAlpha = 1;
     }
 
     // Předběžné varování — výrazně pulsující čára (offside pozice / icing v běhu)
