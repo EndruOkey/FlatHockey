@@ -15,8 +15,10 @@ function _ac() {
     _volGain = _ctx.createGain();
     const _v = parseFloat(localStorage.getItem('sfx-vol'));   // poškozená hodnota (NaN) by shodila zvuk
     _volGain.gain.value = Number.isFinite(_v) ? Math.min(1, Math.max(0, _v)) : 0.8;
+    // pevné ztlumení celého mixu (2026-11-12, „vždycky to hrozně řve"): 0,6 nezávisle na posuvníku hlasitosti
+    const _trim = _ctx.createGain(); _trim.gain.value = 0.6;
     _master.connect(_volGain);
-    _volGain.connect(_ctx.destination);
+    _volGain.connect(_trim); _trim.connect(_ctx.destination);
   }
   if (_ctx.state === 'suspended') _ctx.resume();
   return _ctx;
@@ -452,11 +454,11 @@ export const SFX = {
   },
 
   // Hockey stop — křupavý začátek + HP sweep v pozadí (2kHz→5kHz→1.5kHz)
-  iceStop(spd = 100) {
+  iceStop(spd = 100, gain = 1) {
     const ac  = _ac(), t = ac.currentTime, sr = ac.sampleRate;
     const f   = Math.min(1, Math.max(0, (spd - 35) / 145));
     const dur = 0.35 + f * 0.45;
-    const vol = 0.18 + f * 0.14;   // tišší — efekt v pozadí
+    const vol = (0.18 + f * 0.14) * gain;   // tišší — efekt v pozadí; cizí hráči gain 0,45
 
     // Křupavý úvodní transient: 6ms HP burst na 5.5kHz = ostrý počáteční křup
     const cb = ac.createBuffer(1, Math.ceil(sr * 0.006), sr);

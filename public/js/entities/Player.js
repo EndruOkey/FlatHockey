@@ -576,6 +576,7 @@ const _rt  = cam => (cam && cam.t != null ? cam.t : 0);
 const _hrand = (id, n, i) => { let h = 2166136261 ^ n; const str = String(id); for (let k = 0; k < str.length; k++) h = Math.imul(h ^ str.charCodeAt(k), 16777619); h = Math.imul(h ^ (i * 374761393), 668265263); h ^= h >>> 13; h = Math.imul(h, 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
 // Hokejka — varianty kresby (vis.js): out = obrys dříku, sh = dřík, bl = čepel, blo = obrys čepele (× s), knob = koncovka, hi = odlesk, sh2 = stín na ledu
 const SHOT_EAT_T = 0.25, SHOT_EAT_V = 300, SHOT_NOPICK = 0.1;   // s, px/s — viz canPickup (čerstvá rána soupeře)
+let _brakeSfxAt = -1e9;   // globální omezovač zvuku brzdy cizích hráčů (jen kresba/zvuk, ne simulace)
 const STICK_V = [
   { out: 4.8, sh: 2.8, bl: 2.8, blo: 4.8 },
   { out: 3.4, sh: 1.8, bl: 3.8, blo: 5.4, knob: 1 },
@@ -656,7 +657,11 @@ function _renderPlayer(ctx, p, cam) {
     const _canFire = !((p._stopCd ?? 0) > 0);
 
     // brzda: Space (lokální hráč) NEBO prudké zpomalení (> 450 px/s² — vidí i ostatní hráči online / boti)
-    if ((_spaceEdge || (_prevS - _spd2) / _dtHS > 450) && _spd2 > 35 && _canFire) {
+    // ZVUK BRZDY (2026-11-12, scripts/brake_sound_probe.mjs): vlastní hráč vždy; cizí/boti jen tvrdý stop (> 1500 px/s² z > 160 px/s),
+    // globálně max 1× za 1,2 s a tišeji — dřív každé zpomalení > 450 px/s² u všech = 66 skřípnutí/min v zápase botů, teď 3,5/min
+    const _decel = (_prevS - _spd2) / _dtHS, _mine = !!p._isLocal;
+    const _hardOther = !_mine && _decel > 1500 && _prevS > 160;
+    if ((_spaceEdge || (_mine ? _decel > 450 : _hardOther)) && _spd2 > 35 && _canFire) {
       p._stopN = (p._stopN || 0) + 1;
       const _dir = p._hsDir ?? Math.atan2(p.vy ?? 0, p.vx ?? 0);
       const _spd = _prevS;
@@ -670,7 +675,8 @@ function _renderPlayer(ctx, p, cam) {
         p._stopPts.push({ x: p.x, y: p.y, vx: Math.cos(_a) * _v, vy: Math.sin(_a) * _v,
                           life: 0.15 + _hrand(p.id, p._stopN, i * 3 + 2) * 0.15, maxL: 0.30 });
       }
-      SFX.iceStop(_spd);
+      const _now = (typeof performance !== 'undefined') ? performance.now() : 0;
+      if (_mine) SFX.iceStop(_spd); else if (_now - _brakeSfxAt > 1200) { _brakeSfxAt = _now; SFX.iceStop(_spd, 0.45); }
     }
 
     if (p._stopPts?.length) {
