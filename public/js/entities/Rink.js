@@ -15,7 +15,7 @@ export class Rink {
   // PŘEDNÍ VRSTVA BRANKY (2026-11-12): kreslí se AŽ po brankáři a puku → tyčky a břevno jsou nad brankářem, mřížka střechy
   // přes puk uvnitř sítě (pod střechou); puk výš než síť v daném místě se nakreslí ještě jednou navrch.
   drawFront(ctx, cam, puck, goalies = []) {
-    if (VIS.g === 5) {
+    if (VIS.g === 5 || VIS.g === 6 || VIS.g === 7) {
       _drawGoal(ctx, cam, RINK.goalLineLeft, -1, '#3a9fff', 'front');
       _drawGoal(ctx, cam, RINK.goalLineRight, +1, '#ff4455', 'front');
       if (puck && !puck.ownerId && puck.z > 0.5 && puckAboveGoal(puck)) puck.draw(ctx, cam, null, true);
@@ -236,6 +236,7 @@ function _drawGoal(ctx, cam, glx, dir, postColor, part = 'base') {
   const y1 = oy + RINK.goalY * s, y2 = oy + (RINK.goalY + RINK.goalH) * s;
   if (VIS.g === 1) return _drawGoalTop(ctx, s, x, xB, y1, y2, dir, postColor);
   if (VIS.g === 5) return _drawGoalExact(ctx, s, x, xB, y1, y2, dir, postColor, PUCK.crossbarHeight * s, part);
+  if (VIS.g === 6 || VIS.g === 7) return _drawGoalNice(ctx, s, x, xB, y1, y2, dir, postColor, PUCK.crossbarHeight * s, part, GOAL_STYLE[VIS.g]);
   if (part === 'front') return;
   if (VIS.g === 3 || VIS.g === 4) return _drawGoalPersp(ctx, s, x, xB, y1, y2, dir, postColor, VIS.g === 4 ? 1.45 : 1 + HGT.k, PUCK.crossbarHeight * s);
   const H = PUCK.crossbarHeight * s * (VIS.g === 2 ? 0.35 : 1), HB = H * 0.55;
@@ -375,6 +376,58 @@ function _drawGoalExact(ctx, s, x, xB, y1, y2, dir, postColor, Hs, part = 'base'
   for (const yy of [y1, y2]) { ctx.beginPath(); ctx.arc(x, yy, 2.0 * s, 0, Math.PI * 2); ctx.fillStyle = postColor; ctx.fill(); ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = 0.9 * s; ctx.stroke(); }
   ctx.restore();
 }
+// G6/G7 (2026-11-12, scripts/goal_rubric.mjs): hezčí branka, geometrie PŘESNĚ jako G5 (kolize). Parametry = vstup rubriky K1–K7.
+// pipe = bílá trubka rámu, out = obrys (jako hráči), mesh = rozteč diagonální sítě (px hřiště), shadow 'lines' = stín jen od trubek,
+// back = barva zadní trubky ('team' = týmová), shine = odlesk na tyčkách, depth = jas ústí → zad.
+export const GOAL_STYLE = {
+  5: { pipe: 1.3, out: 2.6, mesh: 3.3, meshDiag: false, meshA: 0.55, shadow: 'fill', shadowA: 0.17, depth: [0.92, 0.70], back: 'white', post: 2.0, bar: 1.6, shine: false },
+  6: { pipe: 2.0, out: 4.0, mesh: 7.5, meshDiag: true, meshA: 0.32, shadow: 'lines', shadowA: 0.16, depth: [0.96, 0.74], back: 'white', post: 2.0, bar: 2.0, shine: false },
+  7: { pipe: 2.0, out: 4.0, mesh: 7.5, meshDiag: true, meshA: 0.32, shadow: 'lines', shadowA: 0.16, depth: [0.96, 0.70], back: 'team', post: 2.0, bar: 2.4, shine: true },
+};
+function _drawGoalNice(ctx, s, x, xB, y1, y2, dir, postColor, Hs, part, st) {
+  const lo = Math.min(x, xB), w = Math.abs(xB - x), h = y2 - y1, Hb = Hs * 0.55;
+  const off = (q, hh) => [q[0] + hh * HGT.lx, q[1] + hh * HGT.ly];
+  const F1 = [x, y1], F2 = [x, y2], B1 = [xB, y1], B2 = [xB, y2];
+  const line = (pts) => { ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (const q of pts.slice(1)) ctx.lineTo(q[0], q[1]); ctx.stroke(); };
+  ctx.save(); ctx.lineJoin = ctx.lineCap = 'round';
+  if (part === 'base') {
+    // stín: jen od trubek (tenké linky posunuté podle výšky, HGT jako puk) + slabý nádech sítě → žádný šedý blok vedle branky
+    // rozmazaný (jinak tenké linky vypadaly jako druhý průhledný rám — „duch")
+    ctx.save(); ctx.filter = `blur(${(1.6 * s).toFixed(1)}px)`; ctx.strokeStyle = `rgba(20,40,70,${st.shadowA})`; ctx.lineWidth = st.pipe * 1.6 * s;
+    line([off(F1, Hs), off(B1, Hb), off(B2, Hb), off(F2, Hs)]); line([off(F1, Hs), off(F2, Hs)]); ctx.restore();
+    ctx.fillStyle = 'rgba(20,40,70,0.05)'; ctx.beginPath(); ctx.moveTo(...off(F1, Hs)); ctx.lineTo(...off(B1, Hb)); ctx.lineTo(...off(B2, Hb)); ctx.lineTo(...off(F2, Hs)); ctx.closePath(); ctx.fill();
+    // vnitřek: od ústí (světlé) k zádům (tmavší) + vnitřní stín podél rámu = hloubka
+    const L = v => Math.round(v * 255), g = ctx.createLinearGradient(x, 0, xB, 0);
+    g.addColorStop(0, `rgb(${L(st.depth[0] * 0.97)},${L(st.depth[0] * 0.99)},${L(st.depth[0])})`); g.addColorStop(1, `rgb(${L(st.depth[1] * 0.92)},${L(st.depth[1] * 0.97)},${L(st.depth[1])})`);
+    ctx.fillStyle = g; ctx.fillRect(lo, y1, w, h);
+    const gi = ctx.createLinearGradient(0, y1, 0, y2); gi.addColorStop(0, 'rgba(30,50,80,0.16)'); gi.addColorStop(0.18, 'rgba(30,50,80,0)'); gi.addColorStop(0.82, 'rgba(30,50,80,0)'); gi.addColorStop(1, 'rgba(30,50,80,0.16)');
+    ctx.fillStyle = gi; ctx.fillRect(lo, y1, w, h);
+    ctx.restore(); return;
+  }
+  // závoj + síť (diagonální, řidší)
+  ctx.fillStyle = 'rgba(225,236,248,0.38)'; ctx.fillRect(lo, y1, w, h);
+  ctx.save(); ctx.beginPath(); ctx.rect(lo, y1, w, h); ctx.clip();
+  ctx.strokeStyle = `rgba(80,100,128,${st.meshA})`; ctx.lineWidth = 0.7 * s; ctx.beginPath();
+  const sp = st.mesh * s;
+  if (st.meshDiag) for (let k = -h; k < w + h; k += sp) { ctx.moveTo(lo + k, y1); ctx.lineTo(lo + k + h, y2); ctx.moveTo(lo + k, y2); ctx.lineTo(lo + k + h, y1); }
+  else { for (let gx = sp; gx < w; gx += sp) { ctx.moveTo(lo + gx, y1); ctx.lineTo(lo + gx, y2); } for (let gy = y1 + sp; gy < y2; gy += sp) { ctx.moveTo(lo, gy); ctx.lineTo(lo + w, gy); } }
+  ctx.stroke(); ctx.restore();
+  // rám: obrys (jazyk hráčů) + bílá trubka s odleskem; záda případně týmovou barvou
+  const frame = [F1, B1, B2, F2];
+  ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = st.out * s; line(frame);
+  ctx.strokeStyle = '#f4f7fb'; ctx.lineWidth = st.pipe * s; line(frame);
+  if (st.back === 'team') { ctx.strokeStyle = postColor; ctx.lineWidth = st.pipe * s; line([B1, B2]); }
+  ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 0.6 * s; line([[x + dir * 1, y1 - 0.5 * s], [xB - dir * 1, y1 - 0.5 * s]]);   // odlesk horní trubky
+  // břevno + tyčky (kolizní kruh POST_R 2 px)
+  ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = (st.bar + 1.4) * s; line([F1, F2]);
+  ctx.strokeStyle = postColor; ctx.lineWidth = st.bar * s; line([F1, F2]);
+  for (const yy of [y1, y2]) {
+    ctx.beginPath(); ctx.arc(x, yy, st.post * s, 0, Math.PI * 2); ctx.fillStyle = postColor; ctx.fill(); ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = 1.0 * s; ctx.stroke();
+    if (st.shine) { ctx.beginPath(); ctx.arc(x - 0.6 * s, yy - 0.6 * s, 0.7 * s, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.fill(); }
+  }
+  ctx.restore();
+}
+
 // Je puk výš než branka v místě, kde je? (nad střechou sítě, nebo nad břevnem v ústí) → kreslí se nad přední vrstvou branky
 export function puckAboveGoal(p) {
   const gy1 = RINK.goalY - PUCK.radius, gy2 = RINK.goalY + RINK.goalH + PUCK.radius;
