@@ -11,6 +11,7 @@ import { Passer } from './entities/Passer.js';
 import { Defender } from './entities/Defender.js';
 import { Rink } from './entities/Rink.js';
 import { SFX } from './sound.js';
+import { makeSteer, steerB2 } from './steer.js';
 import { createMatch, stepMatch, applyClientInput, makeInput, faceoff, rebuildEntities, pendingFlags, DT as CORE_DT } from './match-core.js';
 import { makeBotBrain, hashSeed } from './bot.js';
 
@@ -74,6 +75,8 @@ export class NetGame {
     // OFFLINE (lokální) režim: zápas proti botům běží CELÝ v prohlížeči přes match-core,
     // žádná síť → nulová latence a žádné TCP trhání. Online multiplayer dál přes net (níž).
     this.offline = !!(settings && settings.offline);
+    this.input.online = !this.offline;   // ovládání B2 jen offline
+    if (globalThis.location?.search.includes('fhtest')) globalThis.__fhNet = this;   // test hook (B2 e2e)
     this._lastMsg = makeInput();
 
     if (!this.offline) {
@@ -159,7 +162,7 @@ export class NetGame {
   _localStep(dt) {
     const m = this.match; if (!m) return;
     const inp = m.inputs.get(this.myId);
-    if (inp) { applyClientInput(inp, this._lastMsg); inp._stamp = Date.now(); }
+    if (inp) { applyClientInput(inp, this._lastMsg, true); inp._stamp = Date.now(); }
     // Vyhlazení: render ukazuje polohu MEZI posledními dvěma kroky simulace (alpha = zbytek akumulátoru).
     // Bez toho rAF (≠ přesně 60 Hz) občas dostane 0 nebo 2 kroky → škubnutí (měřeno stutter_probe.mjs).
     const objs = this._smoothObjs || (this._smoothObjs = () => [...m.players.values(), m.puck, m.goalieL, m.goalieR]);
@@ -247,6 +250,9 @@ export class NetGame {
       const mouse = fromScreen(this.input.mouseX, this.input.mouseY, cam);
       aim = Math.atan2(mouse.y - me.y, mouse.x - me.x);
       aimDist = Math.hypot(mouse.x - me.x, mouse.y - me.y);
+      // Ovládání B2 (za kurzorem) zatím jen offline: online server kvantuje směr na 8 → zůstává WASD
+      this.input.steer = (this.offline && this.input.mode === 'B2')
+        ? steerB2(this._steer || (this._steer = makeSteer()), this.input.wasd, me, mouse, this.input.lmb, this.input.rmb) : null;
       // ONLINE: client-side prediction (vlastní hráč se hýbe hned, server pak koriguje).
       // OFFLINE: NEpredikuj — hráče hýbe přímo lokální simulace (_localStep), žádný drift.
       if (!this.offline) {
@@ -257,7 +263,7 @@ export class NetGame {
       }
     }
     const msg = {
-      dx: this.input.dx, dy: this.input.dy,
+      dx: this.input.dx, dy: this.input.dy, an: !!this.input.steer,
       space: !!this.input.keys['Space'],
       lmb: this.input.lmb, rmb: this.input.rmb, mmb: this.input.mmb,
       aim, aimDist,
@@ -964,6 +970,8 @@ export class SandboxGame {
     if (_uiClick) { this._chargeBlocked = true; this._chargeCancelled = true; }
 
     const mouse = fromScreen(this.input.mouseX, this.input.mouseY, cam);
+    this.input.steer = this.input.mode === 'B2'
+      ? steerB2(this._steer || (this._steer = makeSteer()), this.input.wasd, this.local, mouse, this.input.lmb, this.input.rmb) : null;
     if (!_wasBuild) {
       const adx = mouse.x - this.local.x, ady = mouse.y - this.local.y;
       this.local.aimDist = Math.hypot(adx, ady);

@@ -31,9 +31,12 @@ export function makeInput() {
   };
 }
 const dir1 = v => (v > 0 ? 1 : v < 0 ? -1 : 0);
-export function applyClientInput(inp, msg) {
+// analog = true jen lokální offline hra (ovládání B2 posílá plynulý směr); server dál kvantuje na 8 směrů.
+export function applyClientInput(inp, msg, analog = false) {
   if (!msg || typeof msg !== 'object') return;
-  inp.dx = dir1(msg.dx); inp.dy = dir1(msg.dy);
+  const l = Math.hypot(+msg.dx || 0, +msg.dy || 0);
+  if (analog && msg.an && Number.isFinite(l) && l > 0.01) { inp.dx = msg.dx / Math.max(1, l); inp.dy = msg.dy / Math.max(1, l); }
+  else { inp.dx = dir1(msg.dx); inp.dy = dir1(msg.dy); }
   inp.keys.Space = !!msg.space;
   inp.lmb = !!msg.lmb; inp.rmb = !!msg.rmb; inp.mmb = !!msg.mmb;
   if (Number.isFinite(msg.aim))     inp.aim     = msg.aim;
