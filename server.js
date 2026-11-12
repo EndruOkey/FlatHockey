@@ -417,11 +417,12 @@ function broadcast(match) {
   const g = (gg) => ({ x: r1(gg.x), y: r1(gg.y), t: r3(gg._tilt), h: gg._holdTimer > 0 ? 1 : 0,
                        st: gg._saveType, sf: r2(gg._saveFlash), sm: r2(gg._saveFlashMax), sc: r2(gg._screen),
                        ps: gg.stance || 'stand', pd: gg._side || 1, pt: r2(Math.min(1, gg._stanceT || 0)),   // postoj gólmana (vizuál)
+                       hit: gg._hit ? [r1(gg._hit.x), r1(gg._hit.y), gg._hit.n, gg._hit.part] : null,   // místo dotyku (záblesk + ruka)
                        col: gg.color || null });
   io.to(match.room).emit('snap', {
     n: match.tick,
     players,
-    puck: { x: r1(match.puck.x), y: r1(match.puck.y), z: r1(match.puck.z), tc: match.puck.trailColor || null, ev: match.puck._ev || 0 },
+    puck: { x: r1(match.puck.x), y: r1(match.puck.y), z: r1(match.puck.z), tc: match.puck.trailColor || null, ev: match.puck._ev || 0, ph: match.puck._postHit ? [r1(match.puck._postHit.x), r1(match.puck._postHit.y), match.puck._postHit.n, match.puck._postHit.k] : null },
     gl: g(match.goalieL), gr: g(match.goalieR),
     score: match.score,
     lock: match.world._goalLock ? 1 : 0,

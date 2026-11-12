@@ -14,11 +14,37 @@ export class Rink {
 
   // PŘEDNÍ VRSTVA BRANKY (2026-11-12): kreslí se AŽ po brankáři a puku → tyčky a břevno jsou nad brankářem, mřížka střechy
   // přes puk uvnitř sítě (pod střechou); puk výš než síť v daném místě se nakreslí ještě jednou navrch.
-  drawFront(ctx, cam, puck) {
-    if (VIS.g !== 5) return;
-    _drawGoal(ctx, cam, RINK.goalLineLeft, -1, '#3a9fff', 'front');
-    _drawGoal(ctx, cam, RINK.goalLineRight, +1, '#ff4455', 'front');
-    if (puck && !puck.ownerId && puck.z > 0.5 && puckAboveGoal(puck)) puck.draw(ctx, cam, null, true);
+  drawFront(ctx, cam, puck, goalies = []) {
+    if (VIS.g === 5) {
+      _drawGoal(ctx, cam, RINK.goalLineLeft, -1, '#3a9fff', 'front');
+      _drawGoal(ctx, cam, RINK.goalLineRight, +1, '#ff4455', 'front');
+      if (puck && !puck.ownerId && puck.z > 0.5 && puckAboveGoal(puck)) puck.draw(ctx, cam, null, true);
+    }
+    this._hitFx(ctx, cam, puck, goalies);
+  }
+
+  // ZÁBLESK ZÁSAHU (2026-11-12): co puk trefil, přesně kde — tyčka/břevno kovově bíle (+ rozsvícená tyčka), výstroj brankáře žlutě.
+  // Zdroj: puck._postHit / goalie._hit (offline ze simulace, online ze snapshotu). Čas jen pro kresbu (performance.now).
+  _hitFx(ctx, cam, puck, goalies) {
+    const now = (typeof performance !== 'undefined' ? performance.now() : 0), L = this._fx || (this._fx = []), seen = this._fxSeen || (this._fxSeen = new Map());
+    const add = (src, h, kind) => { const n = h ? h.n : 0; if (!seen.has(src)) { seen.set(src, n); return; }   // 1. kreslení: jen zapamatuj stav (žádný záblesk ze starého zásahu)
+      if (seen.get(src) === n) return; seen.set(src, n); if (h) L.push({ x: h.x, y: h.y, kind, t0: now }); };
+    if (puck) add(puck, puck._postHit, puck._postHit?.k === 2 ? 'bar' : 'post');
+    for (const g of goalies) if (g) add(g, g._hit, 'goalie');
+    const s = cam.scale, DUR = 420;
+    for (let i = L.length - 1; i >= 0; i--) {
+      const f = L[i], u = (now - f.t0) / DUR; if (u >= 1 || u < 0) { L.splice(i, 1); continue; }
+      const x = cam.ox + f.x * s, y = cam.oy + f.y * s, a = 1 - u, metal = f.kind !== 'goalie';
+      ctx.save();
+      if (f.kind === 'post') { ctx.beginPath(); ctx.arc(x, y, (2.0 + 1.5 * a) * s, 0, Math.PI * 2); ctx.fillStyle = `rgba(255,255,255,${0.9 * a})`; ctx.fill(); }   // rozsvícená tyčka
+      if (f.kind === 'bar') { ctx.beginPath(); ctx.moveTo(x, y - 6 * s); ctx.lineTo(x, y + 6 * s); ctx.strokeStyle = `rgba(255,255,255,${0.9 * a})`; ctx.lineWidth = 2.4 * s; ctx.lineCap = 'round'; ctx.stroke(); }
+      const col = metal ? '235,242,255' : '255,206,40';
+      if (u < 0.35) { ctx.beginPath(); ctx.arc(x, y, 3.2 * s * (1 - u), 0, Math.PI * 2); ctx.fillStyle = `rgba(${col},${0.95 * (1 - u / 0.35)})`; ctx.fill(); }   // záblesk v bodě dotyku
+      ctx.beginPath(); ctx.arc(x, y, (3 + 8 * u) * s, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(20,30,50,${0.5 * a})`; ctx.lineWidth = (3.2 - 1.6 * u) * s; ctx.stroke();   // tmavý lem = čitelné i na ledu
+      ctx.strokeStyle = `rgba(${col},${a})`; ctx.lineWidth = (2.2 - 1.2 * u) * s; ctx.stroke();
+      ctx.restore();
+    }
   }
 
   draw(ctx, cam) {

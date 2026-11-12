@@ -589,6 +589,7 @@ function _resolveOneGoal(puck, lineX, backX, dir, result) {
         puck.vy = (puck.vy - 2 * dot * ny) * e;
         if (puck.vz === 0) puck.vz = Math.abs(dot) * 0.12; // mírný zvednutí po zásahu tyče
         puck._ev |= 2; // boční tyč
+        puck._postHit = { x: lineX, y: py, k: 1, n: (puck._postHit?.n || 0) + 1 };   // která tyčka (záblesk zásahu)
       }
     }
   }
@@ -620,6 +621,7 @@ function _resolveOneGoal(puck, lineX, backX, dir, result) {
         puck.z  = zAt;
         puck.vz = -Math.abs(puck.vz) * 0.4;
         puck._ev |= 8; // břevno
+        puck._postHit = { x: lineX, y: puck.y, k: 2, n: (puck._postHit?.n || 0) + 1 };
       }
     }
   }

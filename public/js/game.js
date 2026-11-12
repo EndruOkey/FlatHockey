@@ -6,7 +6,7 @@ import { Engine, fromScreen, toScreen, viewW, viewH } from './engine.js';
 import { World } from './world.js';
 import { Player } from './entities/Player.js';
 import { Puck } from './entities/Puck.js';
-import { Goalie } from './entities/Goalie.js';
+import { Goalie, goalieSurface } from './entities/Goalie.js';
 import { Passer } from './entities/Passer.js';
 import { Defender } from './entities/Defender.js';
 import { Rink } from './entities/Rink.js';
@@ -369,6 +369,7 @@ export class NetGame {
 
     this.puck._tx = s.puck.x; this.puck._ty = s.puck.y; this.puck.z = s.puck.z;
     this.puck.trailColor = s.puck.tc || null;
+    if (s.puck.ph) this.puck._postHit = { x: s.puck.ph[0], y: s.puck.ph[1], n: s.puck.ph[2], k: s.puck.ph[3] };
     this._applyGoalie(this.goalieL, s.gl);
     this._applyGoalie(this.goalieR, s.gr);
 
@@ -410,6 +411,11 @@ export class NetGame {
       g._saveRecoilX = Math.random() < 0.5 ? -1 : 1;
     }
     g._saveType = d.st; g._saveFlash = d.sf;
+    if (d.hit && d.hit[2] !== g._hit?.n) {   // nový dotyk ze serveru: záblesk + ruka k puku (stejně jako server)
+      g._hit = { x: d.hit[0], y: d.hit[1], n: d.hit[2], part: d.hit[3] };
+      if (!g._a) g._animUpdate(0, { players: [], puck: this.puck });
+      g._snapHand(goalieSurface(g, g._hit.x, g._hit.y)); if (g._a) g._a.rec = 1;
+    }
   }
 
   _interp(dt) {
@@ -511,6 +517,9 @@ export class NetGame {
       if (ps) { this.puck.x = ps.x; this.puck.y = ps.y; }
       else { this.puck.x += (this.puck._tx - this.puck.x) * k; this.puck.y += (this.puck._ty - this.puck.y) * k; }
     }
+    // rychlost puku z interpolace (online ji snapshot neposílá): šmouha tvrdé rány + reakce brankáře na výstřel
+    { const P = this.puck, idt = 1 / Math.max(dt, 1e-3); if (P._lpx != null) { P.vx = (P.x - P._lpx) * idt; P.vy = (P.y - P._lpy) * idt; } P._lpx = P.x; P._lpy = P.y; }
+    const _animWorld = { players: [...this.players.values()].map(e => e.ent), puck: this.puck };
     for (const [g, key] of [[this.goalieL, 'gl'], [this.goalieR, 'gr']]) {
       const prevGY = g.y;
       const gs = samp(f => f[key]);
@@ -524,6 +533,7 @@ export class NetGame {
       if (g._saveFlash  > 0) g._saveFlash  = Math.max(0, g._saveFlash  - dt);
       if (g._saveRecoil > 0) g._saveRecoil = Math.max(0, g._saveRecoil - dt * 4);
       g._stanceT = (g._stanceT || 0) + dt;   // průběh pádu do postoje (vizuál)
+      g._animUpdate(dt, _animWorld);   // animace rukou/kroků i online (dřív jen v lokální simulaci → online brankář „kámen")
     }
   }
 
@@ -611,7 +621,7 @@ export class NetGame {
     // Golmani navrchu — stejné pořadí jako solo (world: rink→puk→hráč→golman)
     this.goalieL.draw(ctx, cam);
     this.goalieR.draw(ctx, cam);
-    this.rink.drawFront?.(ctx, cam, this.puck);   // tyčky, břevno a střecha sítě nad brankářem; vysoký puk nad brankou
+    this.rink.drawFront?.(ctx, cam, this.puck, [this.goalieL, this.goalieR]);   // tyčky, břevno a střecha sítě nad brankářem; vysoký puk nad brankou
   }
 
   notify(text) { this._notice = { text, t: 3 }; }

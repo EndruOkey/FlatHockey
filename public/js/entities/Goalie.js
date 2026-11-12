@@ -464,14 +464,23 @@ export class Goalie {
     if (GANIM) this._animUpdate(dt, world, puck);
   }
 
+  // Ruka k místu dotyku (sf = goalieSurface v místě dotyku). Volá server při zákroku i klient při novém zásahu ze snapshotu.
+  _snapHand(sf) {
+    if (!this._a) return;
+    const A = this._a, ly = sf.ly - sf.G.bodyY;
+    if (sf.part === 'glove' || (sf.part === 'body' && ly < 0)) A.gy = clamp(ly - sf.G.gloveY, -6, 6);
+    else if (sf.part === 'blocker' || sf.part === 'body') A.by = clamp(ly - sf.G.blockY, -6, 6);
+    A.react = null;
+  }
+
   // ── ANIMACE (2026-11-12, jen vizuál): sledování → příprava (nápřah) → reakce rukou na výstřel → zákrok → návrat.
   // Čte stav simulace, zapisuje jen _a* (simulace je nečte), bez rng → góly i zákroky beze změny (goalie_anim_metrics R8).
   _animUpdate(dt, world, puck) {
     const A = this._a || (this._a = { hx: 0, gy: 0, by: 0, crouch: 0, rec: 0, kick: 0, stepPh: 0, lastY: this.y, react: null, prevVIn: 0 });
     const k = (w) => Math.min(1, w * dt), cap = 150 * dt;
     const spring = (v, tgt, w) => v + clamp((tgt - v) * k(w), -cap, cap);
-    const free = !puck.ownerId && !world.players.some(p => p.hasPuck);
-    const vIn = puck.vx * -this.inX, dyP = puck.y - this.y;
+    const free = !puck.ownerId && !(world.players || []).some(p => p.hasPuck);
+    const vIn = (puck.vx || 0) * -this.inX, dyP = puck.y - this.y;
     // výstřel: puk náhle letí k brance (bez nosiče) → předpověď místa a výšky na brankové čáře
     if (free && vIn > 160 && A.prevVIn < 80) {
       const t = Math.max(0, (this.netX - puck.x) / (puck.vx || 1e-6));
@@ -661,6 +670,13 @@ export class Goalie {
 
     // ── Zákrok (na save teprve doraz puk na bod vstupu) ──
     if (hitX !== null) { puck.x = hitX; puck.y = hitY; }
+    // DOTYK NA POVRCHU: vrať puk po jeho dráze, dokud se jen nedotýká nakreslené výstroje (dřív zajel ~4 px dovnitř a pak
+    // vyskočil o 15 px před brankáře → „odraz od ničeho / mezera"). Max 10 px zpět, krok 0,5 px; deterministické.
+    { const sp = Math.hypot(puck.vx, puck.vy) || 1, ux = puck.vx / sp, uy = puck.vy / sp;
+      for (let k = 0; k < 20 && goalieSurface(this, puck.x, puck.y).d < PUCK.radius; k++) { puck.x -= ux * 0.5; puck.y -= uy * 0.5; } }
+    const _sf = goalieSurface(this, puck.x, puck.y);
+    this._hit = { x: puck.x, y: puck.y, z: puck.z, part: _sf.part, n: (this._hit?.n || 0) + 1 };   // místo dotyku (měření + záblesk zásahu)
+    this._snapHand(_sf);   // animace: zasahující ruka je V TU CHVÍLI u puku (dřív dojela až 0,12 s po ráně, tedy po odrazu)
 
     // Lapačka — vysoká střela do horní (lapačkové) půlky → chycení
     if (high && relY <= 0) {
@@ -680,8 +696,8 @@ export class Goalie {
       return true;
     }
     // Zákrok = fyzikální odraz od padu + rozehrávka na spoluhráče
-    puck.x  = this.x + this.inX * RB_X;            // odraz od místa zásahu (dřív +15 px a y × 0,35 → puk přeskočil o ~7 px)
-    puck.y  = this.y + relY * RB_Y;
+    // odraz začíná v místě dotyku na povrchu výstroje (puk tam už je); jen pojistka, ať nezůstane za čárou brankáře
+    if (this.inX * (puck.x - this.x) < 2) puck.x = this.x + this.inX * 2;
     puck.z = 0; puck.vz = 0;
     // 2026-11-11: dřív puk po zákroku letěl rovnou přesnou přihrávkou na spoluhráče (ťuk do betonu = okamžitá rozehrávka).
     // Teď fyzikální odraz → doraz je šance; gólman rozehrává jen z držení (_release). FH_GSTANCE=0 = staré.
@@ -983,6 +999,26 @@ export function goalieGeom(stance, side = 1, spread = 0, drop = 1) {
   return stand;
 }
 // Silueta (pro audit): krajní body padů v ose Y vůči středu gólmana
+// ── POVRCH NAKRESLENÉHO BRANKÁŘE (2026-11-12, scripts/contact_gap.mjs): znaménková vzdálenost bodu (svět) od výstroje
+// stejně jako skinGoalie (tělo, lapačka, vyrážečka, betony). anim = s animačními posuny rukou (jen měření/kresba), jinak základní póza.
+const _sdEll = (px, py, cx, cy, rx, ry) => { const nx = (px - cx) / rx, ny = (py - cy) / ry; return (Math.hypot(nx, ny) - 1) * Math.min(rx, ry); };
+const _sdBox = (px, py, cx, cy, hw, hh, ang) => { const c = Math.cos(-ang), s = Math.sin(-ang), x = (px - cx) * c - (py - cy) * s, y = (px - cx) * s + (py - cy) * c;
+  const dx = Math.abs(x) - hw, dy = Math.abs(y) - hh; return Math.hypot(Math.max(dx, 0), Math.max(dy, 0)) + Math.min(Math.max(dx, dy), 0); };
+export function goalieSurface(g, wx, wy, anim = false) {
+  const spread = clamp(Math.abs(g._vy || 0) / 110, 0, 1), drop = g.stance === 'stand' ? 1 : Math.min(1, (g._stanceT || 0) / DROP_T);
+  const G = goalieGeom(g.stance, g._side, spread, drop), A = anim ? g._a : null;
+  if (A) { G.handX += A.hx; G.gloveY += A.gy; G.blockY += A.by; G.bodyScale *= 1 - 0.05 * A.crouch; }
+  const lx = -g.inX * (wx - g.x), ly = wy - g.y;
+  const t = g._tilt || 0, c = Math.cos(-t), s = Math.sin(-t), bx = (lx - G.bodyX) * c - (ly - G.bodyY) * s, by = (lx - G.bodyX) * s + (ly - G.bodyY) * c;
+  const rb = 8 * G.bodyScale * 1.04;
+  let part = 'body', d = _sdEll(bx, by, 0, 0, rb * 0.88, rb * 1.12), q;
+  if ((q = _sdEll(bx, by, G.handX, G.gloveY, 3.85, 4.18)) < d) { d = q; part = 'glove'; }
+  if ((q = _sdBox(bx, by, G.handX - 0.22, G.blockY, 1.54, 3.85, 0)) < d) { d = q; part = 'blocker'; }
+  for (const pd of G.pads) { const a = pd.angle * pd.dir, cy0 = pd.dir > 0 ? pd.ph / 2 : -pd.ph / 2;
+    if ((q = _sdBox(lx, ly, pd.kx - Math.sin(a) * cy0, pd.ky + Math.cos(a) * cy0, pd.pw / 2, pd.ph / 2, a)) < d) { d = q; part = 'pads'; } }
+  return { d, part, lx, ly, G };
+}
+
 export function goalieSilhouette(g) {
   let lo = 0, hi = 0;
   for (const p of g.pads) {
