@@ -2,7 +2,7 @@
 import { VIS, setVis } from './vis.js';
 const ROWS = [
   { key: 'ctrl', label: 'Ovládání (Q)', opts: [['A', 'WASD'], ['R1', 'Zaoblené WASD'], ['B2', 'Za kurzorem']] },
-  { key: 'g', label: 'Branka', opts: [[0, '3D náklon'], [1, 'Půdorys'], [2, 'Nízký náklon']] },
+  { key: 'g', label: 'Branka', opts: [[3, 'Shora s hloubkou'], [4, 'Shora, větší hloubka'], [1, 'Půdorys'], [0, 'Šikmý 3D'], [2, 'Nízký náklon']] },
   { key: 'h', label: 'Hlava', opts: [[0, 'V barvě dresu'], [1, 'Oddělená helma'], [2, 'Světlá helma']] },
   { key: 's', label: 'Hokejka', opts: [[0, 'Dnešní'], [1, 'Štíhlá'], [2, 'Lopatka']] },
   { key: 'k', label: 'Bruslení', opts: [[0, 'Dnešní'], [1, 'Krok do stran'], [2, 'Velký odraz']] },
