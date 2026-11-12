@@ -2,7 +2,7 @@ import { RINK, PLAYER, PUCK, TEMPO } from './constants.js';
 import { lerpAngle, clamp } from './utils.js';
 import { t } from './i18n.js';
 import { Input } from './input.js';
-import { Engine, fromScreen, toScreen } from './engine.js';
+import { Engine, fromScreen, toScreen, viewW, viewH } from './engine.js';
 import { World } from './world.js';
 import { Player } from './entities/Player.js';
 import { Puck } from './entities/Puck.js';
@@ -391,6 +391,7 @@ export class NetGame {
     g._tx = d.x; g._ty = d.y; g._ttilt = d.t;
     g._holdTimer = d.h ? 1 : 0; g._saveFlashMax = d.sm || 0.3; g._screen = d.sc;
     g.color = d.col || null;
+    if (d.ps) { if (d.ps !== g.stance) g._stanceT = d.pt || 0; g.stance = d.ps; g._side = d.pd || 1; }   // postoj ze serveru (pád se dokreslí lokálně)
     // Zvuk zákroku + vizuální recoil: nový saveFlash vyšší než starý = čerstvý zákrok
     if (d.sf > prevFlash + 0.05) {
       if      (d.st === 'glove')   SFX.glove();
@@ -513,6 +514,7 @@ export class NetGame {
       g._vy = (g.y - prevGY) / Math.max(dt, 1e-3);
       if (g._saveFlash  > 0) g._saveFlash  = Math.max(0, g._saveFlash  - dt);
       if (g._saveRecoil > 0) g._saveRecoil = Math.max(0, g._saveRecoil - dt * 4);
+      g._stanceT = (g._stanceT || 0) + dt;   // průběh pádu do postoje (vizuál)
     }
   }
 
@@ -579,7 +581,7 @@ export class NetGame {
 
   _draw(ctx, cam) {
     ctx.fillStyle = '#07090f';
-    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.fillRect(0, 0, viewW(ctx.canvas), viewH(ctx.canvas));
     this.rink.draw(ctx, cam);
     this._drawGlassFx(ctx, cam);
     // Pevné objekty pro clip hokejky (hokejka neprojde hráči/gólmany)
@@ -630,7 +632,7 @@ export class NetGame {
         ctx.restore();
       }
     }
-    const W = ctx.canvas.width, H = ctx.canvas.height;
+    const W = viewW(ctx.canvas), H = viewH(ctx.canvas);
     const tm = this.settings.teams;
     const cx = W / 2;
     // scoreboard
@@ -886,11 +888,11 @@ export class SandboxGame {
     this._reset();
     // Camera: leave room for the always-visible training dock at the bottom
     this.engine.cameraOverride = (canvas) => {
-      const DH = this._dockLayout(canvas.width, canvas.height).DH;
+      const DH = this._dockLayout(viewW(canvas), viewH(canvas)).DH;
       const pad = 36;
-      const availH = canvas.height - DH - pad;
-      const scale = Math.min((canvas.width - pad*2) / RINK.w, availH / RINK.h);
-      return { scale, ox: (canvas.width - RINK.w * scale) / 2, oy: pad + (availH - RINK.h * scale) / 2 };
+      const availH = viewH(canvas) - DH - pad;
+      const scale = Math.min((viewW(canvas) - pad*2) / RINK.w, availH / RINK.h);
+      return { scale, ox: (viewW(canvas) - RINK.w * scale) / 2, oy: pad + (availH - RINK.h * scale) / 2 };
     };
     this.engine.onTick      = (dt, cam) => this._tick(dt, cam);
     this.engine.onAfterTick = ()        => {
@@ -1597,7 +1599,7 @@ export class SandboxGame {
   }
 
   _drawOverlay(ctx) {
-    const W = ctx.canvas.width, H = ctx.canvas.height;
+    const W = viewW(ctx.canvas), H = viewH(ctx.canvas);
     const lang = document.documentElement.lang === 'en' ? 'en' : 'cs';
     ctx.save();
 
@@ -2334,7 +2336,7 @@ export class SandboxGame {
   }
 
   _tickMenuInput(cam) {
-    const W = this.canvas.width, H = this.canvas.height;
+    const W = viewW(this.canvas), H = viewH(this.canvas);
     const mx = this.input.mouseX, my = this.input.mouseY;
     const { DH, OVH, PAD, GAP, SEP, BY, BH,
             DR_BW, DR_X0, DIFF_BW, DIFF_X0,
@@ -3882,7 +3884,7 @@ export class TutorialGame extends SandboxGame {
 
   // Poctivé hlášky (přeskočeno / tip) + nápověda a průběh přeskočení (drž Esc)
   _drawTutExtras(ctx) {
-    const W = ctx.canvas.width, H = ctx.canvas.height;
+    const W = viewW(ctx.canvas), H = viewH(ctx.canvas);
     const lang = document.documentElement.lang === 'en' ? 'en' : 'cs';
     ctx.save();
     ctx.textAlign = 'center';
@@ -3962,7 +3964,7 @@ export class TutorialGame extends SandboxGame {
   }
 
   _drawTutPanel(ctx, step, cam) {
-    const W = ctx.canvas.width, H = ctx.canvas.height;
+    const W = viewW(ctx.canvas), H = viewH(ctx.canvas);
     const lang = document.documentElement.lang === 'en' ? 'en' : 'cs';
     const done = this._tDone;
     const col  = done ? '#22cc88' : (_TUT_COLOR[step.id] ?? '#3a9fff');
@@ -4126,7 +4128,7 @@ export class TutorialGame extends SandboxGame {
   }
 
   _drawTutFinished(ctx) {
-    const W = ctx.canvas.width, H = ctx.canvas.height;
+    const W = viewW(ctx.canvas), H = viewH(ctx.canvas);
     const a = Math.min(1, this._finT * 1.6);
     const lang = document.documentElement.lang === 'en' ? 'en' : 'cs';
     ctx.save();
@@ -4206,7 +4208,7 @@ function _countLines(ctx, text, maxW) {
 }
 
 function _renderHUD(ctx, score) {
-  const width = ctx.canvas.width;
+  const width = viewW(ctx.canvas);
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
   ctx.fillRect(width / 2 - 90, 12, 180, 42);
   ctx.font = 'bold 26px monospace';
@@ -4220,7 +4222,7 @@ function _renderHUD(ctx, score) {
 }
 
 function _renderWhistleBanner(ctx, banner) {
-  const W = ctx.canvas.width, a = Math.min(1, banner.t);
+  const W = viewW(ctx.canvas), a = Math.min(1, banner.t);
   const cx = W / 2;
   ctx.save();
   ctx.globalAlpha = a;
@@ -4233,7 +4235,7 @@ function _renderWhistleBanner(ctx, banner) {
 }
 
 function _renderJumbotron(ctx, flash, goalTeam, score) {
-  const W = ctx.canvas.width, H = ctx.canvas.height;
+  const W = viewW(ctx.canvas), H = viewH(ctx.canvas);
   const cx = W / 2, cy = H / 2;
   // Fáze animace: 4→3 = zoom-in, 3→1 = stable, 1→0 = fade
   const a = flash < 1 ? flash : 1;

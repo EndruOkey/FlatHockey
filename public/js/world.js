@@ -65,7 +65,7 @@ export class World {
 
   draw(ctx, cam) {
     ctx.fillStyle = '#07090f';
-    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.fillRect(0, 0, ctx.canvas.cssW || ctx.canvas.width, ctx.canvas.cssH || ctx.canvas.height);
     for (const e of this.entities) e.draw(ctx, cam);
   }
 

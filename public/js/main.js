@@ -987,7 +987,13 @@ document.querySelectorAll('.mn-tab').forEach(tab => {
   });
 });
 
-function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+// HiDPI: backing store × min(dpr, 2), kontext se škáluje v Engine._loop; hra počítá v CSS px (cssW/cssH).
+function resizeCanvas() {
+  const w = window.innerWidth, h = window.innerHeight, dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.cssW = w; canvas.cssH = h; canvas.dpr = dpr;
+  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+  canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+}
 resizeCanvas();
 window.addEventListener('resize', resizeCanvas);
 

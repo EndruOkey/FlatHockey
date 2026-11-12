@@ -1,15 +1,20 @@
 import { RINK } from './constants.js';
 
+// HiDPI: backing store = CSS velikost × dpr (main.js resizeCanvas). Herní/UI souřadnice jsou v CSS px →
+// rozměry plátna čti přes viewW/viewH, ne canvas.width/height (to jsou fyzické pixely).
+export const viewW = c => c.cssW || c.width;
+export const viewH = c => c.cssH || c.height;
+
 export function computeCamera(canvas) {
   const pad = 48;
   const scale = Math.min(
-    (canvas.width  - pad * 2) / RINK.w,
-    (canvas.height - pad * 2) / RINK.h
+    (viewW(canvas) - pad * 2) / RINK.w,
+    (viewH(canvas) - pad * 2) / RINK.h
   );
   return {
     scale,
-    ox: (canvas.width  - RINK.w * scale) / 2,
-    oy: (canvas.height - RINK.h * scale) / 2,
+    ox: (viewW(canvas) - RINK.w * scale) / 2,
+    oy: (viewH(canvas) - RINK.h * scale) / 2,
   };
 }
 
@@ -47,6 +52,8 @@ export class Engine {
 
     const cam = this.cameraOverride ? this.cameraOverride(this.canvas) : computeCamera(this.canvas);
     const ctx = this.canvas.getContext('2d');
+    const dpr = this.canvas.dpr || 1;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);   // kreslení v CSS px, ostré na HiDPI
 
     const sdt = dt * (this.tempo ?? 1);   // lokální simulace (trénink/tutoriál) běží v herním tempu
     this.onTick?.(sdt, cam);
