@@ -8,11 +8,13 @@ export const DEFAULT_VIS = { g: 5, s: 3, k: 0, h: 1, p: 1 };   // 2026-11-12 Ond
 export const HGT = { k: 0.25, lx: 0.45, ly: 0.6 };                // k = zvětšení na břevnu; lx, ly = posun stínu na 1 px výšky
 export const hScale = (z, bar) => 1 + HGT.k * Math.max(0, z) / bar;
 export const VIS = { ...DEFAULT_VIS };
+const VIS_VER = 2;   // zvyš při změně DEFAULT_VIS
 export const DEV = !!globalThis.FH_DEV;
 if (DEV) try {
-  const saved = JSON.parse(localStorage.getItem('fh_vis') || '{}');
+  // VIS_VER: při změně výchozích hodnot se uložené volby z playgroundu zahodí (jinak by tam zůstala např. stará 3D branka G4)
+  let saved = JSON.parse(localStorage.getItem('fh_vis') || '{}'); if (saved._v !== VIS_VER) { saved = {}; localStorage.removeItem('fh_vis'); }
   for (const k of Object.keys(DEFAULT_VIS)) if (Number.isInteger(saved[k])) VIS[k] = saved[k];
   const q = (globalThis.location?.search || '').match(/[?&]vis=([^&]*)/);
   if (q) for (const t of decodeURIComponent(q[1]).split(',')) { const m = t.match(/^([gskhp])(\d)$/); if (m) VIS[m[1]] = +m[2]; }
 } catch {}
-export function setVis(k, v) { VIS[k] = v; try { localStorage.setItem('fh_vis', JSON.stringify(VIS)); } catch {} }
+export function setVis(k, v) { VIS[k] = v; try { localStorage.setItem('fh_vis', JSON.stringify({ ...VIS, _v: VIS_VER })); } catch {} }
