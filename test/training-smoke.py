@@ -222,6 +222,11 @@ def contact_sheet():
     print('contact.png', len(names), 'tiles')
 
 
+def open_train(page):
+    # Trénink je podmenu hlavního menu (offline režimy)
+    if not page.is_visible('#go-solo') and page.is_visible('#go-train'): page.click('#go-train'); page.wait_for_timeout(300)
+
+
 def main():
     with sync_playwright() as p:
         b = p.chromium.launch()
@@ -235,7 +240,9 @@ def main():
             shot(page, '00_splash')
             # guest -> tutorial (first visit => guest button starts tutorial)
             # splash existuje jen někdy (první návštěva); jinak hlavní menu → Tutoriál
-            page.click('#splash-tutorial-btn' if page.is_visible('#splash-tutorial-btn') else '#go-tutorial'); page.wait_for_timeout(800)
+            if page.is_visible('#splash-tutorial-btn'): page.click('#splash-tutorial-btn')
+            else: open_train(page); page.click('#go-tutorial')
+            page.wait_for_timeout(800)
             run_tutorial(page, ctx)
             page.wait_for_timeout(1500)
             # finish screen -> Enter -> profile
@@ -244,12 +251,14 @@ def main():
                 problems.append('tutorial_done flag not set')
             # profile -> main -> solo
             page.evaluate("() => { const n = document.querySelector('#name-input, #name'); }")
+            open_train(page)
             for sel in ('#go-solo',):
                 if not page.is_visible(sel):
                     # profile view: try to continue via any visible primary button, else reload to splash/main
                     page.reload(wait_until='load'); page.wait_for_timeout(1200)
                     page.goto(BASE + '/?fhtest'); page.wait_for_timeout(1200)
                     if page.is_visible('#splash-guest-btn'): page.click('#splash-guest-btn'); page.wait_for_timeout(800)
+                    open_train(page)
                 if not page.is_visible(sel):
                     shot(page, '02_nomain'); problems.append('cannot reach main menu / #go-solo not visible'); break
             if page.is_visible('#go-solo'):

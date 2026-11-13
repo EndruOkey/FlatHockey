@@ -1230,7 +1230,7 @@ function exitSpectate() {
 $('spec-leave').onclick = exitSpectate;
 // ── Mobil: hrát nejde (myš + klávesnice), ale statistiky, Šatna, Obchod a sledování ano ──
 if (IS_MOBILE) {
-  for (const id of ['go-play', 'vm-create-btn', 'go-solo', 'go-tutorial']) {
+  for (const id of ['go-play', 'vm-create-btn', 'go-solo', 'go-tutorial', 'go-offline', 'go-drill-1', 'go-drill-2', 'go-packs']) {
     const b = $(id); b.classList.add('pc-only'); b.setAttribute('aria-disabled', 'true');
     // capture: proběhne před jakýmkoli onclick (i později přiřazeným) a zastaví ho
     b.addEventListener('click', (e) => { e.preventDefault(); e.stopImmediatePropagation(); setStatus(t('pc_only'), '#FFB020'); }, true);
@@ -1247,8 +1247,14 @@ function _updateNavPlayer(rp = 1000, pos = null, cred = 0) {
 }
 $('nav-player').onclick = () => { showView('profile'); drawPreview(); _loadStats(); };
 // Hlavní menu UI v3: vybraná položka (myš / fokus / šipky) mění kartu s popisem režimu
-const _m3Items = [...document.querySelectorAll('.m3-item')];
+const _m3All = [...document.querySelectorAll('.m3-item')];
+let _m3Items = _m3All.filter(b => !b.dataset.sub);   // viditelné položky (hlavní menu, nebo podmenu Trénink)
 let _m3Sel = 0;
+function m3Sub(on) {
+  $('m3-nav').classList.toggle('sub', on);
+  _m3Items = _m3All.filter(b => !!b.dataset.sub === on);
+  m3Select(on ? 0 : _m3Items.indexOf($('go-train')), true);
+}
 function m3Select(i, focus = false) {
   _m3Sel = (i + _m3Items.length) % _m3Items.length;
   _m3Items.forEach((b, k) => { b.classList.toggle('on', k === _m3Sel); b.setAttribute('aria-current', k === _m3Sel ? 'true' : 'false'); });
@@ -1257,12 +1263,13 @@ function m3Select(i, focus = false) {
   $('m3-chips').innerHTML = t(d.chips).split('|').map(c => `<span class="chip3">${esc(c)}</span>`).join('');
   if (focus) it.focus();
 }
-_m3Items.forEach((b, i) => { b.addEventListener('mouseenter', () => m3Select(i)); b.addEventListener('focus', () => m3Select(i)); });
+_m3All.forEach(b => { const sel = () => { const i = _m3Items.indexOf(b); if (i >= 0) m3Select(i); }; b.addEventListener('mouseenter', sel); b.addEventListener('focus', sel); });
 window.addEventListener('keydown', e => {
   if (inGame || $('v-main').style.display === 'none' || e.target.matches('input,select,textarea')) return;
   if (e.key === 'ArrowDown') { e.preventDefault(); m3Select(_m3Sel + 1, true); }
   else if (e.key === 'ArrowUp') { e.preventDefault(); m3Select(_m3Sel - 1, true); }
   else if (e.key === 'Enter' && document.activeElement === document.body) { e.preventDefault(); _m3Items[_m3Sel].click(); }
+  else if ((e.key === 'Escape' || e.key === 'Backspace') && $('m3-nav').classList.contains('sub')) { e.preventDefault(); m3Sub(false); }
 });
 m3Select(IS_MOBILE ? 1 : 0);
 async function _loadStats() {
@@ -1406,13 +1413,22 @@ document.querySelectorAll('.sv-lb-tab').forEach(btn => {
 });
 $('go-online').onclick      = () => { if (!commitProfile()) return requireProfile(); showView('browse'); net.listLobbies(); };
 $('vm-create-btn').onclick  = () => { if (!commitProfile()) return requireProfile(); showView('create'); };
-$('go-solo').onclick     = () => {
+// Trénink: drill 0 volný led, 1 nájezd, 2 rána z první; packs = rovnou otevřít knihovnu vlastních cvičení
+function startTraining(drill = 0, packs = false) {
   if (!commitProfile()) return requireProfile();
   const g = new SandboxGame(canvas), pr = profile();
   Object.assign(g.local, { name: pr.name, handed: pr.handed, num: pr.number, helmet: pr.helmet, jersey: pr.jersey, shorts: pr.shorts, stripe: pr.stripe, laces: pr.laces, gloves: pr.gloves, tape: pr.tape, trail: pr.trail, stick: pr.stick, tapeStyle: pr.tapeStyle, helmetType: pr.helmetType, visor: pr.visor });
   g.local.color = pr.jersey;
   startGame(g);
-};
+  if (drill) g._setDrill(drill);
+  if (packs) { g._catalogList = g._loadCatalog(); g._catalogScroll = 0; g._catalogOpen = true; }
+}
+$('go-solo').onclick    = () => startTraining(0);
+$('go-drill-1').onclick = () => startTraining(1);
+$('go-drill-2').onclick = () => startTraining(2);
+$('go-packs').onclick   = () => startTraining(0, true);
+$('go-train').onclick   = () => m3Sub(true);
+$('m3-back').onclick    = () => m3Sub(false);
 $('go-tutorial').onclick = () => _startTutorial();
 // Boti se nastavují v rámci vytvořené hry (formulář „Boti (hráčů v týmu)"), ne samostatným tlačítkem.
 // _botPending zůstává kvůli případnému „vytvoř + hned start" toku; dnes ho nic nenastavuje na true.
