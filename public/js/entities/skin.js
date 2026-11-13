@@ -75,6 +75,7 @@ export function lodSmall(c) { const t = c.getTransform(); return Math.hypot(t.a,
 
 // ── BRUSLE (lokální rámec brusle: +x = špička), s obrysem
 export function skinSkate(c, K) {
+  if (globalThis.__fhSkateDbg) { c.beginPath(); c.roundRect(-R * 0.62, -R * 0.24, R * 1.14, R * 0.48, R * 0.22); c.fillStyle = '#ff00ff'; c.fill(); return; }   // měření viditelnosti bruslí (scripts/skate_visibility.py)
   c.beginPath(); c.roundRect(-R * 0.62, -R * 0.24, R * 1.14, R * 0.48, R * 0.22); c.strokeStyle = SKIN_OUT; c.lineWidth = 1.6; c.stroke();
   c.beginPath(); c.moveTo(-R * 0.66, 0); c.lineTo(R * 0.72, 0); c.strokeStyle = '#dfe5ee'; c.lineWidth = 1.05; c.lineCap = 'round'; c.stroke();
   c.beginPath(); c.roundRect(-R * 0.6, -R * 0.22, R * 1.1, R * 0.44, R * 0.2); c.fillStyle = '#1c1f26'; c.fill();
