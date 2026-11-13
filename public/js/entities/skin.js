@@ -190,6 +190,20 @@ export function skinBody(c, B, K) {
 // ── GÓLMAN (lokál gólmana: −X = k puku, +Y = dolů; po ctx.scale(−inX·s, s)). G = goalieGeom(...) ze simulace (beze změny).
 // o = { stance, tilt, recoil, holding, padFlash, blockFlash, inX }
 export function skinGoalie(c, G, K, o) {
+  // VÝPAD: paže s vyrážečkou se natáhne k puku (rameno → ruka max 12 jednotek), tělo se o 1,5 jednotky nakloní vpřed.
+  // Hokejka se kreslí od ruky, takže úchop jde s paží (2026-11-13, Ondřej: „chybí pohyb rukou").
+  if (o.poke && o.poke.k > 0 && !(o.stance === 'cover' || o.holding)) {
+    // v2: trup se natočí (rameno vyrážečky jde vpřed, 0,35 rad), paže se natáhne až ve výpadu (k > 0,3) a jen na 9,
+    // vyrážečka se natočí podle paže — dřív gumová paže 12 a svislá vyrážečka působily nepřirozeně.
+    const k = o.poke.k, ka = Math.max(0, (k - 0.3) / 0.7), rb0 = 8 * G.bodyScale * 1.04, shX = -rb0 * 0.1, shY = rb0 * 0.75, rec = (o.recoil || 0) - 1.5 * k;
+    const tilt = (o.tilt || 0) + 0.35 * k, tl = -tilt, ct = Math.cos(tl), st0 = Math.sin(tl), px = o.poke.x - G.bodyX - rec, py = o.poke.y - G.bodyY;
+    const tx = px * ct - py * st0, ty = px * st0 + py * ct;   // puk v rámci (natočeného) těla
+    let ex = G.handX + (tx - G.handX) * ka, ey = G.blockY + (ty - G.blockY) * ka * 0.5; const al = Math.hypot(ex - shX, ey - shY), AMAX = 9;
+    if (al > AMAX) { ex = shX + (ex - shX) * AMAX / al; ey = shY + (ey - shY) * AMAX / al; }
+    ey = Math.max(shY * 0.4, ey);
+    const r0 = Math.atan2(G.blockY - shY, G.handX - shX), r1 = Math.atan2(ey - shY, ex - shX);
+    G = { ...G, blockX: ex, blockY: ey, blockRot: 0.5 * Math.atan2(Math.sin(r1 - r0), Math.cos(r1 - r0)) }; o = { ...o, recoil: rec, tilt };
+  }
   const st = o.stance, r = 8, rb = r * G.bodyScale * 1.04, lx = 0.7 * (o.inX || 1), ly = -0.7, cover = st === 'cover' || o.holding;
   const lod = lodSmall(c);   // malé měřítko (< 2 px na jednotku): bez drobných linek výstroje — v 1× by splynuly ve šum
   // hokejka (vizuální; sim ji nemá): čepel na ledě před pady, paddle, dřík k vyrážečce
@@ -197,20 +211,35 @@ export function skinGoalie(c, G, K, o) {
   const bmS = new DOMMatrix().translate(G.bodyX + (o.recoil || 0), G.bodyY).rotate((o.tilt || 0) * 180 / Math.PI);
   let stk = null;
   if (cover) { const h = bmS.transformPoint({ x: G.handX + 2, y: G.blockY + 1 }); stk = { hx: h.x, hy: h.y, b0: { x: -1, y: 18 }, b1: { x: -6.5, y: 19.5 } }; }
-  else { const h = bmS.transformPoint({ x: G.handX, y: G.blockY }), hx = h.x, hy = h.y, bx = Math.min(hx - 5, -9); const ox = o.stickX || 0, oy = o.stickY || 0; stk = { hx, hy, b0: { x: bx + ox, y: hy * 0.55 + oy }, b1: { x: bx - 0.6 + ox, y: hy * 0.55 - 7.5 * Math.sign(hy || 1) + oy } }; }   // o.stickX/Y = animace čepele (Goalie._animUpdate)
+  else { const h = bmS.transformPoint({ x: G.blockX ?? G.handX, y: G.blockY }), hx = h.x, hy = h.y, bx = Math.min(hx - 5, -9); const ox = o.stickX || 0, oy = o.stickY || 0; stk = { hx, hy, b0: { x: bx + ox, y: hy * 0.55 + oy }, b1: { x: bx - 0.6 + ox, y: hy * 0.55 - 7.5 * Math.sign(hy || 1) + oy } }; }   // o.stickX/Y = animace čepele (Goalie._animUpdate)
+  // výpad hokejkou (o.poke = { k 0–1, x, y } v lokálu, 2026-11-13 v2): hokejka je PEVNÝ kus — celá se otočí k puku
+  // a rukou projede dopředu (čepel drží úhel k dříku, dřík se nad rukou zkrátí). Dřív posun jen čepele = „golfová hůl".
+  stk.knob = 5;   // přesah dříku nad rukou (brankář drží hůl nad paddlem, ne za konec)
+  if (o.poke && !cover) { const k = o.poke.k, H = { x: stk.hx, y: stk.hy };
+    const m0 = { x: (stk.b0.x + stk.b1.x) / 2, y: (stk.b0.y + stk.b1.y) / 2 }, L0 = Math.hypot(m0.x - H.x, m0.y - H.y);
+    const LT = Math.min(Math.hypot(o.poke.x - H.x, o.poke.y - H.y), L0 + 18);
+    let da = Math.atan2(o.poke.y - H.y, o.poke.x - H.x) - Math.atan2(m0.y - H.y, m0.x - H.x); da = Math.atan2(Math.sin(da), Math.cos(da));
+    const a = da * k, L = L0 + (LT - L0) * k, ca = Math.cos(a), sa = Math.sin(a);
+    const rot = p => ({ x: H.x + ((p.x - H.x) * ca - (p.y - H.y) * sa) * (L / L0), y: H.y + ((p.x - H.x) * sa + (p.y - H.y) * ca) * (L / L0) });
+    // čepel: hůl při výpadu leží naplocho → shora skoro v prodloužení dříku (odklon 0,3 rad místo ~90° v klidu)
+    const m = rot(m0), sd = Math.atan2(m.y - H.y, m.x - H.x), bl = Math.hypot(stk.b1.x - stk.b0.x, stk.b1.y - stk.b0.y);
+    let r0 = Math.atan2(stk.b1.y - stk.b0.y, stk.b1.x - stk.b0.x) - Math.atan2(m0.y - H.y, m0.x - H.x); r0 = Math.atan2(Math.sin(r0), Math.cos(r0));
+    const rr = r0 + (Math.sign(r0) * 0.3 - r0) * k, bv = { x: Math.cos(sd + rr) * bl, y: Math.sin(sd + rr) * bl };
+    stk.b0 = { x: m.x - bv.x / 2, y: m.y - bv.y / 2 }; stk.b1 = { x: m.x + bv.x / 2, y: m.y + bv.y / 2 };
+    stk.knob = Math.max(1, 5 - (L - L0)); }
   // pady (rámec padu jako Goalie.js _gPad)
   const padPaths = G.pads.map(pd => { const P = new Path2D(), m = new DOMMatrix().translate(pd.kx, pd.ky).rotate(pd.angle * pd.dir * 180 / Math.PI), q = new Path2D(); q.roundRect(-pd.pw / 2, pd.dir > 0 ? 0 : -pd.ph, pd.pw, pd.ph, 2.4); P.addPath(q, m); return P; });
   // tělo v rámci těla (translate bodyX/Y, rotate tilt) — sestavíme cesty v lokálu gólmana přes matici
   const bm = new DOMMatrix().translate(G.bodyX + (o.recoil || 0), G.bodyY).rotate((o.tilt || 0) * 180 / Math.PI);
   const B = new Path2D(); { const q = new Path2D(); ellP(q, 0, 0, rb * 0.88, rb * 1.12); for (const sd of [-1, 1]) ellP(q, rb * 0.05, sd * rb * 0.68, rb * 0.5, rb * 0.44);
-    for (const hy of [G.gloveY, G.blockY]) capsule(q, -rb * 0.1, Math.sign(hy) * rb * 0.75, 1.9, G.handX, hy, 1.4);
+    for (const hy of [G.gloveY, G.blockY]) capsule(q, -rb * 0.1, Math.sign(hy) * rb * 0.75, 1.9, hy === G.blockY ? (G.blockX ?? G.handX) : G.handX, hy, 1.4);
     // stehna: tělo → kolena (napojení padů na tělo)
     for (const pd of G.pads) capsule(q, rb * 0.15, Math.sign(pd.ky || pd.dir) * rb * 0.35, 2.2, pd.kx - G.bodyX, pd.ky - G.bodyY, 2.0);
     B.addPath(q, bm); }
   const mx = -rb * 0.5, mrx = 3.9 * G.bodyScale * 1.12, mry = 3.5 * G.bodyScale * 1.12;
   const M = new Path2D(); { const q = new Path2D(); ellP(q, mx, 0, mrx, mry); M.addPath(q, bm); }
   const glove = new Path2D(); { const q = new Path2D(); ellP(q, G.handX, G.gloveY, 3.5 * 1.1, 3.8 * 1.1); const cuffQ = new Path2D(); cuffQ.roundRect(G.handX + 1.3 * 1.1, G.gloveY - 2.4 * 1.1, 3.2 * 1.1, 4.8 * 1.1, 1.2); q.addPath(cuffQ); glove.addPath(q, bm); }
-  const block = new Path2D(); { const q = new Path2D(); q.roundRect(G.handX - 1.6 * 1.1, G.blockY - 3.5 * 1.1, 2.8 * 1.1, 7 * 1.1, 0.9); q.roundRect(G.handX + 0.8, G.blockY - 1.6, 2.6, 3.2, 0.9); block.addPath(q, bm); }
+  const block = new Path2D(); { const q = new Path2D(); q.roundRect((G.blockX ?? G.handX) - 1.6 * 1.1, G.blockY - 3.5 * 1.1, 2.8 * 1.1, 7 * 1.1, 0.9); q.roundRect((G.blockX ?? G.handX) + 0.8, G.blockY - 1.6, 2.6, 3.2, 0.9); block.addPath(q, G.blockRot ? bm.translate(G.blockX, G.blockY).rotate(G.blockRot * 180 / Math.PI).translate(-G.blockX, -G.blockY) : bm); }
   const all = new Path2D(); for (const p of padPaths) all.addPath(p); all.addPath(B); all.addPath(M); all.addPath(glove); all.addPath(block);
   // HOKEJKA v2 (2026-11-13, Ondřej: čepel = tmavý špalek, dřík tlustý dvoubarevný): tenká plochá čepel s omotávkou,
   // jednobarevný tenký dřík, rozšířená brankářská část (paddle) u čepele. o.stickStyle 'a' tmavá / 'b' bílá / 'c' týmová.
@@ -219,12 +248,14 @@ export function skinGoalie(c, G, K, o) {
   const seg = (a, b, w, col) => { c.strokeStyle = col; c.lineWidth = w; c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.stroke(); };
   // 1) obrys jednou: hokejka + celé tělo s pady
   c.lineCap = 'round'; c.lineJoin = 'round';
+  const kd = Math.hypot(stk.hx - stk.b0.x, stk.hy - stk.b0.y) || 1, KN = { x: stk.hx + (stk.hx - stk.b0.x) / kd * stk.knob, y: stk.hy + (stk.hy - stk.b0.y) / kd * stk.knob };
+  seg({ x: stk.hx, y: stk.hy }, KN, 2.4, SKIN_OUT);
   seg(stk.b0, stk.b1, 2.9, SKIN_OUT); seg(stk.b0, pE, 3.3, SKIN_OUT); seg(pE, { x: stk.hx, y: stk.hy }, 2.4, SKIN_OUT);
   c.strokeStyle = SKIN_OUT; c.lineWidth = 2.0; c.stroke(all);
   // 2) hokejka: čepel (plochá, omotávka), paddle, dřík
   seg(stk.b0, stk.b1, 1.7, SS.st);
   if (!lod) seg({ x: stk.b0.x + (stk.b1.x - stk.b0.x) * 0.2, y: stk.b0.y + (stk.b1.y - stk.b0.y) * 0.2 }, stk.b1, 0.9, SS.tp);
-  seg(stk.b0, pE, 2.1, SS.st); seg(pE, { x: stk.hx, y: stk.hy }, 1.2, SS.st);
+  seg(stk.b0, pE, 2.1, SS.st); seg(pE, KN, 1.2, SS.st);
   // 3) betony: výplň + válce/bloky (záměrné linky výstroje)
   G.pads.forEach((pd, i) => {
     c.fillStyle = o.padFlash > 0 ? 'rgba(200,220,255,0.98)' : K.pad; c.fill(padPaths[i]);
@@ -241,15 +272,17 @@ export function skinGoalie(c, G, K, o) {
   c.save(); c.setTransform(c.getTransform().multiply(bm));
   const tone = shade(K.gk, 0.2);   // lem ramen a páska na paži tónem dresu (ne bílou) → čte se tvar, ne šev
   if (!lod) for (const sd of [-1, 1]) { c.beginPath(); c.arc(rb * 0.05, sd * rb * 0.68, rb * 0.42, Math.PI * 0.6, Math.PI * 1.4); c.strokeStyle = tone; c.lineWidth = 0.9; c.stroke(); }
-  for (const hy of [G.gloveY, G.blockY]) { const mxx = (-rb * 0.1 + G.handX) / 2, myy = (Math.sign(hy) * rb * 0.75 + hy) / 2; c.save(); c.translate(mxx, myy); c.rotate(Math.atan2(hy - Math.sign(hy) * rb * 0.75, G.handX + rb * 0.1)); if (!lod) { c.fillStyle = tone; c.fillRect(-0.45, -1.7, 0.9, 3.4); } c.restore(); }
+  for (const hy of [G.gloveY, G.blockY]) { const hX = hy === G.blockY ? (G.blockX ?? G.handX) : G.handX; const mxx = (-rb * 0.1 + hX) / 2, myy = (Math.sign(hy) * rb * 0.75 + hy) / 2; c.save(); c.translate(mxx, myy); c.rotate(Math.atan2(hy - Math.sign(hy) * rb * 0.75, hX + rb * 0.1)); if (!lod) { c.fillStyle = tone; c.fillRect(-0.45, -1.7, 0.9, 3.4); } c.restore(); }
   c.save(); c.translate(rb * 0.45, 0); c.rotate(Math.PI / 2 * (o.inX || 1)); c.scale(-(o.inX || 1), 1); c.font = `900 ${rb * 0.7}px 'Segoe UI', sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = luma(K.gk) > 0.4 ? '#1a1f29' : '#ffffff'; c.fillText(String(K.num), 0, 0.3); c.restore();
   c.restore();
   // 5) vyrážečka, lapačka, maska
   c.fillStyle = lod ? K.glove : shade(K.glove, -0.15); c.fill(block);
   c.save(); c.setTransform(c.getTransform().multiply(bm));
   const gw = 1.1;
-  c.fillStyle = o.blockFlash > 0 ? 'rgba(220,170,70,0.95)' : K.glove; c.beginPath(); c.roundRect(G.handX - 1.6 * gw, G.blockY - 3.5 * gw, 2.8 * gw, 7 * gw, 0.9); c.fill();
-  if (!lod) { c.fillStyle = mix(K.glove, K.gloveAccent, 0.2); c.fillRect(G.handX - 1.0 * gw, G.blockY - 2.6 * gw, 1.6 * gw, 5.2 * gw); }
+  if (G.blockRot) { c.translate(G.blockX, G.blockY); c.rotate(G.blockRot); c.translate(-G.blockX, -G.blockY); }   // vyrážečka natočená s paží
+  c.fillStyle = o.blockFlash > 0 ? 'rgba(220,170,70,0.95)' : K.glove; c.beginPath(); c.roundRect((G.blockX ?? G.handX) - 1.6 * gw, G.blockY - 3.5 * gw, 2.8 * gw, 7 * gw, 0.9); c.fill();
+  if (!lod) { c.fillStyle = mix(K.glove, K.gloveAccent, 0.2); c.fillRect((G.blockX ?? G.handX) - 1.0 * gw, G.blockY - 2.6 * gw, 1.6 * gw, 5.2 * gw); }
+  if (G.blockRot) { c.translate(G.blockX, G.blockY); c.rotate(-G.blockRot); c.translate(-G.blockX, -G.blockY); }
   c.translate(G.handX, G.gloveY); const inw = -Math.sign(G.gloveY || -1);
   c.fillStyle = lod ? mix(K.glove, K.gloveAccent, 0.2) : K.gloveAccent; c.beginPath(); c.roundRect(1.3 * gw, -2.4 * gw, 3.2 * gw, 4.8 * gw, 1.2); c.fill();                                     // manžeta
   c.fillStyle = K.glove; c.beginPath(); c.ellipse(0, 0, 3.5 * gw, 3.8 * gw, 0, 0, Math.PI * 2); c.fill();                                                  // dlaň/hřbet

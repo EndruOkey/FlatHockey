@@ -106,6 +106,8 @@ export class Goalie {
     if (!puck) return;
 
     if (this._pokeCooldown > 0) this._pokeCooldown -= dt;
+    if (this._pokeVis > 0) this._pokeVis--;   // výpad hokejky (ticky, jen kresba)
+    this._pkK = pokeK(this);
     if (this._saveFlash   > 0) this._saveFlash = Math.max(0, this._saveFlash - dt);
     if (this._saveRecoil  > 0) this._saveRecoil = Math.max(0, this._saveRecoil - dt * 4);
     if (this._rbT > 0) this._rbT -= dt;
@@ -784,8 +786,9 @@ export class Goalie {
                   / ((Math.hypot(toPuckX, toPuckY) || 1) * (Math.hypot(toGoalX, toGoalY) || 1));
     if (exposed < -0.10) { this._pokeT = 0; return; }  // player shielding puck with body
     // 2026-11-11: dřív okamžitě (ťuk do gólmana = puk pryč). Teď nápřah 0,2 s → útočník stihne kličku / ránu.
-    if (GSTANCE) { this._pokeT += 1 / 60; if (this._pokeT < 0.2) return; this._pokeT = 0; }
+    if (GSTANCE) { this._pokeT += 1 / 60; this._pkX = puck.x; this._pkY = puck.y; if (this._pokeT < 0.2) return; this._pokeT = 0; }
 
+    this._pkX = puck.x; this._pkY = puck.y;   // kam míří čepel (výpad hokejky, jen kresba)
     player.hasPuck = false;
     player._shootCooldown = 0.50;  // prevent instant re-pickup
     this._pokeCooldown = 0.7;
@@ -800,6 +803,7 @@ export class Goalie {
       puck.y = this.y + ny * (pokeDist + PUCK.radius + 2);
       puck.vx = nx * 150; puck.vy = ny * 150; puck.z = 0; puck.vz = 0;
       this._markSave('pads', 0.26);
+      this._pokeVis = POKE_VIS;   // čepel vystřelí k puku
     }
   }
 
@@ -888,6 +892,7 @@ export class Goalie {
     ctx.scale(s, s);
     skinGoalie(ctx, G, goalieKit(this, baseColor), {
       stance: holding ? 'cover' : this.stance, tilt: this._tilt, recoil: recoil + (A ? A.rec * 1.5 : 0), holding, inX: this.inX, drawPuck: false, stickX: A ? A.sx || 0 : 0, stickY: A ? A.sy || 0 : 0,
+      poke: this._pkK > 0 ? { k: this._pkK, x: (this._pkX - this.x) * -this.inX, y: this._pkY - this.y } : null,
       padFlash: type === 'pads' ? flash : 0, blockFlash: type === 'blocker' ? flash : 0, gloveFlash: (type === 'glove' || type === 'cover') ? flash : 0,
     });
     ctx.restore();
@@ -977,6 +982,13 @@ export class Goalie {
 // po ledě do stran (dlouhé, špičky mírně dozadu), trup níž (menší), ruce výš a do stran; RVH = pad u tyčky naplocho po
 // brankové čáře, druhá noha stojí; ROZTAŽENÍ = jeden pad natažený daleko do strany, druhý složený, trup se nakloní;
 // COVER = motýlek, ruce u sebe nad pukem. Vrací i hodnoty, které měří audit (šířka/asymetrie siluety).
+// VÝPAD HOKEJKOU (2026-11-13, Ondřej: „musí pokeovat tou hokejkou"): jen kresba, simulaci nemění. Nápřah (_pokeT 0–0,2 s)
+// čepel vysouvá do 30 %, při vypíchnutí vystřelí k puku (3 ticky), drží (4) a vrací se (11). k = 0 klid, 1 čepel u puku.
+const POKE_VIS = 18;
+export function pokeK(g) {
+  if (g._pokeVis > 0) { const a = POKE_VIS - g._pokeVis; return a < 3 ? 0.3 + 0.7 * a / 3 : a < 7 ? 1 : Math.max(0, 1 - (a - 7) / 11); }
+  return g._pokeT > 0 ? 0.3 * Math.min(1, g._pokeT / 0.2) : 0;
+}
 export function goalieGeom(stance, side = 1, spread = 0, drop = 1) {
   const L = (a, b) => a + (b - a) * drop;   // přechod stoj → postoj (pád)
   const stand = { pads: [

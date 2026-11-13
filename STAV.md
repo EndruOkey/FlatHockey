@@ -27,6 +27,7 @@ Hra nebyla nikdy propagovaná. Plán: vydat na itch.io + CrazyGames, po 14 dnech
 ## Hotovo 30. 10.
 - Brankář: horní roh trefitelný, postavení souměrné.
 - Brankář (2026-11-13): hokejka v2 (tenká čepel s omotávkou, tenký dřík, paddle) + animace čepele: před betony, při nízké střele k puku, po zákroku five-hole (jen kresba).
+- Brankář (2026-11-13): vypíchnutí puku viditelně hokejkou — trup se natočí, paže s vyrážečkou se natáhne, hůl vyjede k puku (jen kresba, sim beze změny; stav posílá server `pk`).
 - Puk u brány: jedno pravidlo pro obě strany (`Puck.js` `_carryKeepOut`), test `npm run test:puck` (64 kontrol).
 - Server: limity požadavků, CSRF u POST, pád = restart, kontrola tokenu; `npm run test:server`.
 - Tutoriál/trénink: 5 oprav (menu, spin, puk na ledě, nahrávka), pojistka u kroku „Dej gól“ (po 3 zákrocích lehký gólman, po 6 splněno); `python test/training-smoke.py <url>`.

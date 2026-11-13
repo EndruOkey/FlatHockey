@@ -405,6 +405,7 @@ export class NetGame {
     g._tx = d.x; g._ty = d.y; g._ttilt = d.t;
     g._holdTimer = d.h ? 1 : 0; g._saveFlashMax = d.sm || 0.3; g._screen = d.sc;
     g.color = d.col || null;
+    if (d.pk) { g._pkK = d.pk[0]; g._pkX = d.pk[1]; g._pkY = d.pk[2]; } else g._pkK = 0;   // výpad hokejkou ze serveru
     if (d.ps) { if (d.ps !== g.stance) g._stanceT = d.pt || 0; g.stance = d.ps; g._side = d.pd || 1; }   // postoj ze serveru (pád se dokreslí lokálně)
     // Zvuk zákroku + vizuální recoil: nový saveFlash vyšší než starý = čerstvý zákrok
     if (d.sf > prevFlash + 0.05) {
