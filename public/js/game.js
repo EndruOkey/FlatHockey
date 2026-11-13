@@ -418,7 +418,7 @@ export class NetGame {
     g._saveType = d.st; g._saveFlash = d.sf;
     if (d.hit && d.hit[2] !== g._hit?.n) {   // nový dotyk ze serveru: záblesk + ruka k puku (stejně jako server)
       g._hit = { x: d.hit[0], y: d.hit[1], n: d.hit[2], part: d.hit[3] };
-      if (!g._a) g._animUpdate(0, { players: [], puck: this.puck });
+      if (!g._a) g._animUpdate(0, { players: [] }, this.puck);
       g._snapHand(goalieSurface(g, g._hit.x, g._hit.y)); if (g._a) g._a.rec = 1;
     }
   }
@@ -540,7 +540,7 @@ export class NetGame {
       if (g._saveFlash  > 0) g._saveFlash  = Math.max(0, g._saveFlash  - dt);
       if (g._saveRecoil > 0) g._saveRecoil = Math.max(0, g._saveRecoil - dt * 4);
       g._stanceT = (g._stanceT || 0) + dt;   // průběh pádu do postoje (vizuál)
-      g._animUpdate(dt, _animWorld);   // animace rukou/kroků i online (dřív jen v lokální simulaci → online brankář „kámen")
+      g._animUpdate(dt, _animWorld, this.puck);   // animace rukou/kroků i online (dřív jen v lokální simulaci → online brankář „kámen")
     }
   }
 
