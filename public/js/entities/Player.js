@@ -154,17 +154,26 @@ export class PlayerBase {
     return true;
   }
 
-  // ── PŘIKOPNUTÍ (Q, 2026-11-12): volný puk na ledě do KICK_R px od těla, blížící se → zpracuješ bruslí a jedeš dál,
-  // i když je rychlý (hokejkou čistě jen do 420 px/s). Mimo okno: KICK_CD s nic. Čerstvou ránu soupeře nejde (jako hokejkou).
+  // ── PŘIKOPNUTÍ (Q, 2026-11-12; okno „pod nohama" 2026-11-13): volný puk na ledě do KICK_R px od středu těla
+  // (= tělo 7 + puk 3 + 1 px; brusle stojí do ~6 px od středu → puk od čepele ≤ ~11 px, scripts/kick_probe.mjs) → zpracuješ
+  // bruslí a jedeš dál, i když je rychlý (hokejkou čistě jen do 420 px/s). Stisk o chvilku dřív se podrží KICK_BUF s (puk do
+  // okna dojede). Mimo okno: KICK_CD s nic. Čerstvou ránu soupeře nejde (jako hokejkou).
+  // Vrací −1 = nic, 0 = puk míří pod nohy a dorazí do KICK_HINT s (nápověda), 1 = puk pod nohama.
   kickWindow(puck) {
     if (this.hasPuck || this.isDown || !puck || puck.isAirborne || puck.z > 1.5 || puck.faceoffTimer > 0) return -1;
     if (puck._carrier && puck._carrier.hasPuck) return -1;
     if (puck._shot && puck._shot.team !== this.team && (puck._shotAge ?? 9) < SHOT_EAT_T) return -1;
-    const dx = puck.x - this.x, dy = puck.y - this.y, d = Math.hypot(dx, dy);
-    const closing = -((puck.vx - this.vx) * dx + (puck.vy - this.vy) * dy) / (d || 1);   // rychlost přibližování (px/s)
-    if (d <= KICK_R && (closing > -KICK_PASS || d < 12)) return 1;   // v okně (i puk, který tě právě minul — brusle za puk)
-    if (d <= KICK_SOON && closing > 60) return 0;             // okno se blíží (nápověda)
-    return -1;
+    const dx = puck.x - this.x, dy = puck.y - this.y;
+    if (Math.hypot(dx, dy) <= KICK_R) return 1;
+    return this.kickEta(puck) <= KICK_HINT ? 0 : -1;
+  }
+  // za kolik s puk (relativní rychlostí, po přímce) vjede do okna KICK_R; Infinity = mine / vzdaluje se
+  kickEta(puck) {
+    const dx = puck.x - this.x, dy = puck.y - this.y, rvx = puck.vx - this.vx, rvy = puck.vy - this.vy, vv = rvx * rvx + rvy * rvy;
+    if (vv < 1) return Infinity;
+    const b = dx * rvx + dy * rvy, c = dx * dx + dy * dy - KICK_R * KICK_R, disc = b * b - vv * c;
+    if (b >= 0 || disc < 0) return Infinity;
+    return Math.max(0, (-b - Math.sqrt(disc)) / vv);
   }
   // ── TEČ NA Q (2026-11-12): čerstvá rána SPOLUHRÁČE (≤ DEFL_AGE s) a ty do DEFL_ZONE px od soupeřovy branky →
   // Q puk přesměruje holí kam míříš (kurzor; výška podle kurzoru za brankou), rychlost × 0,70–0,85 a chyba úhlu
@@ -217,16 +226,26 @@ export class PlayerBase {
     const dw = this.deflectWindow(puck);   // teč má přednost před přikopnutím (jen rána spoluhráče u soupeřovy branky)
     if (dw === 1) { this._deflHeld = 0; return this._doDeflect(puck); }
     if (dw === 0) { this._deflQ = DEFL_BUF; this._deflHeld = 0; return false; }
-    if ((this._kickCd || 0) > 0) return false;
+    if ((this._kickCd || 0) > 0 || this.hasPuck || this.isDown) return false;
+    this._kickSwing(puck);   // kresba: brusle máchne (při zabrání ji hned převezme animace přikopnutí)
     const w = this.kickWindow(puck);
-    if (w === 0) { this._kickQ = KICK_BUF; return false; }   // o chvilku dřív: stisk podržíme, než puk do okna dojede
-    if (w !== 1) { this._kickCd = KICK_CD; return false; }
-    return this._doKick(puck);
+    if (w === 1) return this._doKick(puck);
+    if (w === 0 && this.kickEta(puck) <= KICK_BUF) { this._kickQ = KICK_BUF; return false; }   // o chvilku dřív: stisk podržíme, než puk dojede
+    this._kickCd = KICK_CD; return false;
+  }
+  // máchnutí naprázdno: noha na straně puku (bez puku na straně dolní ruky); jen časová osa pro kresbu
+  _kickSwing(puck) {
+    const dx = puck ? puck.x - this.x : 0, dy = puck ? puck.y - this.y : 0, ba = this.bodyAngle ?? 0;
+    const ly = -Math.sin(ba) * dx + Math.cos(ba) * dy;
+    this._kickSide = Math.abs(ly) > 0.5 ? (ly > 0 ? 1 : -1) : (this.handed ?? 1);
+    this._kickSw = KICK_SW; this._kickSwN = (this._kickSwN || 0) + 1;
   }
   _doKick(puck) {
     this._kickQ = 0;
+    const dx = puck.x - this.x, dy = puck.y - this.y, ba = this.bodyAngle ?? 0, ly = -Math.sin(ba) * dx + Math.cos(ba) * dy;
+    this._kickOx = dx; this._kickOy = dy; this._kickSide = ly >= 0 ? 1 : -1;   // kde puk zastavila brusle (vůči tělu, svět.) + která noha
     puck._passTo = null; this._grabPuck(); puck._carrier = this;
-    this._kickFx = 0.35; this._kickN = (this._kickN || 0) + 1;
+    this._kickFx = KICK_FX; this._kickSw = 0; this._kickN = (this._kickN || 0) + 1;
     return true;
   }
 
@@ -651,6 +670,7 @@ export class Player extends PlayerBase {
     if (this._kickCd > 0) this._kickCd -= dt;
     if (this._kickQ > 0) { this._kickQ -= dt; const pk = world?.puck; if (pk && this.kickWindow(pk) === 1) this._doKick(pk); else if (this._kickQ <= 0) this._kickCd = KICK_CD; }
     if (this._kickFx > 0) this._kickFx -= dt;
+    if (this._kickSw > 0) this._kickSw -= dt;
     if (this._deflQ > 0) { const pk = world?.puck; this._deflHeld = (this._deflHeld || 0) + dt; const w = pk ? this.deflectWindow(pk) : -1;
       if (w === 1) this._doDeflect(pk); else if ((this._deflQ -= dt) <= 0 || w < 0) { this._deflQ = 0; this._kickCd = KICK_CD; } }
     if (this._deflFx > 0) this._deflFx -= dt;
@@ -720,7 +740,10 @@ const SHOT_EAT_T = 0.25, SHOT_EAT_V = 300, SHOT_NOPICK = 0.1;
 const DEFL_AGE = 1.2, DEFL_ZONE = 110, DEFL_VMIN = 80, DEFL_Z = 14, DEFL_R = 13, DEFL_SOON = 0.15, DEFL_BUF = 0.15, DEFL_SWEET = 0.05,
   DEFL_KEEP = 0.85, DEFL_LOSS = 0.15, DEFL_ERR_S = 0.06, DEFL_ERR_T = 0.14;
 function _segDist(px, py, ax, ay, bx, by) { const dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy || 1, u = clamp(((px - ax) * dx + (py - ay) * dy) / L, 0, 1); return Math.hypot(px - ax - dx * u, py - ay - dy * u); }
-const KICK_R = 26, KICK_SOON = 70, KICK_CD = 0.4, KICK_BUF = 0.15, KICK_PASS = 260;   // + podržení stisku (s), puk po průjezdu (px/s od tebe)   // přikopnutí (Q): okno px od těla, nápověda od px, zámek po minutí (s)   // s, px/s — viz canPickup (čerstvá rána soupeře)
+// PŘIKOPNUTÍ (Q): okno px od středu těla (tělo 7 + puk 3 + 1), nápověda s před vjezdem, zámek po minutí (s), podržení stisku (s),
+// délka animace přikopnutí a máchnutí naprázdno (s; jen kresba)
+const KICK_R = PLAYER.radius + PUCK.radius + 1, KICK_HINT = 0.35, KICK_CD = 0.4, KICK_BUF = 0.1, KICK_FX = 0.3, KICK_SW = 0.22;
+export const KICK = { R: KICK_R, HINT: KICK_HINT, CD: KICK_CD, BUF: KICK_BUF, FX: KICK_FX, SW: KICK_SW };
 let _brakeSfxAt = -1e9;   // globální omezovač zvuku brzdy cizích hráčů (jen kresba/zvuk, ne simulace)
 const STICK_V = [
   { out: 4.8, sh: 2.8, bl: 2.8, blo: 4.8 },
@@ -861,6 +884,36 @@ export function skatePose(o) {
   }
   if (k) body.y = Math.sin(ph) * R * 0.07 * sf;   // K1/K2: tělo nad odrazovou nohu (dřív px: r·0.07)
   return { feet, body };
+}
+
+// ── ANIMACE PŘIKOPNUTÍ (Q, 2026-11-13) — jen kresba, časová osa ze simulace (_kickFx / _kickSw odpočítávají od KICK_FX / KICK_SW;
+// online je nese snapshot `kk`). Brusle blíž k puku: 0–40 ms vyjede k puku a dupne na něj napříč (puk „pod nohou", brusle
+// vyčnívá zpod těla → vidět v 1×), 40–160 ms ho stáhne směrem k čepeli (puk plynule, smoothstep), do 300 ms zpět do kroku.
+// Máchnutí naprázdno (minutí): 220 ms tam a zpět, brusle vykopne dopředu do boku za obrys těla.
+const _sm = t => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
+export function kickAnimW(e) { return e < 0.04 ? _sm(e / 0.04) : e < 0.16 ? 1 : _sm(1 - (e - 0.16) / 0.14); }   // váha nohy v čase e (s)
+export function kickPuckU(e) { return _sm((e - 0.04) / 0.12); }   // 0 = puk u brusle, 1 = na čepeli
+function _kickFoot(p, feet, ba) {
+  const R = PLAYER.radius, c = Math.cos(ba), sn = Math.sin(ba), loc = (wx, wy) => ({ x: c * wx + sn * wy, y: -sn * wx + c * wy });
+  let w = 0, tx = 0, ty = 0, ta = 0;
+  if (p._kickFx > 0 && p._kickOx != null) {
+    const e = KICK_FX - p._kickFx; w = kickAnimW(e);
+    const C = loc(p._kickOx, p._kickOy), d = Math.hypot(C.x, C.y) || 1, k = (d + 1) / d;
+    tx = C.x * k; ty = C.y * k; ta = Math.atan2(C.y, C.x) + Math.PI / 2;   // brusle napříč přes puk = zastavení „pod nohou"
+    if (p._visPuck) { const B = loc(p._visPuck.x - p.x, p._visPuck.y - p.y), u = 0.45 * kickPuckU(e); tx += (B.x - tx) * u; ty += (B.y - ty) * u; }   // stáhne puk k čepeli
+  } else if (p._kickSw > 0) {
+    const e = KICK_SW - p._kickSw; w = Math.sin(Math.PI * clamp(e / KICK_SW, 0, 1));
+    const sd = p._kickSide || 1; tx = R * 1.45; ty = sd * R * 1.2; ta = sd * 0.6;   // vykopnutí dopředu do boku
+  }
+  if (w <= 0) return;
+  const f = feet.find(q => q.side === (p._kickSide || 1)); if (!f) return;
+  f.x += (tx - f.x) * w; f.y += (ty - f.y) * w; f.a = lerpAngle(f.a, ta, w); f.lift = Math.max(f.lift || 0, w * (p._kickSw > 0 ? 0.6 : 0.3));
+}
+function _kickPuck(p, blade) {
+  if (!(p._kickFx > 0) || p._kickOx == null) return blade;
+  const u = kickPuckU(KICK_FX - p._kickFx); if (u >= 1) return blade;
+  const sx = p.x + p._kickOx, sy = p.y + p._kickOy;
+  return { x: sx + (blade.x - sx) * u, y: sy + (blade.y - sy) * u, _kick: true };
 }
 
 // ROZPLÁCNUTÍ (2026-11-12): ležící hráč = protažená postava hlavou ve směru úderu, ruce a nohy roztažené, hokejka
@@ -1066,6 +1119,7 @@ function _renderPlayerUp(ctx, p, cam) {
     stopLoc: p._hsDir != null ? angleDiff(p._hsDir, ba) : 0, rotSf: p._rotSf ?? 0, lean: p._lean ?? 0 });
 
   if (_k === 3) skateFeetSmooth(p, _pose.feet, _rdt(cam));
+  _kickFoot(p, _pose.feet, ba);   // Q: brusle zastaví puk / máchne naprázdno (časová osa ze simulace)
   ctx.lineCap = 'round';
   const feetW = [];   // polohy bruslí v lokálu (svět. jednotky) pro štulpny v skinBody
   for (const f of _pose.feet) {
@@ -1310,9 +1364,10 @@ function _renderPlayerUp(ctx, p, cam) {
     const nA = bladeDir - hnd * Math.PI / 2;        // normála k prohnuté straně
     const off = PUCK.radius * 1.05 * s;
     const vx = (mx + Math.cos(nA) * off - ox) / s, vy = (my + Math.sin(nA) * off - oy) / s;
-    p._visPuck = { x: vx, y: vy };
-    cp.draw(ctx, cam, p._visPuck);
-  } else p._visPuck = null;
+    p._visPuck = _kickPuck(p, { x: vx, y: vy });   // po přikopnutí puk z brusle plynule dojede na čepel
+    p._kickTop = p._visPuck._kick === true;        // puk „pod nohama" je pod rukama/tělem → během dojezdu ho kreslíme navrch (čitelnost)
+    if (!p._kickTop) cp.draw(ctx, cam, p._visPuck);
+  } else { p._visPuck = null; p._kickTop = false; }
   } // end !crossCheck stick
 
   // ── TĚLO C-d2 (skin.js): jedna sjednocená cesta, obrys jednou, jedno stínování; ruce z držení hole ──
@@ -1362,8 +1417,17 @@ function _renderPlayerUp(ctx, p, cam) {
       ctx.fillStyle = on ? 'rgba(60,200,110,0.95)' : 'rgba(20,30,50,0.75)'; ctx.fill(); ctx.strokeStyle = on ? '#e9fff1' : 'rgba(255,255,255,0.7)'; ctx.lineWidth = 0.8 * s; ctx.stroke();
       ctx.fillStyle = '#fff'; ctx.fillText('Q', x, y + 0.3 * s); ctx.restore(); }
   }
+  if (p._kickTop && p._visPuck && p._carriedPuck) p._carriedPuck.draw(ctx, cam, p._visPuck);   // přikopnutý puk navrch (viz _kickPuck)
+  if (p._kickFx > 0 && p._kickOx != null) {   // přikopnutí: ledová tříšť od brusle (deterministicky z pořadí kopu)
+    const s = cam.scale, e = KICK_FX - p._kickFx, u = clamp(e / 0.22, 0, 1), cx = cam.ox + (p.x + p._kickOx) * s, cy = cam.oy + (p.y + p._kickOy) * s;
+    const a0 = Math.atan2(-p._kickOy, -p._kickOx), n = p._kickN || 0;   // tříšť letí od těla (puk přijel zvenku)
+    if (u < 1) { ctx.save(); ctx.fillStyle = `rgba(235,245,255,${0.9 * (1 - u)})`;
+      for (let i = 0; i < 6; i++) { const h = ((n * 7 + i * 13) % 10) / 10, a = a0 + Math.PI + (i - 2.5) * 0.38 + (h - 0.5) * 0.2, L = (3 + 7 * u) * (0.7 + 0.5 * h);
+        ctx.beginPath(); ctx.arc(cx + Math.cos(a) * L * s, cy + Math.sin(a) * L * s, (1.3 - 0.6 * u) * s, 0, Math.PI * 2); ctx.fill(); }
+      ctx.restore(); }
+  }
   if (p._kickFx > 0) {   // úspěšné přikopnutí: krátký záblesk u brusle
-    const s = cam.scale, a = p._kickFx / 0.35; ctx.save(); ctx.beginPath(); ctx.arc(cam.ox + p.x * s, cam.oy + p.y * s, (PLAYER.radius + 4 + 6 * (1 - a)) * s, 0, Math.PI * 2);
+    const s = cam.scale, a = p._kickFx / KICK_FX; ctx.save(); ctx.beginPath(); ctx.arc(cam.ox + p.x * s, cam.oy + p.y * s, (PLAYER.radius + 4 + 6 * (1 - a)) * s, 0, Math.PI * 2);
     ctx.strokeStyle = `rgba(60,200,110,${a})`; ctx.lineWidth = 2 * s * a; ctx.stroke(); ctx.restore(); }
 
   if (p._deflFx > 0) {   // teč na Q: záblesk u čepele

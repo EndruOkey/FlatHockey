@@ -346,6 +346,8 @@ export class NetGame {
       if ( prevHasPuck && !newHasPuck && !this.goalFlash) SFX.shoot(prevCh > 0.05 ? prevCh : 0.12); // rána = síla nápřahu; pas / ztráta = tiché cvaknutí
       ent.hasPuck = newHasPuck;
       if (ps.shd != null) { ent._shieldT = 0.35; ent._shieldA = ps.shd; }   // štít (krytí tělem) ze serveru
+      { const kk = ps.kk; if (kk && (kk[5] !== ent._kickN || kk[6] !== ent._kickSwN)) {   // přikopnutí / máchnutí (Q) ze serveru: nová událost → spusť animaci, dál odpočítává klient
+        ent._kickFx = kk[0]; ent._kickSw = kk[1]; ent._kickOx = kk[2]; ent._kickOy = kk[3]; ent._kickSide = kk[4]; ent._kickN = kk[5]; ent._kickSwN = kk[6]; } }
       { const kd = ps.kd; ent._downT = kd ? kd[0] : 0; ent._upT = kd ? kd[1] : 0; ent._stagT = kd ? kd[3] : 0; if (kd) { ent._fallA = kd[2]; ent._fallN = kd[4]; } }   // knockback (rozplácnutí / zakolísání) ze serveru
 
       if (isMe) {
@@ -510,6 +512,8 @@ export class NetGame {
       }
       if (ent.passReq > 0) ent.passReq = Math.max(0, ent.passReq - dt);
       if (ent._shieldT > 0) ent._shieldT -= dt;
+      if (ent._kickFx > 0) ent._kickFx -= dt;
+      if (ent._kickSw > 0) ent._kickSw -= dt;
     }
     // Puk: lokálně držený → cradle; jinak interpolace/extrapolace z bufferu (fallback vyhlazení).
     if (this.localEnt && this.localEnt.hasPuck) {
