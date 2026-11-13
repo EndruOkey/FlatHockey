@@ -18,7 +18,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { mountDev } from './dev-gate.js';
 import authRouter, { linkRouter, verifySession, requireAuth, bearerToken, createGuestAccount } from './auth.js';
-import { updateStats, updateRankAndCredits, getRankPosition, getLeaderboard, getStoreItems, getUserUnlocks, buyItem, getPuckCredits, getActiveSeason, logMetric, cleanOldMetrics, recordReferral, rewardReferralIfPending, isFounder, getUserById, userBadge } from './db.js';
+import { updateStats, updateRankAndCredits, getRankPosition, getLeaderboard, getStoreItems, getUserUnlocks, buyItem, getPuckCredits, getActiveSeason, logMetric, cleanOldMetrics, recordReferral, rewardReferralIfPending, isFounder, getUserById, userBadge, isGuestUser } from './db.js';
 
 import { World } from './public/js/world.js';
 import { Player } from './public/js/entities/Player.js';
@@ -294,6 +294,8 @@ function buildPlayer(lobby, sid, m) {
   p.num    = m.number;
   const ts = lobby.settings.teams[m.team] || {};
   p.color  = ts.color || null;
+  // RYCHLÁ HRA: hráč s účtem hraje ve vlastním dresu, tým ukazuje barevný kruh pod hráčem (tm). Host a bot = barva týmu.
+  if (lobby.settings.quick) { p.teamMark = ts.color || null; if (m.jersey && !m.guest) { p.color = m.jersey; p.stripe = m.stripe || null; } }
   p.jersey = ts.style || 'solid';
   p.helmet = m.helmet; p.shorts = m.shorts; p.gloves = m.gloves; p.tape = m.tape; p.trail = m.trail;
   p.stick = m.stick; p.tapeStyle = m.tapeStyle; p.helmetType = m.helmetType; p.visor = m.visor;
@@ -410,7 +412,7 @@ function snapPlayers(match) {
       sd: r3(p._stickDisp), dr: r1(p._dispReach), dc: r2(p._dispCharge),
       fh: p.forehand ? 1 : 0, hp: p.hasPuck ? 1 : 0, ch: r2(p.charge),
       hd: p.handed, cc: p.crossCheck ? 1 : 0, ln: r2(p._lean), ...(p.isDown || p._stagT > 0 ? { kd: [r2(p._downT), r2(p._upT), r2(p._fallA), r2(p._stagT), p._fallN, r2(p._fallB)] } : {}), ...(p._shieldT > 0 ? { shd: r2(p._shieldA) } : {}), ...(p._kickFx > 0 || p._kickSw > 0 ? { kk: [r2(Math.max(0, p._kickFx || 0)), r2(Math.max(0, p._kickSw || 0)), r1(p._kickOx || 0), r1(p._kickOy || 0), p._kickSide || 1, p._kickN || 0, p._kickSwN || 0] } : {}),
-      col: p.color || null, num: p.num, js: p.jersey || 'solid',
+      col: p.color || null, num: p.num, js: p.jersey || 'solid', ...(p.stripe ? { st: p.stripe } : {}), ...(p.teamMark ? { tm: p.teamMark } : {}),
       hc: p.helmet || null, sh: p.shorts || null, gc: p.gloves || null, tc: p.tape || null,
       sk: p.stick || null, ty: p.tapeStyle || 'full', hy: p.helmetType || 'visor', vc: p.visor || null,
     });
@@ -485,9 +487,14 @@ const SPONSOR_HASH = '6ca63a5475d6396dc2c544b9b236d22eac7bced69b2a88c24135dccf29
 const isSponsorCode = (code) => typeof code === 'string' && code.length > 0 &&
   crypto.createHash('sha256').update(SPONSOR_SALT + code.trim().toUpperCase()).digest('hex') === SPONSOR_HASH;
 // Člen lobby za socket: jméno VŽDY z účtu (jedinečné, db.js claimName) — ne z prohlížeče; + ikonka původu.
+// Host (i bez účtu): žádný vlastní vzhled — server ho zahodí, ať to nejde obejít z prohlížeče (Ondřej 2026-11-13).
 function memberFor(socket, profile, team) {
-  const m = makeMember(profile, team), uid = socket.data.userId;
+  const uid = socket.data.userId;
+  let guest = true;
+  try { guest = !uid || isGuestUser(uid); } catch {}
+  const m = makeMember(guest ? { handed: profile?.handed, code: profile?.code } : profile, team);
   if (uid) { try { const u = getUserById(uid); if (u?.display_name) m.name = u.display_name; m.badge = userBadge(uid); } catch {} }
+  m.guest = guest;
   return m;
 }
 function makeMember(profile, team) {
@@ -504,6 +511,7 @@ function makeMember(profile, team) {
     trail:  hex(profile.trail,  '#9aa3b2'),
     stick:  hex(profile.stick,  '#1a1f29'),
     visor:  hex(profile.visor,  '#bfe0ff'),
+    jersey: hex(profile.jersey, null), stripe: hex(profile.stripe, null),   // vlastní dres (jen rychlá hra, jen účet)
     tapeStyle:  ['full','toe','heel','candy'].includes(profile.tapeStyle) ? profile.tapeStyle : 'full',
     helmetType: ['visor','none','shield','cage'].includes(profile.helmetType) ? profile.helmetType : 'visor',
     team,

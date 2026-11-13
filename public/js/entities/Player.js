@@ -1065,6 +1065,13 @@ function _renderPlayerUp(ctx, p, cam) {
   const K = skaterKit(p, PLAYER.colors[p.team]);   // kosmetika C-d2 (defaulty, když server pole nepošle)
   const bladeCol = K.blade;
 
+  // RYCHLÁ HRA (2026-11-13): hráči ve vlastních dresech → tým = barevný kotouč pod hráčem (plná výplň + hrana)
+  if (p.teamMark) {
+    ctx.save(); ctx.beginPath(); ctx.arc(sx, sy, r + 8 * s, 0, Math.PI * 2);   // větší než tělo → barva týmu je vidět kolem celého hráče
+    ctx.globalAlpha = 0.5; ctx.fillStyle = p.teamMark; ctx.fill();
+    ctx.globalAlpha = 1; ctx.lineWidth = 2.2 * s; ctx.strokeStyle = p.teamMark; ctx.stroke(); ctx.restore();
+  }
+
   // ŠTÍT: soupeř se pokusil obrat puk krytý tělem → oblouk na straně soupeře (krytí tělem funguje)
   if (p._shieldT > 0 && p._shieldA != null) {
     const a = Math.min(1, p._shieldT / 0.2);
@@ -1080,8 +1087,9 @@ function _renderPlayerUp(ctx, p, cam) {
   if (p._isLocal) {
     ctx.save();
     ctx.beginPath(); ctx.arc(sx, sy, r + 9 * s, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(127,212,255,0.18)'; ctx.fill();
-    ctx.lineWidth = 2.5 * s; ctx.strokeStyle = '#7FD4FF'; ctx.stroke();
+    // rychlá hra: tým ukazuje kotouč pod hráčem → vlastní hráč jen bílý kroužek (modrý by vypadal jako modrý tým)
+    if (p.teamMark) { ctx.beginPath(); ctx.arc(sx, sy, r + 10.5 * s, 0, Math.PI * 2); ctx.lineWidth = 2 * s; ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.stroke(); }
+    else { ctx.fillStyle = 'rgba(127,212,255,0.18)'; ctx.fill(); ctx.lineWidth = 2.5 * s; ctx.strokeStyle = '#7FD4FF'; ctx.stroke(); }
     ctx.restore();
   }
 
@@ -1525,7 +1533,7 @@ function _renderPlayerUp(ctx, p, cam) {
     ctx.font = `italic 800 ${Math.round(10 * s)}px 'Barlow Condensed', 'Segoe UI', sans-serif`;
     const tw = ctx.measureText(label).width, ph = 16 * s, pw = tw + 10 * s;   // výška i s diakritikou (Á, Č)
     const by = sy - r - 9 * s - 6 * s - ph;          // nad kruhem
-    ctx.fillStyle = '#1F4FD8';
+    ctx.fillStyle = p.teamMark || '#1F4FD8';   // rychlá hra: štítek v barvě týmu
     ctx.fillRect(sx - pw / 2, by, pw, ph);
     ctx.beginPath(); ctx.moveTo(sx - 4 * s, by + ph); ctx.lineTo(sx + 4 * s, by + ph); ctx.lineTo(sx, by + ph + 5 * s); ctx.closePath(); ctx.fill();
     ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -1543,7 +1551,7 @@ function _renderPlayerUp(ctx, p, cam) {
     ctx.lineWidth = 1.4 * s;
     ctx.strokeStyle = 'rgba(0,0,0,0.5)';
     ctx.strokeText(p.name, sx, ny);
-    ctx.fillStyle = color;
+    ctx.fillStyle = p.teamMark || color;   // rychlá hra: jméno v barvě týmu, ne vlastního dresu
     ctx.fillText(p.name, sx, ny);
     if (p.founder) _drawCrown(ctx, sx - ctx.measureText(p.name).width / 2 - 8 * s, ny - 3 * s, 7 * s);   // korunka vlevo od jména
     if (p.badge) drawBadge(ctx, p.badge, sx + ctx.measureText(p.name).width / 2 + 2 * s, ny - 3.2 * s, 8.5 * s);   // původ vpravo od jména

@@ -5,7 +5,7 @@ import { Player } from './entities/Player.js';
 import { PLAYER, RINK } from './constants.js';
 import { t, applyI18n, toggleLang, setOnChange } from './i18n.js';
 import { setVolume, getVolume } from './sound.js';
-import { loadSession, onAuthChange, loginWithDiscord, logout, handleOAuthRedirect, getUser, loadServerStats, saveServerProfile, loadRankAndCredits, getKind, requestLinkCode, redeemLinkCode, isFounder, hasProgress, loadStore, buyStoreItem } from './auth.js';
+import { loadSession, onAuthChange, loginWithDiscord, logout, handleOAuthRedirect, getUser, loadServerStats, saveServerProfile, loadRankAndCredits, getKind, requestLinkCode, redeemLinkCode, isFounder, hasProgress, loadStore, buyStoreItem, getGuestName } from './auth.js';
 const FOUNDER_CROWN_SVG = '<svg width="13" height="11" viewBox="0 0 14 11" style="vertical-align:-1px" aria-hidden="true"><path d="M1 10 L1 3 L4 6 L7 1 L10 6 L13 3 L13 10 Z" fill="#FFB020" stroke="rgba(0,0,0,.4)" stroke-width="0.8" stroke-linejoin="round"/></svg>';
 import { makeRng, hashSeed } from './rng.js';
 import { initLockerPreview } from './locker-preview.js';
@@ -184,8 +184,21 @@ const chTapeStyle = makeChips($('ts-chips'), [
 const swVisor = makeSwatches($('sw-visor'), localStorage.getItem(GK.visor) || '#bfe0ff', drawPreview, { colors: VISOR_PALETTE });
 function updateVisorRow() { /* gear panel removed — visor always available via popup */ }
 
+// HOST (bez Discord/CrazyGames účtu): jméno přidělí server, vlastní vzhled nemá (Ondřej 2026-11-13). Šatna je zamčená,
+// profil posílá výchozí vzhled (server ho stejně vynutí — server.js memberFor). Uložené nastavení v zařízení se nepřepisuje.
+const DEFAULT_LOOK = { helmet: '#f4f7fb', jersey: '#1b4fd1', shorts: '#1a1f29', stripe: '#f4f7fb', laces: '#f4f7fb', gloves: '#1a1f29',   // jen barvy z palet (set() jiné ignoruje)
+  tape: '#f4f7fb', trail: TRAIL_GRAY, stick: '#1a1f29', tapeStyle: 'full', helmetType: 'visor', visor: '#bfe0ff' };
+const isGuestUI = () => !getUser();
+function applyGuestLook() {
+  const S = { helmet: swHelmet, jersey: swJersey, shorts: swShorts, stripe: swStripe, laces: swLaces, gloves: swGloves, tape: swTape, trail: swTrail, stick: swStick, visor: swVisor };
+  _suspendPreview = true;
+  try { for (const k in S) S[k].set(DEFAULT_LOOK[k]); chTapeStyle.set(DEFAULT_LOOK.tapeStyle); chHelmetType.set(DEFAULT_LOOK.helmetType); numInput.value = ''; }
+  finally { _suspendPreview = false; }
+  drawPreview();
+}
 function profile() {
   const name = (nameInput.value || '').trim().slice(0, 14);
+  if (isGuestUI()) return { name, handed: chosenHand, number: null, ...DEFAULT_LOOK };
   localStorage.setItem(NAME_KEY, name);
   localStorage.setItem(GK.helmet, swHelmet.get());
   localStorage.setItem(GK.jersey, swJersey.get());
@@ -1064,16 +1077,6 @@ net.onConnectError = () => {
 // ── Profil — povinný (bez přezdívky nepustíme dál) ────────────────────
 const hasName = () => (nameInput.value || '').trim().length > 0;
 const suggestName = () => t('guest_name') + Math.floor(100 + Math.random() * 900);
-// Jména jsou jedinečná (server): obsazené → vezmi první volné (Petr → Petr2), ulož a řekni to hráči.
-function _onNameSaved(r) {
-  if (!r || r.ok || r.error !== 'name_taken' || !r.suggestion) return;
-  const was = nameInput.value;
-  nameInput.value = r.suggestion; localStorage.setItem(NAME_KEY, r.suggestion);
-  if (typeof _syncPlateDisplay === 'function') _syncPlateDisplay();
-  drawPreview();
-  saveServerProfile({ display_name: r.suggestion });
-  setStatus(t('name_taken', was, r.suggestion), '#ffcf3a');
-}
 function commitProfile() {
   if (!hasName()) nameInput.value = getUser()?.display_name || suggestName();   // jméno doplníme, Šatnu nevnucujeme
   const p = profile();       // ulož jméno + výbavu do localStorage
@@ -1083,7 +1086,7 @@ function commitProfile() {
       helmet: p.helmet, gloves: p.gloves, tape: p.tape, trail: p.trail, stick: p.stick,
       tape_style: p.tapeStyle, helmet_type: p.helmetType, visor: p.visor,
       handed: p.handed, number: p.number,
-    }).then(_onNameSaved);
+    });
   }
   setStatus('');
   return true;
@@ -1192,6 +1195,7 @@ function renderStore() {
       const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'st-btn';
       if (worn) { btn.textContent = t('store_worn'); btn.disabled = true; }
       else if (owned) { btn.textContent = t('store_wear'); btn.onclick = () => { sw[cat.type].set(col); commitProfile(); renderStore(); setStatus(t('store_worn_toast', it.name), '#6ee0a0'); }; }
+      else if (isGuestUI()) { btn.textContent = t('store_need_account'); btn.disabled = true; }   // host nemá vlastní vzhled → nákup až s účtem
       else if (short) { btn.textContent = t('store_short', it.price - _store.credits); btn.disabled = true; }
       else { btn.textContent = t('store_buy', it.price); btn.onclick = () => buyItem(it, btn); }
       card.appendChild(btn); grid.appendChild(card);
@@ -1749,25 +1753,23 @@ function updateAuthUI(user) {
     authLabel.textContent = t('auth_label_guest');
     authTier.textContent  = '';
     authAvatar.style.display = 'none';
-    // Host: jméno si zadává sám.
-    nameInput.readOnly = false;
-    nameInput.classList.remove('lk-input--locked');
-    nameInput.title = '';
+    // Host: jméno přidělí server (nejde změnit), vzhled výchozí, Šatna zamčená
+    if (getGuestName()) nameInput.value = getGuestName();
+    nameInput.readOnly = true;
+    nameInput.classList.add('lk-input--locked');
+    nameInput.title = t('name_guest');
     isSponsor = false;
     document.body.classList.remove('sponsor');
+    applyGuestLook();
   }
+  document.body.classList.toggle('guest', !user);
   authDropdown.classList.remove('open');
   // Zobraz/skryj Discord login banner + stats sekci v profilu
   $('profile-guest-login').style.display = user ? 'none' : '';
   $('profile-stats').style.display = 'none'; // stats se načítají lazy při otevření profilu
   updateLinkUI();
   if (!inGame) { _loadStats(); refreshStore(); }   // host dostal token / přihlášení → ukaž statistiky, kredity a obchod hned
-  // nový host: účet na serveru vznikl s výchozím jménem → hned pošli jméno z tohoto zařízení (ve hře se bere jméno z účtu)
-  if (getKind() === 'guest' && !_guestNameSynced && (nameInput.value || '').trim()) {
-    _guestNameSynced = true; saveServerProfile({ display_name: nameInput.value.trim().slice(0, 14) }).then(_onNameSaved);
-  }
 }
-let _guestNameSynced = false;
 
 // ── Propojení účtů (link kód) ─────────────────────────────────────────
 const _embedded = document.documentElement.classList.contains('embedded');
@@ -1862,6 +1864,7 @@ $('auth-close-btn').addEventListener('click', () => {
 authModal.addEventListener('click', e => { if (e.target === authModal) closeAuthModal(); });
 
 $('discord-login-btn').addEventListener('click', loginWithDiscord);
+$('lk-guest-discord')?.addEventListener('click', loginWithDiscord);
 
 
 onAuthChange(updateAuthUI);

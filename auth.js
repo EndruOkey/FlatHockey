@@ -2,7 +2,7 @@ import express from 'express';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
-import { loginDiscordUser, getUserById, getProfile, saveProfile, getStats, getUserIdByIdentity, createGuestUser, userHasIdentity, isGuestUser, setGuestName, createLinkCode, redeemLinkCode, loginCrazyGamesUser } from './db.js';
+import { loginDiscordUser, getUserById, getProfile, saveProfile, getStats, getUserIdByIdentity, createGuestUser, userHasIdentity, isGuestUser, createLinkCode, redeemLinkCode, loginCrazyGamesUser } from './db.js';
 
 const router = express.Router();
 
@@ -61,7 +61,7 @@ export function verifyDeviceToken(token) {
 /** Nový hostující účet + podepsaný token. */
 export function createGuestAccount(source = 'web') {
   const did = crypto.randomUUID();
-  const userId = createGuestUser(did, 'Hráč', source);
+  const userId = createGuestUser(did, undefined, source);
   return { userId, token: signDeviceToken(did, userId) };
 }
 
@@ -253,14 +253,12 @@ router.get('/profile', requireAuth, (req, res) => {
 });
 
 router.post('/profile', requireAuth, (req, res) => {
-  const allowed = ['helmet','gloves','tape','trail','stick','tape_style','helmet_type','visor','handed','number'];
+  // Host: jen držení hokejky (ovládání). Jméno ani vzhled si nemění — Šatna je pro účty (Ondřej 2026-11-13).
+  const allowed = isGuestUser(req.userId) ? ['handed'] : ['helmet','gloves','tape','trail','stick','tape_style','helmet_type','visor','handed','number'];
   const fields = {};
   for (const k of allowed) if (req.body?.[k] !== undefined) fields[k] = req.body[k];
   if (Object.keys(fields).length) saveProfile(req.userId, fields);
-  // jméno: jen hosté; obsazené → name_taken + návrh volného (klient ukáže hlášku a jméno vrátí)
-  const nm = typeof req.body?.display_name === 'string' && isGuestUser(req.userId) ? setGuestName(req.userId, req.body.display_name) : null;
-  if (nm && !nm.ok) return res.json({ ok: false, error: nm.error, suggestion: nm.suggestion, name: getUserById(req.userId)?.display_name });
-  res.json({ ok: true, name: nm?.name });
+  res.json({ ok: true });
 });
 
 router.get('/stats', requireAuth, (req, res) => {

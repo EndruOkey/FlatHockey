@@ -144,6 +144,13 @@ html.mobile #create-btn, html.mobile .sv-join-row { display: none !important; }
 #spec-bar #spec-name { font-size: 22px; }
 #spec-leave { all: unset; cursor: pointer; background: linear-gradient(90deg, var(--a3-red), var(--a3-red2)); padding: 8px 26px 8px 16px; font-size: 18px; clip-path: var(--a3-cut); }
 .lobby-item > div:first-child { flex: 1 1 auto; min-width: 0; }   /* název lobby bere zbylé místo */
+/* HOST v Šatně (2026-11-13): jméno, vzhled a barvy jen s účtem → ovládání zamčené, nahoře vysvětlení; držení L/R zůstává */
+.lk-guest-lock { display: none; }
+body.guest .lk-guest-lock { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; margin-bottom: 10px; border: 1px solid rgba(255,207,58,.35); border-left: 3px solid #ffcf3a; background: rgba(255,207,58,.06); font: 600 13px/1.45 'Hanken Grotesk', sans-serif; color: #f3e6b8; }
+.lk-guest-emb { display: none; } html.embedded .lk-guest-emb { display: inline; } html.embedded .lk-guest-web, html.embedded #lk-guest-discord { display: none; }
+.lk-guest-btn { width: auto; align-self: flex-start; margin: 0; padding: 7px 14px; background: #5865F2; color: #fff; font-size: .75rem; }
+body.guest .lk-panel .sw, body.guest .lk-panel .chip, body.guest #lk-dice, body.guest #num-input, body.guest #lk-plate-edit-btn,
+body.guest .lk-panel .lk-share { pointer-events: none; opacity: .35; filter: grayscale(.6); }
 .pb { display: inline-block; margin-left: 6px; padding: 0 4px; border-radius: 3px; font: 800 10px/14px 'Segoe UI', sans-serif; vertical-align: middle; color: #fff; }   /* ikonka původu (= Player.js BADGES) */
 .pb-d { background: #5865F2; } .pb-c { background: #7A3CFF; }
 .li-join, .li-watch { width: auto; margin-bottom: 0; }   /* globální button { width:100% } by tlačítka roztáhl a SLEDOVAT vytlačil */

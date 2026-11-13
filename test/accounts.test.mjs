@@ -171,7 +171,10 @@ try {
   // CSRF: Bearer z cizího originu projde, cookie z cizího originu ne
   const prof = await j(await api('/auth/profile', { token: c1.token, origin: 'https://evil.example', method: 'POST', body: { number: 12, display_name: 'Ondra' } }));
   check(prof.status === 200, 'Bearer POST z cizího originu -> 200');
-  check((await j(await api('/auth/me', { token: c1.token }))).body.display_name === 'Ondra', 'host: přezdívka z profilu uložena');
+  // 2026-11-13: host se nepřejmenovává a nemá vlastní vzhled — jméno přidělí server (Hráč + 4 číslice)
+  const meG = (await j(await api('/auth/me', { token: c1.token }))).body;
+  check(meG.display_name !== 'Ondra' && /^Hráč\d{4}\d*$/.test(meG.display_name), 'host: jméno z profilu se NEuloží, má přidělené ' + meG.display_name);
+  check(S.prepare('SELECT number FROM profiles WHERE user_id=?').get(guestId)?.number !== 12, 'host: číslo dresu (vzhled) se neuloží');
   // Discord účet v serverové DB + cookie
   const dId = Number(S.prepare("INSERT INTO users (discord_id, display_name) VALUES ('777','Disc')").run().lastInsertRowid);
   S.prepare('INSERT INTO identities (provider, provider_id, user_id) VALUES (?,?,?)').run('discord', '777', dId);

@@ -139,7 +139,7 @@ db.exec(`
 // ── JEDINEČNÁ JMÉNA (2026-11-13, Ondřej: „nesmí vznikat nickname duplicity") ──────────────────────
 // name_key = normalizované jméno (malá písmena dle cs, jedna mezera) s UNIQUE indexem → dvě stejná jména
 // (ani „Petr"/„petr") nevzniknou ani souběhem. Obsazené jméno z Discordu/CrazyGames dostane číslo (Petr2);
-// host si obsazené jméno nastavit nemůže (setGuestName vrátí name_taken + návrh).
+// host se nepřejmenovává (náhodné jméno při založení, createGuestUser).
 // users.source = odkud účet přišel ('web' | 'itch' | 'cg') — ikonka u hráče.
 for (const col of ['name_key TEXT', 'source TEXT']) { try { db.exec(`ALTER TABLE users ADD COLUMN ${col}`); } catch {} }
 export const NAME_MAX = 14;   // = klient (main.js profile() .slice(0, 14))
@@ -283,7 +283,8 @@ export function isGuestUser(user_id) {
 }
 
 /** Nový hostující účet vázaný na identitu zařízení (provider 'device', provider_id = did). */
-export const createGuestUser = db.transaction((did, display_name = 'Hráč', source = 'web') => {
+// Host dostane náhodné jedinečné jméno (Hráč + 4 číslice) — přejmenovat se nemůže (Ondřej 2026-11-13)
+export const createGuestUser = db.transaction((did, display_name = 'Hráč' + randomInt(1000, 10000), source = 'web') => {
   const info = db.prepare('INSERT INTO users (display_name, source) VALUES (?, ?)').run(display_name, ['web', 'itch', 'cg'].includes(source) ? source : 'web');
   const id = Number(info.lastInsertRowid);
   claimName(id, display_name);
@@ -293,7 +294,6 @@ export const createGuestUser = db.transaction((did, display_name = 'Hráč', sou
   return id;
 });
 
-/** Host si mění jméno: obsazené → { ok:false, error:'name_taken', suggestion }, jinak { ok:true, name }. */
 /** Ikonka původu hráče: 'd' Discord, 'c' CrazyGames účet, 'i' host z itch.io, 'g' host na CrazyGames, 'w' host z webu. */
 export function userBadge(user_id) {
   if (!user_id) return '';
@@ -302,13 +302,7 @@ export function userBadge(user_id) {
   const src = db.prepare('SELECT source FROM users WHERE id = ?').get(user_id)?.source;
   return src === 'itch' ? 'i' : src === 'cg' ? 'g' : 'w';
 }
-export function setGuestName(user_id, name) {
-  const n = cleanName(name);
-  if (!n || !isGuestUser(user_id)) return { ok: false, error: 'not_guest' };
-  if (nameTaken(nameKey(n), user_id)) return { ok: false, error: 'name_taken', suggestion: freeName(n, user_id) };
-  db.prepare('UPDATE users SET display_name = ?, name_key = ? WHERE id = ?').run(n, nameKey(n), user_id);
-  return { ok: true, name: n };
-}
+// (setGuestName odstraněno 2026-11-13: host se nepřejmenovává — jméno přidělí server, účet má jméno z Discordu/CrazyGames)
 
 /**
  * Sloučí účet src do dst (deterministická pravidla), vše v jedné transakci:

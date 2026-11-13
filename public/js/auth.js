@@ -2,6 +2,7 @@
 let _user = null;
 let _kind = null;          // 'account' (Discord) | 'guest' (účet zařízení) | null
 let _founder = false;      // má titul Founder (korunka u jména) — i pro hosta
+let _guestName = '';       // jméno hosta přidělené serverem (host se nepřejmenovává)
 const TOKEN_KEY = 'fh_device_token';
 const _listeners = new Set();
 
@@ -9,6 +10,7 @@ export function getUser() { return _user; }
 export function isGuest() { return _user === null; }
 export function getKind() { return _kind; }
 export function isFounder() { return _founder; }
+export function getGuestName() { return _guestName; }
 // Má hráč na serveru postup? (Discord účet NEBO host s účtem zařízení — i hostům se ukládají statistiky a kredity)
 export function hasProgress() { return _user !== null || _kind === 'guest'; }
 
@@ -42,6 +44,7 @@ export async function loadSession() {
       _kind = u.kind || 'account';
       _user = _kind === 'account' ? u : null;   // host zůstává „nepřihlášený“ pro UI (jen se mu ukládají statistiky)
       _founder = !!u.founder;                    // korunka u jména (i pro hosta s device-token účtem)
+      _guestName = _kind === 'guest' ? (u.display_name || '') : '';
     } else if (res.status === 401) {
       _user = null; _kind = null; _founder = false;
     }
