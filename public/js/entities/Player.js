@@ -1082,30 +1082,47 @@ export function bodyPose(st, o, dt = 1 / 60) {
 // horní a dolní ruka na holi (svět): sdílí draw i metrika. tipW = špička dříku, sway = posun horní ruky napříč (B1)
 export function stickHands(x, y, ba, dcv, hnd, tipW, sway = 0) {
   const R0 = PLAYER.radius, fC = Math.cos(ba), fS = Math.sin(ba), sC = -fS, sS = fC;
-  // DRŽENÍ (2026-11-13, scripts/stick_grip_metrics.mjs G1–G5): dřív horní ruka 0,55 R vpředu / 0,15 R do strany = PŘÍMO POD HELMOU
-  // (rukavice skrytá ve 100 % vzorků, dřík „z krku"). Nově jako skutečný hráč: horní ruka před bekhendovým bokem vedle hlavy
-  // (1,1 R vpředu, 0,5 R do strany), dolní ruka ve 35 % hole (skutečně ~30–40 cm pod horní); nápřah končí jako dřív (0,2 R; +0,4 R).
-  let tF = R0 * (1.1 - 0.9 * dcv); const tSd = R0 * (-0.5 + 0.9 * dcv) * hnd + sway;
-  { const dx = tipW.x - x, dy = tipW.y - y;   // špička v lokálu těla (jednotky R) → horní ruka dopředu, ať dřík nevede přes helmu
-    tF = R0 * gripAdjust(tF / R0, tSd / R0, (dx * fC + dy * fS) / R0, (dx * sC + dy * sS) / R0); }
-  const topW = { x: x + fC * tF + sC * tSd, y: y + fS * tF + sS * tSd };
-  return { topW, botW: { x: topW.x + (tipW.x - topW.x) * 0.35, y: topW.y + (tipW.y - topW.y) * 0.35 } };
+  // DRŽENÍ (2026-11-13, scripts/stick_grip_metrics.mjs G1–G5): dřív horní ruka 0,55 R vpředu = PŘÍMO POD HELMOU (dřík „z krku").
+  // HOKEJKA, NE MEČ (2026-11-13, Ondřej: „drží ji jak meč"; scripts/stick_hold_metrics.mjs H1–H6): horní ruka 1,1 R vpředu byla
+  // před helmou a dolní ruka 0,6 R za ní → obě rukavice u sebe, dřík trčel dopředu. Nově horní ruka (konec hole) u břicha na
+  // bekhendu (0,8 R vpředu, 0,75 R do strany), dolní ruka 1,2 R níž po dříku (≈ délka rukavice–šířka ramen), paže natažená;
+  // dřík jde šikmo přes přední stranu těla. Nápřah končí jako dřív (0,2 R; +0,4 R). Špička (čepel) se nemění.
+  const tF = R0 * (0.8 - 0.6 * dcv), tSd = R0 * (-0.75 + 1.15 * dcv) * hnd + sway;
+  let f = tF / R0, sd = tSd / R0, bf = 0.35;
+  { const dx = tipW.x - x, dy = tipW.y - y, lx = (dx * fC + dy * fS) / R0, ly = (dx * sC + dy * sS) / R0;   // špička v lokálu těla (R)
+    // puk u těla (špička < 2,5 R): konec hole se stáhne k boku (až −0,35 R, +0,15 R do strany) → ruce zůstanou od sebe, dřík šikmo
+    const near = Math.max(0, Math.min(1, (2.5 - Math.hypot(lx, ly)) / 0.9)) * (1 - dcv);
+    f -= 0.35 * near; sd -= 0.15 * near * hnd;
+    bf = Math.max(0.35, Math.min(0.65, 1.2 / Math.max(0.1, Math.hypot(lx - f, ly - sd))));
+    ({ f, s: sd } = gripAdjust(f, sd, lx, ly, bf, hnd, 1 - dcv));   // do strany jen mimo nápřah (plynulý přechod)
+    // dolní ruka v dosahu paže (≤ 1,85 R od forhendového ramene): spojitě (půlení) k horní ruce, rozestup nejméně 1,0 R
+    const L = Math.max(0.1, Math.hypot(lx - f, ly - sd)), bmin = Math.min(bf, 1.0 / L);
+    const far = b => Math.hypot(f + (lx - f) * b - 0.25, sd + (ly - sd) * b - 0.9 * hnd) > 1.85;
+    if (far(bf)) { if (far(bmin)) bf = bmin; else { let lo = bmin, hi = bf; for (let i = 0; i < 20; i++) { const m = (lo + hi) / 2; if (far(m)) hi = m; else lo = m; } bf = lo; } } }
+  const topW = { x: x + (fC * f + sC * sd) * R0, y: y + (fS * f + sS * sd) * R0 };
+  return { topW, botW: { x: topW.x + (tipW.x - topW.x) * bf, y: topW.y + (tipW.y - topW.y) * bf } };
 }
 // DŘÍK PŘED HLAVOU (2026-11-13, Ondřej: „hokejka stále občas prolejzá"): špička blízko u těla na forhendu → dřík by vedl přes obličej.
 // Horní ruka se posune dopředu (krok 0,06 R, max +0,48 R), dokud dřík (horní ruka → špička) nevede mimo elipsu helmy (skin.js:
 // střed 0,72 R, poloosy 0,616 × 0,56 R). Čistá funkce v jednotkách R — sdílí ji kresba i scripts/stick_grip_metrics.mjs.
-export function gripAdjust(fx, sy, tx, ty) {
-  const e = (u, v) => ((u - 0.72) / 0.616) ** 2 + (v / 0.56) ** 2, sg = sy > 0 ? 1 : -1;
-  // dosah paží (ramena 0,25 R / ±0,9 R; horní ≤ 1,5 R, dolní ruka ve 35 % hole ≤ 1,9 R) — dál ruku nepřetahuj
-  const reach = f => { const bx = f + (tx - f) * 0.35, by = sy + (ty - sy) * 0.35;
-    return Math.hypot(f - 0.25, sy - sg * 0.9) <= 1.5 && Math.hypot(bx - 0.25, by + sg * 0.9) <= 1.9; };
-  for (let k = 0; k <= 8; k++) {
-    const f = fx + 0.06 * k; let ok = true;
-    if (k > 0 && !reach(f)) return f - 0.06;
-    for (let i = 0; i <= 24 && ok; i++) { const t = i / 24; if (e(f + (tx - f) * t, sy + (ty - sy) * t) < 1) ok = false; }
-    if (ok) return f;
+// 2026-11-13 (meč): nejdřív ruku odsunout DO STRANY (od osy těla, krok 0,06 R, max 0,48 R) — dřík pak jde šikmo kolem helmy;
+// až když to dosah nedovolí, dopředu jako dřív. Vrací { f, s } (horní ruka v R); bf = podíl dolní ruky po dříku.
+// hnd: horní ruka patří vždy k bekhendovému rameni (skinRig) → strana −hnd; sideK = délka kroku do strany (0 = jen dopředu)
+export function gripAdjust(fx, sy, tx, ty, bf = 0.35, hnd = 0, sideK = 1) {
+  const e = (u, v) => ((u - 0.72) / 0.616) ** 2 + (v / 0.56) ** 2, sg = hnd ? -hnd : (sy > 0 ? 1 : -1);
+  // dosah paží (ramena 0,25 R / ±0,9 R; horní ≤ 1,5 R, dolní ruka ≤ 1,9 R) — dál ruku nepřetahuj
+  const reach = (f, s) => { const bx = f + (tx - f) * bf, by = s + (ty - s) * bf;
+    return Math.hypot(f - 0.25, s - sg * 0.9) <= 1.5 && Math.hypot(bx - 0.25, by + sg * 0.9) <= 1.9; };
+  const clear = (f, s) => { for (let i = 0; i <= 24; i++) { const t = i / 24; if (e(f + (tx - f) * t, s + (ty - s) * t) < 1) return false; } return true; };
+  if (clear(fx, sy)) return { f: fx, s: sy };
+  let s0 = sy;   // nejdál do strany, kam dosah pustí; odtud případně dopředu
+  for (let k = 1; k <= 8 && sideK > 0; k++) { const s = sy + sg * 0.06 * sideK * k; if (!reach(fx, s)) break; s0 = s; if (clear(fx, s)) return { f: fx, s }; }
+  for (let k = 1; k <= 8; k++) {
+    const f = fx + 0.06 * k;
+    if (!reach(f, s0)) return { f: f - 0.06, s: s0 };
+    if (clear(f, s0)) return { f, s: s0 };
   }
-  return fx + 0.48;
+  return { f: fx + 0.48, s: s0 };
 }
 
 // ROZPLÁCNUTÍ (2026-11-13): kloubová postava (downBody.js) — pád → doznění → ležení (klouže se simulací) → zvedání ve fázích

@@ -48,9 +48,9 @@ for (const dpr of [1, 3]) {
       for (let t = 0; t < S.pre / 0.17; t++) { await p.waitForTimeout(170); await aimAt(); }
       if (S.shot) await p.mouse.down();
       if (S.brake) await p.keyboard.down('Space');
-      const frames = await p.evaluate(async ({ n, k, turn, shot, flick, rev }) => {
+      const frames = await p.evaluate(async ({ n, k, turn, shot, flick, rev, cw }) => {
         const g = window.__fhGame, eng = g.engine, cv = eng.canvas || document.querySelector('canvas'), inp = g.input;
-        const sc = cv.width / cv.clientWidth, W = 52, out = [], prev = eng.onDraw; let f = 0;
+        const sc = cv.width / cv.clientWidth, W = cw, out = [], prev = eng.onDraw; let f = 0;
         await new Promise(res => {
           eng.onDraw = (c) => { prev(c); const cam = g._cam, L = g.local; f++;
             if (turn) {   // zatáčka: vstup se po 12 snímcích stáčí doprava dolů (D → D+S → S), myš míří po směru jízdy
@@ -67,7 +67,7 @@ for (const dpr of [1, 3]) {
             if (out.length >= n) { eng.onDraw = prev; inp.keys.KeyS = false; res(); } };
         });
         return out;
-      }, { n: N, k: S.k, turn: !!S.turn, shot: !!S.shot, flick: !!S.flick, rev: !!S.rev });
+      }, { n: N, k: S.k, turn: !!S.turn, shot: !!S.shot, flick: !!S.flick, rev: !!S.rev, cw: +(A.w || 52) });   // --w = výřez (css px)
       for (const k of S.keys) await p.keyboard.up(k);
       await p.keyboard.up('KeyS'); await p.evaluate(() => { window.__fhGame.input.keys.KeyA = false; }); if (S.brake) await p.keyboard.up('Space'); if (S.shot) await p.mouse.up();
       frames.forEach((f, i) => writeFileSync(join(OUT, `${lab}_${S.id}_d${dpr}_${String(i).padStart(2, '0')}.png`), Buffer.from(f.img.split(',')[1], 'base64')));
