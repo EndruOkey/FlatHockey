@@ -65,11 +65,11 @@ function scenario(id, k) {
     if (spd > 30) p._hsDir = Math.atan2(p.vy, p.vx);
     if ((p._stopFx ?? 0) > 0) p._stopFx -= DT;
     p._stopTSmooth = skateStopBlend(p._stopTSmooth ?? 0, (p._stopFx ?? 0) > 0, DT); p._stopK3 = skateStopBlend(p._stopK3 ?? 0, (p._stopFx ?? 0) > 0, DT, 3.5, 3, true); if (!p._stopTSmooth && !p._stopK3) p._hsDir = null;
-    const stopT = (k === 3 ? p._stopK3 : p._stopTSmooth) ?? 0;
+    const stopT = (k >= 3 ? p._stopK3 : p._stopTSmooth) ?? 0;
     const mLoc = spd > 8 ? angleDiff(Math.atan2(p.vy, p.vx), ba) : 0;
     skateAdvance(p, p.x, p.y, ba, spd, k, mLoc, DT);
-    const pose = skatePose({ k, phase: p._skatePhase ?? 0, spd, mLoc: k === 3 ? p._mLocS : mLoc, stopT, stopLoc: p._hsDir != null ? angleDiff(p._hsDir, ba) : 0, rotSf: p._rotSf ?? 0, lean: p._lean, thr: p._thr ?? 0 });
-    if (k === 3) skateFeetSmooth(p, pose.feet, DT);
+    const pose = skatePose({ k, phase: p._skatePhase ?? 0, spd, mLoc: k >= 3 ? p._mLocS : mLoc, stopT, stopLoc: p._hsDir != null ? angleDiff(p._hsDir, ba) : 0, rotSf: p._rotSf ?? 0, lean: p._lean, thr: p._thr ?? 0, bwS: p._bwS, bwV: p._bwV });
+    if (k === 4) skateFeetSmooth(p, pose.feet, DT, ba, null, null, true); else if (k === 3) skateFeetSmooth(p, pose.feet, DT);
     F.push({ t, x: p.x, y: p.y, ba, spd, mLoc, lean: p._lean, stopT, phase: p._skatePhase ?? 0, pose });
   }
   return F;

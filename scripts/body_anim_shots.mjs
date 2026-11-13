@@ -7,6 +7,8 @@ import { mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 const A = Object.fromEntries(process.argv.slice(2).map(a => { const [k, v] = a.replace(/^--/, '').split('='); return [k, v ?? true]; }));
 const PORT = A.port || 4611, OUT = A.out || '_body_shots', N = +(A.n || 12);
+// --key=k --pred=3 --po=4: porovnat jinou volbu VIS (výchozí tělo b 0 → 1)
+const VKEY = A.key || 'b', VPRED = +(A.pred ?? 0), VPO = +(A.po ?? 1);
 mkdirSync(OUT, { recursive: true });
 // id, krok snímání (každý k-tý snímek), příprava (s jízdy), klávesy, akce během snímání
 const SIT = [
@@ -15,6 +17,8 @@ const SIT = [
   { id: 'brzda', k: 2, keys: ['KeyD'], pre: 1.4, brake: true },
   { id: 'napr', k: 4, keys: [], pre: 0.6, shot: true },
   { id: 'klid', k: 12, keys: [], pre: 1.0 },
+  { id: 'bokem', k: 2, keys: ['KeyS'], pre: 1.4 },                  // jízda bokem dolů, tělo čelem doprava (myš)
+  { id: 'svih', k: 2, keys: ['KeyD'], pre: 1.4, flick: true },      // jízda vpřed, po 6 snímcích švih myší dozadu
 ];
 const errs = [];
 const b = await chromium.launch();
@@ -29,7 +33,7 @@ for (const dpr of [1, 3]) {
   if (await p.isVisible('#splash-guest-btn')) { await p.click('#splash-guest-btn'); await p.waitForTimeout(800); }
   await p.click('#go-train'); await p.click('#go-solo'); await p.waitForTimeout(1500);
   for (const lab of ['pred', 'po']) {
-    await p.evaluate(async b => { (await import('/js/vis.js')).VIS.b = b; }, lab === 'po' ? 1 : 0);
+    await p.evaluate(async ([key, v]) => { (await import('/js/vis.js')).VIS[key] = v; }, [VKEY, lab === 'po' ? VPO : VPRED]);
     for (const S of SIT) {
       await p.evaluate(() => { const g = window.__fhGame, L = g.local; L.x = 160; L.y = 330; L.vx = 0; L.vy = 0; L.bodyAngle = L.skateAngle = L.aimAngle = 0;
         if (g.puck) { g.puck.x = 900; g.puck.y = 60; g.puck.vx = 0; g.puck.vy = 0; } });
@@ -42,7 +46,7 @@ for (const dpr of [1, 3]) {
       for (let t = 0; t < S.pre / 0.17; t++) { await p.waitForTimeout(170); await aimAt(); }
       if (S.shot) await p.mouse.down();
       if (S.brake) await p.keyboard.down('Space');
-      const frames = await p.evaluate(async ({ n, k, turn, shot }) => {
+      const frames = await p.evaluate(async ({ n, k, turn, shot, flick }) => {
         const g = window.__fhGame, eng = g.engine, cv = eng.canvas || document.querySelector('canvas'), inp = g.input;
         const sc = cv.width / cv.clientWidth, W = 52, out = [], prev = eng.onDraw; let f = 0;
         await new Promise(res => {
@@ -50,6 +54,7 @@ for (const dpr of [1, 3]) {
             if (turn) {   // zatáčka: vstup se po 12 snímcích stáčí doprava dolů (D → D+S → S), myš míří po směru jízdy
               const st = Math.floor(f / 12); inp.keys.KeyD = st < 2; inp.keys.KeyS = st >= 1;
               const a = Math.atan2(L.vy, L.vx); inp.mouseX = cam.ox + (L.x + Math.cos(a) * 200) * cam.scale; inp.mouseY = cam.oy + (L.y + Math.sin(a) * 200) * cam.scale; }
+            if (flick && f >= 6) { inp.mouseX = cam.ox + (L.x - 200) * cam.scale; inp.mouseY = cam.oy + L.y * cam.scale; }   // švih dozadu
             if (shot && f === 44) window.dispatchEvent(new MouseEvent('mouseup', { button: 0 }));   // rána po ~0,7 s nápřahu
             if (f % k) return;
             const cx = (cam.ox + L.x * cam.scale) * sc, cy = (cam.oy + L.y * cam.scale) * sc, w = W * sc;
@@ -59,7 +64,7 @@ for (const dpr of [1, 3]) {
             if (out.length >= n) { eng.onDraw = prev; inp.keys.KeyS = false; res(); } };
         });
         return out;
-      }, { n: N, k: S.k, turn: !!S.turn, shot: !!S.shot });
+      }, { n: N, k: S.k, turn: !!S.turn, shot: !!S.shot, flick: !!S.flick });
       for (const k of S.keys) await p.keyboard.up(k);
       await p.keyboard.up('KeyS'); if (S.brake) await p.keyboard.up('Space'); if (S.shot) await p.mouse.up();
       frames.forEach((f, i) => writeFileSync(join(OUT, `${lab}_${S.id}_d${dpr}_${String(i).padStart(2, '0')}.png`), Buffer.from(f.img.split(',')[1], 'base64')));

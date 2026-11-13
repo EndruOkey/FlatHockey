@@ -134,7 +134,7 @@ export function skinBody(c, B, K) {
   for (const L of legs) { body.addPath(L.sh); body.addPath(L.th); }
   const PT = [-1, 1].map(sd => skinPants(sd, hh));   // kalhoty = středy natočené s boky
   for (const q of PT) ellP(body, q.x, q.y, R * 0.5, R * 0.46);  // kalhoty
-  const up = new Path2D(); { const q = new Path2D(); torso(q, B.jd); up.addPath(q, new DOMMatrix().translate(ux, uy)); } for (const s of S) ellP(up, s.x - R * 0.12, shY(s), R * 0.48, R * 0.42);   // trup + ramena
+  const up = new Path2D(); { const q = new Path2D(); torso(q, B.jd); up.addPath(q, new DOMMatrix().translate(ux, uy).rotate((B.twT || 0) * 180 / Math.PI)); }   // K4: trup natočený s boky for (const s of S) ellP(up, s.x - R * 0.12, shY(s), R * 0.48, R * 0.42);   // trup + ramena
   for (let i = 0; i < 2; i++) { capsule(up, S[i].x, S[i].y, 1.9, E[i].x, E[i].y, 1.5); capsule(up, E[i].x, E[i].y, 1.5, H[i].x, H[i].y, 1.25); }   // paže: plynulé zúžení
   const gloves = new Path2D(); for (const g of gl) { const m = new DOMMatrix().translate(g.x, g.y).rotate(g.a * 180 / Math.PI); const q = new Path2D(); q.roundRect(-2.6 * GS + 0.6, -1.9 * GS, 4.6 * GS, 3.8 * GS, 1.5); gloves.addPath(q, m); }
   const helm = new Path2D(); { const q = new Path2D(); ellP(q, hx, 0, hrx, hry); helm.addPath(q, HM); }
