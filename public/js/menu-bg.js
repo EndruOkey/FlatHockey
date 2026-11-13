@@ -35,6 +35,7 @@ export function initMenuBg(host) {
       teams: { home: { name: 'HOME', color: '#3a9fff', style: 'solid' }, away: { name: 'AWAY', color: '#ff4455', style: 'solid' } },
     });
     stat.frames = 0; stat.ticks = 0; stat.marks = {};
+    cine.rng = SEED >>> 0; cine.left = 0; cine.n = 0; cine.kind = 'wide'; cine.deck = null;   // restart scény = stejný sestřih
   }
 
   function resize() {
@@ -44,11 +45,50 @@ export function initMenuBg(host) {
     canvas.cssW = w; canvas.cssH = h;
   }
 
-  // Pevná kamera (žádný pohyb): celé kluziště vidět, obě branky.
-  function camera() {
-    const W = canvas.cssW, H = canvas.cssH, pad = 24;
-    const scale = Math.min((W - pad * 2) / RINK.w, (H - pad * 2) / RINK.h);
-    return { scale, ox: (W - RINK.w * scale) / 2, oy: (H - RINK.h * scale) / 2 };
+  // FILMOVÁ KAMERA (2026-11-13, Ondřej: „víc filmatický, kamera na hráče různě se měnící"): záběry 5–8 s se střihem.
+  // Pořadí a délky záběrů z LCG se seedem → stejný seed = stejný sestřih. Kamera se dotahuje plynule (pevné dt 1/30),
+  // jemné chvění „z ruky" je sinus z čísla snímku. Předmět záběru je uprostřed = v mezeře mezi panely menu.
+  const SHOT = { carrier: { z: 2.6, lead: 0.45 }, puck: { z: 2.0, lead: 0.25 }, goal: { z: 2.2, lead: 0 }, wide: { z: 1.15, z1: 1.45, lead: 0 }, player: { z: 3.0, lead: 0.35 } };
+  const KINDS = Object.keys(SHOT);
+  const cine = { rng: SEED >>> 0, shot: null, left: 0, n: 0, cx: RINK.w / 2, cy: RINK.h / 2, z: 1, kind: 'wide', who: 0, f: 0 };
+  const lcg = () => (cine.rng = (Math.imul(cine.rng, 1664525) + 1013904223) >>> 0) / 4294967296;
+  function nextShot() {
+    // balíček: každé kolo všech 5 typů v zamíchaném pořadí (Fisher–Yates z LCG), bez opakování přes hranici kola
+    if (!cine.deck || !cine.deck.length) { const d = KINDS.slice(); for (let i = d.length - 1; i > 0; i--) { const j = Math.floor(lcg() * (i + 1)); [d[i], d[j]] = [d[j], d[i]]; }
+      if (d[0] === cine.kind) d.push(d.shift()); cine.deck = d; }
+    const k = cine.deck.shift();
+    cine.kind = k; cine.left = cine.len = 150 + Math.floor(lcg() * 90); cine.who = Math.floor(lcg() * 6); cine.n++; cine.f = 0;
+    return true;
+  }
+  function subject(m) {
+    const pl = [...m.players.values()].sort((a, b) => (a.id > b.id ? 1 : -1)), pk = m.puck, S = SHOT[cine.kind];
+    let o = pk, vx = pk.vx || 0, vy = pk.vy || 0;
+    if (cine.kind === 'carrier') { o = pl.find(p => p.hasPuck) || pl.reduce((b, p) => (Math.hypot(p.x - pk.x, p.y - pk.y) < Math.hypot(b.x - pk.x, b.y - pk.y) ? p : b), pl[0]); vx = o.vx || 0; vy = o.vy || 0; }
+    else if (cine.kind === 'player' && pl.length) { o = pl[cine.who % pl.length]; vx = o.vx || 0; vy = o.vy || 0; }
+    let x = o.x + vx * S.lead, y = o.y + vy * S.lead;
+    if (cine.kind === 'goal') { const gx = pk.x < RINK.w / 2 ? RINK.goalLineLeft : RINK.goalLineRight; x = gx * 0.6 + pk.x * 0.4; y = RINK.h / 2 * 0.6 + pk.y * 0.4; }
+    const z = S.z1 ? S.z + (S.z1 - S.z) * (1 - cine.left / cine.len) : S.z;
+    return { x, y, z };
+  }
+  function camera(m) {
+    const W = canvas.cssW, H = canvas.cssH, pad = 24, dt = 1 / FPS;
+    const base = Math.min((W - pad * 2) / RINK.w, (H - pad * 2) / RINK.h);
+    let cut = false;
+    if (cine.left <= 0) cut = nextShot();
+    cine.left--; cine.f++;
+    const t = subject(m);
+    if (cut) { cine.cx = t.x; cine.cy = t.y; cine.z = t.z; }       // střih: kamera rovnou na novém záběru
+    else { const kp = 1 - Math.exp(-3 * dt), kz = 1 - Math.exp(-1.5 * dt); cine.cx += (t.x - cine.cx) * kp; cine.cy += (t.y - cine.cy) * kp; cine.z += (t.z - cine.z) * kz; }
+    const scale = base * cine.z, hw = W / 2 / scale, hh = H / 2 / scale, f = stat.frames;
+    // „z ruky": pomalé chvění ±3 px obrazovky (dvě nesoudělné frekvence)
+    let cx = cine.cx + (Math.sin(f * 0.031) * 2 + Math.sin(f * 0.017 + 1.3)) / scale, cy = cine.cy + (Math.cos(f * 0.023) * 2 + Math.sin(f * 0.013)) / scale;
+    // nevyjet z kluziště: když je záběr menší než kluziště, střed drž uvnitř; jinak střed kluziště
+    // smí vyjet za mantinel o 45 % poloviny záběru (tmavá aréna) → předmět zůstane uprostřed, v mezeře mezi panely menu
+    const mx = hw * 0.45, my = hh * 0.45;
+    cx = hw * 2 >= RINK.w + 2 * mx ? RINK.w / 2 : Math.max(hw - mx, Math.min(RINK.w - hw + mx, cx));
+    cy = hh * 2 >= RINK.h + 2 * my ? RINK.h / 2 : Math.max(hh - my, Math.min(RINK.h - hh + my, cy));
+    stat.shot = cine.kind; stat.shotN = cine.n;
+    return { scale, ox: W / 2 - cx * scale, oy: H / 2 - cy * scale };
   }
 
   function frame() {
@@ -61,7 +101,7 @@ export function initMenuBg(host) {
     if (m._fx) m._fx.length = 0;                 // hlášky skillu se za menu nekreslí
     if (m.ended || stat.ticks >= RESTART_TICKS) { build(); return; }
     resize();
-    const cam = camera();
+    const cam = camera(m);
     stat.frames++;
     cam.dt = 1 / FPS; cam.t = stat.frames / FPS;  // hodiny kresby z počtu snímků → deterministický obraz
     const t0 = performance.now();
