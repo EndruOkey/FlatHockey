@@ -228,7 +228,27 @@ function _drawTrapezoid(ctx, cam, glx, dir) {
 
 // Rectangular goal cage that protrudes outside the rink
 // dir=+1: cage extends right (right goal), dir=-1: cage extends left (left goal)
+// CACHE BRANKY (2026-11-13, scripts/perf_frame.py): G6–G12 mají rozostřený stín (ctx.filter blur) → kreslení každý snímek
+// srazilo hru ze ~170 na 13–32 FPS (bez vsync, headless). Branka je statická → vrstva (base/front) se vykreslí JEDNOU do
+// skrytého plátna a pak se jen razítkuje; nové vykreslení jen při změně varianty, barvy, měřítka nebo DPR.
+const _goalCache = new Map();
 function _drawGoal(ctx, cam, glx, dir, postColor, part = 'base') {
+  if (VIS.g >= 6 && VIS.g <= 12 && typeof document !== 'undefined' && !cam._noCache) {
+    const s = cam.scale, dpr = Math.abs(ctx.getTransform().a) || 1, key = `${VIS.g}|${dir}|${part}|${postColor}|${s.toFixed(4)}|${dpr}`;
+    const wx0 = glx - 48, wy0 = RINK.goalY - 40, ww = 96, wh = RINK.goalH + 80;   // svět kolem branky vč. stínu (posun ~13 px)
+    let c = _goalCache.get(key);
+    if (!c) {
+      if (_goalCache.size > 24) _goalCache.clear();
+      c = document.createElement('canvas'); c.width = Math.ceil(ww * s * dpr); c.height = Math.ceil(wh * s * dpr);
+      const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      _drawGoal(g, { scale: s, ox: -wx0 * s, oy: -wy0 * s, _noCache: true }, glx, dir, postColor, part);
+      _goalCache.set(key, c);
+    }
+    // razítko na celé fyzické pixely 1:1 (zlomková pozice = převzorkování → tenké trubky ztratí jas); posun ≤ ½ px zařízení
+    const px = Math.round((cam.ox + wx0 * s) * dpr) / dpr, py = Math.round((cam.oy + wy0 * s) * dpr) / dpr;
+    ctx.drawImage(c, px, py, c.width / dpr, c.height / dpr);
+    return;
+  }
   // BRANKA S VÝŠKOU (2026-11-09): stejná projekce jako puk (obrazovka y = y − z) → břevno je
   // PUCK.crossbarHeight nad ledem, zadní horní hrana sítě níž (síť se k zadní stěně svažuje).
   const s = cam.scale, { ox, oy } = cam;
@@ -533,7 +553,7 @@ function _drawGoalReal(ctx, s, x, dir, y1, y2, postColor, Hs, part, G) {
 // v3 (Ondřej: „síť je pořád deformovaná do oblouku"): žádný oblouk — rovný bok od tyčky až k zadnímu rohu, ROVNÁ záda, zaoblené jen rohy (r).
 // G11 = boky rozevřené (záda širší než ústí), G12 = boky skoro rovnoběžné. Vzpěry rovné z rohu police do zadního rohu základny.
 export const GOAL_NHL = {
-  11: { depth: 23.2, bow: 2.4, shelf: 11, halfBack: 26.5, r: 5, shelfR: 4.5, bar: 2.4, tube: 1.8, mesh: 4.4 },
+  11: { depth: 23.2, bow: 2.4, shelf: 11, halfBack: 28.5, r: 5, shelfR: 4.5, bar: 2.4, tube: 1.8, mesh: 4.4 },
   12: { depth: 23.2, bow: 2.4, shelf: 11, halfBack: 23.5, r: 5, shelfR: 4.5, bar: 2.4, tube: 1.8, mesh: 4.4 },
 };
 function _drawGoalNHL(ctx, s, x, dir, y1, y2, postColor, Hs, part, G) {

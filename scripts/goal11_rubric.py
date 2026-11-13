@@ -101,10 +101,10 @@ def evaluate(g):
     sh = sum(lum(E.getpixel(P(GL + u, y))) for u in range(6, 19) for y in range(253, 258)) / 65
     res['R9'] = (sh <= free * 0.97, f'stín {sh:.3f} vs led {free:.3f} ({(1 - sh / free) * 100:.1f} % tmavší)')
     # R13 (doplněno 2026-11-13 po Ondřejově připomínce „spodní hrana od tyček není takhle zaoblená"): bok základny od tyčky
-    # je ROVNÝ — horní okraj bílé trubky na sloupcích u 3,5–12 leží na přímce (největší odchylka od tětivy ≤ 0,35 px hřiště)
+    # je ROVNÝ — horní okraj bílé trubky na sloupcích u 4,5–12 leží na přímce (největší odchylka od tětivy ≤ 0,35 px hřiště)
     edge = []
-    for k in range(0, 18):   # od u 3,5: blíž k tyčce se trubka základny slévá s trubkou police (< 1,8 px od sebe) → měřila by se police
-        wu = 3.5 + 0.5 * k; f = [isW(c) for c in col(wu, 192, 228)]; i = next((i for i, q in enumerate(f) if q), None)
+    for k in range(0, 16):   # od u 4,5: blíž k tyčce se trubka základny slévá s trubkou police (< 1,8 px od sebe) → měřila by se police
+        wu = 4.5 + 0.5 * k; f = [isW(c) for c in col(wu, 192, 228)]; i = next((i for i, q in enumerate(f) if q), None)
         if i is not None: edge.append((wu, 192 + i * st))
     if len(edge) >= 10:
         (ua, ya), (ub, yb) = edge[0], edge[-1]
