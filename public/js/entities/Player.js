@@ -992,9 +992,27 @@ export function stickHands(x, y, ba, dcv, hnd, tipW, sway = 0) {
   // DRŽENÍ (2026-11-13, scripts/stick_grip_metrics.mjs G1–G5): dřív horní ruka 0,55 R vpředu / 0,15 R do strany = PŘÍMO POD HELMOU
   // (rukavice skrytá ve 100 % vzorků, dřík „z krku"). Nově jako skutečný hráč: horní ruka před bekhendovým bokem vedle hlavy
   // (1,1 R vpředu, 0,5 R do strany), dolní ruka ve 35 % hole (skutečně ~30–40 cm pod horní); nápřah končí jako dřív (0,2 R; +0,4 R).
-  const tF = R0 * (1.1 - 0.9 * dcv), tSd = R0 * (-0.5 + 0.9 * dcv) * hnd + sway;
+  let tF = R0 * (1.1 - 0.9 * dcv); const tSd = R0 * (-0.5 + 0.9 * dcv) * hnd + sway;
+  { const dx = tipW.x - x, dy = tipW.y - y;   // špička v lokálu těla (jednotky R) → horní ruka dopředu, ať dřík nevede přes helmu
+    tF = R0 * gripAdjust(tF / R0, tSd / R0, (dx * fC + dy * fS) / R0, (dx * sC + dy * sS) / R0); }
   const topW = { x: x + fC * tF + sC * tSd, y: y + fS * tF + sS * tSd };
   return { topW, botW: { x: topW.x + (tipW.x - topW.x) * 0.35, y: topW.y + (tipW.y - topW.y) * 0.35 } };
+}
+// DŘÍK PŘED HLAVOU (2026-11-13, Ondřej: „hokejka stále občas prolejzá"): špička blízko u těla na forhendu → dřík by vedl přes obličej.
+// Horní ruka se posune dopředu (krok 0,06 R, max +0,48 R), dokud dřík (horní ruka → špička) nevede mimo elipsu helmy (skin.js:
+// střed 0,72 R, poloosy 0,616 × 0,56 R). Čistá funkce v jednotkách R — sdílí ji kresba i scripts/stick_grip_metrics.mjs.
+export function gripAdjust(fx, sy, tx, ty) {
+  const e = (u, v) => ((u - 0.72) / 0.616) ** 2 + (v / 0.56) ** 2, sg = sy > 0 ? 1 : -1;
+  // dosah paží (ramena 0,25 R / ±0,9 R; horní ≤ 1,5 R, dolní ruka ve 35 % hole ≤ 1,9 R) — dál ruku nepřetahuj
+  const reach = f => { const bx = f + (tx - f) * 0.35, by = sy + (ty - sy) * 0.35;
+    return Math.hypot(f - 0.25, sy - sg * 0.9) <= 1.5 && Math.hypot(bx - 0.25, by + sg * 0.9) <= 1.9; };
+  for (let k = 0; k <= 8; k++) {
+    const f = fx + 0.06 * k; let ok = true;
+    if (k > 0 && !reach(f)) return f - 0.06;
+    for (let i = 0; i <= 24 && ok; i++) { const t = i / 24; if (e(f + (tx - f) * t, sy + (ty - sy) * t) < 1) ok = false; }
+    if (ok) return f;
+  }
+  return fx + 0.48;
 }
 
 // ROZPLÁCNUTÍ (2026-11-13): kloubová postava (downBody.js) — pád → doznění → ležení (klouže se simulací) → zvedání ve fázích

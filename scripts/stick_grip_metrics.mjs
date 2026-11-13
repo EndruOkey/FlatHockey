@@ -11,14 +11,16 @@
 // Výběr (deterministický): ze všech (f0, s0) na mřížce, které splní G1–G5, ta nejblíž dnešnímu držení; nápřah končí jako dnes (f 0,2 R, s +0,4 R).
 // node scripts/stick_grip_metrics.mjs
 import { readFileSync } from 'fs';
+import { gripAdjust } from '../public/js/entities/Player.js';   // stejné posunutí horní ruky jako kresba
 const S = JSON.parse(readFileSync(new URL('./data/stick_tips.json', import.meta.url)));
 const HX = 0.72, HRX = 0.55 * 1.12, HRY = 0.5 * 1.12;
 const eH = (x, y) => ((x - HX) / HRX) ** 2 + (y / HRY) ** 2;   // < 1 = uvnitř helmy
+let ADJ = false;
 function evaluate(f0, s0, bf = 0.42) {
   const fk = f0 - 0.2, sk = 0.4 - s0;   // nápřah (dcv = 1) končí stejně jako dnes: f 0,2 R, s +0,4 R
   let g1 = 0, g2 = 0, g3 = 0, g4 = 0, n4 = 0, g5 = 0, n5 = 0;
   for (const [tx, ty, dcv, hnd] of S) {
-    const fx = f0 - fk * dcv, sy = (s0 + sk * dcv) * hnd, bx = fx + (tx - fx) * bf, by = sy + (ty - sy) * bf;
+    const sy = (s0 + sk * dcv) * hnd, fx = ADJ ? gripAdjust(f0 - fk * dcv, sy, tx, ty) : f0 - fk * dcv, bx = fx + (tx - fx) * bf, by = sy + (ty - sy) * bf;
     if (eH(fx, sy) >= 1) g1++;
     let m = 1e9; for (let i = 0; i <= 40; i++) { const k = i / 40; m = Math.min(m, eH(fx + (tx - fx) * k, sy + (ty - sy) * k)); }
     if (m >= 1) g2++;
@@ -41,3 +43,6 @@ for (let b = 0.42; b >= 0.2499; b -= 0.01) for (let f = 0.45; f <= 1.2001; f += 
   const d = Math.hypot(f - 0.55, s + 0.15, (b - 0.42) * 2); if (!best || d < best.d - 1e-9) best = { f: +f.toFixed(2), s: +s.toFixed(2), b: +b.toFixed(2), d, r };
 }
 console.log(best ? `NOVĚ   f0 ${best.f} s0 ${best.s} dolní ruka ${best.b}: ${fmt(best.r)} → OK` : 'žádná kombinace nesplní G1–G5');
+
+ADJ = true; const fin = evaluate(1.1, -0.5, 0.35);
+console.log(`KRESBA (1,1 / −0,5 / 0,35 + gripAdjust): ${fmt(fin)} → ${fin.ok ? 'OK' : 'NE'}`);

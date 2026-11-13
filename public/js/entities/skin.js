@@ -263,7 +263,9 @@ export function skinGoalie(c, G, K, o) {
   // maska: zadní plát, kopule s malbou, klec „kočičí oči"
   c.save(); c.setTransform(c.getTransform().multiply(bm));
   if (!lod) { c.fillStyle = mix(K.gk, '#f4f6fa', 0.55); c.beginPath(); c.roundRect(mx + mrx * 0.55, -mry * 0.55, mrx * 0.6, mry * 1.1, 0.8); c.fill(); }   // zadní plát masky (v 1× splývá)
-  c.fillStyle = K.gk; c.beginPath(); c.ellipse(mx, 0, mrx, mry, 0, 0, Math.PI * 2); c.fill();
+  // MASKA ODDĚLENÁ OD TĚLA (2026-11-13, Ondřej: „hlava u gólmana zaniká"): dřív stejná týmová barva jako vesta, bez vlastní hrany.
+  // Kopule o tón světlejší + vlastní tenký obrys (krok 7) — jako oddělená helma hráče (H1).
+  c.fillStyle = mix(K.gk, '#f4f6fa', 0.2); c.beginPath(); c.ellipse(mx, 0, mrx, mry, 0, 0, Math.PI * 2); c.fill();
   c.save(); c.clip(); const pc = mix(K.gk, K.padAccent === K.gk ? K.accent : K.padAccent, lod ? 0.3 : 0.7); c.fillStyle = pc;
   if (K.mask === 'team') c.fillRect(mx - mrx, -mry * 0.18, mrx * 2, mry * 0.36);
   else if (K.mask === 'stripe') { c.fillRect(mx - mrx, -mry * 0.62, mrx * 2, mry * 0.24); c.fillRect(mx - mrx, mry * 0.38, mrx * 2, mry * 0.24); }
@@ -278,6 +280,7 @@ export function skinGoalie(c, G, K, o) {
   c.save(); c.clip(body); c.fillStyle = gr; c.fillRect(-30, -30, 60, 60); c.restore();
   // 7) klec masky + lesk navrch
   c.save(); c.setTransform(c.getTransform().multiply(bm));
+  c.beginPath(); c.ellipse(mx, 0, mrx, mry, 0, 0, Math.PI * 2); c.strokeStyle = SKIN_OUT; c.lineWidth = 1.1; c.stroke();   // vlastní hrana masky
   c.beginPath(); c.ellipse(mx + lx * 1.2, ly * 1.2, 0.9, 0.55, 0, 0, Math.PI * 2); c.fillStyle = 'rgba(255,255,255,0.85)'; c.fill();
   c.beginPath(); const cx0 = mx - mrx * 0.45;
   c.moveTo(cx0, -mry * 0.85); c.quadraticCurveTo(mx - mrx * 1.35, 0, cx0, mry * 0.85);
