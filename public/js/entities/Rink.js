@@ -461,7 +461,7 @@ function _dPath(x, dir, cy, half, hb, side, sideCtl, depth, s) {
   if (side > 0) P.quadraticCurveTo(X(sideCtl), Y(hb), X(0), Y(half));
   return P;
 }
-function _realPath(x, dir, cy, half, depth, halfBack, r, s, flare = 0) {
+function _realPath(x, dir, cy, half, depth, halfBack, r, s, flare = 0, bow = 0) {   // bow > 0: záda lehce vyklenutá (vrchol o bow/2 za rohy)
   // půlka obrysu od tyčky (u=0, y=±half) k zádům; u = hloubka za čarou, směr dir. flare > 0: od tyčky nejdřív do strany (oblouk), pak dozadu.
   const P = new Path2D(), X = u => x + dir * u * s, Y = v => cy + v * s;
   const hb = halfBack, d = depth;
@@ -469,7 +469,7 @@ function _realPath(x, dir, cy, half, depth, halfBack, r, s, flare = 0) {
   if (flare > 0) { P.quadraticCurveTo(X(0), Y(-hb), X(flare), Y(-hb)); P.lineTo(X(d - r), Y(-hb)); }
   else P.lineTo(X(d - r * 0.9), Y(-hb));                  // bok: od tyčky šikmo ven k zadnímu rohu
   P.quadraticCurveTo(X(d), Y(-hb), X(d), Y(-hb + r));     // zaoblený roh
-  P.lineTo(X(d), Y(hb - r));                              // záda
+  if (bow > 0) P.quadraticCurveTo(X(d + bow), Y(0), X(d), Y(hb - r)); else P.lineTo(X(d), Y(hb - r));   // záda
   if (flare > 0) { P.quadraticCurveTo(X(d), Y(hb), X(d - r), Y(hb)); P.lineTo(X(flare), Y(hb)); P.quadraticCurveTo(X(0), Y(hb), X(0), Y(half)); }
   else { P.quadraticCurveTo(X(d), Y(hb), X(d - r * 0.9), Y(hb)); P.lineTo(X(0), Y(half)); }
   return P;
@@ -533,13 +533,13 @@ function _drawGoalReal(ctx, s, x, dir, y1, y2, postColor, Hs, part, G) {
 // v3 (Ondřej: „síť je pořád deformovaná do oblouku"): žádný oblouk — rovný bok od tyčky až k zadnímu rohu, ROVNÁ záda, zaoblené jen rohy (r).
 // G11 = boky rozevřené (záda širší než ústí), G12 = boky skoro rovnoběžné. Vzpěry rovné z rohu police do zadního rohu základny.
 export const GOAL_NHL = {
-  11: { depth: 24.4, shelf: 11, halfBack: 26.5, r: 5, shelfR: 4.5, bar: 2.4, tube: 1.8, mesh: 4.4 },
-  12: { depth: 24.4, shelf: 11, halfBack: 23.5, r: 5, shelfR: 4.5, bar: 2.4, tube: 1.8, mesh: 4.4 },
+  11: { depth: 23.2, bow: 2.4, shelf: 11, halfBack: 26.5, r: 5, shelfR: 4.5, bar: 2.4, tube: 1.8, mesh: 4.4 },
+  12: { depth: 23.2, bow: 2.4, shelf: 11, halfBack: 23.5, r: 5, shelfR: 4.5, bar: 2.4, tube: 1.8, mesh: 4.4 },
 };
 function _drawGoalNHL(ctx, s, x, dir, y1, y2, postColor, Hs, part, G) {
   const cy = (y1 + y2) / 2, half = (y2 - y1) / 2 / s;
   const X = u => x + dir * u * s, Y = v => cy + v * s;
-  const base = _realPath(x, dir, cy, half, G.depth, G.halfBack, G.r, s);   // tyčka → rovně k rohu → zaoblený roh → rovná záda
+  const base = _realPath(x, dir, cy, half, G.depth, G.halfBack, G.r, s, 0, G.bow || 0);   // záda: Ondřej „můžou být lehce zakulacená“   // tyčka → rovně k rohu → zaoblený roh → rovná záda
   const baseF = new Path2D(base); baseF.closePath();
   const shelf = _realPath(x, dir, cy, half, G.shelf, half, G.shelfR, s), shelfF = new Path2D(shelf); shelfF.closePath();
   const strut = new Path2D();   // zadní vzpěry: rovně z rohu police do středu zaobleného rohu základny (bod kvadratiky v t = 0,5)
