@@ -2428,8 +2428,8 @@ export class SandboxGame {
       const nb = this._catalogNewBtn;
       if (nb && mx >= nb.x && mx <= nb.x + nb.w && my >= nb.y && my <= nb.y + nb.h) {
         this._showInputDialog({
-          title: lang === 'cs' ? 'Název tréninku:' : 'Training pack name:',
-          defaultValue: lang === 'cs' ? 'Můj trénink' : 'My training',
+          title: lang === 'cs' ? 'Název cvičení:' : 'Drill name:',
+          defaultValue: lang === 'cs' ? 'Moje cvičení' : 'My drill',
           onConfirm: v => { if (v.trim()) this._saveToLibrary(v.trim()); },
         });
         return true;
@@ -2439,7 +2439,7 @@ export class SandboxGame {
       if (ib && mx >= ib.x && mx <= ib.x + ib.w && my >= ib.y && my <= ib.y + ib.h) {
         this._catalogOpen = false;
         this._showInputDialog({
-          title: lang === 'cs' ? 'Vlož kód scénáře:' : 'Paste scenario code:',
+          title: lang === 'cs' ? 'Vlož kód cvičení:' : 'Paste drill code:',
           placeholder: 'FH1-...',
           onConfirm: v => { if (v.trim()) this._loadScenarioCode(v.trim()); },
         });
@@ -2459,10 +2459,10 @@ export class SandboxGame {
           const code = row.scen.code;
           if (navigator.clipboard) {
             navigator.clipboard.writeText(code).catch(() => {
-              this._showInputDialog({ title: lang === 'cs' ? 'Kód tréninku (zkopíruj)' : 'Training code (copy)', defaultValue: code, readonly: true });
+              this._showInputDialog({ title: lang === 'cs' ? 'Kód cvičení (zkopíruj)' : 'Drill code (copy)', defaultValue: code, readonly: true });
             });
           } else {
-            this._showInputDialog({ title: lang === 'cs' ? 'Kód tréninku (zkopíruj)' : 'Training code (copy)', defaultValue: code, readonly: true });
+            this._showInputDialog({ title: lang === 'cs' ? 'Kód cvičení (zkopíruj)' : 'Drill code (copy)', defaultValue: code, readonly: true });
           }
           return true;
         }
@@ -2589,7 +2589,7 @@ export class SandboxGame {
 
     // ── Dock: SAVE button (always visible) ──
     if (mx >= SAVE_X && mx <= SAVE_X + SAVE_W && my >= pY + BY && my <= pY + BY + BH) {
-      this._showInputDialog({ title: lang === 'cs' ? 'Název tréninku:' : 'Training pack name:', defaultValue: lang === 'cs' ? 'Můj trénink' : 'My training', onConfirm: v => { if (v.trim()) this._saveToLibrary(v.trim()); } });
+      this._showInputDialog({ title: lang === 'cs' ? 'Název cvičení:' : 'Drill name:', defaultValue: lang === 'cs' ? 'Moje cvičení' : 'My drill', onConfirm: v => { if (v.trim()) this._saveToLibrary(v.trim()); } });
       return true;
     }
 
@@ -2746,7 +2746,7 @@ export class SandboxGame {
   _loadScenarioCode(raw) {
     const code = (raw || '').trim();
     const lang = document.documentElement.lang === 'en' ? 'en' : 'cs';
-    if (!code.startsWith('FH1-')) { this._showInputDialog({ title: lang === 'cs' ? '⚠ Neplatný kód scénáře' : '⚠ Invalid scenario code', defaultValue: code, readonly: true }); return; }
+    if (!code.startsWith('FH1-')) { this._showInputDialog({ title: lang === 'cs' ? '⚠ Neplatný kód cvičení' : '⚠ Invalid drill code', defaultValue: code, readonly: true }); return; }
     try {
       const s = JSON.parse(atob(code.slice(4)));
       this._drillIdx = s.d ?? 0; this._diffIdx = s.g ?? 0;
@@ -2868,10 +2868,10 @@ export class SandboxGame {
     const cnt = list.length;
     ctx.font = '400 11px "Segoe UI",sans-serif';
     ctx.fillStyle = 'rgba(182,196,255,0.55)'; ctx.textAlign = 'left';
-    ctx.fillText(cnt > 0 ? `${cnt} ${lang === 'cs' ? 'uložených' : 'saved'}` : (lang === 'cs' ? 'Žádné tréninky' : 'Empty'), PX + 20, PY + 16);
+    ctx.fillText(cnt > 0 ? `${cnt} ${lang === 'cs' ? 'uložených' : 'saved'}` : (lang === 'cs' ? 'Zatím žádné' : 'Empty'), PX + 20, PY + 16);
     ctx.font = 'bold 14px "Segoe UI",sans-serif';
     ctx.fillStyle = '#FFFFFF';
-    ctx.fillText(lang === 'cs' ? '🏒  MOJE TRÉNINKY' : '🏒  MY TRAINING PACKS', PX + 20, PY + 34);
+    ctx.fillText(lang === 'cs' ? '🏒  MOJE CVIČENÍ' : '🏒  MY DRILLS', PX + 20, PY + 34);
 
     // Close × button
     const cbx = PX + PW - 28, cby = PY + 26;
@@ -2891,8 +2891,8 @@ export class SandboxGame {
     // Empty state
     if (list.length === 0) {
       ctx.font = '400 13px "Segoe UI",sans-serif';
-      ctx.fillStyle = 'rgba(182,196,255,0.30)'; ctx.textAlign = 'center';
-      ctx.fillText(lang === 'cs' ? 'Ulož svůj první trénink tlačítkem níže' : 'Save your first training pack below',
+      ctx.fillStyle = 'rgba(182,196,255,0.80)'; ctx.textAlign = 'center';
+      ctx.fillText(lang === 'cs' ? 'Postav cvičení: ⚙ STAVĚT vpravo dole → rozmísti objekty → ULOŽIT' : 'Build a drill: ⚙ BUILD bottom right → place objects → SAVE',
         PX + PW/2, PY + HEADER_H + ROW_H/2 + 6);
     }
 
@@ -3136,7 +3136,7 @@ export class SandboxGame {
     ctx.fillStyle = _btnGrad(SAVE_X, pY+BY, SAVE_W, BH, '#1A60D0', '#2A8FFF'); ctx.fill();
     ctx.textAlign = 'center'; ctx.font = '700 12px "Segoe UI",sans-serif'; ctx.fillStyle = '#FFFFFF';
     ctx.fillText(lang === 'cs' ? 'ULOŽIT' : 'SAVE', SAVE_X + SAVE_W / 2, pY + BY + BH / 2 + (BH > 40 ? -3 : 4));
-    if (BH > 40) { ctx.font = '400 9px "Segoe UI",sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.60)'; ctx.fillText(lang === 'cs' ? 'scénář' : 'scenario', SAVE_X + SAVE_W / 2, pY + BY + BH / 2 + 11); }
+    if (BH > 40) { ctx.font = '400 9px "Segoe UI",sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.60)'; ctx.fillText(lang === 'cs' ? 'cvičení' : 'drill', SAVE_X + SAVE_W / 2, pY + BY + BH / 2 + 11); }
     // PACKS (amber)
     _btnPath(PKS_X, pY + BY, PKS_W, BH);
     const catOpen = this._catalogOpen;
@@ -3144,7 +3144,7 @@ export class SandboxGame {
     ctx.fillStyle = 'rgba(245,200,80,0.65)'; ctx.fillRect(PKS_X, pY+BY, 3, BH);
     _btnPath(PKS_X, pY+BY, PKS_W, BH); ctx.strokeStyle = catOpen ? 'rgba(245,200,80,0.40)' : 'rgba(245,200,80,0.15)'; ctx.lineWidth = 1; ctx.stroke();
     ctx.textAlign = 'center'; ctx.font = '700 12px "Segoe UI",sans-serif'; ctx.fillStyle = '#F0E0A0';
-    ctx.fillText(lang === 'cs' ? 'TRÉNINKY' : 'PACKS', PKS_X + PKS_W / 2, pY + BY + BH / 2 + (BH > 40 ? -3 : 4));
+    ctx.fillText(lang === 'cs' ? 'CVIČENÍ' : 'DRILLS', PKS_X + PKS_W / 2, pY + BY + BH / 2 + (BH > 40 ? -3 : 4));
     if (BH > 40) { ctx.font = '400 9px "Segoe UI",sans-serif'; ctx.fillStyle = 'rgba(245,200,80,0.50)'; ctx.fillText(savedN > 0 ? `${savedN} ${lang==='cs'?'uloženo':'saved'}` : (lang==='cs'?'prázdné':'empty'), PKS_X + PKS_W / 2, pY + BY + BH / 2 + 11); }
 
     // ── BUILD ⚙ toggle — far right ──
@@ -3191,7 +3191,7 @@ export class SandboxGame {
     const BH2 = OVH - BY2 - 8;
 
     _sectionLabel(lang === 'cs' ? 'OBJEKTY NA LED' : 'ICE OBJECTS', OBJ_X0, ovY + LBL_Y + LBL_H - 2);
-    _sectionLabel(lang === 'cs' ? 'SCÉNÁŘ' : 'SCENARIO', SCEN_X, ovY + LBL_Y + LBL_H - 2);
+    _sectionLabel(lang === 'cs' ? 'CÍL CVIČENÍ' : 'DRILL GOAL', SCEN_X, ovY + LBL_Y + LBL_H - 2);
 
     const objLocked = this._drillIdx !== 0;
     const _passerOn = this.passer.active;
@@ -3246,7 +3246,7 @@ export class SandboxGame {
     const gl = tgt ? (lang === 'cs' ? `CÍL: ${tgt} ${tgt < 5 ? 'GÓLY' : 'GÓLŮ'} NA ČAS` : `GOAL: ${tgt} GOALS, TIMED`) : (lang === 'cs' ? 'CÍL: BEZ CÍLE' : 'GOAL: NONE');
     ctx.fillText(gl, gx + GW / 2, ovY + BY2 + BH2 / 2 + (BH2 > 32 ? -2 : 4));
     if (BH2 > 32) { ctx.font = '400 9px "Segoe UI",sans-serif'; ctx.fillStyle = tgt ? 'rgba(255,255,255,0.65)' : 'rgba(245,200,80,0.55)';
-      ctx.fillText(lang === 'cs' ? 'klikni = změnit · uloží se se scénářem' : 'click = change · saved with the scenario', gx + GW / 2, ovY + BY2 + BH2 / 2 + 12); }
+      ctx.fillText(lang === 'cs' ? 'klikni = změnit · uloží se s cvičením' : 'click = change · saved with the drill', gx + GW / 2, ovY + BY2 + BH2 / 2 + 12); }
     // ↺ RESET
     _btnPath(s3x, ovY + BY2, RST_W, BH2);
     ctx.fillStyle = hasScen ? 'rgba(100,220,120,0.12)' : 'rgba(255,255,255,0.03)'; ctx.fill();

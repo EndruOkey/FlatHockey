@@ -1719,7 +1719,9 @@ function _startTutorial() {
 
 // ── Esc menu / odpojení ───────────────────────────────────────────────
 const pauseMenu = $('pause-menu'), pauseTitle = $('pause-title'), resumeBtn = $('resume-btn'), leaveBtn = $('leave-btn');
-function showPause(title=t('pause'), disc=false) { currentGame?.input?.clear(); pauseTitle.textContent = title; resumeBtn.style.display = disc ? 'none' : ''; pauseMenu.style.display = 'flex'; cgGameplay(false); }
+function showPause(title=t('pause'), disc=false) { currentGame?.input?.clear();
+  leaveBtn.textContent = (currentGame instanceof SandboxGame || currentGame?.offline) ? t('to_menu_off') : t('disconnect');   // offline se nic neodpojuje
+  pauseTitle.textContent = title; resumeBtn.style.display = disc ? 'none' : ''; pauseMenu.style.display = 'flex'; cgGameplay(false); }
 const hidePause = () => { pauseMenu.style.display = 'none'; if (inGame) cgGameplay(true); };
 resumeBtn.addEventListener('click', hidePause);
 leaveBtn.addEventListener('click', () => { if (_spectating) { hidePause(); exitSpectate(); return; } net.leaveLobby(); lastLobbyId = null; localStorage.removeItem('fh_last_lobby'); stopGame(); hidePause(); showView('main'); });
@@ -1734,7 +1736,9 @@ window.addEventListener('keydown', e => {
   // UI v3: Esc = Zpět do hlavního menu z podobrazovek (ne z čekárny — tam je Odejít)
   if (['v-profile','v-browse','v-create','v-stats','v-store'].some(id => $(id) && $(id).style.display !== 'none')) showView('main');
 });
-window.addEventListener('keydown', e => { if (e.key !== 'Escape' || !inGame) return; if (currentGame?._activeTab === 'build') return; pauseMenu.style.display === 'flex' ? hidePause() : showPause(); });
+window.addEventListener('keydown', e => { if (e.key !== 'Escape' || !inGame) return; if (currentGame?._activeTab === 'build') return;
+  if (currentGame?._catalogOpen) { currentGame._catalogOpen = false; return; }   // Esc nejdřív zavře knihovnu cvičení, ne pauza přes ni
+  pauseMenu.style.display === 'flex' ? hidePause() : showPause(); });
 // F3 = debug overlay ve hře (FPS / frame time / jitter snapshotů) — diagnostika sekání
 window.addEventListener('keydown', e => { if (e.key === 'F3') { e.preventDefault(); window.__fhDbg = !window.__fhDbg; } });
 window.addEventListener('beforeunload', () => net.leaveLobby());
