@@ -399,7 +399,7 @@ function startMatch(lobby) {
 }
 
 
-function broadcast(match) {
+function snapPlayers(match) {
   const players = [];
   for (const [id, p] of match.players) {
     const inp = match.inputs.get(id);
@@ -408,12 +408,17 @@ function broadcast(match) {
       x: r1(p.x), y: r1(p.y), ba: r3(p.bodyAngle), aa: r3(p.aimAngle), ca: r3(p.carryAngle),
       sd: r3(p._stickDisp), dr: r1(p._dispReach), dc: r2(p._dispCharge),
       fh: p.forehand ? 1 : 0, hp: p.hasPuck ? 1 : 0, ch: r2(p.charge),
-      hd: p.handed, cc: p.crossCheck ? 1 : 0, ln: r2(p._lean), ...(p._shieldT > 0 ? { shd: r2(p._shieldA) } : {}),
+      hd: p.handed, cc: p.crossCheck ? 1 : 0, ln: r2(p._lean), ...(p.isDown || p._stagT > 0 ? { kd: [r2(p._downT), r2(p._upT), r2(p._fallA), r2(p._stagT), p._fallN] } : {}), ...(p._shieldT > 0 ? { shd: r2(p._shieldA) } : {}),
       col: p.color || null, num: p.num, js: p.jersey || 'solid',
       hc: p.helmet || null, sh: p.shorts || null, gc: p.gloves || null, tc: p.tape || null,
       sk: p.stick || null, ty: p.tapeStyle || 'full', hy: p.helmetType || 'visor', vc: p.visor || null,
     });
   }
+  return players;
+}
+
+function broadcast(match) {
+  const players = snapPlayers(match);
   const g = (gg) => ({ x: r1(gg.x), y: r1(gg.y), t: r3(gg._tilt), h: gg._holdTimer > 0 ? 1 : 0,
                        st: gg._saveType, sf: r2(gg._saveFlash), sm: r2(gg._saveFlashMax), sc: r2(gg._screen),
                        ps: gg.stance || 'stand', pd: gg._side || 1, pt: r2(Math.min(1, gg._stanceT || 0)),   // postoj gólmana (vizuál)
@@ -893,4 +898,4 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT',  () => shutdown('SIGINT'));
 
 // Jen pro testy (test/determinism.test.mjs) — krokování zápasu bez sítě
-export const __test = { lobbies, startMatch, stepMatch, makeMember, sanitizeSettings };
+export const __test = { lobbies, startMatch, stepMatch, makeMember, sanitizeSettings, snapPlayers };

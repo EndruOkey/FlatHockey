@@ -2,8 +2,10 @@ import { RINK, PLAYER, PUCK } from '../constants.js';
 import { clamp, lerpAngle, angleDiff } from '../utils.js';
 import { SFX } from '../sound.js';
 import { defaultRng } from '../rng.js';
-import { skaterKit, skinSkate, skinBody, SKIN_OUT } from './skin.js';
+import { skaterKit, skinSkate, skinBody, SKIN_OUT, shade, luma } from './skin.js';
 import { VIS } from '../vis.js';
+
+const _NO_INPUT = { dx: 0, dy: 0, keys: {} };   // ležící hráč: vstup se ignoruje
 
 export class PlayerBase {
   rng = defaultRng;
@@ -18,6 +20,7 @@ export class PlayerBase {
     this.aimAngle  = 0;
     this.skateAngle = 0;   // směr bruslení (řízený A/D); tělo kouká sem, hokejku míří myš
     this._knockT    = 0;   // časovač knockbacku — zpomalí perp. útlum, aby náraz dojel
+    this._downT = 0; this._upT = 0; this._stagT = 0; this._hitImm = 0; this._fallA = 0; this._fallN = 0; this._stagDir = 1;   // odstupňovaný knockback (sim čas s, krok = pevné DT)
     this.handed     = team === 'away' ? -1 : 1; // pravák (+1) / levák (−1) → strana forehandu
     this._stickRel  = 0;   // úhel hole vůči tělu (scalar, drží se v předním kuželu)
     this.radius          = PLAYER.radius;
@@ -112,7 +115,7 @@ export class PlayerBase {
     if (this._others) for (const o of this._others) {
       if (o === this) continue;
       if (_STK_BODY && !(_STK_MODE === 'opp' && o.team === this.team) && !(_STK_MODE === 'nopuck' && this.hasPuck)) t = _clipRayCircle(gx, gy, cos, sin, t, o.x, o.y, PLAYER.bodyRadius + _STK_BODY_PAD);
-      if (_STK_STICK && !o.crossCheck && !(PLAYER.fight && o.hasPuck)) { const q = o.gripPoint, qd = o.carryAngle ?? o.aimAngle;
+      if (_STK_STICK && !o.crossCheck && !o.isDown && !(PLAYER.fight && o.hasPuck)) { const q = o.gripPoint, qd = o.carryAngle ?? o.aimAngle;
         t = _clipRayStick(gx, gy, cos, sin, t, q.x, q.y, Math.cos(qd), Math.sin(qd), o._dispReach ?? PLAYER.stickLen); }
     }
 
@@ -125,7 +128,7 @@ export class PlayerBase {
     if (puck.isAirborne) return false;
     if (puck.faceoffTimer > 0) return false;  // bully freeze
     if (this._shootCooldown > 0) return false;
-    if (this.crossCheck) return false;   // crosscheck = ignoruje pickup
+    if (this.crossCheck || this.isDown) return false;   // crosscheck = ignoruje pickup; ležící hráč puk nehraje
     const tip = this.stickTip;
     // Grab zóna kolem celé čepele — nejen špička, ale i podél lopaty (přesahuje za tip)
     const bladeDir = (this.carryAngle ?? this.aimAngle) + (this.handed ?? 1) * Math.PI / 6.5;
@@ -153,7 +156,7 @@ export class PlayerBase {
   // ── PŘIKOPNUTÍ (Q, 2026-11-12): volný puk na ledě do KICK_R px od těla, blížící se → zpracuješ bruslí a jedeš dál,
   // i když je rychlý (hokejkou čistě jen do 420 px/s). Mimo okno: KICK_CD s nic. Čerstvou ránu soupeře nejde (jako hokejkou).
   kickWindow(puck) {
-    if (this.hasPuck || !puck || puck.isAirborne || puck.z > 1.5 || puck.faceoffTimer > 0) return -1;
+    if (this.hasPuck || this.isDown || !puck || puck.isAirborne || puck.z > 1.5 || puck.faceoffTimer > 0) return -1;
     if (puck._carrier && puck._carrier.hasPuck) return -1;
     if (puck._shot && puck._shot.team !== this.team && (puck._shotAge ?? 9) < SHOT_EAT_T) return -1;
     const dx = puck.x - this.x, dy = puck.y - this.y, d = Math.hypot(dx, dy);
@@ -192,7 +195,7 @@ export class PlayerBase {
 
   // Obrání: soupeřova hůl na puku (puk je u nositelovy hole) → vezme puk.
   canSteal(puck, carrier) {
-    if (this._shootCooldown > 0 || puck.isAirborne) return false;
+    if (this._shootCooldown > 0 || puck.isAirborne || this.isDown) return false;
     // KRYTÍ TĚLEM (2026-11-09): puk za nosičovým tělem (z mé strany) nejde obrat — stejný test jako Goalie.pokeCheck.
     if (carrier && PLAYER.shield > -1) {
       const px = puck.x - carrier.x, py = puck.y - carrier.y, ox = this.x - carrier.x, oy = this.y - carrier.y;
@@ -316,7 +319,7 @@ export class PlayerBase {
 
   // Tečování (deflection) — letící puk u čepele se odrazí pod jiným úhlem (gól z dorážky)
   tryDeflect(puck) {
-    if (this.hasPuck || puck.isAirborne) return false;
+    if (this.hasPuck || puck.isAirborne || this.isDown) return false;
     if (this.charge > 0) return false; // nabíjí one-timer → puk chytí, netečuje
     if (this._shootCooldown > 0 || this._deflectCool > 0) return false;
     const inSpeed = Math.hypot(puck.vx, puck.vy);
@@ -335,6 +338,34 @@ export class PlayerBase {
     return true;
   }
 
+  // Ležící / zvedající se hráč nehraje puk (pickup, obrání, tečování, crosscheck, nápřah, přikopnutí).
+  get isDown() { return this._downT > 0 || this._upT > 0; }
+
+  // ODSTUPŇOVANÝ KNOCKBACK (2026-11-12): I = síla zásahu (px/s po normále), (nx, ny) = směr od útočníka k oběti.
+  // Vrací stupeň 0 = postrčení (fyzika jako dřív), 1 = zakolísání, 2 = rozplácnutí. Deterministické (bez kostky).
+  takeHit(I, nx, ny) {
+    if (this.isDown || !this.isPlayer || this.isGoalie) return 0;
+    if (I >= PLAYER.kbHeavy && !(this._hitImm > 0)) {
+      if (this.hasPuck) {   // puk vypadne z hole a jede dál s hráčem (volný puk)
+        this.hasPuck = false; const pk = this._puckRef;
+        if (pk) { const t = this.stickTip; pk.x = t.x; pk.y = t.y; pk.z = 0; pk.vz = 0; pk.vx = this.vx * 0.6 + nx * 50; pk.vy = this.vy * 0.6 + ny * 50; pk.trailColor = null; }
+      }
+      this.charge = 0; this._chargeDecaying = false; this.overcharged = false; this._oneTimer = false; this.crossCheck = false;
+      this._downT = PLAYER.downT; this._upT = PLAYER.upT; this._stagT = 0; this._knockT = 0;
+      this._shootCooldown = Math.max(this._shootCooldown || 0, PLAYER.downT + PLAYER.upT);
+      this._hitImm = PLAYER.downT + PLAYER.upT + PLAYER.hitImmune;   // po zvednutí chvíli nejde znovu srazit (žádné řetězení)
+      this._fallA = Math.atan2(ny, nx); this._fallN = (this._fallN || 0) + 1;
+      this.vx += nx * PLAYER.heavyPush; this.vy += ny * PLAYER.heavyPush;
+      return 2;
+    }
+    if (I >= PLAYER.kbMid) {
+      const c = Math.cos(this.bodyAngle) * ny - Math.sin(this.bodyAngle) * nx;   // náraz zleva/zprava → točí se po směru úderu
+      this._stagDir = c >= 0 ? 1 : -1; this._stagT = PLAYER.stagT; this._knockT = Math.max(this._knockT, 0.25);
+      return 1;
+    }
+    return 0;
+  }
+
   // Souboj těl — dva hráči se přetlačí (clona, box-out, scramble před brankou)
   collideWith(other) {
     const minDist = 2 * PLAYER.bodyRadius;
@@ -347,6 +378,8 @@ export class PlayerBase {
     // utlum přibližování
     const rel = (other.vx - this.vx) * nx + (other.vy - this.vy) * ny;
     const closing = Math.max(0, -rel);   // rychlost srážky (px/s) — měřítko odrazu
+    // Kdo koho sejmul: útočník = ten, kdo do druhého víc jede (složka rychlosti po normále); jen soupeři
+    const aThis = this.vx * nx + this.vy * ny, aOther = -(other.vx * nx + other.vy * ny);
     if (rel < 0) {
       const imp = rel * 0.5;
       this.vx  += nx * imp; this.vy  += ny * imp;
@@ -357,6 +390,10 @@ export class PlayerBase {
     this.vx  -= nx * KB; this.vy  -= ny * KB;
     other.vx += nx * KB; other.vy += ny * KB;
     this._knockT = other._knockT = 0.2; // dočasně zpomalí útlum, aby náraz dojel
+    if (this.team !== other.team && closing >= PLAYER.kbMid) {
+      const lv = aThis >= aOther ? other : this, s = lv === other ? 1 : -1;
+      lv._lastHit = lv.takeHit(closing, nx * s, ny * s);
+    }
   }
 
   // aimOverride: volitelný směr nahrávky (predikce do jízdy); jinak míří kam ukazuje hůl
@@ -379,7 +416,7 @@ export class PlayerBase {
 
   // Called each frame — check if this player's cross-check hits another
   tryCrossCheck(other) {
-    if (!this.crossCheck || this._crossCheckCool > 0) return;
+    if (!this.crossCheck || this._crossCheckCool > 0 || this.isDown) return;
     const dx   = other.x - this.x;
     const dy   = other.y - this.y;
     const dist = Math.hypot(dx, dy);
@@ -406,17 +443,26 @@ export class PlayerBase {
     // Náraz — strčí soupeře (ne vystřelí): 120 < top speed 180, aby to nebylo „funny"; checker se lehce zbrzdí
     const nx = dx / dist;
     const ny = dy / dist;
+    const ccI = Math.max(0, -((other.vx - this.vx) * nx + (other.vy - this.vy) * ny)) + PLAYER.ccBonus;   // síla: rozjetý crosscheck > stojící
     other.vx += nx * PLAYER.ccPush;
     other.vy += ny * PLAYER.ccPush;
     this.vx  -= nx * PLAYER.ccPush * 0.45;
     this.vy  -= ny * PLAYER.ccPush * 0.45;
     other._knockT = 0.18; this._knockT = 0.1;
+    if (this.team !== other.team) other._lastHit = other.takeHit(ccI, nx, ny);
   }
 
   _move(input, dt) {
+    // Knockback časovače (pevný krok simulace → deterministické). Ležící hráč ignoruje vlastní vstup.
+    if (this._hitImm > 0) this._hitImm = Math.max(0, this._hitImm - dt);
+    if (this._stagT > 0) this._stagT = Math.max(0, this._stagT - dt);
+    if (this._downT > 0) this._downT = Math.max(0, this._downT - dt);
+    else if (this._upT > 0) this._upT = Math.max(0, this._upT - dt);
+    const down = this._downT > 0, rising = !down && this._upT > 0;
+    if (down) input = _NO_INPUT;
     const braking       = !!(input.keys && input.keys['Space']); // tvrdá brzda (drž) — puk si necháš
     const charging      = !!(input.lmb && (this.hasPuck || this.charge > 0.01)); // i one-timer nápřah zpomaluje
-    const crossChecking = this.crossCheck;
+    const crossChecking = this.crossCheck && !down;
 
     // TWIN-STICK: WASD bruslí ve SMĚRECH (world-space), myš míří hokejkou NEZÁVISLE
     // (turret) → skateuješ jedním směrem, střílíš/kličkuješ jiným. Pohyb má moment
@@ -436,6 +482,8 @@ export class PlayerBase {
     // CRUISE (volitelný strop rychlosti): boti zpomalí při pozicování/krytí/rozehře (míň frantičnosti,
     // prostor na kličku); hráč může držet modifikátor pro kontrolovanou jízdu. null/1 = bez stropu.
     if (input.cruise != null && input.cruise < 1) topSpeed *= clamp(input.cruise, 0.3, 1);
+    if (rising) topSpeed *= 0.4;                                  // zvedá se z ledu: první krok pomalý
+    if (this._stagT > 0) topSpeed *= PLAYER.stagSlow;              // zakolísání: krátce pomalejší
 
     // Zpátečka (backskating): jízda dozadu je ~25% pomalejší
     // Détekce: pohyb opačný k facing direction (bodyAngle)
@@ -477,11 +525,15 @@ export class PlayerBase {
       this.vy = Math.sin(heading) * sp;
     } else if (sp > 0) {
       // glide — led NESE: po puštění dlouhý skluz (cítit led); při nízké rychlosti doklouže a zastaví
-      const dec = (knocked ? 0.3 : (sp < 50 ? 1.6 : 0.55)) * PLAYER.decel * dt;
+      const dec = (down ? 1.4 : knocked ? 0.3 : (sp < 50 ? 1.6 : 0.55)) * PLAYER.decel * dt;   // ležící klouže po břiše a zastaví se
       sp = Math.max(0, sp - dec);
       this.vx = Math.cos(heading) * sp;
       this.vy = Math.sin(heading) * sp;
     }
+
+    // Zakolísání: nad stagSlow × top speed hráč rychle ztrácí rychlost (otřes, ztráta hran) — i během knockT
+    if (this._stagT > 0) { const v = Math.hypot(this.vx, this.vy), lim = PLAYER.speed * PLAYER.stagSlow;
+      if (v > lim) { const nv = Math.max(lim, v - 220 * dt); this.vx *= nv / v; this.vy *= nv / v; } }
 
     // Tělo kouká TAM, KAM MÍŘÍŠ (kurzor) — plynule. Hůl tak vychází přirozeně zepředu a tělo
     // i hokejka jsou vždy zarovnané (žádné poskakování po 8 směrech kláves, žádné uvíznutí v boku).
@@ -489,12 +541,14 @@ export class PlayerBase {
     // CROSSCHECK: tělo kouká směrem pohybu (WASD), angle je LOCKED když stojíš — ne kurzorem
     const sp2 = Math.hypot(this.vx, this.vy);
     // crosscheck: tělo jde za pohybem (WASD), ne za myší. Při stání = tělo se nezamrzne.
-    const targetBodyAngle = crossChecking
+    const targetBodyAngle = down ? this.skateAngle : crossChecking
       ? (hasInput ? Math.atan2(iy, ix) : this.bodyAngle)
       : this.aimAngle;
-    const bodyLerpRate = crossChecking ? 9 : 14;
+    const bodyLerpRate = this._stagT > 0 ? 2.5 : rising ? 6 : crossChecking ? 9 : 14;   // otřesený hráč se srovnává pomalu
     const _prevSkateAngle = this.skateAngle;
     this.skateAngle = lerpAngle(this.skateAngle, targetBodyAngle, Math.min(1, bodyLerpRate * dt));
+    // Zakolísání: tělo se po zásahu stočí po směru úderu (oblouk stagSpin rad, plynule zpět)
+    if (this._stagT > 0) this.skateAngle += this._stagDir * 2 * PLAYER.stagSpin / PLAYER.stagT * (this._stagT / PLAYER.stagT) * dt;   // lineárně doznívá, celkem stagSpin rad
     this.bodyAngle  = this.skateAngle;
 
 
@@ -550,7 +604,7 @@ export class Player extends PlayerBase {
     // Hůl relativně k tělu (kužel) + forehand dle handedness
     this._updateStick(dt);
     if (this.passReq > 0) this.passReq = Math.max(0, this.passReq - dt);
-    this.crossCheck = !!this.input.rmb && !this.hasPuck && this._passCooldown <= 0;
+    this.crossCheck = !!this.input.rmb && !this.hasPuck && this._passCooldown <= 0 && !this.isDown;
     if (this._crossCheckCool > 0) this._crossCheckCool -= dt;
 
     this._move(this.input, dt);
@@ -614,7 +668,75 @@ const STICK_V = [
   { out: 4.1, sh: 2.4, bl: 2.5, blo: 4.3 },   // S3 = dnešní, lehce štíhlejší (~15 %) — výchozí od 2026-11-12
 ];
 const SKATE_CYCLE = 95;   // px ujeté dráhy na celý cyklus kroku (2 odrazy) — 165 px/s ≈ 1,7 cyklu/s
+// ROZPLÁCNUTÍ (2026-11-12): ležící hráč = protažená postava hlavou ve směru úderu, ruce a nohy roztažené, hokejka
+// odletí vedle na led; prvních 0,25 s záblesk + ledová tříšť (deterministicky z id a pořadí pádu). Zvedání = prolnutí
+// ležící postavy (stahuje nohy) do normální kresby. Jen kresba: stav (_downT/_upT/_fallA) nese simulace / snapshot (kd).
 function _renderPlayer(ctx, p, cam) {
+  if (p._downT > 0) { _renderDown(ctx, p, cam, 0); return; }
+  if (p._upT > 0) {
+    const u = clamp(1 - p._upT / PLAYER.upT, 0, 1), a0 = ctx.globalAlpha;
+    ctx.globalAlpha = a0 * (1 - u); _renderDown(ctx, p, cam, u);
+    ctx.globalAlpha = a0 * u; _renderPlayerUp(ctx, p, cam);
+    ctx.globalAlpha = a0; return;
+  }
+  _renderPlayerUp(ctx, p, cam);
+}
+
+function _renderDown(ctx, p, cam, rise) {
+  const s = cam.scale, R = PLAYER.radius, x = cam.ox + p.x * s, y = cam.oy + p.y * s;
+  const K = skaterKit(p, PLAYER.colors[p.team]), fa = p._fallA ?? p.bodyAngle, n = p._fallN || 0;
+  const side = _hrand(p.id, n, 99) < 0.5 ? -1 : 1, leg = 1 - 0.55 * rise;   // zvedání: nohy se stahují pod tělo
+  const tFall = PLAYER.downT - (p._downT || 0);
+  // ledová tříšť a záblesk nárazu (prvních 0,25 s)
+  if (rise === 0 && tFall < 0.25) {
+    const k = tFall / 0.25;
+    ctx.save(); ctx.beginPath(); ctx.arc(x, y, (R + 4 + 16 * k) * s, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(30,70,140,${(0.7 * (1 - k)).toFixed(3)})`;   // tmavší kruh: na světlém ledu čitelný ctx.lineWidth = 2.6 * s * (1 - k) + 0.4 * s; ctx.stroke();
+    for (let i = 0; i < 10; i++) {
+      const a = fa + (_hrand(p.id, n, i * 2) - 0.5) * 2.2, d = (R + 2 + (10 + 14 * _hrand(p.id, n, i * 2 + 1)) * Math.sqrt(k)) * s;
+      ctx.beginPath(); ctx.arc(x + Math.cos(a) * d, y + Math.sin(a) * d, Math.max(0.8, 1.6 * s * (1 - k)), 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(110,165,220,${(0.95 * (1 - k)).toFixed(3)})`; ctx.fill();   // ledová tříšť
+    }
+    ctx.restore();
+  }
+  // hokejka ležící na ledě vedle hráče
+  {
+    const sa = fa + side * 0.3, ox = Math.cos(fa + side * 1.75) * R * 2.5, oy = Math.sin(fa + side * 1.75) * R * 2.5;   // vedle těla, skoro souběžně (nepřekrývá postavu)
+    const L = PLAYER.stickLen * 1.5 * PLAYER.stickDraw * s, gx = x + ox * s - Math.cos(sa) * L / 2, gy = y + oy * s - Math.sin(sa) * L / 2;
+    const bx = gx + Math.cos(sa) * L, by = gy + Math.sin(sa) * L, ba = sa - side * 0.5;
+    ctx.save(); ctx.lineCap = 'round';
+    ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = 4.4 * s;
+    ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(bx, by); ctx.lineTo(bx + Math.cos(ba) * 9 * s, by + Math.sin(ba) * 9 * s); ctx.stroke();
+    ctx.strokeStyle = K.stick; ctx.lineWidth = 2.6 * s; ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(bx, by); ctx.stroke();
+    ctx.strokeStyle = K.tape; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + Math.cos(ba) * 9 * s, by + Math.sin(ba) * 9 * s); ctx.stroke();
+    ctx.restore();
+  }
+  ctx.save(); ctx.translate(x, y); ctx.rotate(fa); ctx.scale(s, s);   // lokál: +x = hlava (směr úderu)
+  ctx.beginPath(); ctx.ellipse(-0.2 * R + 1.5, 2, R * 2.0 * (1 - 0.3 * rise), R * 1.15, 0, 0, Math.PI * 2); ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fill();
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const limb = (x1, y1, x2, y2, w, col) => { ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = w + 1.8; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); };
+  for (const sg of [-1, 1]) {   // nohy roztažené dozadu, brusle na konci
+    const kx = -R * 1.25 * leg, ky = sg * R * (0.55 + 0.25 * leg), fx = -R * 2.0 * leg, fy = sg * R * (0.6 + 0.5 * leg);
+    limb(-R * 0.35, sg * R * 0.35, kx, ky, R * 0.62, K.pants); limb(kx, ky, fx, fy, R * 0.5, shade(K.jersey, -0.1));
+    ctx.save(); ctx.translate(fx, fy); ctx.rotate(sg * 0.5); ctx.fillStyle = '#20242c'; ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect(-R * 0.55, -R * 0.24, R * 0.85, R * 0.48, 1.2); ctx.fill(); ctx.stroke(); ctx.restore();
+  }
+  for (const sg of [-1, 1]) {   // ruce rozhozené dopředu
+    const hx = R * (1.45 - 0.5 * rise), hy = sg * R * (1.35 - 0.4 * rise);
+    limb(R * 0.55, sg * R * 0.62, hx, hy, R * 0.5, shade(K.jersey, -0.14));
+    ctx.beginPath(); ctx.arc(hx, hy, R * 0.34, 0, Math.PI * 2); ctx.fillStyle = K.glove; ctx.fill(); ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = 1; ctx.stroke();
+  }
+  ctx.beginPath(); ctx.ellipse(R * 0.1, 0, R * 1.0, R * 0.82, 0, 0, Math.PI * 2);   // trup (záda nahoru)
+  ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = 2; ctx.stroke(); ctx.fillStyle = K.jersey; ctx.fill();
+  ctx.save(); ctx.rotate(Math.PI / 2); ctx.font = `900 ${R * 1.05}px 'Segoe UI', sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = luma(K.jersey) > 0.4 ? '#1a1f29' : '#ffffff'; ctx.fillText(String(K.num), 0, R * 0.1); ctx.restore();
+  ctx.beginPath(); ctx.ellipse(R * 1.35, 0, R * 0.5, R * 0.46, 0, 0, Math.PI * 2);   // helma
+  ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = 1.8; ctx.stroke(); ctx.fillStyle = K.helmet === K.jersey ? shade(K.helmet, -0.22) : K.helmet; ctx.fill();
+  ctx.restore();
+}
+
+function _renderPlayerUp(ctx, p, cam) {
   const s     = cam.scale;
   const { ox, oy } = cam;
   const sx    = ox + p.x * s;
@@ -1347,6 +1469,7 @@ const MV = { acurve: [320, 180], stopgo: { k: 2, t: 0.45, pivot: 30 }, carve: { 
 const _baseMove = PlayerBase.prototype._move;
 const MV_OFF = _mvEnv("FH_MV", 1) === 0;
 PlayerBase.prototype._move = function (input, dt) {
+  if (Math.max(0, (this._downT || 0) - dt) > 0) input = _NO_INPUT;   // rozplácnutý: stejný test jako v _baseMove (vstup nesmí projít ani sem)
   if (MV_OFF) return _baseMove.call(this, input, dt);
   const accel0 = PLAYER.accel, speed0 = PLAYER.speed;
   const sp = Math.hypot(this.vx, this.vy), top = speed0;

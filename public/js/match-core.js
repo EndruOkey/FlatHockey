@@ -96,6 +96,7 @@ function nearestTeammate(p, match) {
 export function playerActions(p, inp, dt, match) {
   p.aimDist = inp.aimDist;
   _updateAim(p, inp.aim, dt);
+  if (p.isDown) { p.charge = 0; p._chargeDecaying = false; p.overcharged = false; p._oneTimer = false; p._rmbHold = 0; return; }   // rozplácnutý: žádná akce
 
   if (inp.lmbJustPressed) { p._chargeCancelled = false; p._oneTimer = !p.hasPuck; }
   if (!inp.lmb) p._chargeBlocked = false;

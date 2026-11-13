@@ -58,6 +58,13 @@ export const PLAYER = {
   kbFactor: _penv('FH_KBF', 0.35),     // odraz = rychlost srážky × faktor
   ccSpeed:  _penv('FH_CCSPD', 0.9),    // rychlost při crosschecku × top speed (dřív 1.12)
   ccPush:   _penv('FH_CCPUSH', 80),    // px/s — strčení soupeře crosscheckem (dřív 120)
+  // ODSTUPŇOVANÝ KNOCKBACK (2026-11-12, scripts/knock_probe.mjs + test/knock.test.mjs). Síla zásahu I = rychlost srážky po normále
+  // (relativní rychlost × cos úhlu nárazu, px/s; crosscheck + ccBonus). Jen soupeři. I < kbMid = postrčení (jako dřív),
+  // kbMid ≤ I < kbHeavy = ZAKOLÍSÁNÍ (zpomalení + otočení), I ≥ kbHeavy = ROZPLÁCNUTÍ (leží downT s, zvedá se upT s, ztratí puk).
+  kbMid:    _penv('FH_KBMID', 125),
+  kbHeavy:  _penv('FH_KBHEAVY', 175),
+  ccBonus:  _penv('FH_CCBONUS', 70),   // crosscheck = hůl + tělo → k rychlosti srážky přičti tolik (rozjetý crosscheck = rozplácnutí)
+  downT: 0.6, upT: 0.25, stagT: 0.35, stagSpin: 0.9, stagSlow: 0.55, heavyPush: 70, hitImmune: 0.8,
   receiveFirst: _penv('FH_RECV', 1) > 0,   // pas, který jde zpracovat, hráč převezme (dřív se od hole náhodně odrazil)
   stealGrace: ((typeof process !== 'undefined' && process.env && process.env.FH_GRACE != null) ? Number(process.env.FH_GRACE) : 0.8),   // 2026-11-09 1.5→0.8: neviditelná ochrana blokovala 29 % kontaktů (steal_match). Dřív 1.2→1.5: nosič udrží čerstvý puk o kus déle → míň pranic/turnoverů (fel klidnější, víc stavění akcí). Měřeno rubrikou.
   pickupMaxRelSpeed: 420,

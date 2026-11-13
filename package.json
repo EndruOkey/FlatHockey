@@ -22,6 +22,7 @@
     "test:steer": "node test/steer.test.mjs",
     "test:goalzone": "node test/goalzone.test.mjs",
     "test:kick": "node test/kick.test.mjs",
+    "test:knock": "node test/knock.test.mjs",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "engines": {

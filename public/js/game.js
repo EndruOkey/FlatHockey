@@ -346,6 +346,7 @@ export class NetGame {
       if ( prevHasPuck && !newHasPuck && !this.goalFlash) SFX.shoot(prevCh > 0.05 ? prevCh : 0.12); // rána = síla nápřahu; pas / ztráta = tiché cvaknutí
       ent.hasPuck = newHasPuck;
       if (ps.shd != null) { ent._shieldT = 0.35; ent._shieldA = ps.shd; }   // štít (krytí tělem) ze serveru
+      { const kd = ps.kd; ent._downT = kd ? kd[0] : 0; ent._upT = kd ? kd[1] : 0; ent._stagT = kd ? kd[3] : 0; if (kd) { ent._fallA = kd[2]; ent._fallN = kd[4]; } }   // knockback (rozplácnutí / zakolísání) ze serveru
 
       if (isMe) {
         e.sx = ps.x; e.sy = ps.y;
