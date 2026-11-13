@@ -12,7 +12,8 @@ export const RINK = {
   goalLineLeft: 90,
   goalLineRight: 990,
   goalY: 206, goalH: 44,   // ústí branky — mírně nad realitou kvůli hratelnosti
-  goalDepth: 20,
+  goalDepth: 24,   // 2026-11-13: 20 → 24 = branka G12 (NHL 40″ u ledu); audit scripts/net_shape_gap.mjs
+  netSide: { flare: 1.5, flareU: 14, tube: 0.9, r: 10 },   // boky sítě G12: od tyčky +1,5 px do strany do hloubky 14 px, + ½ trubky (MUSÍ sedět s Rink GOAL_NHL[12])
   blueLineLeft: 405,
   blueLineRight: 675,
   centerX: 540,
