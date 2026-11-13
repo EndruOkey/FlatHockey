@@ -2,7 +2,7 @@ import { RINK, PLAYER, PUCK } from '../constants.js';
 import { clamp, lerpAngle, angleDiff } from '../utils.js';
 import { SFX } from '../sound.js';
 import { defaultRng } from '../rng.js';
-import { skaterKit, skinSkate, skinBody, SKIN_OUT, shade, luma } from './skin.js';
+import { skaterKit, skinSkate, skinBody, skinHip, SKIN_OUT, shade, luma } from './skin.js';
 import { VIS } from '../vis.js';
 import { downPose, drawDownBody } from './downBody.js';
 
@@ -681,7 +681,9 @@ export class Player extends PlayerBase {
     // Hůl relativně k tělu (kužel) + forehand dle handedness
     this._updateStick(dt);
     if (this.passReq > 0) this.passReq = Math.max(0, this.passReq - dt);
-    this.crossCheck = !!this.input.rmb && !this.hasPuck && this._passCooldown <= 0 && !this.isDown;
+    // RMB stisknuté ještě s pukem (pas / nadzvednutý pas) a puk ztracen → žádný crosscheck, dokud RMB nepustí (2026-11-13).
+    if (!this.input.rmb) this._rmbFromCarry = false; else if (this.hasPuck) this._rmbFromCarry = true;
+    this.crossCheck = !!this.input.rmb && !this.hasPuck && !this._rmbFromCarry && this._passCooldown <= 0 && !this.isDown;
     if (this._crossCheckCool > 0) this._crossCheckCool -= dt;
 
     this._move(this.input, dt);
@@ -761,7 +763,7 @@ const SKATE_CYCLE = 95;   // K0–K2: px ujeté dráhy na celý cyklus kroku (2 
 // pak se zvedne (návrat vzduchem, brusle o chlup větší), přistane pod boky a klouže, dokud se neodrazí.
 // Do strany se boky (a brusle) natočí ke směru jízdy (max SKATE_K3.hip rad), ramena s holí zůstanou na míření; couvání = C-cuty.
 export const SKATE_K3 = { cyc0: 60, cycV: 0.26, push: 0.36, land: 0.80, hip: 1.25, accHz: 1.5, accLo: 40, accHi: 260,
-  latW: 1.7, ccW: 1.6, reachK: 1.2, reachM: 1.8,          // šíře odrazu / C-cutu (×R), měkký dosah nohy od kyčle (×R)
+  latW: 1.7, ccW: 1.6, reachK: 1.2, reachM: 1.5,          // šíře odrazu / C-cutu (×R), měkký dosah nohy od kyčle (×R)
   silF: 1.25, silS: 1.5, silB: 1.1, stopLead: 0.55, stopTrail: 0.1 };   // obrys trupu+paží vpřed/do boku/vzad (×R); brusle ve stopu za obrysem
 export const skateCycle = (k, v) => k === 3 ? SKATE_K3.cyc0 + SKATE_K3.cycV * Math.min(200, v) : SKATE_CYCLE;
 const _ss = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -880,13 +882,13 @@ export function skatePose(o) {
       // jako odtržená. Měkký limit: do 1,0 R beze změny, nad tím plynule stlačeno k max. 1,25 R (rytmus kroku zůstává).
       // (2026-11-13 večer: 1,25 R schovalo brusle pod trup do boku a vzad — ve hře vidět jen vpřed; skripts/skate_visibility.py → 1,8 R; stop bez limitu)
       { const ex = 1 + 1.5 * _ss(0, 0.6, stopT);   // ve stopu se limit plynule uvolní (nohy vpředu za obrysem)
-        const hx = -0.55 * R, hy = side * 0.55 * R, dx = x - hx, dy = y - hy, r = Math.hypot(dx, dy), k = SKATE_K3.reachK * R * ex, M = SKATE_K3.reachM * R * ex;
+        const hp = skinHip(side, h), hx = hp.x, hy = hp.y, dx = x - hx, dy = y - hy, r = Math.hypot(dx, dy), k = SKATE_K3.reachK * R * ex, M = SKATE_K3.reachM * R * ex;   // kyčel natočená s boky (jako ji kreslí skin)
         if (r > k) { const r2 = k + (M - k) * (1 - Math.exp(-(r - k) / (M - k))); x = hx + dx * r2 / r; y = hy + dy * r2 / r; } }
       feet.push({ side, x, y, a, lift });
     }
     // přenos váhy: odraz tlačí tělo od odrazové nohy (napříč boky), ramena se lehce protočí proti odrazové noze
     const swing = Math.sin(2 * Math.PI * uA) * amp * w * (1 - 0.6 * bw);
-    body.x = 0.11 * R * swing * sh * (1 - bw); body.y = -0.11 * R * swing * (ch * (1 - bw) + bw); body.tw = -0.08 * swing; body.sw = swing;
+    body.x = 0.11 * R * swing * sh * (1 - bw); body.y = -0.11 * R * swing * (ch * (1 - bw) + bw); body.tw = -0.08 * swing; body.sw = swing; body.h = h;   // natočení boků → skinBody B.hh
     if (stopT > 0) { const m = o.stopLoc ?? 0, e = _ss(0, 1, stopT); body.x -= Math.cos(m) * 0.32 * R * e; body.y -= Math.sin(m) * 0.32 * R * e; }   // záklon
     return { feet, body };
   }
@@ -1485,7 +1487,7 @@ function _renderPlayerUp(ctx, p, cam) {
     // DRES V RYCHLOSTI (2026-11-13): zadní lem se táhne proti jízdě a vlaje v rytmu kroku (fáze z ujeté dráhy → deterministické)
     const _jk = Math.max(0, Math.min(1, (_spd / PLAYER.speed - 0.35) / 0.65)), _jm = _k === 3 ? (p._mLocS ?? _mLoc) : _mLoc;   // trup se v skinBody neotáčí o tw → směr vůči trupu = mLoc
     const _jd = _jk > 0 && VIS.b ? { mx: Math.cos(_jm), my: Math.sin(_jm), k: _jk, fl: Math.sin(2 * (p._skatePhase ?? 0)) } : null;
-    skinBody(ctx, { feet: feetW.map(f => ({ x: f.x - bo.x, y: f.y - bo.y, side: f.side })), top: toL(topH), bot: toL(botH), hnd: p.handed ?? 1, tw: bo.tw + _bp.tw, ux: _bp.ux, uy: _bp.uy, hd: _bp.hd, lx: llx, ly: lly, jd: _jd }, K);
+    skinBody(ctx, { feet: feetW.map(f => ({ x: f.x - bo.x, y: f.y - bo.y, side: f.side })), top: toL(topH), bot: toL(botH), hnd: p.handed ?? 1, tw: bo.tw + _bp.tw, ux: _bp.ux, uy: _bp.uy, hd: _bp.hd, hh: _pose.body.h || 0, lx: llx, ly: lly, jd: _jd }, K);
     ctx.restore();
   }
 

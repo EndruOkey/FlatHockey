@@ -27,7 +27,7 @@ for (const dpr of [1, 3]) {
   await p.evaluate(() => localStorage.setItem('hockey_tutorial_done', '1'));
   await p.reload({ waitUntil: 'load' }); await p.waitForTimeout(1200);
   if (await p.isVisible('#splash-guest-btn')) { await p.click('#splash-guest-btn'); await p.waitForTimeout(800); }
-  await p.click('#go-solo'); await p.waitForTimeout(1500);
+  await p.click('#go-train'); await p.click('#go-solo'); await p.waitForTimeout(1500);
   for (const lab of ['pred', 'po']) {
     await p.evaluate(async b => { (await import('/js/vis.js')).VIS.b = b; }, lab === 'po' ? 1 : 0);
     for (const S of SIT) {

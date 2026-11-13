@@ -107,6 +107,9 @@ export function skinRig(B) {
   const hp = rot({ x: R * 0.72 - R * 0.25, y: 0 }, hd);
   return { S, H, E, ux, uy, tw, hd, head: { x: R * 0.25 + ux + hp.x, y: uy + hp.y } };
 }
+// Kyčel a střed kalhot vůči středu hráče, natočené s boky o hh (rad). Sdílí skinBody, Player.skatePose (dosah nohy) i scripts/leg_attach_metrics.mjs.
+export function skinHip(side, hh) { const x = -R * 0.6, y = side * R * 0.58, c = Math.cos(hh || 0), s = Math.sin(hh || 0); return { x: x * c - y * s, y: x * s + y * c }; }
+export function skinPants(side, hh) { const x = -R * 0.62, y = side * R * 0.62, c = Math.cos(hh || 0), s = Math.sin(hh || 0); return { x: x * c - y * s, y: x * s + y * c }; }
 // ── TĚLO HRÁČE (lokál: +x = dopředu/obličej, +y = doprava). B = { feet:[{x,y,side}], top, bot (ruce), hnd, tw (natočení ramen), ux, uy, hd, lx, ly (světlo v lokálu) }
 export function skinBody(c, B, K) {
   const lod = lodSmall(c);   // lod: malé měřítko → silnější tóny tvarů, méně drobných linek
@@ -120,13 +123,17 @@ export function skinBody(c, B, K) {
   const body = new Path2D();
   // NOHY (2026-11-13, Ondřej: „nohy vypadají jen jako tyčky"): dřív jedna kapsle 1,4 → 1,15 px. Nově stehno (kalhoty, široké, z kalhot
   // ke koleni) + lýtko se štulpnou zúžené ke kotníku; koleno lehce vybočené ven (do strany nohy) → noha má tvar, ne čáru.
-  const legs = B.feet.map(f => { const hx = -R * 0.6, hy = f.side * R * 0.58, ax = f.x, ay = f.y;   // f = kotník (Player posílá bod nad botou u paty)
+  // KYČLE S BOKY (2026-11-13, Ondřej: „nohy/hips mimo tělo"): boky se v jízdě natočí k pohybu (B.hh, Player.skatePose body.h) →
+  // kyčle i kalhoty se točí s nimi; dřív stály rovně a stehno vedlo z nenatočené kyčle napříč přes trup (scripts/leg_attach_metrics.mjs).
+  const hh = B.hh || 0;
+  const legs = B.feet.map(f => { const hp = skinHip(f.side, hh), hx = hp.x, hy = hp.y, ax = f.x, ay = f.y;   // f = kotník (Player posílá bod nad botou u paty)
     const kx = (hx + ax) / 2, ky = (hy + ay) / 2 + f.side * R * 0.12;
     const th = new Path2D(); capsule(th, hx, hy, R * 0.4, kx, ky, R * 0.3);
     const sh = new Path2D(); capsule(sh, kx, ky, R * 0.27, ax, ay, R * 0.2);
     return { th, sh }; });
   for (const L of legs) { body.addPath(L.sh); body.addPath(L.th); }
-  ellP(body, -R * 0.62, -R * 0.62, R * 0.5, R * 0.46); ellP(body, -R * 0.62, R * 0.62, R * 0.5, R * 0.46);  // kalhoty
+  const PT = [-1, 1].map(sd => skinPants(sd, hh));   // kalhoty = středy natočené s boky
+  for (const q of PT) ellP(body, q.x, q.y, R * 0.5, R * 0.46);  // kalhoty
   const up = new Path2D(); { const q = new Path2D(); torso(q, B.jd); up.addPath(q, new DOMMatrix().translate(ux, uy)); } for (const s of S) ellP(up, s.x - R * 0.12, shY(s), R * 0.48, R * 0.42);   // trup + ramena
   for (let i = 0; i < 2; i++) { capsule(up, S[i].x, S[i].y, 1.9, E[i].x, E[i].y, 1.5); capsule(up, E[i].x, E[i].y, 1.5, H[i].x, H[i].y, 1.25); }   // paže: plynulé zúžení
   const gloves = new Path2D(); for (const g of gl) { const m = new DOMMatrix().translate(g.x, g.y).rotate(g.a * 180 / Math.PI); const q = new Path2D(); q.roundRect(-2.6 * GS + 0.6, -1.9 * GS, 4.6 * GS, 3.8 * GS, 1.5); gloves.addPath(q, m); }
@@ -138,7 +145,7 @@ export function skinBody(c, B, K) {
   // 3) výplně v pořadí zdola (y−z): štulpny, kalhoty, trup+paže (jedna barva = bez švu), vzor, číslo, rukavice, helma
   c.fillStyle = shade(K.jersey, -0.1); for (const L of legs) c.fill(L.sh);   // lýtko = štulpna v barvě dresu (tmavší)
   c.fillStyle = shade(K.pants, -0.06); for (const L of legs) c.fill(L.th);   // stehno = kalhoty
-  c.fillStyle = K.pants; c.beginPath(); c.ellipse(-R * 0.62, -R * 0.62, R * 0.5, R * 0.46, 0, 0, Math.PI * 2); c.ellipse(-R * 0.62, R * 0.62, R * 0.5, R * 0.46, 0, 0, Math.PI * 2); c.fill();
+  c.fillStyle = K.pants; c.beginPath(); for (const q of PT) { c.moveTo(q.x + R * 0.5, q.y); c.ellipse(q.x, q.y, R * 0.5, R * 0.46, 0, 0, Math.PI * 2); } c.fill();
   c.fillStyle = K.jersey; c.fill(up);
   // čitelné tvary v 1× tónem (ne linkou → obrys zůstává jeden): ramena světlejší, rukávy tmavší; vzor dresu jde přes ně
   const lt = luma(K.jersey) > 0.55;

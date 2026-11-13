@@ -29,7 +29,7 @@ Podle klíčových slov v názvu commitu: **vizuál 34** (branka G3→G12, posta
 | 3 | Stažení hole | 4 | 4 | pořád nikde vysvětlené |
 | 4 | Převzetí puku | 3 | 3 | – |
 | 5 | Ochrana čerstvého puku | 0 | 0 | zkrácena 1,5 → 0,8 s (`constants.js:72`), pořád neviditelná |
-| 6 | Obrání | 1 | **3** | krytí tělem + viditelný štít (`Player.js:270`, `:1093`); směr odrazu **pořád náhodný ±31°** (`Player.js:294`) |
+| 6 | Obrání | 1 | **4** | deterministický souboj holí: tlak z rychlosti švihu čepele, puk letí ve směru švihu (`constants.js:55` `fight: 1`, `world.js:33–49`; náhodný směr `Player.js:294` se přepíše) + krytí tělem (`Player.js:270`). K1 = 0: tlak souboje se nekreslí |
 | 7 | Sklouznutí | 1 | 1 | pořád `rng < chance` (`Player.js:379`) |
 | 8 | Střela | 5 | 5 | + okno přesné rány |
 | 9 | Přenabití | 0 | **4** | už nevystřelí samo: okno PŘESNĚ, pak puk sklouzne (`match-core.js:112–117`) |
@@ -44,11 +44,11 @@ Podle klíčových slov v názvu commitu: **vizuál 34** (branka G3→G12, posta
 | 18 | Brankář | 2 | 2 | spousta vizuálu, pravidlo brankoviště pořád chybí |
 | 19 | Ofsajd / icing / fauly | 2 | 2 | buly v pásmu; přesilovka není |
 
-**Součet: 46 → 66 / 95.** Rozložení: 5 bodů 2 → 5 · 4 body 4 → 6 · 3 body 2 → 4 · **0–2 body 11 → 4**.
+**Součet: 46 → 67 / 95.** Rozložení: 5 bodů 2 → 5 · 4 body 4 → 7 · 3 body 2 → 3 · **0–2 body 11 → 4**.
 
 Nové mechaniky od 9. 11. (`[odhad]` podle kódu, ne ze hry): přikopnutí Q (okno 120–320 ms) 4 · odraz za síť jako skill shot 4 · kombo přihrávek 5 · týdenní pravidlo 3.
 
-**Plán z 9. 11. (návrhy A–L):** hotovo B, D, F, G, I, J, E (7/12), napůl A (krytí ano, aktivní poke-check bruslaře ne). **Chybí C** přepínání hráče v sólo (`game.js`: Tab přepíná jen trénink/stavění, `:1123`), **H** přesilovka, **K** nájezdy, **L** brankoviště.
+**Plán z 9. 11. (návrhy A–L):** hotovo B, D, F, G, I, J, E (7/12), A jinou cestou (souboj holí + krytí místo tlačítka). **Chybí C** přepínání hráče v sólo (`game.js`: Tab přepíná jen trénink/stavění, `:1123`), **H** přesilovka, **K** nájezdy, **L** brankoviště.
 
 ## 4. Nálezy podle závažnosti
 
@@ -56,8 +56,8 @@ Nové mechaniky od 9. 11. (`[odhad]` podle kódu, ne ze hry): přikopnutí Q (ok
 14denní test zájmu (`STAV.md`, „Další kroky 2.") nebyl spuštěn: `STAV.md` z 13. 11. píše „ověřit **po nahrání** na portály". Od 1. 11. je 130 commitů, z toho po 9. 11. polovina vizuál. Rubrika mechanik vzrostla o 20 bodů, ale nikdo zvenku to nehrál. Každá další úprava vzhledu je sázka bez dat.
 **Doporučení:** zmrazit vizuál, nahrát na itch.io + CrazyGames a spustit test s prahy ze `STAV.md`.
 
-### P1: Souboj o puk pořád rozhoduje náhoda
-Obrání končí 28 % držení (9. 11. bylo 27 %). Krytí tělem pomohlo nosiči, ale ten, kdo obírá, pořád jen „najede blízko" a puk odletí náhodně ±31° (`Player.js:294`). Aktivní poke-check pro bruslaře neexistuje (brankář ho má: `pk`).
+### P2: Souboj holí je skill, ale není vidět (OPRAVENO po kontrole, původně chybně P1 „náhoda“)
+Obrání jde přes deterministický souboj holí (`world.js:33–49`): tlak roste s relativní rychlostí čepele, puk vyletí ve směru švihu. Náhodná větev (`world.js:126`) běží jen s `FH_FIGHT=0`. Obrání končí 28 % držení. Chyba je v čitelnosti: tlak se nekreslí (`_press` 0× v kódu kresby), hráč neví, že švihem vyhrává.
 
 ### P2: Postava je v 1× malá, jmenovka větší než hráč
 Na 1440×900 má tělo hráče ~25 px, štítek se jménem je širší než postava (snímek `07-solo-game`, výřez). Detaily posledních dní (stehno + lýtko, roh branky r 10) jsou v plné hře vidět jen málo. `[odhad]`, přesně to změří px snímku postavy v 1×.
@@ -83,7 +83,7 @@ Střela, přihrávka, one-timer a kombo jsou teď všechny 5/5. Útočná hra je
 
 ## 6. Doporučené pořadí
 1. **Test s lidmi** (P1): nahrát na portály. Bez toho nevíme, jestli řešíme správné věci.
-2. Poke-check bruslaře (dokončí A) + oprava crosschecku: malé, řeší největší zbylou náhodu.
+2. Oprava crosschecku (hotovo 13. 11.) + zviditelnit souboj holí.
 3. Přepínání hráče v sólo (C).
 4. Teprve podle dat z testu: vizuál, přesilovka, nájezdy.
 
