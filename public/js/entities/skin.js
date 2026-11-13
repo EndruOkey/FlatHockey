@@ -47,6 +47,18 @@ export function goalieKit(g, teamColor) {
 // číslo, když ho server/profil nepošle (boti, offline): deterministicky z id (FNV-1a) → 2..98; bez čísla je hráč v 1× beztvarý
 function autoNum(id) { if (id == null) return ''; let h = 2166136261; for (const ch of String(id)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; } return 2 + h % 97; }
 
+// ČITELNOST POSTAV (2026-11-13, dev VIS.o → volající předá sep): 1 = světlý lem kolem obrysu (překrývající se postavy se oddělí),
+// 2 = lem + stín na ledu. Stín = posunutá výplň bez rozostření (ctx.filter je drahý, viz scripts/perf_frame.py). lx, ly = směr ke světlu.
+function _sep(c, o, paths, lx, ly, wHalo, sticks) {
+  if (!o) return;
+  c.save(); c.lineCap = 'round'; c.lineJoin = 'round';
+  if (o === 2) { c.save(); c.translate(-lx * 2.6, -ly * 2.6); c.fillStyle = 'rgba(20,40,70,0.24)'; for (const P of paths) c.fill(P);
+    if (sticks) { c.strokeStyle = 'rgba(20,40,70,0.24)'; for (const [a, b, w] of sticks) { c.lineWidth = w; c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.stroke(); } } c.restore(); }
+  c.strokeStyle = 'rgba(255,255,255,0.92)';
+  if (sticks) for (const [a, b, w] of sticks) { c.lineWidth = w + 2.6; c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.stroke(); }
+  c.lineWidth = wHalo + 2.6; for (const P of paths) c.stroke(P);
+  c.restore();
+}
 // ── geometrie
 function capsule(P, ax, ay, ra, bx, by, rb) {   // zúžená kapsle a→b jako jedna cesta (konvexní obal dvou kruhů) — kladná orientace
   const dx = bx - ax, dy = by - ay, d = Math.hypot(dx, dy) || 1e-6, ang = Math.atan2(dy, dx);
@@ -133,6 +145,7 @@ export function skinBody(c, B, K) {
   const hv = K.headV || 0;   // H0 helma v jedné cestě s tělem; H1/H2 samostatný tvar s vlastním obrysem (dev playground)
   body.addPath(up); body.addPath(gloves); if (!hv) body.addPath(helm);
   // 2) obrys jednou (pod výplněmi) → zůstane jen vnější hrana
+  _sep(c, B.sep | 0, [body], B.lx || 0, B.ly || 0, 2.0);
   c.lineJoin = 'round'; c.strokeStyle = SKIN_OUT; c.lineWidth = 2.0; c.stroke(body);
   // 3) výplně v pořadí zdola (y−z): štulpny, kalhoty, trup+paže (jedna barva = bez švu), vzor, číslo, rukavice, helma
   c.fillStyle = shade(K.jersey, -0.1); for (const L of legs) c.fill(L.sh);   // lýtko = štulpna v barvě dresu (tmavší)
@@ -213,6 +226,7 @@ export function skinGoalie(c, G, K, o) {
   const block = new Path2D(); { const q = new Path2D(); q.roundRect(G.handX - 1.6 * 1.1, G.blockY - 3.5 * 1.1, 2.8 * 1.1, 7 * 1.1, 0.9); q.roundRect(G.handX + 0.8, G.blockY - 1.6, 2.6, 3.2, 0.9); block.addPath(q, bm); }
   const all = new Path2D(); for (const p of padPaths) all.addPath(p); all.addPath(B); all.addPath(M); all.addPath(glove); all.addPath(block);
   // 1) obrys jednou: hokejka + celé tělo s pady
+  _sep(c, o.sep | 0, [all], lx, ly, 2.0, [[stk.b0, stk.b1, 4.6], [stk.b0, { x: stk.hx, y: stk.hy }, 3.4]]);
   c.lineCap = 'round'; c.lineJoin = 'round'; c.strokeStyle = SKIN_OUT;
   c.lineWidth = 4.6; c.beginPath(); c.moveTo(stk.b0.x, stk.b0.y); c.lineTo(stk.b1.x, stk.b1.y); c.stroke();
   c.lineWidth = 3.4; c.beginPath(); c.moveTo(stk.b0.x, stk.b0.y); c.lineTo(stk.hx, stk.hy); c.stroke();
