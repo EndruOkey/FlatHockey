@@ -989,9 +989,12 @@ export function bodyPose(st, o, dt = 1 / 60) {
 // horní a dolní ruka na holi (svět): sdílí draw i metrika. tipW = špička dříku, sway = posun horní ruky napříč (B1)
 export function stickHands(x, y, ba, dcv, hnd, tipW, sway = 0) {
   const R0 = PLAYER.radius, fC = Math.cos(ba), fS = Math.sin(ba), sC = -fS, sS = fC;
-  const tF = R0 * (0.55 - 0.35 * dcv), tSd = R0 * (-0.15 + 0.55 * dcv) * hnd + sway;
+  // DRŽENÍ (2026-11-13, scripts/stick_grip_metrics.mjs G1–G5): dřív horní ruka 0,55 R vpředu / 0,15 R do strany = PŘÍMO POD HELMOU
+  // (rukavice skrytá ve 100 % vzorků, dřík „z krku"). Nově jako skutečný hráč: horní ruka před bekhendovým bokem vedle hlavy
+  // (1,1 R vpředu, 0,5 R do strany), dolní ruka ve 35 % hole (skutečně ~30–40 cm pod horní); nápřah končí jako dřív (0,2 R; +0,4 R).
+  const tF = R0 * (1.1 - 0.9 * dcv), tSd = R0 * (-0.5 + 0.9 * dcv) * hnd + sway;
   const topW = { x: x + fC * tF + sC * tSd, y: y + fS * tF + sS * tSd };
-  return { topW, botW: { x: topW.x + (tipW.x - topW.x) * 0.42, y: topW.y + (tipW.y - topW.y) * 0.42 } };
+  return { topW, botW: { x: topW.x + (tipW.x - topW.x) * 0.35, y: topW.y + (tipW.y - topW.y) * 0.35 } };
 }
 
 // ROZPLÁCNUTÍ (2026-11-13): kloubová postava (downBody.js) — pád → doznění → ležení (klouže se simulací) → zvedání ve fázích
