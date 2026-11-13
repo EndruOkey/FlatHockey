@@ -236,7 +236,7 @@ function _drawGoal(ctx, cam, glx, dir, postColor, part = 'base') {
   const y1 = oy + RINK.goalY * s, y2 = oy + (RINK.goalY + RINK.goalH) * s;
   if (VIS.g === 1) return _drawGoalTop(ctx, s, x, xB, y1, y2, dir, postColor);
   if (VIS.g === 5) return _drawGoalExact(ctx, s, x, xB, y1, y2, dir, postColor, PUCK.crossbarHeight * s, part);
-  if (VIS.g === 11) return _drawGoalNHL(ctx, s, x, dir, y1, y2, postColor, PUCK.crossbarHeight * s, part);
+  if (VIS.g === 11 || VIS.g === 12) return _drawGoalNHL(ctx, s, x, dir, y1, y2, postColor, PUCK.crossbarHeight * s, part, GOAL_NHL[VIS.g]);
   if (VIS.g >= 8 && VIS.g <= 10) return _drawGoalReal(ctx, s, x, dir, y1, y2, postColor, PUCK.crossbarHeight * s, part, GOAL_REAL[VIS.g]);
   if (VIS.g === 6 || VIS.g === 7) return _drawGoalNice(ctx, s, x, xB, y1, y2, dir, postColor, PUCK.crossbarHeight * s, part, GOAL_STYLE[VIS.g]);
   if (part === 'front') return;
@@ -530,26 +530,21 @@ function _drawGoalReal(ctx, s, x, dir, y1, y2, postColor, Hs, part, G) {
 // Odhad (ne z pravidel): šířka zad základny ~86″ (halfBack 26,5), poloha zadních vzpěr.
 // tube 1,8 px ≈ 2,9″ (skutečně 2⅜″ = 1,45 px; zesíleno pro 1×). Základna (2026-11-13 v2, Ondřej: „od tyček není takhle zaoblená"):
 // od tyčky ROVNÝ bok mírně rozevřený do (sideU, ±halfBack), teprve záda jsou oblá (kubika s tečnou navazující na bok → bez zlomu).
-export const GOAL_NHL = { depth: 24.4, shelf: 11, halfBack: 26.5, sideU: 12, backK: 0.55, shelfR: 4.5, bar: 2.4, tube: 1.8, mesh: 4.4 };
-// horní polovina zad: kubika P0 (konec boku) → P3 (střed zad); vrací body [u, v] (v < 0 = horní bok)
-function _nhlBack(G, half) {
-  const ex = G.sideU, ey = G.halfBack - half, L = Math.hypot(ex, ey), k = (G.depth - G.sideU) * 0.5;
-  return [[G.sideU, -G.halfBack], [G.sideU + k * ex / L, -G.halfBack - k * ey / L], [G.depth, -G.halfBack * G.backK], [G.depth, 0]];
-}
-function _drawGoalNHL(ctx, s, x, dir, y1, y2, postColor, Hs, part) {
-  const G = GOAL_NHL, cy = (y1 + y2) / 2, half = (y2 - y1) / 2 / s;
+// v3 (Ondřej: „síť je pořád deformovaná do oblouku"): žádný oblouk — rovný bok od tyčky až k zadnímu rohu, ROVNÁ záda, zaoblené jen rohy (r).
+// G11 = boky rozevřené (záda širší než ústí), G12 = boky skoro rovnoběžné. Vzpěry rovné z rohu police do zadního rohu základny.
+export const GOAL_NHL = {
+  11: { depth: 24.4, shelf: 11, halfBack: 26.5, r: 5, shelfR: 4.5, bar: 2.4, tube: 1.8, mesh: 4.4 },
+  12: { depth: 24.4, shelf: 11, halfBack: 23.5, r: 5, shelfR: 4.5, bar: 2.4, tube: 1.8, mesh: 4.4 },
+};
+function _drawGoalNHL(ctx, s, x, dir, y1, y2, postColor, Hs, part, G) {
+  const cy = (y1 + y2) / 2, half = (y2 - y1) / 2 / s;
   const X = u => x + dir * u * s, Y = v => cy + v * s;
-  const B = _nhlBack(G, half), base = new Path2D();
-  base.moveTo(X(0), Y(-half)); base.lineTo(X(B[0][0]), Y(B[0][1]));
-  base.bezierCurveTo(X(B[1][0]), Y(B[1][1]), X(B[2][0]), Y(B[2][1]), X(B[3][0]), Y(B[3][1]));
-  base.bezierCurveTo(X(B[2][0]), Y(-B[2][1]), X(B[1][0]), Y(-B[1][1]), X(B[0][0]), Y(-B[0][1]));
-  base.lineTo(X(0), Y(half));
+  const base = _realPath(x, dir, cy, half, G.depth, G.halfBack, G.r, s);   // tyčka → rovně k rohu → zaoblený roh → rovná záda
   const baseF = new Path2D(base); baseF.closePath();
   const shelf = _realPath(x, dir, cy, half, G.shelf, half, G.shelfR, s), shelfF = new Path2D(shelf); shelfF.closePath();
-  const strut = new Path2D();   // zadní vzpěry: z rohu police (výška břevna) šikmo dolů; konec leží PŘESNĚ na zádech základny (bod kubiky v t = 0,45)
-  const onBack = t => [0, 1].map(i => (1 - t) ** 3 * B[0][i] + 3 * (1 - t) ** 2 * t * B[1][i] + 3 * (1 - t) * t * t * B[2][i] + t ** 3 * B[3][i]);
-  const [eu, ev] = onBack(0.45);
-  for (const v of [-1, 1]) { strut.moveTo(X(G.shelf - 1.2), Y(v * (half - 1.2))); strut.quadraticCurveTo(X(G.shelf + 5), Y(v * (half + 1.5)), X(eu), Y(-v * ev)); }   // ev < 0 = horní polovina → v = −1 horní, +1 dolní
+  const strut = new Path2D();   // zadní vzpěry: rovně z rohu police do středu zaobleného rohu základny (bod kvadratiky v t = 0,5)
+  const cu = G.depth - 0.225 * G.r, cv = G.halfBack - 0.25 * G.r;
+  for (const v of [-1, 1]) { strut.moveTo(X(G.shelf - 1.2), Y(v * (half - 1.2))); strut.lineTo(X(cu), Y(v * cv)); }
   ctx.save(); ctx.lineJoin = ctx.lineCap = 'round';
   if (part === 'base') {
     // led pod sítí: jemně stinný (síť a rám ho kryjí před světlem)
