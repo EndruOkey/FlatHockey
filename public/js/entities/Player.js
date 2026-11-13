@@ -856,6 +856,10 @@ export function skatePose(o) {
         const tx = -0.3 * R + cm * d - sm * q, ty = sm * d + cm * q;   // q: boky se stočí → brusle vykouknou do boku
         x += (tx - x) * e; y += (ty - y) * e; a = lerpAngle(a, stopA, e); lift *= 1 - e;
       }
+      // DOSAH NOHY (2026-11-13, Ondřej: „končetiny se odkryjí"): chodidlo šlo v zatáčce až 2,0 R od kyčle → noha trčela z postavy
+      // jako odtržená. Měkký limit: do 1,0 R beze změny, nad tím plynule stlačeno k max. 1,25 R (rytmus kroku zůstává).
+      { const hx = -0.55 * R, hy = side * 0.55 * R, dx = x - hx, dy = y - hy, r = Math.hypot(dx, dy), k = 1.0 * R, M = 1.25 * R;
+        if (r > k) { const r2 = k + (M - k) * (1 - Math.exp(-(r - k) / (M - k))); x = hx + dx * r2 / r; y = hy + dy * r2 / r; } }
       feet.push({ side, x, y, a, lift });
     }
     // přenos váhy: odraz tlačí tělo od odrazové nohy (napříč boky), ramena se lehce protočí proti odrazové noze
@@ -1429,7 +1433,10 @@ function _renderPlayerUp(ctx, p, cam) {
     ctx.save();
     ctx.translate(sx, sy); ctx.rotate(ba); ctx.translate(bo.x * s, (leanW + bo.y) * s); ctx.scale(s, s);
     K.headV = VIS.h;
-    skinBody(ctx, { feet: feetW.map(f => ({ x: f.x - bo.x, y: f.y - bo.y, side: f.side })), top: toL(topH), bot: toL(botH), hnd: p.handed ?? 1, tw: bo.tw + _bp.tw, ux: _bp.ux, uy: _bp.uy, hd: _bp.hd, lx: llx, ly: lly }, K);
+    // DRES V RYCHLOSTI (2026-11-13): zadní lem se táhne proti jízdě a vlaje v rytmu kroku (fáze z ujeté dráhy → deterministické)
+    const _jk = Math.max(0, Math.min(1, (_spd / PLAYER.speed - 0.35) / 0.65)), _jm = _k === 3 ? (p._mLocS ?? _mLoc) : _mLoc;   // trup se v skinBody neotáčí o tw → směr vůči trupu = mLoc
+    const _jd = _jk > 0 && VIS.b ? { mx: Math.cos(_jm), my: Math.sin(_jm), k: _jk, fl: Math.sin(2 * (p._skatePhase ?? 0)) } : null;
+    skinBody(ctx, { feet: feetW.map(f => ({ x: f.x - bo.x, y: f.y - bo.y, side: f.side })), top: toL(topH), bot: toL(botH), hnd: p.handed ?? 1, tw: bo.tw + _bp.tw, ux: _bp.ux, uy: _bp.uy, hd: _bp.hd, lx: llx, ly: lly, jd: _jd }, K);
     ctx.restore();
   }
 

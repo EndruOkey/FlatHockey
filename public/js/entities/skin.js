@@ -56,10 +56,16 @@ function capsule(P, ax, ay, ra, bx, by, rb) {   // zúžená kapsle a→b jako j
   P.arc(bx, by, rb, ang - t, ang + t, false);
   P.closePath();
 }
-function torso(P) {
+// D = deformace dresu v rychlosti (2026-11-13): { mx, my } = směr jízdy v lokálu trupu (jednotkový), k = 0–1 rychlost, fl = vlání −1…1.
+// Body na ZADNÍ straně (proti jízdě) se táhnou dozadu (váha t² → přední strana i ramena drží tvar) a lehce vlají do boku.
+function torso(P, D) {
   const r = R * 1.04;
-  P.moveTo(r * 0.35, -r * 1.2); P.quadraticCurveTo(r * 0.75, -r * 0.6, r * 0.55, 0); P.quadraticCurveTo(r * 0.75, r * 0.6, r * 0.35, r * 1.2);
-  P.quadraticCurveTo(-r * 0.15, r * 1.42, -r * 0.75, r * 0.85); P.quadraticCurveTo(-r * 1.05, 0, -r * 0.75, -r * 0.85); P.quadraticCurveTo(-r * 0.15, -r * 1.42, r * 0.35, -r * 1.2); P.closePath();
+  const f = !D || D.k <= 0 ? (x, y) => [x, y] : (x, y) => {
+    const t = Math.max(0, -(x * D.mx + y * D.my)) / r, w = t * t, b = D.k * w * R * 0.28, sw = D.fl * D.k * w * R * 0.14;
+    return [x - D.mx * b - D.my * sw, y - D.my * b + D.mx * sw]; };
+  const M = (x, y) => P.moveTo(...f(x, y)), Q = (cx, cy, x, y) => P.quadraticCurveTo(...f(cx, cy), ...f(x, y));
+  M(r * 0.35, -r * 1.2); Q(r * 0.75, -r * 0.6, r * 0.55, 0); Q(r * 0.75, r * 0.6, r * 0.35, r * 1.2);
+  Q(-r * 0.15, r * 1.42, -r * 0.75, r * 0.85); Q(-r * 1.05, 0, -r * 0.75, -r * 0.85); Q(-r * 0.15, -r * 1.42, r * 0.35, -r * 1.2); P.closePath();
 }
 const ellP = (P, x, y, rx, ry) => { P.moveTo(x + rx, y); P.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2, false); P.closePath(); };
 const rot = (p, a) => ({ x: p.x * Math.cos(a) - p.y * Math.sin(a), y: p.x * Math.sin(a) + p.y * Math.cos(a) });
@@ -111,9 +117,16 @@ export function skinBody(c, B, K) {
   const gl = [0, 1].map(i => ({ x: H[i].x, y: H[i].y, a: Math.atan2(H[i].y - E[i].y, H[i].x - E[i].x) }));
   // 1) sjednocená cesta těla
   const body = new Path2D();
-  for (const f of B.feet) capsule(body, -R * 0.55, f.side * R * 0.55, 1.4, f.x - 0.4, f.y, 1.15);           // štulpny
+  // NOHY (2026-11-13, Ondřej: „nohy vypadají jen jako tyčky"): dřív jedna kapsle 1,4 → 1,15 px. Nově stehno (kalhoty, široké, z kalhot
+  // ke koleni) + lýtko se štulpnou zúžené ke kotníku; koleno lehce vybočené ven (do strany nohy) → noha má tvar, ne čáru.
+  const legs = B.feet.map(f => { const hx = -R * 0.6, hy = f.side * R * 0.58, ax = f.x - 0.4, ay = f.y;
+    const kx = (hx + ax) / 2, ky = (hy + ay) / 2 + f.side * R * 0.12;
+    const th = new Path2D(); capsule(th, hx, hy, R * 0.4, kx, ky, R * 0.3);
+    const sh = new Path2D(); capsule(sh, kx, ky, R * 0.27, ax, ay, R * 0.2);
+    return { th, sh }; });
+  for (const L of legs) { body.addPath(L.sh); body.addPath(L.th); }
   ellP(body, -R * 0.62, -R * 0.62, R * 0.5, R * 0.46); ellP(body, -R * 0.62, R * 0.62, R * 0.5, R * 0.46);  // kalhoty
-  const up = new Path2D(); { const q = new Path2D(); torso(q); up.addPath(q, new DOMMatrix().translate(ux, uy)); } for (const s of S) ellP(up, s.x - R * 0.12, shY(s), R * 0.48, R * 0.42);   // trup + ramena
+  const up = new Path2D(); { const q = new Path2D(); torso(q, B.jd); up.addPath(q, new DOMMatrix().translate(ux, uy)); } for (const s of S) ellP(up, s.x - R * 0.12, shY(s), R * 0.48, R * 0.42);   // trup + ramena
   for (let i = 0; i < 2; i++) { capsule(up, S[i].x, S[i].y, 1.9, E[i].x, E[i].y, 1.5); capsule(up, E[i].x, E[i].y, 1.5, H[i].x, H[i].y, 1.25); }   // paže: plynulé zúžení
   const gloves = new Path2D(); for (const g of gl) { const m = new DOMMatrix().translate(g.x, g.y).rotate(g.a * 180 / Math.PI); const q = new Path2D(); q.roundRect(-2.6 * GS + 0.6, -1.9 * GS, 4.6 * GS, 3.8 * GS, 1.5); gloves.addPath(q, m); }
   const helm = new Path2D(); { const q = new Path2D(); ellP(q, hx, 0, hrx, hry); helm.addPath(q, HM); }
@@ -122,7 +135,8 @@ export function skinBody(c, B, K) {
   // 2) obrys jednou (pod výplněmi) → zůstane jen vnější hrana
   c.lineJoin = 'round'; c.strokeStyle = SKIN_OUT; c.lineWidth = 2.0; c.stroke(body);
   // 3) výplně v pořadí zdola (y−z): štulpny, kalhoty, trup+paže (jedna barva = bez švu), vzor, číslo, rukavice, helma
-  c.fillStyle = shade(K.jersey, -0.1); for (const f of B.feet) { const q = new Path2D(); capsule(q, -R * 0.55, f.side * R * 0.55, 1.4, f.x - 0.4, f.y, 1.15); c.fill(q); }
+  c.fillStyle = shade(K.jersey, -0.1); for (const L of legs) c.fill(L.sh);   // lýtko = štulpna v barvě dresu (tmavší)
+  c.fillStyle = shade(K.pants, -0.06); for (const L of legs) c.fill(L.th);   // stehno = kalhoty
   c.fillStyle = K.pants; c.beginPath(); c.ellipse(-R * 0.62, -R * 0.62, R * 0.5, R * 0.46, 0, 0, Math.PI * 2); c.ellipse(-R * 0.62, R * 0.62, R * 0.5, R * 0.46, 0, 0, Math.PI * 2); c.fill();
   c.fillStyle = K.jersey; c.fill(up);
   // čitelné tvary v 1× tónem (ne linkou → obrys zůstává jeden): ramena světlejší, rukávy tmavší; vzor dresu jde přes ně
