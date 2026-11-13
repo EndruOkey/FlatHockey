@@ -82,9 +82,12 @@ def drive_step(page, sid, s, n):
             steer(page, s, 0, 0, 99999); page.keyboard.down('Space')
     elif sid == 'aim':
         a = n * 0.5; aim(page, s['x'] + math.cos(a) * 110, s['y'] + math.sin(a) * 110)
-    elif sid == 'spin':
-        page.mouse.down(button='left')
-        a = n * 0.45; aim(page, s['x'] + math.cos(a) * 110, s['y'] + math.sin(a) * 110)
+    elif sid == 'onetimer':
+        # hold LMB while the pass travels, release once the puck is on the blade
+        aim(page, *GOAL)
+        if s['phas']: page.mouse.up(button='left')
+        elif not s['has']: page.mouse.down(button='left')
+        else: page.mouse.up(button='left')
     elif sid == 'pickup':
         page.mouse.up(button='left'); steer(page, s, s['px'], s['py'], 6)
     elif sid == 'shoot':
@@ -102,10 +105,9 @@ def drive_step(page, sid, s, n):
             aim(page, s['px'], s['py']); steer(page, s, s['px'], s['py'], 6)
     elif sid == 'bodycheck':
         steer(page, s, s['ax'], s['ay'], 4);
-    elif sid == 'clona':
-        steer(page, s, 900, 228, 15)
     elif sid == 'tece':
         a = n * 0.7; aim(page, 990 + math.cos(a) * 30, 228 + math.sin(a) * 30)
+        if n % 2 == 0: page.keyboard.press('q')
     elif sid == 'goal':
         # skate to alternating wing, aim at far post, charged (900 ms) slapshot whenever carrying; flick shots are saved
         top = (n // 40) % 2 == 0
@@ -116,7 +118,7 @@ def drive_step(page, sid, s, n):
 
 def run_tutorial(page, ctx):
     ids = page.evaluate("() => window.__fhGame ? 1 : 0")
-    names = ['move', 'aim', 'pickup', 'shoot', 'goal', 'brake', 'pass', 'mmb', 'spin', 'bodycheck', 'clona', 'tece']
+    names = ['move', 'aim', 'pickup', 'shoot', 'goal', 'brake', 'pass', 'mmb', 'onetimer', 'bodycheck', 'tece']
     reached, stuck = [], []
     last_step, since, n = -1, 0, 0; t0 = time.monotonic()
     page.mouse.move(640, 360)
@@ -163,9 +165,9 @@ def run_training(page):
     for drill, key in ((0, 'Digit1'), (1, 'Digit2'), (2, 'Digit3')):
         tap(page, key); page.wait_for_timeout(300)
         for diff in range(3):
-            for _ in range(5):          # fixed: cycle E until wanted difficulty
+            for _ in range(5):          # cycle G (goalie difficulty; E = call for pass)
                 if state(page)['diff'] == diff: break
-                tap(page, 'KeyE'); page.wait_for_timeout(150)
+                tap(page, 'KeyG'); page.wait_for_timeout(150)
             name = 'train_d%d_g%d' % (drill, diff)
             for i in range(40):         # 4 s of play
                 s = state(page)
@@ -232,7 +234,8 @@ def main():
             page.goto(BASE + '/?fhtest', wait_until='load'); page.wait_for_timeout(1500)
             shot(page, '00_splash')
             # guest -> tutorial (first visit => guest button starts tutorial)
-            page.click('#splash-tutorial-btn'); page.wait_for_timeout(800)
+            # splash existuje jen někdy (první návštěva); jinak hlavní menu → Tutoriál
+            page.click('#splash-tutorial-btn' if page.is_visible('#splash-tutorial-btn') else '#go-tutorial'); page.wait_for_timeout(800)
             run_tutorial(page, ctx)
             page.wait_for_timeout(1500)
             # finish screen -> Enter -> profile
@@ -263,7 +266,8 @@ def main():
     for e in errors:
         if '401 (Unauthorized)' in e: continue   # guest /api session probe, expected
         problems.append(e)
-    contact_sheet()
+    try: contact_sheet()
+    except Exception as ex: warnings.append('contact sheet: %r' % ex)
     print(json.dumps({'problems': problems, 'warnings': warnings, 'log': log}, ensure_ascii=False, indent=1))
     print('RESULT:', 'FAIL (%d)' % len(problems) if problems else 'PASS')
     sys.exit(1 if problems else 0)
