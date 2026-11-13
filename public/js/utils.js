@@ -1,14 +1,17 @@
 export function lerp(a, b, t) { return a + (b - a) * t; }
 
+// Rozdíl úhlů vždy v [−π, π) i pro libovolně „rozbalené" úhly (2026-11-13: staré (x + 3π) % 2π selhalo pro |x| > 3π →
+// po ~1,5 otáčce se tělo/míření otočilo opačným směrem; test/heli.test.mjs).
+const _TAU = Math.PI * 2;
+function _wrapPi(x) { return ((x + Math.PI) % _TAU + _TAU) % _TAU - Math.PI; }   // rozsah [−π, π) jako dřív
 export function lerpAngle(a, b, t) {
-  const d = ((b - a + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
-  return a + d * Math.min(1, t);
+  return a + _wrapPi(b - a) * Math.min(1, t);
 }
 
 export function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
 export function angleDiff(a, b) {
-  return ((a - b + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+  return _wrapPi(a - b);
 }
 
 export function approach(cur, target, step) {

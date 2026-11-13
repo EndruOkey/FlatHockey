@@ -16,6 +16,7 @@
     "test:balance": "node test/balance.mjs",
     "test:freeze": "node test/goalie-freeze.test.mjs",
     "test:cc": "node test/crosscheck.test.mjs",
+    "test:heli": "node test/heli.test.mjs",
     "test:buy": "node test/buy-race.test.mjs",
     "test:scorehack": "node test/score-hack.test.mjs",
     "test:dev": "node test/dev-gate.test.mjs",
