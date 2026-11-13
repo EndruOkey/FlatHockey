@@ -126,6 +126,7 @@ export class PlayerBase {
     if (puck.faceoffTimer > 0) return false;  // bully freeze
     if (this._shootCooldown > 0) return false;
     if (this.crossCheck) return false;   // crosscheck = ignoruje pickup
+    if (this._deflQ > 0 && this.deflectWindow(puck) >= 0) return false;   // Q na teč je nachystané → puk neber, tečuj
     const tip = this.stickTip;
     // Grab zóna kolem celé čepele — nejen špička, ale i podél lopaty (přesahuje za tip)
     const bladeDir = (this.carryAngle ?? this.aimAngle) + (this.handed ?? 1) * Math.PI / 6.5;
@@ -162,7 +163,57 @@ export class PlayerBase {
     if (d <= KICK_SOON && closing > 60) return 0;             // okno se blíží (nápověda)
     return -1;
   }
+  // ── TEČ NA Q (2026-11-12): čerstvá rána SPOLUHRÁČE (≤ DEFL_AGE s) a ty do DEFL_ZONE px od soupeřovy branky →
+  // Q puk přesměruje holí kam míříš (kurzor; výška podle kurzoru za brankou), rychlost × 0,70–0,85 a chyba úhlu
+  // deterministicky podle načasování (doba podržení stisku) a místa zásahu na čepeli. Bez rng. Mimo situaci Q = přikopnutí.
+  // Vrací −1 = není situace teče, 0 = puk se blíží (stisk se podrží), 1 = puk na dosah čepele.
+  deflectWindow(puck) {
+    if (this.hasPuck || !puck || puck.faceoffTimer > 0 || (puck._carrier && puck._carrier.hasPuck)) return -1;
+    const sh = puck._shot;
+    if (!sh || sh.team !== this.team || sh.id === this.id || (puck._shotAge ?? 9) > DEFL_AGE) return -1;
+    const gx = this.team === 'home' ? RINK.goalLineRight : RINK.goalLineLeft, gy = RINK.goalY + RINK.goalH / 2;
+    if (Math.hypot(this.x - gx, this.y - gy) > DEFL_ZONE) return -1;
+    const v = Math.hypot(puck.vx, puck.vy);
+    if (v < DEFL_VMIN || puck.z > DEFL_Z) return -1;
+    // vzdálenost puku od čepele (úsečka úchop→špička); i průlet během tiku (puk ≤ 8 px/tik)
+    const g = this.gripPoint, t = this.stickTip, d0 = _segDist(puck.x, puck.y, g.x, g.y, t.x, t.y),
+      d1 = _segDist(puck.x + puck.vx / 60, puck.y + puck.vy / 60, g.x, g.y, t.x, t.y);
+    if (Math.min(d0, d1) <= DEFL_R) return 1;
+    // blíží se: nejbližší přiblížení ke špičce do DEFL_R a za ≤ DEFL_SOON s
+    const rx = t.x - puck.x, ry = t.y - puck.y, tc = (rx * puck.vx + ry * puck.vy) / (v * v);
+    if (tc > 0 && tc <= DEFL_SOON && Math.hypot(puck.x + puck.vx * tc - t.x, puck.y + puck.vy * tc - t.y) <= DEFL_R + 4) return 0;
+    return -1;
+  }
+  _doDeflect(puck) {
+    const held = this._deflHeld || 0; this._deflQ = 0; this._deflHeld = 0; this._kickQ = 0;
+    const tq = clamp(1 - (held - DEFL_SWEET) / (DEFL_BUF - DEFL_SWEET), 0, 1);   // 1 = stisk těsně před dotekem
+    const v = Math.hypot(puck.vx, puck.vy) || 1;
+    const gx = this.team === 'home' ? RINK.goalLineRight : RINK.goalLineLeft, gy = RINK.goalY + RINK.goalH / 2;
+    // cíl = bod na paprsku kurzoru (od hráče), nejméně v hloubce brankové čáry
+    const a = this.aimAngle, ca = Math.cos(a), sa = Math.sin(a);
+    const toLine = Math.abs(ca) > 0.05 ? (gx - this.x) / ca : 0, reach = Math.max(this.aimDist ?? 60, toLine > 0 ? toLine : 0, 30);
+    const tx = this.x + ca * reach, ty = this.y + sa * reach;
+    // místo zásahu: kolmý odstup puku od špičky vůči směru letu (−1..1) → strana chyby
+    const t = this.stickTip, side = clamp(((puck.x - t.x) * -puck.vy + (puck.y - t.y) * puck.vx) / v / DEFL_R, -1, 1);
+    const err = side * DEFL_ERR_S + (side >= 0 ? 1 : -1) * (1 - tq) * DEFL_ERR_T;
+    const dir = Math.atan2(ty - puck.y, tx - puck.x) + err, out = v * (DEFL_KEEP - DEFL_LOSS * (1 - tq));
+    puck.vx = Math.cos(dir) * out; puck.vy = Math.sin(dir) * out;
+    // výška: kurzor za brankovou čarou zvedá teč (až pod břevno), bot/kurzor na čáře = po ledě
+    const dl = Math.max(8, Math.hypot(gx - puck.x, gy - puck.y)), tt = dl / out, over = Math.max(0, (this.aimDist ?? 0) - Math.hypot(gx - this.x, gy - this.y));
+    const zT = this.isBot ? 0 : clamp(over / 80, 0, 1) * (PUCK.crossbarHeight - 5), z0 = Math.max(0, puck.z);
+    puck.z = z0; puck.vz = Math.max(0, (zT - z0 + PUCK.gravity * tt * tt / 2) / tt);
+    if (zT <= 0 && z0 <= 1.5) puck.vz = 0;
+    this._deflOut = { x: puck.x, y: puck.y, vx: puck.vx, vy: puck.vy, vin: v, tq, zLine: puck.z + puck.vz * tt - PUCK.gravity * tt * tt / 2 };   // pro sondy/testy
+    puck._passTo = null;
+    puck._shot = { id: this.id, team: this.team, ot: false, pf: false, defl: true }; puck._shotAge = 0;   // gól z teče = tvůj gól
+    this._shootCooldown = 0.12; this._deflectCool = 0.3;
+    this._deflFx = 0.3; this._deflN = (this._deflN || 0) + 1; this._deflQ_tq = tq;
+    return true;
+  }
   trySkateKick(puck) {
+    const dw = this.deflectWindow(puck);   // teč má přednost před přikopnutím (jen rána spoluhráče u soupeřovy branky)
+    if (dw === 1) { this._deflHeld = 0; return this._doDeflect(puck); }
+    if (dw === 0) { this._deflQ = DEFL_BUF; this._deflHeld = 0; return false; }
     if ((this._kickCd || 0) > 0) return false;
     const w = this.kickWindow(puck);
     if (w === 0) { this._kickQ = KICK_BUF; return false; }   // o chvilku dřív: stisk podržíme, než puk do okna dojede
@@ -317,6 +368,7 @@ export class PlayerBase {
   // Tečování (deflection) — letící puk u čepele se odrazí pod jiným úhlem (gól z dorážky)
   tryDeflect(puck) {
     if (this.hasPuck || puck.isAirborne) return false;
+    if (this._deflQ > 0) return false;   // Q na teč nachystané → řídí to _doDeflect, ne náhodný odraz
     if (this.charge > 0) return false; // nabíjí one-timer → puk chytí, netečuje
     if (this._shootCooldown > 0 || this._deflectCool > 0) return false;
     const inSpeed = Math.hypot(puck.vx, puck.vy);
@@ -545,6 +597,9 @@ export class Player extends PlayerBase {
     if (this._kickCd > 0) this._kickCd -= dt;
     if (this._kickQ > 0) { this._kickQ -= dt; const pk = world?.puck; if (pk && this.kickWindow(pk) === 1) this._doKick(pk); else if (this._kickQ <= 0) this._kickCd = KICK_CD; }
     if (this._kickFx > 0) this._kickFx -= dt;
+    if (this._deflQ > 0) { const pk = world?.puck; this._deflHeld = (this._deflHeld || 0) + dt; const w = pk ? this.deflectWindow(pk) : -1;
+      if (w === 1) this._doDeflect(pk); else if ((this._deflQ -= dt) <= 0 || w < 0) { this._deflQ = 0; this._kickCd = KICK_CD; } }
+    if (this._deflFx > 0) this._deflFx -= dt;
     if (this._passCooldown  > 0) this._passCooldown  -= dt;
     if (this._deflectCool   > 0) this._deflectCool   -= dt;
     // Hůl relativně k tělu (kužel) + forehand dle handedness
@@ -605,6 +660,12 @@ const _rt  = cam => (cam && cam.t != null ? cam.t : 0);
 const _hrand = (id, n, i) => { let h = 2166136261 ^ n; const str = String(id); for (let k = 0; k < str.length; k++) h = Math.imul(h ^ str.charCodeAt(k), 16777619); h = Math.imul(h ^ (i * 374761393), 668265263); h ^= h >>> 13; h = Math.imul(h, 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
 // Hokejka — varianty kresby (vis.js): out = obrys dříku, sh = dřík, bl = čepel, blo = obrys čepele (× s), knob = koncovka, hi = odlesk, sh2 = stín na ledu
 const SHOT_EAT_T = 0.25, SHOT_EAT_V = 300, SHOT_NOPICK = 0.1;
+// TEČ NA Q: stáří rány (s), prostor od středu soupeřovy branky (px), min. rychlost (px/s), max. výška puku (px; břevno 21),
+// dosah čepele (px), předstih okna (s), podržení stisku (s), „sladké" načasování (s), zachovaná rychlost a ztráta při
+// pozdním/brzkém stisku, chyba úhlu z místa zásahu a z načasování (rad)
+const DEFL_AGE = 1.2, DEFL_ZONE = 110, DEFL_VMIN = 80, DEFL_Z = 14, DEFL_R = 13, DEFL_SOON = 0.15, DEFL_BUF = 0.15, DEFL_SWEET = 0.05,
+  DEFL_KEEP = 0.85, DEFL_LOSS = 0.15, DEFL_ERR_S = 0.06, DEFL_ERR_T = 0.14;
+function _segDist(px, py, ax, ay, bx, by) { const dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy || 1, u = clamp(((px - ax) * dx + (py - ay) * dy) / L, 0, 1); return Math.hypot(px - ax - dx * u, py - ay - dy * u); }
 const KICK_R = 26, KICK_SOON = 70, KICK_CD = 0.4, KICK_BUF = 0.15, KICK_PASS = 260;   // + podržení stisku (s), puk po průjezdu (px/s od tebe)   // přikopnutí (Q): okno px od těla, nápověda od px, zámek po minutí (s)   // s, px/s — viz canPickup (čerstvá rána soupeře)
 let _brakeSfxAt = -1e9;   // globální omezovač zvuku brzdy cizích hráčů (jen kresba/zvuk, ne simulace)
 const STICK_V = [
@@ -1096,7 +1157,7 @@ function _renderPlayer(ctx, p, cam) {
 
   if (p._isLocal) _drawPickupAid(ctx, p, cam);
   if (p._isLocal && p._puckView) {   // nápověda přikopnutí (Q): odznak u puku, zelený v okně
-    const w = p.kickWindow(p._puckView);
+    const dw = p.deflectWindow(p._puckView), w = dw >= 0 ? dw : p.kickWindow(p._puckView);   // teč (rána spoluhráče u branky) má přednost
     if (w >= 0) { const s = cam.scale, P = p._puckView, x = cam.ox + P.x * s, y = cam.oy + (P.y - 9) * s, on = w === 1;
       ctx.save(); ctx.font = `800 ${6.5 * s}px 'Segoe UI', sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.beginPath(); ctx.roundRect(x - 4.2 * s, y - 4.2 * s, 8.4 * s, 8.4 * s, 2 * s);
@@ -1106,6 +1167,10 @@ function _renderPlayer(ctx, p, cam) {
   if (p._kickFx > 0) {   // úspěšné přikopnutí: krátký záblesk u brusle
     const s = cam.scale, a = p._kickFx / 0.35; ctx.save(); ctx.beginPath(); ctx.arc(cam.ox + p.x * s, cam.oy + p.y * s, (PLAYER.radius + 4 + 6 * (1 - a)) * s, 0, Math.PI * 2);
     ctx.strokeStyle = `rgba(60,200,110,${a})`; ctx.lineWidth = 2 * s * a; ctx.stroke(); ctx.restore(); }
+
+  if (p._deflFx > 0) {   // teč na Q: záblesk u čepele
+    const s = cam.scale, a = p._deflFx / 0.3, t = p.stickTip; ctx.save(); ctx.beginPath(); ctx.arc(cam.ox + t.x * s, cam.oy + t.y * s, (5 + 7 * (1 - a)) * s, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(255,214,70,${a})`; ctx.lineWidth = 2 * s * a; ctx.stroke(); ctx.restore(); }
 
   // Charge arc — jen vlastní hráč (ostatní vidí nabíjení jako nápřah hole, ne ukazatel)
   if (p.charge > 0.05 && p._isLocal) {

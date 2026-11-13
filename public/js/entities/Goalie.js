@@ -34,6 +34,7 @@ export const STANCE_COVER = {
 // FINTA v malém okně (2026-11-12, scripts/feint_probe.mjs): po zrušení nápřahu FAKE_D s gólman ještě stojí na ránu, pak FAKE_W s
 // „skočí" (plný trest), pak FAKE_R s návrat. Dřív FAKE_T = 1 s plného trestu → finta vyšla vždy (okno ~1 s).
 const FAKE_D = _genv('FH_FAKED', 0.08), FAKE_W = _genv('FH_FAKEW', 0.07), FAKE_R = _genv('FH_FAKER', 0.06);
+const DEFL_READ = _genv('FH_DEFLREAD', 0.5), DEFL_SF = _genv('FH_DEFLSF', 0.72);   // tečovaný puk: jak dlouho (s) a o kolik hůř gólman čte
 const FAKE_LOCK = _genv('FH_FAKELOCK', 0.6);   // rána vypuštěná, když je gólman „chycený" (trest ≥ 0,5) → trest drží až do konce rány
 const FAKE_T = FAKE_D + FAKE_W + FAKE_R, FAKE_LAG = _genv('FH_FAKELAG', 0.2), FAKE_SCREEN = _genv('FH_FAKESCR', 1.8);   // 1,8: rána v okně finty vyjde ~62 % (feint_probe sweep 2026-11-12)   // FAKE_LAG = násobek rychlosti sledování puku při plném trestu
 
@@ -579,6 +580,8 @@ export class Goalie {
     let speedFactor = clamp(1 - (shotSpeed - 150) / 520, 0.65, 1.0);
     // One-timer: gólman nestihne reagovat na rychlý přechod nahrávka→střela (−28 %)
     if (this._oneTimerHint) speedFactor = Math.max(0.55, speedFactor * 0.72);
+    // TEČ (Q, 2026-11-12): čerstvě tečovaný puk změnil směr těsně před brankou → gólman je postavený na původní ránu (jako one-timer)
+    else if (puck._shot && puck._shot.defl && (puck._shotAge ?? 9) < DEFL_READ) speedFactor = Math.max(0.55, speedFactor * DEFL_SF);
     // Vzdálenost střely: z blízka = kratší čas na read = menší zone (max −20 %)
     const prevPx = puck.prevX ?? puck.x;
     const shotDist = Math.abs(prevPx - this.x);
