@@ -100,6 +100,17 @@ def evaluate(g):
     free = sum(lum(E.getpixel(P(GL + u, 270))) for u in range(6, 19)) / 13
     sh = sum(lum(E.getpixel(P(GL + u, y))) for u in range(6, 19) for y in range(253, 258)) / 65
     res['R9'] = (sh <= free * 0.97, f'stín {sh:.3f} vs led {free:.3f} ({(1 - sh / free) * 100:.1f} % tmavší)')
+    # R13 (doplněno 2026-11-13 po Ondřejově připomínce „spodní hrana od tyček není takhle zaoblená"): bok základny od tyčky
+    # je ROVNÝ — horní okraj bílé trubky na sloupcích u 3,5–12 leží na přímce (největší odchylka od tětivy ≤ 0,35 px hřiště)
+    edge = []
+    for k in range(0, 18):   # od u 3,5: blíž k tyčce se trubka základny slévá s trubkou police (< 1,8 px od sebe) → měřila by se police
+        wu = 3.5 + 0.5 * k; f = [isW(c) for c in col(wu, 192, 228)]; i = next((i for i, q in enumerate(f) if q), None)
+        if i is not None: edge.append((wu, 192 + i * st))
+    if len(edge) >= 10:
+        (ua, ya), (ub, yb) = edge[0], edge[-1]
+        dev13 = max(abs(y - (ya + (yb - ya) * (u - ua) / (ub - ua))) for u, y in edge)
+    else: dev13 = 99
+    res['R13'] = (dev13 <= 0.35, f'bok základny: odchylka od přímky {dev13:.2f} px ({len(edge)} sloupců)')
     # R10, R11 (převzato z goal8b_rubric.py R8, R7)
     G1, _, _, _ = load(g, '1366x768@3', 'gk'); G0, _, _, _ = load(g, '1366x768@3', 'gknf'); E0, _, _, _ = load(g, '1366x768@3', 'emptynf')
     px_, py_ = P(1006, 236); nb = [(px_ + dx, py_ + dy) for dx in (-2, 0, 2) for dy in (-2, 0, 2)]
