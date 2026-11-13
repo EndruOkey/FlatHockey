@@ -69,7 +69,9 @@ kbd, .key3 { display: inline-block; min-width: 30px; text-align: center; border:
   padding: clamp(16px, 6vh, 94px) var(--a3-gut) 120px; }
 .m3-menu { display: flex; flex-direction: column; gap: 8px; }
 /* Trénink = podmenu offline režimů ve stejném seznamu (main.js přepíná .sub) */
-.m3-menu:not(.sub) .m3-item[data-sub], .m3-menu.sub .m3-item:not([data-sub]), .m3-menu:not(.sub) .m3-subhead { display: none; }
+/* podmenu: nav má data-sub="train|lobby" → viditelné jen položky toho podmenu; bez data-sub jen hlavní */
+.m3-menu:not([data-sub]) [data-sub], .m3-menu[data-sub] .m3-item:not([data-sub]),
+.m3-menu[data-sub="train"] [data-sub="lobby"], .m3-menu[data-sub="lobby"] [data-sub="train"] { display: none; }
 .m3-subhead { margin: 0 0 2px 4px; }
 .m3-item { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; justify-content: space-between;
   width: min(520px, 100%); min-height: 58px; padding: 0 36px 0 28px; background: var(--a3-glass); backdrop-filter: blur(14px);

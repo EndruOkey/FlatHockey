@@ -1250,14 +1250,17 @@ $('nav-player').onclick = () => { showView('profile'); drawPreview(); _loadStats
 const _m3All = [...document.querySelectorAll('.m3-item')];
 let _m3Items = _m3All.filter(b => !b.dataset.sub);   // viditelné položky (hlavní menu, nebo podmenu Trénink)
 let _m3Sel = 0;
-function m3Sub(on) {
-  $('m3-nav').classList.toggle('sub', on);
-  _m3Items = _m3All.filter(b => !!b.dataset.sub === on);
-  m3Select(on ? 0 : _m3Items.indexOf($('go-train')), true);
+// name = 'train' | 'lobby' | null (hlavní menu); návrat vybere tlačítko, které podmenu otevřelo
+function m3Sub(name) {
+  const nav = $('m3-nav'), from = nav.dataset.sub;
+  if (name) nav.dataset.sub = name; else delete nav.dataset.sub;
+  _m3Items = _m3All.filter(b => (b.dataset.sub || null) === (name || null));
+  m3Select(name ? 0 : Math.max(0, _m3Items.findIndex(b => b.dataset.open === from)), true);
 }
 function m3Select(i, focus = false) {
   _m3Sel = (i + _m3Items.length) % _m3Items.length;
-  _m3Items.forEach((b, k) => { b.classList.toggle('on', k === _m3Sel); b.setAttribute('aria-current', k === _m3Sel ? 'true' : 'false'); });
+  const cur = _m3Items[_m3Sel];   // přes všechny položky, ať nezůstane zvýraznění ve schovaném podmenu
+  _m3All.forEach(b => { b.classList.toggle('on', b === cur); b.setAttribute('aria-current', b === cur ? 'true' : 'false'); });
   const it = _m3Items[_m3Sel], d = it.dataset;
   $('m3-kicker').textContent = t(d.kicker); $('m3-title').textContent = t(d.title); $('m3-text').textContent = t(d.text);
   $('m3-chips').innerHTML = t(d.chips).split('|').map(c => `<span class="chip3">${esc(c)}</span>`).join('');
@@ -1269,7 +1272,7 @@ window.addEventListener('keydown', e => {
   if (e.key === 'ArrowDown') { e.preventDefault(); m3Select(_m3Sel + 1, true); }
   else if (e.key === 'ArrowUp') { e.preventDefault(); m3Select(_m3Sel - 1, true); }
   else if (e.key === 'Enter' && document.activeElement === document.body) { e.preventDefault(); _m3Items[_m3Sel].click(); }
-  else if ((e.key === 'Escape' || e.key === 'Backspace') && $('m3-nav').classList.contains('sub')) { e.preventDefault(); m3Sub(false); }
+  else if ((e.key === 'Escape' || e.key === 'Backspace') && $('m3-nav').dataset.sub) { e.preventDefault(); m3Sub(null); }
 });
 m3Select(IS_MOBILE ? 1 : 0);
 async function _loadStats() {
@@ -1427,8 +1430,10 @@ $('go-solo').onclick    = () => startTraining(0);
 $('go-drill-1').onclick = () => startTraining(1);
 $('go-drill-2').onclick = () => startTraining(2);
 $('go-packs').onclick   = () => startTraining(0, true);
-$('go-train').onclick   = () => m3Sub(true);
-$('m3-back').onclick    = () => m3Sub(false);
+$('go-train').onclick   = () => m3Sub('train');
+$('go-lobby').onclick   = () => m3Sub('lobby');
+$('m3-back').onclick    = () => m3Sub(null);
+$('m3-back-lobby').onclick = () => m3Sub(null);
 $('go-tutorial').onclick = () => _startTutorial();
 // Boti se nastavují v rámci vytvořené hry (formulář „Boti (hráčů v týmu)"), ne samostatným tlačítkem.
 // _botPending zůstává kvůli případnému „vytvoř + hned start" toku; dnes ho nic nenastavuje na true.

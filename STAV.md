@@ -34,7 +34,7 @@ Hra nebyla nikdy propagovaná. Plán: vydat na itch.io + CrazyGames, po 14 dnech
 - Průzkum jako hráč (2026-11-13): prohra se ukazovala jako remíza (chybělo isLoss); ELO jen v zápase proti člověku (proti botům „—“); limit 20/min jen na přihlášení, čtení 600/min.
 - Tutoriál (2026-11-13): 11 kroků — přihrávka podle kurzoru + nadzvednutý pas, přesná rána (zelený kruh), nový krok rána z první, teč na Q; spin a clona pryč. `test/training-smoke.py` opraven (menu místo splashe, obtížnost na G) → PASS.
 - Stavění v tréninku (2026-11-13): cíl cvičení (3/5/10 gólů na čas, rekord v `fh_scen_best`), scénář ukládá pozici volného puku a cíl, knihovna bez duplicit (stejný obsah / stejný název = přepis), dok bez useknutých textů, toast nad panelem.
-- Menu (2026-11-13): hlavní menu 7 položek; TRÉNINK = podmenu offline režimů (volný trénink, sólo zápas s boty, nájezd, rána z první, moje cvičení, tutoriál, zpět / Esc). Id tlačítek zůstala (`go-solo`, `go-offline`, `go-tutorial`).
+- Menu (2026-11-13): hlavní menu 6 položek; VLASTNÍ ZÁPAS = podmenu (najít zápas, založit zápas); TRÉNINK = podmenu offline režimů (volný trénink, sólo zápas s boty, nájezd, rána z první, moje cvičení, tutoriál, zpět / Esc). Id tlačítek zůstala (`go-solo`, `go-offline`, `go-tutorial`).
 - Puk u brány: jedno pravidlo pro obě strany (`Puck.js` `_carryKeepOut`), test `npm run test:puck` (64 kontrol).
 - Server: limity požadavků, CSRF u POST, pád = restart, kontrola tokenu; `npm run test:server`.
 - Tutoriál/trénink: 5 oprav (menu, spin, puk na ledě, nahrávka), pojistka u kroku „Dej gól“ (po 3 zákrocích lehký gólman, po 6 splněno); `python test/training-smoke.py <url>`.
