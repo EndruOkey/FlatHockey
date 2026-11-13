@@ -1,8 +1,8 @@
 // SONDA KNOCKBACKU — crosschecky, srážky hráčů a odstupňovaný knockback v zápasech botů 2v2 (deterministicky).
 // Síla zásahu I = rychlost srážky po normále (rel. rychlost × cos úhlu), px/s; crosscheck + PLAYER.ccBonus.
 // RUBRIKA PŘEDEM (2026-11-12, před laděním prahů):
-//   heavy_min      0,3–2   rozplácnutí za minutu hry (ne spam, ale stane se)
-//   mid_min        ≤ 4     zakolísání za minutu
+//   heavy_min      0,3–2   rozplácnutí za minutu hry (ne spam, ale stane se)  → 2026-11-13 (designér: „ne tak často“): 0,1–0,25
+//   mid_min        ≤ 4     zakolísání za minutu                                → 2026-11-13: ≤ 1,5
 //   down_input_pct = 100   % ticků v leže bez zrychlení z vlastního vstupu (rychlost neroste v _move)
 //   down_puck_pct  = 100   % ticků v leže bez puku
 //   down_s         0,5–0,8 doba ležení (s)
@@ -68,7 +68,7 @@ const R = {
   down_s: A.downDur.length ? A.downDur.reduce((a, b) => a + b, 0) / A.downDur.length : PLAYER.downT,
   goals_match: A.goals / SEEDS, det: A.sig === B.sig && A.tiers.join() === B.tiers.join() ? 1 : 0,
 };
-const RUB = { heavy_min: [0.3, 2], mid_min: [0, 4], down_input_pct: [100, 100], down_puck_pct: [100, 100], down_s: [0.5, 0.8], heavy_min_I: [PLAYER.kbHeavy, 1e9], det: [1, 1] };
+const RUB = { heavy_min: [0.1, 0.25], mid_min: [0, 1.5], down_input_pct: [100, 100], down_puck_pct: [100, 100], down_s: [0.5, 0.8], heavy_min_I: [PLAYER.kbHeavy, 1e9], det: [1, 1] };
 let ok = true;
 console.log(`live ${min.toFixed(1)} min, ${SEEDS} zápasů 2v2, prahy kbMid ${PLAYER.kbMid} kbHeavy ${PLAYER.kbHeavy}`);
 for (const [k, v] of Object.entries(R)) { const r = RUB[k], pass = !r || (v >= r[0] - 1e-9 && v <= r[1] + 1e-9); if (!pass) ok = false;
