@@ -38,6 +38,7 @@ jobs:
       - run: npm run test:goalzone
       - run: npm run test:kick
       - run: npm run test:deflect
+      - run: npm run test:knock
 
   deploy:
     needs: test

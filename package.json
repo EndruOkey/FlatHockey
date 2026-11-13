@@ -23,6 +23,7 @@
     "test:goalzone": "node test/goalzone.test.mjs",
     "test:kick": "node test/kick.test.mjs",
     "test:deflect": "node test/deflect.test.mjs",
+    "test:knock": "node test/knock.test.mjs",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "engines": {

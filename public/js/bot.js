@@ -486,7 +486,10 @@ export function botThink(p, inp, match) {
     // Blízko puku se zastav tam, kde čepel (~REACH před tělem) dosáhne na puk; střed těla na puk by čepel
     // posunul za něj a bot by puk donekonečna obíhal (puk ležel 100+ s, bot kolem něj kroužil)
     const pdx = tx - p.x, pdy = ty - p.y, pd = Math.hypot(pdx, pdy);
-    if (pd > REACH && pd < PICK_NEAR) { const k = (pd - REACH) / pd; tx = p.x + pdx * k; ty = p.y + pdy * k; }
+    // Puk drží soupeř, který STOJÍ déle než 3 s (sevřený v brankovišti): dojeď o kus blíž, ať čepel dosáhne do zóny obrání (stealR) —
+    // jinak bot zastavil 11 px od puku (stealR 10) a nosič ho držel 156 s (test/balance seed 28, 2026-11-12).
+    const _pc = [...match.players.values()].find(q => q.hasPuck && q.team !== p.team), _stop = _pc && Math.hypot(_pc.vx, _pc.vy) < 10 && (_pc._possT ?? 0) > 3 ? REACH - 4 : REACH;   // jen dlouhé zaseknutí (> 3 s), jinak beze změny
+    if (pd > _stop && pd < PICK_NEAR) { const k = (pd - _stop) / pd; tx = p.x + pdx * k; ty = p.y + pdy * k; }
   } else {
     ax = puck.x; ay = puck.y;
     p._botMode = 'support';                    // upřesněno níž (support/defend) podle držení
