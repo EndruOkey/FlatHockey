@@ -513,7 +513,7 @@ function _drawGoalReal(ctx, s, x, dir, y1, y2, postColor, Hs, part, G) {
   }
   // přední tyč = JEDNA souvislá trubka (tyčka–břevno–tyčka), zaoblené konce, jeden obrys, odlesk po délce (2026-11-13:
   // dřív dva kroužky s vlastním obrysem + úsečka mezi = „dvě tyče a tyč mezi")
-  const tw = G.post * 2;   // tloušťka trubky = průměr tyčky
+  const tw = G.post * 1.15;   // tloušťka trubky (2026-11-13: dřív 2× poloměr = 6,4 px, moc tlustá)
   ctx.lineCap = 'round';
   ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = (tw + 2.2) * s; ctx.beginPath(); ctx.moveTo(x, y1); ctx.lineTo(x, y2); ctx.stroke();
   ctx.strokeStyle = postColor; ctx.lineWidth = tw * s; ctx.stroke();
