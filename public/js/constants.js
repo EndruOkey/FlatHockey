@@ -61,10 +61,12 @@ export const PLAYER = {
   // ODSTUPŇOVANÝ KNOCKBACK (2026-11-12, scripts/knock_probe.mjs + test/knock.test.mjs). Síla zásahu I = rychlost srážky po normále
   // (relativní rychlost × cos úhlu nárazu, px/s; crosscheck + ccBonus). Jen soupeři. I < kbMid = postrčení (jako dřív),
   // kbMid ≤ I < kbHeavy = ZAKOLÍSÁNÍ (zpomalení + otočení), I ≥ kbHeavy = ROZPLÁCNUTÍ (leží downT s, zvedá se upT s, ztratí puk).
-  kbMid:    _penv('FH_KBMID', 125),
-  kbHeavy:  _penv('FH_KBHEAVY', 175),
+  // 2026-11-13: 125/175 → 140/200 — rozplácnutí 0,50 → ~0,15/min (jen opravdu tvrdý čelní náraz), zakolísání 1,65 → ~1,25/min (knock_probe)
+  kbMid:    _penv('FH_KBMID', 140),
+  kbHeavy:  _penv('FH_KBHEAVY', 200),
   ccBonus:  _penv('FH_CCBONUS', 70),   // crosscheck = hůl + tělo → k rychlosti srážky přičti tolik (rozjetý crosscheck = rozplácnutí)
-  downT: 0.6, upT: 0.25, stagT: 0.35, stagSpin: 0.9, stagSlow: 0.55, heavyPush: 70, hitImmune: 0.8,
+  downT: 0.7, upT: 0.42,   // ležení vč. pádu 0,2 s (downBody.js DOWN_FALL) / zvedání ve fázích
+  stagT: 0.35, stagSpin: 0.9, stagSlow: 0.55, heavyPush: 70, hitImmune: 0.8,
   receiveFirst: _penv('FH_RECV', 1) > 0,   // pas, který jde zpracovat, hráč převezme (dřív se od hole náhodně odrazil)
   stealGrace: ((typeof process !== 'undefined' && process.env && process.env.FH_GRACE != null) ? Number(process.env.FH_GRACE) : 0.8),   // 2026-11-09 1.5→0.8: neviditelná ochrana blokovala 29 % kontaktů (steal_match). Dřív 1.2→1.5: nosič udrží čerstvý puk o kus déle → míň pranic/turnoverů (fel klidnější, víc stavění akcí). Měřeno rubrikou.
   pickupMaxRelSpeed: 420,

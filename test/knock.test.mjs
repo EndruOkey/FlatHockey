@@ -6,7 +6,13 @@
 //    a bez vlivu vlastního vstupu (dva různé vstupy → shodná poloha); doba ležení 0,5–0,8 s; pak se zvedne a jede
 //  4 po zvednutí ho další tvrdý náraz hned nesrazí (žádné řetězení)
 //  5 crosscheck: rozjetý zepředu = rozplácnutí, ze stoje na odjíždějícího = ne
-//  6 stejný vstup = stejný otisk; 7 server posílá ve snapshotu pole kd jen při stavu
+//  6 stejný vstup = stejný otisk; 7 server posílá ve snapshotu pole kd jen při stavu (vč. _fallB = natočení při zásahu → břicho/záda)
+// RUBRIKA ANIMACE PŘEDEM (2026-11-13, downBody.js, čistá póza z času od zásahu):
+//  8 doba pádu (DOWN_FALL) 0,15–0,25 s, zvedání (upT) 0,35–0,5 s
+//  9 plynulost: žádný díl (hlava, ramena, lokty, rukavice, kyčle, kolena, brusle, konce hole) neposkočí o > 3 px za tik (1/60 s)
+//    vůči středu hráče v 1×, po celé sekvenci (pád → ležení → zvedání), 64 kombinací (břicho/záda, směr, pravák/levák, id)
+// 10 začátek a konec sekvence = stojící proporce skinBody (helma 0,72R vpředu, ramena 0,25R/±0,9R) — odchylka < 0,5 px
+// 11 póza deterministická (dvakrát stejný vstup = stejná čísla)
 import { tmpdir } from 'os'; import { join } from 'path';
 process.env.PORT = process.env.PORT || '4761';
 process.env.DB_PATH = join(tmpdir(), `fh-knock-${process.pid}.db`);
@@ -92,5 +98,27 @@ const sig = T => T.reduce((s, r) => (s * 31 + Math.round(r.x * 100) + Math.round
   kdNone = __test.snapPlayers(m2)[0].kd;
   const h = r.h; h._downT = 0.3; h._upT = PLAYER.upT; h._fallA = 1.2; kdDown = __test.snapPlayers(m).find(p => p.id === 'h0').kd;
   chk('snapshot: kd při rozplácnutí, jinak chybí', Array.isArray(kdDown) && kdDown[0] === 0.3 && kdDown[2] === 1.2 && kdNone === undefined, JSON.stringify(kdDown));
+}
+// 8–11 animace
+{ const { downPoints, DOWN_FALL } = await import('../public/js/entities/downBody.js');
+  chk('pád 0,15–0,25 s', DOWN_FALL >= 0.15 && DOWN_FALL <= 0.25, DOWN_FALL + ' s');
+  chk('zvedání 0,35–0,5 s', PLAYER.upT >= 0.35 && PLAYER.upT <= 0.5, PLAYER.upT + ' s');
+  const tot = PLAYER.downT + PLAYER.upT; let worst = 0, wInfo = '', endErr = 0, detOk = true;
+  for (const sg of [1, -1]) for (const h of [1, -1]) for (let i = 0; i < 4; i++) for (const id of ['h0', 'a1', 'bot3', 'x']) {
+    const fa = i * 1.7 - 2.5, fb = fa + (sg > 0 ? 0.3 : Math.PI - 0.4) * (h > 0 ? 1 : -1), q = { id, n: i + 1, fb, fa, ba: fb, h };
+    let prev = null;
+    for (let t = 0; t <= Math.ceil(tot / DT); t++) {
+      const el = Math.min(tot, t * DT), P = downPoints(el, { ...q, ba: fb + (el > PLAYER.downT ? (i - 1.5) * (1 - Math.exp(-6 * (el - PLAYER.downT))) : 0) }, PLAYER);   // při zvedání se tělo stáčí k míření (jako _move, rychlost 6/s)
+      if (prev) for (const k in P) { const d = Math.hypot(P[k][0] - prev[k][0], P[k][1] - prev[k][1]); if (d > worst) { worst = d; wInfo = `${k} el=${el.toFixed(3)} sg=${sg} h=${h} fa=${fa.toFixed(1)}`; } }
+      prev = P;
+    }
+    const c = Math.cos(q.ba), s = Math.sin(q.ba), R = PLAYER.radius;
+    const want = { hd: [0.72 * R, 0], rs: [0.25 * R, 0.9 * R], ls: [0.25 * R, -0.9 * R] };
+    for (const el of [0, tot]) { const P = downPoints(el, q, PLAYER); for (const k in want) { const w = want[k], wx = w[0] * c - w[1] * s, wy = w[0] * s + w[1] * c; endErr = Math.max(endErr, Math.hypot(P[k][0] - wx, P[k][1] - wy)); } }
+    const a = JSON.stringify(downPoints(0.5, q, PLAYER)), b = JSON.stringify(downPoints(0.5, q, PLAYER)); if (a !== b) detOk = false;
+  }
+  chk('plynulost: max skok dílu ≤ 3 px/tik', worst <= 3, worst.toFixed(2) + ' px (' + wInfo + ')');
+  chk('začátek/konec = stojící proporce (< 0,5 px)', endErr < 0.5, endErr.toFixed(3) + ' px');
+  chk('póza deterministická', detOk);
 }
 console.log(`\n${ok} OK, ${fail} FAIL`); process.exit(fail ? 1 : 0);

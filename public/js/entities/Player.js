@@ -4,6 +4,7 @@ import { SFX } from '../sound.js';
 import { defaultRng } from '../rng.js';
 import { skaterKit, skinSkate, skinBody, SKIN_OUT, shade, luma } from './skin.js';
 import { VIS } from '../vis.js';
+import { downPose, drawDownBody } from './downBody.js';
 
 const _NO_INPUT = { dx: 0, dy: 0, keys: {} };   // ležící hráč: vstup se ignoruje
 
@@ -20,7 +21,7 @@ export class PlayerBase {
     this.aimAngle  = 0;
     this.skateAngle = 0;   // směr bruslení (řízený A/D); tělo kouká sem, hokejku míří myš
     this._knockT    = 0;   // časovač knockbacku — zpomalí perp. útlum, aby náraz dojel
-    this._downT = 0; this._upT = 0; this._stagT = 0; this._hitImm = 0; this._fallA = 0; this._fallN = 0; this._stagDir = 1;   // odstupňovaný knockback (sim čas s, krok = pevné DT)
+    this._downT = 0; this._upT = 0; this._stagT = 0; this._hitImm = 0; this._fallA = 0; this._fallN = 0; this._fallB = 0; this._stagDir = 1;   // odstupňovaný knockback (sim čas s, krok = pevné DT)
     this.handed     = team === 'away' ? -1 : 1; // pravák (+1) / levák (−1) → strana forehandu
     this._stickRel  = 0;   // úhel hole vůči tělu (scalar, drží se v předním kuželu)
     this.radius          = PLAYER.radius;
@@ -426,6 +427,7 @@ export class PlayerBase {
       this._shootCooldown = Math.max(this._shootCooldown || 0, PLAYER.downT + PLAYER.upT);
       this._hitImm = PLAYER.downT + PLAYER.upT + PLAYER.hitImmune;   // po zvednutí chvíli nejde znovu srazit (žádné řetězení)
       this._fallA = Math.atan2(ny, nx); this._fallN = (this._fallN || 0) + 1;
+      this._fallB = this.bodyAngle;   // natočení v okamžiku zásahu: sražen zezadu/zboku vpřed = na břicho, zepředu = na záda (downBody.js)
       this.vx += nx * PLAYER.heavyPush; this.vy += ny * PLAYER.heavyPush;
       return 2;
     }
@@ -988,30 +990,29 @@ export function stickHands(x, y, ba, dcv, hnd, tipW, sway = 0) {
   return { topW, botW: { x: topW.x + (tipW.x - topW.x) * 0.42, y: topW.y + (tipW.y - topW.y) * 0.42 } };
 }
 
-// ROZPLÁCNUTÍ (2026-11-12): ležící hráč = protažená postava hlavou ve směru úderu, ruce a nohy roztažené, hokejka
-// odletí vedle na led; prvních 0,25 s záblesk + ledová tříšť (deterministicky z id a pořadí pádu). Zvedání = prolnutí
-// ležící postavy (stahuje nohy) do normální kresby. Jen kresba: stav (_downT/_upT/_fallA) nese simulace / snapshot (kd).
+// ROZPLÁCNUTÍ (2026-11-13): kloubová postava (downBody.js) — pád → doznění → ležení (klouže se simulací) → zvedání ve fázích
+// (čtyři / sed → klek → stoj) → normální kresba. Póza = čistá funkce času od zásahu (stav _downT/_upT/_fallA/_fallB nese
+// simulace / snapshot kd); kresba si čas jen vyhladí mezi snapshoty (online 30/s), takže animace neposkakuje.
+function _downEl(p, cam) {
+  const tot = PLAYER.downT + PLAYER.upT, e = p._downT > 0 ? PLAYER.downT - p._downT : tot - (p._upT || 0);
+  if (p._kdN !== p._fallN || p._kdE == null || Math.abs(p._kdE - e) > 0.1) { p._kdN = p._fallN; p._kdE = e; }
+  else { p._kdE = Math.min(tot, p._kdE + _rdt(cam)); p._kdE += (e - p._kdE) * 0.25; }
+  return Math.max(0, Math.min(tot, p._kdE));
+}
 function _renderPlayer(ctx, p, cam) {
-  if (p._downT > 0) { p._bpPv = null; _renderDown(ctx, p, cam, 0); return; }   // B1: po pádu bez falešného zrychlení
-  if (p._upT > 0) {
-    const u = clamp(1 - p._upT / PLAYER.upT, 0, 1), a0 = ctx.globalAlpha;
-    ctx.globalAlpha = a0 * (1 - u); _renderDown(ctx, p, cam, u);
-    ctx.globalAlpha = a0 * u; _renderPlayerUp(ctx, p, cam);
-    ctx.globalAlpha = a0; return;
-  }
+  if (p._downT > 0 || p._upT > 0) { p._bpPv = null; _renderDown(ctx, p, cam, _downEl(p, cam)); return; }   // B1: po pádu bez falešného zrychlení
+  p._kdE = null;
   _renderPlayerUp(ctx, p, cam);
 }
 
-function _renderDown(ctx, p, cam, rise) {
+function _renderDown(ctx, p, cam, el) {
   const s = cam.scale, R = PLAYER.radius, x = cam.ox + p.x * s, y = cam.oy + p.y * s;
   const K = skaterKit(p, PLAYER.colors[p.team]), fa = p._fallA ?? p.bodyAngle, n = p._fallN || 0;
-  const side = _hrand(p.id, n, 99) < 0.5 ? -1 : 1, leg = 1 - 0.55 * rise;   // zvedání: nohy se stahují pod tělo
-  const tFall = PLAYER.downT - (p._downT || 0);
   // ledová tříšť a záblesk nárazu (prvních 0,25 s)
-  if (rise === 0 && tFall < 0.25) {
-    const k = tFall / 0.25;
+  if (el < 0.25) {
+    const k = el / 0.25;
     ctx.save(); ctx.beginPath(); ctx.arc(x, y, (R + 4 + 16 * k) * s, 0, Math.PI * 2);
-    ctx.strokeStyle = `rgba(30,70,140,${(0.7 * (1 - k)).toFixed(3)})`;   // tmavší kruh: na světlém ledu čitelný ctx.lineWidth = 2.6 * s * (1 - k) + 0.4 * s; ctx.stroke();
+    ctx.strokeStyle = `rgba(30,70,140,${(0.7 * (1 - k)).toFixed(3)})`; ctx.lineWidth = 2.6 * s * (1 - k) + 0.4 * s; ctx.stroke();   // tmavší kruh: na světlém ledu čitelný
     for (let i = 0; i < 10; i++) {
       const a = fa + (_hrand(p.id, n, i * 2) - 0.5) * 2.2, d = (R + 2 + (10 + 14 * _hrand(p.id, n, i * 2 + 1)) * Math.sqrt(k)) * s;
       ctx.beginPath(); ctx.arc(x + Math.cos(a) * d, y + Math.sin(a) * d, Math.max(0.8, 1.6 * s * (1 - k)), 0, Math.PI * 2);
@@ -1019,40 +1020,10 @@ function _renderDown(ctx, p, cam, rise) {
     }
     ctx.restore();
   }
-  // hokejka ležící na ledě vedle hráče
-  {
-    const sa = fa + side * 0.3, ox = Math.cos(fa + side * 1.75) * R * 2.5, oy = Math.sin(fa + side * 1.75) * R * 2.5;   // vedle těla, skoro souběžně (nepřekrývá postavu)
-    const L = PLAYER.stickLen * 1.5 * PLAYER.stickDraw * s, gx = x + ox * s - Math.cos(sa) * L / 2, gy = y + oy * s - Math.sin(sa) * L / 2;
-    const bx = gx + Math.cos(sa) * L, by = gy + Math.sin(sa) * L, ba = sa - side * 0.5;
-    ctx.save(); ctx.lineCap = 'round';
-    ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = 4.4 * s;
-    ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(bx, by); ctx.lineTo(bx + Math.cos(ba) * 9 * s, by + Math.sin(ba) * 9 * s); ctx.stroke();
-    ctx.strokeStyle = K.stick; ctx.lineWidth = 2.6 * s; ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(bx, by); ctx.stroke();
-    ctx.strokeStyle = K.tape; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + Math.cos(ba) * 9 * s, by + Math.sin(ba) * 9 * s); ctx.stroke();
-    ctx.restore();
-  }
-  ctx.save(); ctx.translate(x, y); ctx.rotate(fa); ctx.scale(s, s);   // lokál: +x = hlava (směr úderu)
-  ctx.beginPath(); ctx.ellipse(-0.2 * R + 1.5, 2, R * 2.0 * (1 - 0.3 * rise), R * 1.15, 0, 0, Math.PI * 2); ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fill();
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  const limb = (x1, y1, x2, y2, w, col) => { ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = w + 1.8; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-    ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); };
-  for (const sg of [-1, 1]) {   // nohy roztažené dozadu, brusle na konci
-    const kx = -R * 1.25 * leg, ky = sg * R * (0.55 + 0.25 * leg), fx = -R * 2.0 * leg, fy = sg * R * (0.6 + 0.5 * leg);
-    limb(-R * 0.35, sg * R * 0.35, kx, ky, R * 0.62, K.pants); limb(kx, ky, fx, fy, R * 0.5, shade(K.jersey, -0.1));
-    ctx.save(); ctx.translate(fx, fy); ctx.rotate(sg * 0.5); ctx.fillStyle = '#20242c'; ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.roundRect(-R * 0.55, -R * 0.24, R * 0.85, R * 0.48, 1.2); ctx.fill(); ctx.stroke(); ctx.restore();
-  }
-  for (const sg of [-1, 1]) {   // ruce rozhozené dopředu
-    const hx = R * (1.45 - 0.5 * rise), hy = sg * R * (1.35 - 0.4 * rise);
-    limb(R * 0.55, sg * R * 0.62, hx, hy, R * 0.5, shade(K.jersey, -0.14));
-    ctx.beginPath(); ctx.arc(hx, hy, R * 0.34, 0, Math.PI * 2); ctx.fillStyle = K.glove; ctx.fill(); ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = 1; ctx.stroke();
-  }
-  ctx.beginPath(); ctx.ellipse(R * 0.1, 0, R * 1.0, R * 0.82, 0, 0, Math.PI * 2);   // trup (záda nahoru)
-  ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = 2; ctx.stroke(); ctx.fillStyle = K.jersey; ctx.fill();
-  ctx.save(); ctx.rotate(Math.PI / 2); ctx.font = `900 ${R * 1.05}px 'Segoe UI', sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillStyle = luma(K.jersey) > 0.4 ? '#1a1f29' : '#ffffff'; ctx.fillText(String(K.num), 0, R * 0.1); ctx.restore();
-  ctx.beginPath(); ctx.ellipse(R * 1.35, 0, R * 0.5, R * 0.46, 0, 0, Math.PI * 2);   // helma
-  ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = 1.8; ctx.stroke(); ctx.fillStyle = K.helmet === K.jersey ? shade(K.helmet, -0.22) : K.helmet; ctx.fill();
+  const { psi, P } = downPose(el, { id: p.id, n, fb: p._fallB ?? p.bodyAngle, fa, ba: p.bodyAngle, ca: p.carryAngle ?? p.aimAngle, h: p.handed ?? 1 }, PLAYER);
+  const lx = Math.cos(-psi) * -0.7 - Math.sin(-psi) * -0.7, ly = Math.sin(-psi) * -0.7 + Math.cos(-psi) * -0.7;   // světlo vlevo nahoře, pevné ve světě
+  ctx.save(); ctx.translate(x, y); ctx.rotate(psi); ctx.scale(s, s);
+  drawDownBody(ctx, P, K, R, { stickL: PLAYER.stickLen * PLAYER.stickDraw, bladeSide: p.handed ?? 1, lx, ly });
   ctx.restore();
 }
 

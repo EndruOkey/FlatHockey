@@ -408,7 +408,7 @@ function snapPlayers(match) {
       x: r1(p.x), y: r1(p.y), ba: r3(p.bodyAngle), aa: r3(p.aimAngle), ca: r3(p.carryAngle),
       sd: r3(p._stickDisp), dr: r1(p._dispReach), dc: r2(p._dispCharge),
       fh: p.forehand ? 1 : 0, hp: p.hasPuck ? 1 : 0, ch: r2(p.charge),
-      hd: p.handed, cc: p.crossCheck ? 1 : 0, ln: r2(p._lean), ...(p.isDown || p._stagT > 0 ? { kd: [r2(p._downT), r2(p._upT), r2(p._fallA), r2(p._stagT), p._fallN] } : {}), ...(p._shieldT > 0 ? { shd: r2(p._shieldA) } : {}), ...(p._kickFx > 0 || p._kickSw > 0 ? { kk: [r2(Math.max(0, p._kickFx || 0)), r2(Math.max(0, p._kickSw || 0)), r1(p._kickOx || 0), r1(p._kickOy || 0), p._kickSide || 1, p._kickN || 0, p._kickSwN || 0] } : {}),
+      hd: p.handed, cc: p.crossCheck ? 1 : 0, ln: r2(p._lean), ...(p.isDown || p._stagT > 0 ? { kd: [r2(p._downT), r2(p._upT), r2(p._fallA), r2(p._stagT), p._fallN, r2(p._fallB)] } : {}), ...(p._shieldT > 0 ? { shd: r2(p._shieldA) } : {}),
       col: p.color || null, num: p.num, js: p.jersey || 'solid',
       hc: p.helmet || null, sh: p.shorts || null, gc: p.gloves || null, tc: p.tape || null,
       sk: p.stick || null, ty: p.tapeStyle || 'full', hy: p.helmetType || 'visor', vc: p.visor || null,

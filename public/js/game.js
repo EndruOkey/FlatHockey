@@ -348,7 +348,7 @@ export class NetGame {
       if (ps.shd != null) { ent._shieldT = 0.35; ent._shieldA = ps.shd; }   // štít (krytí tělem) ze serveru
       { const kk = ps.kk; if (kk && (kk[5] !== ent._kickN || kk[6] !== ent._kickSwN)) {   // přikopnutí / máchnutí (Q) ze serveru: nová událost → spusť animaci, dál odpočítává klient
         ent._kickFx = kk[0]; ent._kickSw = kk[1]; ent._kickOx = kk[2]; ent._kickOy = kk[3]; ent._kickSide = kk[4]; ent._kickN = kk[5]; ent._kickSwN = kk[6]; } }
-      { const kd = ps.kd; ent._downT = kd ? kd[0] : 0; ent._upT = kd ? kd[1] : 0; ent._stagT = kd ? kd[3] : 0; if (kd) { ent._fallA = kd[2]; ent._fallN = kd[4]; } }   // knockback (rozplácnutí / zakolísání) ze serveru
+      { const kd = ps.kd; ent._downT = kd ? kd[0] : 0; ent._upT = kd ? kd[1] : 0; ent._stagT = kd ? kd[3] : 0; if (kd) { ent._fallA = kd[2]; ent._fallN = kd[4]; ent._fallB = kd[5] ?? ent.bodyAngle; } }   // knockback (rozplácnutí / zakolísání) ze serveru
 
       if (isMe) {
         e.sx = ps.x; e.sy = ps.y;
