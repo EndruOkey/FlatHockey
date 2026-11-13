@@ -94,12 +94,13 @@ export async function buyStoreItem(itemId) {
 export async function saveServerProfile(data) {
   if (!_user && !getDeviceToken()) return;
   try {
-    await authFetch('/auth/profile', {
+    const r = await authFetch('/auth/profile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-  } catch {}
+    return await r.json().catch(() => null);   // { ok, error:'name_taken', suggestion } — jména jsou jedinečná
+  } catch { return null; }
 }
 
 export function loginWithDiscord() {

@@ -144,6 +144,8 @@ html.mobile #create-btn, html.mobile .sv-join-row { display: none !important; }
 #spec-bar #spec-name { font-size: 22px; }
 #spec-leave { all: unset; cursor: pointer; background: linear-gradient(90deg, var(--a3-red), var(--a3-red2)); padding: 8px 26px 8px 16px; font-size: 18px; clip-path: var(--a3-cut); }
 .lobby-item > div:first-child { flex: 1 1 auto; min-width: 0; }   /* název lobby bere zbylé místo */
+.pb { display: inline-block; margin-left: 6px; padding: 0 4px; border-radius: 3px; font: 800 10px/14px 'Segoe UI', sans-serif; vertical-align: middle; color: #fff; }   /* ikonka původu (= Player.js BADGES) */
+.pb-d { background: #5865F2; } .pb-c { background: #7A3CFF; }
 .li-join, .li-watch { width: auto; margin-bottom: 0; }   /* globální button { width:100% } by tlačítka roztáhl a SLEDOVAT vytlačil */
 .li-join { margin-left: 12px; flex: 0 0 auto; background: #b6c4ff; border: 1px solid #b6c4ff; color: #0b0d12; padding: 6px 14px; font: italic 800 15px 'Barlow Condensed', sans-serif; text-transform: uppercase; cursor: pointer; }
 .li-join:hover { background: #d4dcff; }

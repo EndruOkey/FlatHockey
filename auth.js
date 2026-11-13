@@ -59,9 +59,9 @@ export function verifyDeviceToken(token) {
 }
 
 /** Nový hostující účet + podepsaný token. */
-export function createGuestAccount() {
+export function createGuestAccount(source = 'web') {
   const did = crypto.randomUUID();
-  const userId = createGuestUser(did);
+  const userId = createGuestUser(did, 'Hráč', source);
   return { userId, token: signDeviceToken(did, userId) };
 }
 
@@ -257,8 +257,10 @@ router.post('/profile', requireAuth, (req, res) => {
   const fields = {};
   for (const k of allowed) if (req.body?.[k] !== undefined) fields[k] = req.body[k];
   if (Object.keys(fields).length) saveProfile(req.userId, fields);
-  if (typeof req.body?.display_name === 'string') setGuestName(req.userId, req.body.display_name);   // jen hosté
-  res.json({ ok: true });
+  // jméno: jen hosté; obsazené → name_taken + návrh volného (klient ukáže hlášku a jméno vrátí)
+  const nm = typeof req.body?.display_name === 'string' && isGuestUser(req.userId) ? setGuestName(req.userId, req.body.display_name) : null;
+  if (nm && !nm.ok) return res.json({ ok: false, error: nm.error, suggestion: nm.suggestion, name: getUserById(req.userId)?.display_name });
+  res.json({ ok: true, name: nm?.name });
 });
 
 router.get('/stats', requireAuth, (req, res) => {

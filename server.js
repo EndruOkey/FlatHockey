@@ -18,7 +18,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { mountDev } from './dev-gate.js';
 import authRouter, { linkRouter, verifySession, requireAuth, bearerToken, createGuestAccount } from './auth.js';
-import { updateStats, updateRankAndCredits, getRankPosition, getLeaderboard, getStoreItems, getUserUnlocks, buyItem, getPuckCredits, getActiveSeason, logMetric, cleanOldMetrics, recordReferral, rewardReferralIfPending, isFounder } from './db.js';
+import { updateStats, updateRankAndCredits, getRankPosition, getLeaderboard, getStoreItems, getUserUnlocks, buyItem, getPuckCredits, getActiveSeason, logMetric, cleanOldMetrics, recordReferral, rewardReferralIfPending, isFounder, getUserById, userBadge } from './db.js';
 
 import { World } from './public/js/world.js';
 import { Player } from './public/js/entities/Player.js';
@@ -289,6 +289,7 @@ function serverGameOver(match) {
 function buildPlayer(lobby, sid, m) {
   const p = new Player(sid, m.team, makeInput());
   p.name   = m.name;
+  p._badge = m.badge || '';
   p.handed = m.handed;
   p.num    = m.number;
   const ts = lobby.settings.teams[m.team] || {};
@@ -404,7 +405,7 @@ function snapPlayers(match) {
   for (const [id, p] of match.players) {
     const inp = match.inputs.get(id);
     players.push({
-      id, team: p.team, nm: p.name || '', fn: p._founder ? 1 : 0, sq: (inp && inp._sq) || 0,
+      id, team: p.team, nm: p.name || '', fn: p._founder ? 1 : 0, bg: p._badge || '', sq: (inp && inp._sq) || 0,
       x: r1(p.x), y: r1(p.y), ba: r3(p.bodyAngle), aa: r3(p.aimAngle), ca: r3(p.carryAngle),
       sd: r3(p._stickDisp), dr: r1(p._dispReach), dc: r2(p._dispCharge),
       fh: p.forehand ? 1 : 0, hp: p.hasPuck ? 1 : 0, ch: r2(p.charge),
@@ -483,6 +484,12 @@ const SPONSOR_SALT = 'FH_sp_v1::';
 const SPONSOR_HASH = '6ca63a5475d6396dc2c544b9b236d22eac7bced69b2a88c24135dccf292424d1';
 const isSponsorCode = (code) => typeof code === 'string' && code.length > 0 &&
   crypto.createHash('sha256').update(SPONSOR_SALT + code.trim().toUpperCase()).digest('hex') === SPONSOR_HASH;
+// Člen lobby za socket: jméno VŽDY z účtu (jedinečné, db.js claimName) — ne z prohlížeče; + ikonka původu.
+function memberFor(socket, profile, team) {
+  const m = makeMember(profile, team), uid = socket.data.userId;
+  if (uid) { try { const u = getUserById(uid); if (u?.display_name) m.name = u.display_name; m.badge = userBadge(uid); } catch {} }
+  return m;
+}
 function makeMember(profile, team) {
   profile = profile || {};
   return {
@@ -632,7 +639,9 @@ io.on('connection', (socket) => {
     ?? (cm ? verifySession(decodeURIComponent(cm[1])) : null);
   if (!socket.data.userId && guestQuotaOk(socketIp(socket))) {
     try {
-      const g = createGuestAccount();
+      // původ hosta z odkazu/refereru (itch.io / CrazyGames iframe) — ikonka u jména; ODHAD: referrer iframe = stránka portálu
+      const ref = String(socket.handshake.auth?.ref || '').toLowerCase();
+      const g = createGuestAccount(ref.includes('itch') ? 'itch' : ref.includes('crazygames') ? 'cg' : 'web');
       socket.data.userId = g.userId;
       socket.emit('device_token', { token: g.token });
     } catch (err) { console.error('guest create failed', err); }
@@ -697,7 +706,7 @@ io.on('connection', (socket) => {
     leaveCurrentLobby(socket);
     const id = genId();
     const l = { id, hostId: socket.id, state: 'waiting', settings: sanitizeSettings(settings), members: new Map(), match: null };
-    l.members.set(socket.id, makeMember(profile, 'home'));
+    l.members.set(socket.id, memberFor(socket, profile, 'home'));
     lobbies.set(id, l);
     socket.join('lobby:' + id);
     socket.data.lobbyId = id;
@@ -719,7 +728,7 @@ io.on('connection', (socket) => {
       if (hostUserId && socket.data.userId) { try { recordReferral(socket.data.userId, hostUserId); } catch {} }
     }
     leaveCurrentLobby(socket);
-    const m = makeMember(profile, balanceTeam(l));
+    const m = memberFor(socket, profile, balanceTeam(l));
     l.members.set(socket.id, m);
     socket.join('lobby:' + id);
     socket.data.lobbyId = id;

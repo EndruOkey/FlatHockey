@@ -136,6 +136,32 @@ db.exec(`
     SELECT 'email', email, id, created_at FROM users WHERE email IS NOT NULL;
 `);
 
+// ── JEDINEČNÁ JMÉNA (2026-11-13, Ondřej: „nesmí vznikat nickname duplicity") ──────────────────────
+// name_key = normalizované jméno (malá písmena dle cs, jedna mezera) s UNIQUE indexem → dvě stejná jména
+// (ani „Petr"/„petr") nevzniknou ani souběhem. Obsazené jméno z Discordu/CrazyGames dostane číslo (Petr2);
+// host si obsazené jméno nastavit nemůže (setGuestName vrátí name_taken + návrh).
+// users.source = odkud účet přišel ('web' | 'itch' | 'cg') — ikonka u hráče.
+for (const col of ['name_key TEXT', 'source TEXT']) { try { db.exec(`ALTER TABLE users ADD COLUMN ${col}`); } catch {} }
+export const NAME_MAX = 14;   // = klient (main.js profile() .slice(0, 14))
+export function nameKey(n) { return String(n || '').normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('cs'); }
+export function cleanName(n) { return String(n || '').normalize('NFKC').replace(/[\u0000-\u001f\u007f]/g, '').trim().replace(/\s+/g, ' ').slice(0, NAME_MAX).trim(); }
+function nameTaken(key, exceptId) { return !!db.prepare('SELECT 1 FROM users WHERE name_key = ? AND id != ?').get(key, Number(exceptId) || 0); }
+/** První volné jméno: base, base2, base3… (deterministicky, oříznuto na NAME_MAX). */
+export function freeName(base, exceptId = 0) {
+  const b = cleanName(base) || 'Hráč';
+  if (!nameTaken(nameKey(b), exceptId)) return b;
+  for (let i = 2; ; i++) { const sfx = String(i), c = b.slice(0, NAME_MAX - sfx.length).trim() + sfx; if (!nameTaken(nameKey(c), exceptId)) return c; }
+}
+/** Nastaví účtu jméno (obsazené → s číslem). Vrací skutečné jméno. */
+function claimName(userId, desired) {
+  const n = freeName(desired, userId);
+  db.prepare('UPDATE users SET display_name = ?, name_key = ? WHERE id = ?').run(n, nameKey(n), userId);
+  return n;
+}
+// Jednorázově: existující účty bez name_key (pořadí podle id → starší účet si jméno nechá, novější dostane číslo)
+db.transaction(() => { for (const u of db.prepare('SELECT id, display_name FROM users WHERE name_key IS NULL ORDER BY id').all()) claimName(u.id, u.display_name); })();
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_name_key ON users (name_key)');
+
 // ── Alpha Season 1 seed (jen pokud neexistuje) ───────────────────────────────
 const seasonExists = db.prepare("SELECT id FROM seasons WHERE slug = 'alpha-1'").get();
 if (!seasonExists) {
@@ -225,6 +251,7 @@ export function upsertDiscordUser({ discord_id, display_name, avatar_url, is_spo
         is_sponsor = CASE WHEN ? = 1 THEN 1 ELSE is_sponsor END
       WHERE discord_id = ?
     `).run(display_name, avatar_url, is_sponsor ? 1 : 0, discord_id);
+    claimName(existing.id, display_name);
     ensureProfile(existing.id);
     ensureStats(existing.id);
     stmtAddIdentity.run('discord', discord_id, existing.id);
@@ -234,6 +261,7 @@ export function upsertDiscordUser({ discord_id, display_name, avatar_url, is_spo
     INSERT INTO users (discord_id, display_name, avatar_url, is_sponsor)
     VALUES (?, ?, ?, ?)
   `).run(discord_id, display_name, avatar_url, is_sponsor ? 1 : 0);
+  claimName(Number(info.lastInsertRowid), display_name);
   ensureProfile(info.lastInsertRowid);
   ensureStats(info.lastInsertRowid);
   stmtAddIdentity.run('discord', discord_id, info.lastInsertRowid);
@@ -255,19 +283,31 @@ export function isGuestUser(user_id) {
 }
 
 /** Nový hostující účet vázaný na identitu zařízení (provider 'device', provider_id = did). */
-export const createGuestUser = db.transaction((did, display_name = 'Guest') => {
-  const info = db.prepare('INSERT INTO users (display_name) VALUES (?)').run(display_name);
+export const createGuestUser = db.transaction((did, display_name = 'Hráč', source = 'web') => {
+  const info = db.prepare('INSERT INTO users (display_name, source) VALUES (?, ?)').run(display_name, ['web', 'itch', 'cg'].includes(source) ? source : 'web');
   const id = Number(info.lastInsertRowid);
+  claimName(id, display_name);
   ensureProfile(id);
   ensureStats(id);
   stmtAddIdentity.run('device', did, id);
   return id;
 });
 
+/** Host si mění jméno: obsazené → { ok:false, error:'name_taken', suggestion }, jinak { ok:true, name }. */
+/** Ikonka původu hráče: 'd' Discord, 'c' CrazyGames účet, 'i' host z itch.io, 'g' host na CrazyGames, 'w' host z webu. */
+export function userBadge(user_id) {
+  if (!user_id) return '';
+  if (userHasIdentity(user_id, 'discord')) return 'd';
+  if (userHasIdentity(user_id, 'crazygames')) return 'c';
+  const src = db.prepare('SELECT source FROM users WHERE id = ?').get(user_id)?.source;
+  return src === 'itch' ? 'i' : src === 'cg' ? 'g' : 'w';
+}
 export function setGuestName(user_id, name) {
-  const n = String(name || '').trim().slice(0, 16);
-  if (!n || !isGuestUser(user_id)) return;
-  db.prepare('UPDATE users SET display_name = ? WHERE id = ?').run(n, user_id);
+  const n = cleanName(name);
+  if (!n || !isGuestUser(user_id)) return { ok: false, error: 'not_guest' };
+  if (nameTaken(nameKey(n), user_id)) return { ok: false, error: 'name_taken', suggestion: freeName(n, user_id) };
+  db.prepare('UPDATE users SET display_name = ?, name_key = ? WHERE id = ?').run(n, nameKey(n), user_id);
+  return { ok: true, name: n };
 }
 
 /**
@@ -327,6 +367,7 @@ export const loginDiscordUser = db.transaction((info, guestId = null) => {
   if (guestOk) {
     db.prepare('UPDATE users SET discord_id = ?, display_name = ?, avatar_url = ?, is_sponsor = MAX(is_sponsor, ?) WHERE id = ?')
       .run(discord_id, display_name, avatar_url, is_sponsor ? 1 : 0, guestId);
+    claimName(Number(guestId), display_name);
     stmtAddIdentity.run('discord', discord_id, guestId);
     return Number(guestId);
   }
@@ -346,14 +387,15 @@ export const loginCrazyGamesUser = db.transaction((cgId, display_name, avatar_ur
   const avatar = typeof avatar_url === 'string' && /^https:\/\//.test(avatar_url) && avatar_url.length < 300 ? avatar_url : null;
   let uid = getUserIdByIdentity('crazygames', cgId), created = false;
   if (uid) {
-    db.prepare('UPDATE users SET display_name = ?, avatar_url = ? WHERE id = ?').run(name, avatar, uid);
+    db.prepare('UPDATE users SET avatar_url = ? WHERE id = ?').run(avatar, uid); claimName(uid, name);
   } else {
     const gp = guestId && isGuestUser(guestId) ? (getStats(guestId)?.games_played ?? 0) : -1;
     if (gp === 0) {
       uid = Number(guestId);
-      db.prepare('UPDATE users SET display_name = ?, avatar_url = ? WHERE id = ?').run(name, avatar, uid);
+      db.prepare("UPDATE users SET avatar_url = ?, source = 'cg' WHERE id = ?").run(avatar, uid); claimName(uid, name);
     } else {
-      uid = Number(db.prepare('INSERT INTO users (display_name, avatar_url) VALUES (?, ?)').run(name, avatar).lastInsertRowid);
+      uid = Number(db.prepare("INSERT INTO users (display_name, avatar_url, source) VALUES (?, ?, 'cg')").run(name, avatar).lastInsertRowid);
+      claimName(uid, name);
       ensureProfile(uid); ensureStats(uid);
       created = true;
     }
@@ -400,6 +442,7 @@ export function upsertEmailUser(email, display_name) {
   const info = db.prepare(`
     INSERT INTO users (email, display_name) VALUES (?, ?)
   `).run(email, display_name);
+  claimName(Number(info.lastInsertRowid), display_name);
   ensureProfile(info.lastInsertRowid);
   ensureStats(info.lastInsertRowid);
   return info.lastInsertRowid;
@@ -470,17 +513,19 @@ export function getRankPosition(user_id) {
   const row = db.prepare('SELECT rank_points, games_played FROM stats WHERE user_id = ?').get(user_id);
   if (!row) return null;
   // pořadí jako žebříček (getLeaderboard): jen hráči s odehraným zápasem; bez zápasu pozice není (dřív nováček „#1“)
-  if (!row.games_played) return { rank_points: row.rank_points, position: null };
-  const pos = db.prepare('SELECT COUNT(*) AS n FROM stats WHERE rank_points > ? AND games_played > 0').get(row.rank_points).n + 1;
+  // host (bez Discord/CrazyGames účtu) v žebříčku není → nemá ani pořadí (Ondřej 2026-11-13: „Guest nesmí být zapsán v tabulce")
+  if (!row.games_played || isGuestUser(user_id)) return { rank_points: row.rank_points, position: null };
+  const pos = db.prepare(`SELECT COUNT(*) AS n FROM stats s WHERE s.rank_points > ? AND s.games_played > 0 AND EXISTS (SELECT 1 FROM identities i WHERE i.user_id = s.user_id AND i.provider IN ('discord','crazygames'))`).get(row.rank_points).n + 1;
   return { rank_points: row.rank_points, position: pos };
 }
 
 export function getLeaderboard(limit = 50) {
   return db.prepare(`
     SELECT u.display_name, u.avatar_url, s.rank_points, s.goals, s.assists,
-           s.wins, s.losses, s.games_played, s.plus_minus
+           s.wins, s.losses, s.games_played, s.plus_minus,
+           CASE WHEN EXISTS (SELECT 1 FROM identities i WHERE i.user_id = u.id AND i.provider = 'discord') THEN 'd' ELSE 'c' END AS badge
     FROM stats s JOIN users u ON u.id = s.user_id
-    WHERE s.games_played > 0
+    WHERE s.games_played > 0 AND EXISTS (SELECT 1 FROM identities i WHERE i.user_id = u.id AND i.provider IN ('discord','crazygames'))   -- jen účty (Discord / CrazyGames), hosté ne
     ORDER BY s.rank_points DESC
     LIMIT ?
   `).all(limit);

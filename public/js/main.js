@@ -1064,6 +1064,16 @@ net.onConnectError = () => {
 // ── Profil — povinný (bez přezdívky nepustíme dál) ────────────────────
 const hasName = () => (nameInput.value || '').trim().length > 0;
 const suggestName = () => t('guest_name') + Math.floor(100 + Math.random() * 900);
+// Jména jsou jedinečná (server): obsazené → vezmi první volné (Petr → Petr2), ulož a řekni to hráči.
+function _onNameSaved(r) {
+  if (!r || r.ok || r.error !== 'name_taken' || !r.suggestion) return;
+  const was = nameInput.value;
+  nameInput.value = r.suggestion; localStorage.setItem(NAME_KEY, r.suggestion);
+  if (typeof _syncPlateDisplay === 'function') _syncPlateDisplay();
+  drawPreview();
+  saveServerProfile({ display_name: r.suggestion });
+  setStatus(t('name_taken', was, r.suggestion), '#ffcf3a');
+}
 function commitProfile() {
   if (!hasName()) nameInput.value = getUser()?.display_name || suggestName();   // jméno doplníme, Šatnu nevnucujeme
   const p = profile();       // ulož jméno + výbavu do localStorage
@@ -1073,7 +1083,7 @@ function commitProfile() {
       helmet: p.helmet, gloves: p.gloves, tape: p.tape, trail: p.trail, stick: p.stick,
       tape_style: p.tapeStyle, helmet_type: p.helmetType, visor: p.visor,
       handed: p.handed, number: p.number,
-    });
+    }).then(_onNameSaved);
   }
   setStatus('');
   return true;
@@ -1371,7 +1381,7 @@ async function _renderLeaderboard(mode) {
       const wr = gp > 0 ? Math.round(r.wins / gp * 100) + '%' : '—';
       return `<div class="sv-lb-row${isMe ? ' me' : ''}">
         <span class="sv-lb-rank${rank <= 3 ? ' top3' : ''}">${rank}</span>
-        <span class="sv-lb-name">${esc(r.display_name || 'Player')}</span>
+        <span class="sv-lb-name">${esc(r.display_name || 'Player')}${r.badge ? `<span class="pb pb-${r.badge === 'd' ? 'd' : 'c'}" title="${r.badge === 'd' ? 'Discord' : 'CrazyGames'}">${r.badge === 'd' ? 'D' : 'CG'}</span>` : ''}</span>
         <span class="sv-lb-elo">${r.rank_points ?? 1000}</span>
         <span class="sv-lb-wr">${wr}</span>
         <span class="sv-lb-gp">${gp}</span>
@@ -1752,7 +1762,12 @@ function updateAuthUI(user) {
   $('profile-stats').style.display = 'none'; // stats se načítají lazy při otevření profilu
   updateLinkUI();
   if (!inGame) { _loadStats(); refreshStore(); }   // host dostal token / přihlášení → ukaž statistiky, kredity a obchod hned
+  // nový host: účet na serveru vznikl s výchozím jménem → hned pošli jméno z tohoto zařízení (ve hře se bere jméno z účtu)
+  if (getKind() === 'guest' && !_guestNameSynced && (nameInput.value || '').trim()) {
+    _guestNameSynced = true; saveServerProfile({ display_name: nameInput.value.trim().slice(0, 14) }).then(_onNameSaved);
+  }
 }
+let _guestNameSynced = false;
 
 // ── Propojení účtů (link kód) ─────────────────────────────────────────
 const _embedded = document.documentElement.classList.contains('embedded');
