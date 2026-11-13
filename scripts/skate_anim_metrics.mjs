@@ -14,6 +14,8 @@
 //  R8 Stop čitelný: při plném stopu obě brusle napříč k jízdě (90° ± 20°) a aspoň jedna vyjede ≥ 3 px mimo siluetu.
 //  R9 Přenos váhy: tělo se v jízdě vpřed posouvá napříč ≥ 0,6 px (1×, špička–špička) v rytmu kroku (|korelace s fází nohy| ≥ 0,7).
 //  R10 Deterministické: dva běhy = stejný hash všech póz.
+//  R11 Výbušný rozjezd (přidáno 2026-11-13, Pohyb v2 ≈ 330 px/s², změřeno ve hře): průměrná kadence prvních 0,5 s z klidu ≥ 2,2 kroku/s
+//      (krátké rychlé kroky, ne klouzání); ustálená jízda dál podle R3.
 import { createHash } from 'crypto';
 const { PLAYER } = await import('../public/js/constants.js');
 const { skateAdvance, skateStopBlend, skatePose, skateCycle, skateFeetSmooth } = await import('../public/js/entities/Player.js');
@@ -78,6 +80,7 @@ const SCN = {
   bokem80: steady(80, -Math.PI / 2), bokem165: steady(165, -Math.PI / 2),
   couvani60: steady(60, Math.PI), couvani124: steady(124, Math.PI),
   zatacka150: { step: (p, t) => { const w = 150 / 110, a = t * w; p.vx = 150 * Math.cos(a); p.vy = 150 * Math.sin(a); p.bodyAngle = a; p._lean = 0.6; } },
+  rozjezdV2: { T: 2.5, step: (p, t) => { const v = Math.min(165, Math.max(0, (t - 0.3) * 330)); p.vx = v; p.vy = 0; p.bodyAngle = 0; } },
   rozjezd: { T: 2.5, step: (p, t) => { const v = Math.min(165, Math.max(0, (t - 0.3) * 140)); p.vx = v; p.vy = 0; p.bodyAngle = 0; } },
   otocka: { step: (p, t) => { p.vx = 120; p.vy = 0; p.bodyAngle = Math.PI - Math.min(Math.PI, Math.max(0, (t - 1) * 3.8)); } },
   stop: { T: 3, step: (p, t) => { const v = t < 1.2 ? 165 : Math.max(0, 165 - (t - 1.2) * 300); if (t >= 1.2 && !p._stopped) { p._stopped = 1; p._stopFx = 0.9; } p.vx = v; p.vy = 0; p.bodyAngle = 0; } },
@@ -86,7 +89,8 @@ const SCN = {
 function analyze(k) {
   const res = {}, hash = createHash('sha256');
   for (const [id, sc] of Object.entries(SCN)) {
-    const F = scenario(sc, k), from = id === 'rozjezd' || id === 'otocka' || id === 'stop' ? 0 : 60;   // ustálené: bez první sekundy
+    const F = scenario(sc, k); if (id === 'rozjezdV2') { /* R11: kadence prvních 0,5 s rozjezdu (snímky 18–48) */ let s = 0; for (let n = 19; n <= 48; n++) { let q = F[n].phase - F[n - 1].phase; if (q < -Math.PI) q += 2 * Math.PI; s += Math.max(0, q); } F.cad05 = s / 2 / Math.PI / 0.5; }
+    const from = id === 'rozjezd' || id === 'rozjezdV2' || id === 'otocka' || id === 'stop' ? 0 : 60;   // ustálené: bez první sekundy
     let jump = 0, expHit = 0, expN = 0; const expSide = { '-1': [], 1: [] }, slip = [], bodyY = [], footY = [], cc = { '-1': { ymin: 1e9, ymax: -1e9, amin: 0, amax: 0 }, 1: { ymin: 1e9, ymax: -1e9, amin: 0, amax: 0 } };
     let stopOk = 0, stopN = 0;
     for (let n = from; n < F.length; n++) {
@@ -124,7 +128,7 @@ function analyze(k) {
       lag: per ? lagBest / per : 0, cadence: cyc, jump, slipMed: med(slip), slipN: slip.length,
       bodyPP: (Math.max(...bodyY) - Math.min(...bodyY)) * SC, bodyCorr: corr(bodyY, footY),
       ccY: Math.min(cc[-1].ymax - cc[-1].ymin, cc[1].ymax - cc[1].ymin) / R, ccA: Math.min(-cc[-1].amin, -cc[1].amin, cc[-1].amax, cc[1].amax),
-      stop: stopN ? stopOk / stopN : null };
+      stop: stopN ? stopOk / stopN : null, cad05: F.cad05 };
   }
   return { res, hash: hash.digest('hex').slice(0, 16) };
 }
@@ -145,6 +149,7 @@ for (const k of KS) {
     ['R8 stop napříč + ≥3 px', (r.stop.stop ?? 0) >= 0.9, `${((r.stop.stop ?? 0) * 100).toFixed(0)} % snímků plného stopu`],
     ['R9 přenos váhy ≥0,6 px, |r|≥0,7', r.vpred165.bodyPP >= 0.6 && Math.abs(r.vpred165.bodyCorr) >= 0.7, `${f2(r.vpred165.bodyPP)} px, r = ${f2(r.vpred165.bodyCorr)}`],
     ['R10 deterministické', A.hash === B.hash, A.hash],
+    ['R11 výbušný rozjezd ≥2,2 kroku/s', k !== 3 || r.rozjezdV2.cad05 >= 2.2, f2(r.rozjezdV2.cad05) + ' kroku/s (0–0,5 s)'],
   ];
   out[k] = { rub: rub.map(([n, ok, v]) => ({ n, ok, v })), res: r };
   console.log(`\n== K${k} ${k === 3 ? '(nové)' : k === 0 ? '(dřívější výchozí)' : ''} — ${rub.filter(x => x[1]).length}/${rub.length}`);

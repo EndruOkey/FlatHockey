@@ -760,7 +760,7 @@ const SKATE_CYCLE = 95;   // K0–K2: px ujeté dráhy na celý cyklus kroku (2 
 // Odrazová noha je na ledě a ostří míří VŽDY po její dráze vůči ledu → brusle se po ledě nesmýká do boku (jen klouže po ostří),
 // pak se zvedne (návrat vzduchem, brusle o chlup větší), přistane pod boky a klouže, dokud se neodrazí.
 // Do strany se boky (a brusle) natočí ke směru jízdy (max SKATE_K3.hip rad), ramena s holí zůstanou na míření; couvání = C-cuty.
-export const SKATE_K3 = { cyc0: 60, cycV: 0.26, push: 0.36, land: 0.80, hip: 1.25 };
+export const SKATE_K3 = { cyc0: 60, cycV: 0.26, push: 0.36, land: 0.80, hip: 1.25, accHz: 1.5, accLo: 40, accHi: 260 };
 export const skateCycle = (k, v) => k === 3 ? SKATE_K3.cyc0 + SKATE_K3.cycV * Math.min(200, v) : SKATE_CYCLE;
 const _ss = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const _wrap1 = u => u - Math.floor(u);
@@ -773,10 +773,15 @@ export function skateAdvance(st, x, y, ba, spd, k, mLoc = 0, dt = 1 / 60) {
     const dd = Math.min(30, Math.hypot(x - pv.x, y - pv.y));             // teleport (buly) nepočítej
     const dr = Math.abs(angleDiff(ba, pv.ba));
     const rotK = k === 3 ? 1.6 * (1 - sf) : 1.6;                          // K3: otáčení přidá krok jen v pomalé jízdě (pivot)
-    st._skatePhase = ((st._skatePhase ?? 0) + dd / skateCycle(k, spd) * Math.PI * 2 + Math.min(0.6, dr) * rotK) % (Math.PI * 2);
+    // K3 ROZJEZD (2026-11-13, Ondřej: „animace nesedí vůči pohybu"): fáze jen z dráhy → výbušný rozjezd vypadal jako klouzání
+    // (1,6 kroku/s jako v plné jízdě). Zrychlení přidá rychlé krátké kroky: +SKATE_K3.accHz kroku/s při zrychlení ≥ accHi px/s².
+    let acc = 0;
+    if (k === 3 && pv.spd != null && dd < 30) { const th = Math.max(0, (spd - pv.spd) / dt); st._thr = (st._thr ?? 0) + (th - (st._thr ?? 0)) * Math.min(1, 10 * dt);
+      acc = SKATE_K3.accHz * _ss(SKATE_K3.accLo, SKATE_K3.accHi, st._thr) * dt * Math.PI * 2; }
+    st._skatePhase = ((st._skatePhase ?? 0) + dd / skateCycle(k, spd) * Math.PI * 2 + acc + Math.min(0.6, dr) * rotK) % (Math.PI * 2);
     st._rotSf = Math.min(1, dr / 0.12) * (1 - sf);                        // otáčení na místě → pivot kroky
   }
-  st._animPrev = { x, y, ba };
+  st._animPrev = { x, y, ba, spd };
 }
 // vyhlazení přechodu do hokejového stopu (dřív přímo v draw)
 export function skateStopBlend(prev, active, dt, up = 14, down = 5) {   // K3 volá pomaleji (7/4) → bez skoku nohou do stopu
@@ -1065,11 +1070,12 @@ function _renderPlayerUp(ctx, p, cam) {
   const K = skaterKit(p, PLAYER.colors[p.team]);   // kosmetika C-d2 (defaulty, když server pole nepošle)
   const bladeCol = K.blade;
 
-  // RYCHLÁ HRA (2026-11-13): hráči ve vlastních dresech → tým = barevný kotouč pod hráčem (plná výplň + hrana)
+  // RYCHLÁ HRA (2026-11-13): hráči ve vlastních dresech → tým = tenký kroužek v barvě týmu pod hráčem + jemný nádech
+  // (Ondřej: plný kotouč 50 % + hrana 2,2 byl „hrozně výrazný" → nádech 14 %, hrana 1,4 při 80 %)
   if (p.teamMark) {
-    ctx.save(); ctx.beginPath(); ctx.arc(sx, sy, r + 8 * s, 0, Math.PI * 2);   // větší než tělo → barva týmu je vidět kolem celého hráče
-    ctx.globalAlpha = 0.5; ctx.fillStyle = p.teamMark; ctx.fill();
-    ctx.globalAlpha = 1; ctx.lineWidth = 2.2 * s; ctx.strokeStyle = p.teamMark; ctx.stroke(); ctx.restore();
+    ctx.save(); ctx.beginPath(); ctx.arc(sx, sy, r + 6 * s, 0, Math.PI * 2);
+    ctx.globalAlpha = 0.14; ctx.fillStyle = p.teamMark; ctx.fill();
+    ctx.globalAlpha = 0.8; ctx.lineWidth = 1.4 * s; ctx.strokeStyle = p.teamMark; ctx.stroke(); ctx.restore();
   }
 
   // ŠTÍT: soupeř se pokusil obrat puk krytý tělem → oblouk na straně soupeře (krytí tělem funguje)
@@ -1088,7 +1094,7 @@ function _renderPlayerUp(ctx, p, cam) {
     ctx.save();
     ctx.beginPath(); ctx.arc(sx, sy, r + 9 * s, 0, Math.PI * 2);
     // rychlá hra: tým ukazuje kotouč pod hráčem → vlastní hráč jen bílý kroužek (modrý by vypadal jako modrý tým)
-    if (p.teamMark) { ctx.beginPath(); ctx.arc(sx, sy, r + 10.5 * s, 0, Math.PI * 2); ctx.lineWidth = 2 * s; ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.stroke(); }
+    if (p.teamMark) { ctx.beginPath(); ctx.arc(sx, sy, r + 8.5 * s, 0, Math.PI * 2); ctx.lineWidth = 1.4 * s; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.stroke(); }
     else { ctx.fillStyle = 'rgba(127,212,255,0.18)'; ctx.fill(); ctx.lineWidth = 2.5 * s; ctx.strokeStyle = '#7FD4FF'; ctx.stroke(); }
     ctx.restore();
   }
