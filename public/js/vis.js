@@ -1,5 +1,5 @@
 // Vizuální varianty (2026-11-12). Pro všechny platí výchozí hodnoty; pokusy jen v dev playgroundu (/dev pod heslem, window.FH_DEV).
-// g = branka (0 šikmý 3D náklon, 1 čistý půdorys, 2 nízký náklon, 3 top-down s hloubkou, 4 větší hloubka, 5 shora přesně podle kolize + hloubka stínem = výchozí), s = hokejka (0, 1 štíhlá, 2 lopatka + odlesk + stín),
+// g = branka (0 šikmý 3D náklon, 1 čistý půdorys, 2 nízký náklon, 3 top-down s hloubkou, 4 větší hloubka, 5 shora přesně podle kolize + hloubka stínem = výchozí, 6/7 hezčí obdélník, 8 skutečný tvar NHL, 9 skutečný tvar jen základna), s = hokejka (0, 1 štíhlá, 2 lopatka + odlesk + stín),
 // k = bruslení (0, 1 krok do stran, 2 velký odraz + skluz), h = hlava (0 v barvě dresu, 1 oddělená helma, 2 světlá helma jako dřív).
 // Objekt se čte každý snímek → změna z dev panelu platí hned.
 export const DEFAULT_VIS = { g: 5, s: 3, k: 0, h: 1, p: 1 };   // 2026-11-12 Ondřej: hlava oddělená (H1), hokejka dnešní štíhlejší (S3)   // p = kresba výšky puku (0 šikmo nahoru, 1 shora: zvětšení + stín = jako branka)
