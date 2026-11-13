@@ -6,7 +6,7 @@ const ROWS = [
   { key: 'p', label: 'Výška puku', opts: [[1, 'Shora (jako branka)'], [0, 'Šikmo nahoru (dřív)']] },
   { key: 'h', label: 'Hlava', opts: [[1, 'Oddělená helma'], [0, 'V barvě dresu'], [2, 'Světlá helma']] },
   { key: 's', label: 'Hokejka', opts: [[3, 'Dnešní štíhlejší'], [0, 'Dnešní (původní)'], [1, 'Štíhlá'], [2, 'Lopatka']] },
-  { key: 'k', label: 'Bruslení', opts: [[0, 'Dnešní'], [1, 'Krok do stran'], [2, 'Velký odraz']] },
+  { key: 'k', label: 'Bruslení', opts: [[3, 'Plynulý krok (nový)'], [0, 'Dřívější'], [1, 'Krok do stran'], [2, 'Velký odraz']] },
 ];
 const css = `#fh-dev{position:fixed;left:12px;bottom:12px;z-index:9998;background:rgba(10,20,35,.94);color:#eef4fb;border:2px solid #4cc3ff;
 border-radius:8px;font:600 13px/1.3 system-ui,sans-serif;padding:8px 10px;max-width:calc(100vw - 24px);box-sizing:border-box}
