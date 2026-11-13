@@ -15,7 +15,7 @@ for (let i = 0; i < 24; i++) {
   const m = -Math.PI + (i + 0.5) * Math.PI / 12, g = Math.abs(m) < 0.6 ? 'vpřed' : Math.abs(m) > 2.2 ? 'vzad' : 'bokem';
   for (let j = 0; j < 48; j++) {
     const P = skatePose({ k: 3, phase: j / 48 * Math.PI * 2, spd: 165, mLoc: m, stopT: 0, stopLoc: 0, rotSf: 0, lean: 0, hs: 1, thr: 0 });
-    const hh = P.body.h ?? 0;
+    const hh = P.body.hh ?? P.body.h ?? 0;   // kyčel, jak ji kreslí skin (B.hh)
     for (const f of P.feet) {
       const h = hipOf(f.side, hh), d = Math.hypot(f.x - h.x, f.y - h.y) / R;
       groups[g].push(d); n++; if (d > 1.5) over++;

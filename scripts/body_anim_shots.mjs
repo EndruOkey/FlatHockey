@@ -19,7 +19,9 @@ const SIT = [
   { id: 'klid', k: 12, keys: [], pre: 1.0 },
   { id: 'bokem', k: 2, keys: ['KeyS'], pre: 1.4 },                  // jízda bokem dolů, tělo čelem doprava (myš)
   { id: 'svih', k: 2, keys: ['KeyD'], pre: 1.4, flick: true },      // jízda vpřed, po 6 snímcích švih myší dozadu
+  { id: 'obrat', k: 3, keys: ['KeyD'], pre: 1.4, rev: true },       // jízda doprava, po 3 snímcích prudce doleva (brzda + rozjezd), myš vpravo
 ];
+const ONLY = A.only ? String(A.only).split(',') : null;
 const errs = [];
 const b = await chromium.launch();
 for (const dpr of [1, 3]) {
@@ -34,7 +36,7 @@ for (const dpr of [1, 3]) {
   await p.click('#go-train'); await p.click('#go-solo'); await p.waitForTimeout(1500);
   for (const lab of ['pred', 'po']) {
     await p.evaluate(async ([key, v]) => { (await import('/js/vis.js')).VIS[key] = v; }, [VKEY, lab === 'po' ? VPO : VPRED]);
-    for (const S of SIT) {
+    for (const S of SIT) { if (ONLY && !ONLY.includes(S.id)) continue;
       await p.evaluate(() => { const g = window.__fhGame, L = g.local; L.x = 160; L.y = 330; L.vx = 0; L.vy = 0; L.bodyAngle = L.skateAngle = L.aimAngle = 0;
         if (g.puck) { g.puck.x = 900; g.puck.y = 60; g.puck.vx = 0; g.puck.vy = 0; } });
       const cam = await p.evaluate(() => { const c = window.__fhGame._cam; return { s: c.scale, ox: c.ox, oy: c.oy }; });
@@ -46,7 +48,7 @@ for (const dpr of [1, 3]) {
       for (let t = 0; t < S.pre / 0.17; t++) { await p.waitForTimeout(170); await aimAt(); }
       if (S.shot) await p.mouse.down();
       if (S.brake) await p.keyboard.down('Space');
-      const frames = await p.evaluate(async ({ n, k, turn, shot, flick }) => {
+      const frames = await p.evaluate(async ({ n, k, turn, shot, flick, rev }) => {
         const g = window.__fhGame, eng = g.engine, cv = eng.canvas || document.querySelector('canvas'), inp = g.input;
         const sc = cv.width / cv.clientWidth, W = 52, out = [], prev = eng.onDraw; let f = 0;
         await new Promise(res => {
@@ -54,6 +56,7 @@ for (const dpr of [1, 3]) {
             if (turn) {   // zatáčka: vstup se po 12 snímcích stáčí doprava dolů (D → D+S → S), myš míří po směru jízdy
               const st = Math.floor(f / 12); inp.keys.KeyD = st < 2; inp.keys.KeyS = st >= 1;
               const a = Math.atan2(L.vy, L.vx); inp.mouseX = cam.ox + (L.x + Math.cos(a) * 200) * cam.scale; inp.mouseY = cam.oy + (L.y + Math.sin(a) * 200) * cam.scale; }
+            if (rev && f === 3) { inp.keys.KeyD = false; inp.keys.KeyA = true; }
             if (flick && f >= 6) { inp.mouseX = cam.ox + (L.x - 200) * cam.scale; inp.mouseY = cam.oy + L.y * cam.scale; }   // švih dozadu
             if (shot && f === 44) window.dispatchEvent(new MouseEvent('mouseup', { button: 0 }));   // rána po ~0,7 s nápřahu
             if (f % k) return;
@@ -64,9 +67,9 @@ for (const dpr of [1, 3]) {
             if (out.length >= n) { eng.onDraw = prev; inp.keys.KeyS = false; res(); } };
         });
         return out;
-      }, { n: N, k: S.k, turn: !!S.turn, shot: !!S.shot, flick: !!S.flick });
+      }, { n: N, k: S.k, turn: !!S.turn, shot: !!S.shot, flick: !!S.flick, rev: !!S.rev });
       for (const k of S.keys) await p.keyboard.up(k);
-      await p.keyboard.up('KeyS'); if (S.brake) await p.keyboard.up('Space'); if (S.shot) await p.mouse.up();
+      await p.keyboard.up('KeyS'); await p.evaluate(() => { window.__fhGame.input.keys.KeyA = false; }); if (S.brake) await p.keyboard.up('Space'); if (S.shot) await p.mouse.up();
       frames.forEach((f, i) => writeFileSync(join(OUT, `${lab}_${S.id}_d${dpr}_${String(i).padStart(2, '0')}.png`), Buffer.from(f.img.split(',')[1], 'base64')));
       console.log(`${lab} dpr${dpr} ${S.id}: ${frames.length} snímků, rychlost ${frames[0].v.toFixed(0)}–${frames.at(-1).v.toFixed(0)} px/s, nabití max ${Math.max(...frames.map(f => f.dc)).toFixed(2)}`);
       await p.waitForTimeout(500);
