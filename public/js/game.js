@@ -822,21 +822,30 @@ const _SB_DIFFS = [
   { cs: 'Střední', en: 'Medium' },
   { cs: 'Těžký',   en: 'Hard'   },
 ];
+// text delší než šířka → zkrátit s „…“ (místo useknutí v půlce slova)
+function _fitText(ctx, txt, w) {
+  if (ctx.measureText(txt).width <= w) return txt;
+  let t = txt;
+  while (t.length > 1 && ctx.measureText(t + '…').width > w) t = t.slice(0, -1);
+  return t.trimEnd() + '…';
+}
+const _GOAL_STEPS = [0, 3, 5, 10];   // cíl vlastního cvičení: počet gólů (0 = bez cíle)
+function _fmtT(sec) { const m = Math.floor(sec / 60), x = Math.floor(sec % 60); return m + ':' + String(x).padStart(2, '0'); }
 const _SB_DRILL_DESC = [
   {
     title: { cs: 'Volný trénink',    en: 'Free practice' },
-    desc:  { cs: 'Střílej, nahrávej, pohybuj se — bez omezení', en: 'Shoot, pass, move — no restrictions' },
-    hint:  { cs: '▲ Přidej nahrávače, kužele nebo plochy z menu', en: '▲ Add passer, cones or boards from menu' },
+    desc:  { cs: 'Hraj bez omezení', en: 'No restrictions' },
+    hint:  { cs: '⚙ Stavět = vlastní cvičení', en: '⚙ Build = your own drill' },
   },
   {
     title: { cs: 'Nájezd',    en: 'Breakaway' },
-    desc:  { cs: 'Dojeď sám na bránu. Bránič tě pronásleduje.', en: 'One-on-one against goalie. Defender chases you.' },
-    hint:  { cs: 'Tip: Změň stranu v poslední chvíli nebo střílej bekend', en: 'Tip: Change side at last moment or shoot backhand' },
+    desc:  { cs: 'Sám na bránu, bránič tě honí', en: 'Alone on goal, a defender chases' },
+    hint:  { cs: 'Tip: změň stranu na poslední chvíli', en: 'Tip: switch sides at the last moment' },
   },
   {
     title: { cs: 'One-timer', en: 'One-timer' },
-    desc:  { cs: 'Přijmi přihrávku a okamžitě vystřel — bez zastavení puku', en: 'Receive the pass and shoot immediately — no stopping' },
-    hint:  { cs: 'Miř myší na bránu PŘED příchodem puku — načasování je klíč', en: 'Aim at goal BEFORE puck arrives — timing is the key' },
+    desc:  { cs: 'Přihrávka a hned rána', en: 'Take the pass, shoot at once' },
+    hint:  { cs: 'Drž LMB, než puk dorazí', en: 'Hold LMB before the puck arrives' },
   },
 ];
 const _SB_OT_CONFIGS = [
@@ -1125,6 +1134,22 @@ export class SandboxGame {
     }
     this._tabWas = tabDown;
     if (this._tabToast > 0) this._tabToast -= dt;
+    // cíl vlastního cvičení: góly od začátku běhu, stopky do splnění
+    const gr = this._goalRun;
+    if (gr && this._goalTarget && !gr.done) {
+      if (this.score.home < gr.base) gr.base = this.score.home;   // reset skóre (R) → počítej znovu
+      gr.t += dt;
+      if (this.score.home - gr.base >= this._goalTarget) {
+        gr.done = true;
+        const key = this._scenarioCode || 'free:' + this._goalTarget;
+        let best = {}; try { best = JSON.parse(localStorage.getItem('fh_scen_best') || '{}'); } catch {}
+        const rec = !best[key] || gr.t < best[key];
+        if (rec) { best[key] = +gr.t.toFixed(2); try { localStorage.setItem('fh_scen_best', JSON.stringify(best)); } catch {} }
+        gr.best = best[key];
+        const L = document.documentElement.lang === 'en';
+        this._toast((L ? 'GOAL DONE ' : 'SPLNĚNO ') + `${this._goalTarget}/${this._goalTarget} · ${_fmtT(gr.t)}` + (rec ? (L ? ' · NEW BEST!' : ' · REKORD!') : ''), '#F5C840', 3);
+      }
+    }
 
     // Hover object for context menu (computed each frame, used by _drawOverlay too)
     if (this._rotatingObj) {
@@ -2341,7 +2366,7 @@ export class SandboxGame {
     }
 
     // ── Training dock (hidden in tutorial) ──
-    if (!this._isTutorial) this._drawPanel(ctx, W, H);
+    if (!this._isTutorial) { this._drawPanel(ctx, W, H); this._drawGoalHud(ctx, W); }
 
     // ── Catalog overlay ──
     if (this._catalogOpen && !this._isTutorial) this._drawCatalogOverlay(ctx, W, H);
@@ -2353,21 +2378,24 @@ export class SandboxGame {
       ctx.save();
       ctx.globalAlpha = a;
       let txt, col;
-      if (this._toastMsg === 'reset') {
+      if (this._toastMsg && typeof this._toastMsg === 'object') {
+        txt = this._toastMsg.txt; col = this._toastMsg.col;
+      } else if (this._toastMsg === 'reset') {
         txt = lang === 'cs' ? '↺  NAČTENO' : '↺  RESET LOADED';
         col = '#80E890';
       } else {
         const isBuild = this._activeTab === 'build';
-        txt = isBuild ? '⚙  BUILD MODE' : (lang === 'cs' ? '🏒  TRÉNINK' : '🏒  TRAINING');
+        txt = isBuild ? (lang === 'cs' ? '⚙  STAVĚNÍ' : '⚙  BUILD MODE') : (lang === 'cs' ? '🏒  TRÉNINK' : '🏒  TRAINING');
         col = isBuild ? '#F5C840' : '#7FC4FF';
       }
       ctx.font = 'bold 17px "Segoe UI",sans-serif';
       ctx.textAlign = 'center';
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
       const tw = ctx.measureText(txt).width + 32;
-      ctx.fillRect(W/2 - tw/2, H - DH - 58, tw, 32);
+      const ty0 = H - DH - (this._activeTab === 'build' ? this._dockLayout(W, H).OVH : 0) - 58;
+      ctx.fillRect(W/2 - tw/2, ty0, tw, 32);
       ctx.fillStyle = col;
-      ctx.fillText(txt, W/2, H - DH - 36);
+      ctx.fillText(txt, W/2, ty0 + 22);
       ctx.restore();
     }
     if (this._tabToast <= 0) this._toastMsg = null;
@@ -2530,18 +2558,16 @@ export class SandboxGame {
       // SCENARIO buttons in overlay
       const { LBL_Y, LBL_H, OVH } = this._dockLayout(W, H);
       const BY2 = LBL_Y + LBL_H + 4, BH2 = OVH - BY2 - 8;
-      const SBW = Math.floor((SCEN_W - 2*GAP - RST_W) / 2);
-      const s1x = SCEN_X, s2x = SCEN_X + SBW + GAP, s3x = SCEN_X + 2*(SBW+GAP);
-      if (mx >= s1x && mx <= s1x + SBW && my >= ovY + BY2 && my <= ovY + BY2 + BH2) {
-        this._showInputDialog({ title: lang === 'cs' ? 'Název tréninku:' : 'Training pack name:', defaultValue: lang === 'cs' ? 'Můj trénink' : 'My training', onConfirm: v => { if (v.trim()) this._saveToLibrary(v.trim()); } });
-        return true;
-      }
-      if (mx >= s2x && mx <= s2x + SBW && my >= ovY + BY2 && my <= ovY + BY2 + BH2) {
-        this._catalogList = this._loadCatalog(); this._catalogScroll = 0; this._catalogOpen = true;
+      const GW = SCEN_W - GAP - RST_W, gx = SCEN_X, s3x = SCEN_X + GW + GAP;
+      if (mx >= gx && mx <= gx + GW && my >= ovY + BY2 && my <= ovY + BY2 + BH2) {
+        const i = _GOAL_STEPS.indexOf(this._goalTarget || 0);
+        this._goalTarget = _GOAL_STEPS[(i + 1) % _GOAL_STEPS.length];
+        this._startGoalRun();
         return true;
       }
       if (mx >= s3x && mx <= s3x + RST_W && my >= ovY + BY2 && my <= ovY + BY2 + BH2) {
         if (this._scenarioCode) { this._loadScenarioCode(this._scenarioCode); this._tabToast = 1.2; this._toastMsg = 'reset'; }
+        else this._startGoalRun();
         return true;
       }
       return true; // consume clicks within overlay
@@ -2608,9 +2634,9 @@ export class SandboxGame {
 
     // Pravá strana: BUILD ⚙ | PACKS | SAVE (vždy viditelné)
     const RPADS  = 10;
-    const BLD_W  = 46;
-    const SAVE_W = 70;
-    const PKS_W  = 70;
+    const BLD_W  = 60;
+    const SAVE_W = 78;
+    const PKS_W  = 86;
     const BLD_X  = W - PAD - BLD_W;
     const PKS_X  = BLD_X - RPADS - PKS_W;
     const SAVE_X = PKS_X - RPADS - SAVE_W;
@@ -2706,6 +2732,8 @@ export class SandboxGame {
       o: this._trainingObjects.map(o => [o.type[0], Math.round(o.x), Math.round(o.y), +((o.angle||0).toFixed(2))]),
       p: this.passer.active ? [Math.round(this.passer.x), Math.round(this.passer.y), this.passer.driftSpeed ?? 1, +((this.passer.driftAngle ?? Math.PI / 2).toFixed(3))] : null,
       s: [Math.round(this.local.x), Math.round(this.local.y)],
+      k: this.local.hasPuck || this.passer.hasPuck ? null : [Math.round(this.puck.x), Math.round(this.puck.y)],   // volný puk: kde leží
+      go: this._goalTarget || 0,
       df: this._defender.active ? {
         x: Math.round(this._defender.homeX ?? this._defender.x),
         y: Math.round(this._defender.homeY ?? this._defender.y),
@@ -2744,7 +2772,13 @@ export class SandboxGame {
       } else {
         this._defender.active = false;
       }
+      if (s.k) {
+        this.local.hasPuck = false; if (!s.p) this.passer.hasPuck = false;
+        Object.assign(this.puck, { x: s.k[0], y: s.k[1], vx: 0, vy: 0, z: 0, vz: 0, faceoffTimer: 0 });
+      }
+      this._goalTarget = _GOAL_STEPS.includes(s.go) ? s.go : 0;
       this._scenarioCode = code;
+      this._startGoalRun();
     } catch { this._showInputDialog({ title: lang === 'cs' ? '⚠ Neplatný kód' : '⚠ Invalid code', defaultValue: code, readonly: true }); }
   }
 
@@ -2759,9 +2793,23 @@ export class SandboxGame {
     const code = this._generateScenarioCode();
     const list = this._loadCatalog();
     const lang = document.documentElement.lang === 'en' ? 'en' : 'cs';
-    list.unshift({ id: Date.now(), name: name || (lang === 'cs' ? 'Bez názvu' : 'Untitled'), code, created: Date.now() });
+    const nm = name || (lang === 'cs' ? 'Bez názvu' : 'Untitled');
+    // stejný obsah → nic nového, jen nahoru (název zůstane); stejný název → přepsat; jinak nový
+    let i = list.findIndex(x => x.code === code), msg;
+    if (i < 0) i = list.findIndex(x => (x.name || '').toLowerCase() === nm.toLowerCase());
+    if (i >= 0) {
+      const old = list.splice(i, 1)[0];
+      const same = old.code === code;
+      msg = same ? (lang === 'cs' ? `Už uloženo jako „${old.name}“` : `Already saved as "${old.name}"`) : (lang === 'cs' ? `Přepsáno: ${nm}` : `Overwritten: ${nm}`);
+      list.unshift({ ...old, name: same ? old.name : nm, code });
+    } else {
+      list.unshift({ id: Date.now(), name: nm, code, created: Date.now() });
+      msg = list.length > 30 ? (lang === 'cs' ? 'Uloženo (nejstarší vypadl, max 30)' : 'Saved (oldest dropped, max 30)') : (lang === 'cs' ? `Uloženo: ${nm}` : `Saved: ${nm}`);
+    }
     this._saveCatalog(list);
-    this._catalogList = list;
+    this._catalogList = list.slice(0, 30);
+    this._scenarioCode = code;
+    this._toast(msg, '#7FC4FF');
   }
   _deleteFromLibrary(id) {
     const list = this._loadCatalog().filter(s => s.id !== id);
@@ -3015,14 +3063,14 @@ export class SandboxGame {
       ctx.fillStyle = active ? 'rgba(238,244,255,0.85)' : 'rgba(238,244,255,0.45)';
       ctx.save();
       ctx.beginPath(); ctx.rect(bx + 12, by + 24, DR_BW - 24, BH); ctx.clip();
-      ctx.fillText(dDesc.desc[lang], bx + 12, by + (active ? 38 : 36));
+      ctx.fillText(_fitText(ctx, dDesc.desc[lang], DR_BW - 24), bx + 12, by + (active ? 38 : 36));
       ctx.restore();
       if (active) {
         ctx.font = '400 10px "Segoe UI",sans-serif';
         ctx.fillStyle = 'rgba(182,196,255,0.70)';
         ctx.save();
         ctx.beginPath(); ctx.rect(bx + 12, by + 40, DR_BW - 24, BH); ctx.clip();
-        ctx.fillText(dDesc.hint[lang], bx + 12, by + BH - 6);
+        ctx.fillText(_fitText(ctx, dDesc.hint[lang], DR_BW - 24), bx + 12, by + BH - 6);
         ctx.restore();
       }
       ctx.textAlign = 'right'; ctx.font = '700 10px "Segoe UI",sans-serif';
@@ -3117,7 +3165,7 @@ export class SandboxGame {
     if (BH > 40) {
       ctx.font = '700 9px "Segoe UI",sans-serif';
       ctx.fillStyle = buildOpen ? 'rgba(245,200,80,0.85)' : 'rgba(245,200,80,0.40)';
-      ctx.fillText('BUILD', BLD_X + BLD_W / 2, pY + BY + BH / 2 + 13);
+      ctx.fillText(lang === 'cs' ? 'STAVĚT' : 'BUILD', BLD_X + BLD_W / 2, pY + BY + BH / 2 + 13);
     }
 
     // ── BUILD overlay panel (nad dockem) ──
@@ -3153,7 +3201,7 @@ export class SandboxGame {
       { acc:'rgba(20,176,90,0.6)',   lbl: lang==='cs'?'KUŽEL':'CONE',     sub: lang==='cs'?'+ přidat':'+ add' },
       { acc:'rgba(232,120,0,0.6)',   lbl: lang==='cs'?'PLOCHA':'BOARD',   sub: lang==='cs'?'+ přidat':'+ add' },
       { acc:'rgba(255,60,60,0.6)',   lbl: lang==='cs'?'BRÁNIČ':'DEFENDER', sub: _defOnBld ? (lang==='cs'?'↩ odebrat':'↩ remove') : (lang==='cs'?'+ přidat':'+ add') },
-      { acc:'rgba(192,48,48,0.6)',   lbl: lang==='cs'?'VYČISTIT VŠE':'CLEAR ALL', sub: lang==='cs'?'smaže vše':'removes all' },
+      { acc:'rgba(192,48,48,0.6)',   lbl: lang==='cs'?'VYČISTIT':'CLEAR', sub: lang==='cs'?'smaže vše':'removes all' },
     ];
     for (let i = 0; i < 5; i++) {
       const bx = OBJ_X0 + i * (OBJ_BW + GAP), by = ovY + BY2;
@@ -3186,24 +3234,19 @@ export class SandboxGame {
     const objSepX = OBJ_X0 + 5*OBJ_BW + 4*GAP + Math.floor(SEP / 2);
     ctx.fillStyle = 'rgba(245,200,80,0.20)'; ctx.fillRect(objSepX, ovY + BY2 + 4, 1, BH2 - 8);
 
-    // SCENARIO buttons in overlay
+    // SCÉNÁŘ: CÍL (počet gólů, měří čas) + ↺ RESET (ULOŽIT a TRÉNINKY jsou v docku)
     const hasScen = !!this._scenarioCode;
-    const savedN2 = (this._catalogList ?? this._loadCatalog()).length;
-    const SBW  = Math.floor((SCEN_W - 2*GAP - RST_W) / 2);
-    const s1x  = SCEN_X, s2x = SCEN_X + SBW + GAP, s3x = SCEN_X + 2*(SBW+GAP);
-    // ULOŽIT
-    _btnPath(s1x, ovY + BY2, SBW, BH2);
-    ctx.fillStyle = _btnGrad(s1x, ovY+BY2, SBW, BH2, '#1A60D0', '#2A8FFF'); ctx.fill();
-    ctx.textAlign = 'center'; ctx.font = '700 12px "Segoe UI",sans-serif'; ctx.fillStyle = '#FFFFFF';
-    ctx.fillText(lang === 'cs' ? 'ULOŽIT' : 'SAVE', s1x + SBW/2, ovY + BY2 + BH2/2 + (BH2 > 32 ? -2 : 4));
-    // TRÉNINKY
-    _btnPath(s2x, ovY + BY2, SBW, BH2);
-    const catA = this._catalogOpen;
-    ctx.fillStyle = catA ? 'rgba(245,200,80,0.18)' : 'rgba(245,200,80,0.06)'; ctx.fill();
-    ctx.fillStyle = 'rgba(245,200,80,0.65)'; ctx.fillRect(s2x, ovY+BY2, 3, BH2);
-    _btnPath(s2x, ovY+BY2, SBW, BH2); ctx.strokeStyle = catA ? 'rgba(245,200,80,0.40)' : 'rgba(245,200,80,0.15)'; ctx.lineWidth = 1; ctx.stroke();
-    ctx.textAlign = 'center'; ctx.font = '700 12px "Segoe UI",sans-serif'; ctx.fillStyle = '#F0E0A0';
-    ctx.fillText(lang === 'cs' ? 'TRÉNINKY' : 'PACKS', s2x + SBW/2, ovY + BY2 + BH2/2 + (BH2 > 32 ? -2 : 4));
+    const GW = SCEN_W - GAP - RST_W, gx = SCEN_X, s3x = SCEN_X + GW + GAP;
+    const tgt = this._goalTarget || 0;
+    _btnPath(gx, ovY + BY2, GW, BH2);
+    if (tgt) { ctx.fillStyle = _btnGrad(gx, ovY + BY2, GW, BH2, '#7A5800', '#C48F00'); ctx.fill(); }
+    else { ctx.fillStyle = 'rgba(245,200,80,0.06)'; ctx.fill(); ctx.fillStyle = 'rgba(245,200,80,0.65)'; ctx.fillRect(gx, ovY + BY2, 3, BH2);
+      _btnPath(gx, ovY + BY2, GW, BH2); ctx.strokeStyle = 'rgba(245,200,80,0.15)'; ctx.lineWidth = 1; ctx.stroke(); }
+    ctx.textAlign = 'center'; ctx.font = '700 12px "Segoe UI",sans-serif'; ctx.fillStyle = tgt ? '#FFFFFF' : '#F0E0A0';
+    const gl = tgt ? (lang === 'cs' ? `CÍL: ${tgt} ${tgt < 5 ? 'GÓLY' : 'GÓLŮ'} NA ČAS` : `GOAL: ${tgt} GOALS, TIMED`) : (lang === 'cs' ? 'CÍL: BEZ CÍLE' : 'GOAL: NONE');
+    ctx.fillText(gl, gx + GW / 2, ovY + BY2 + BH2 / 2 + (BH2 > 32 ? -2 : 4));
+    if (BH2 > 32) { ctx.font = '400 9px "Segoe UI",sans-serif'; ctx.fillStyle = tgt ? 'rgba(255,255,255,0.65)' : 'rgba(245,200,80,0.55)';
+      ctx.fillText(lang === 'cs' ? 'klikni = změnit · uloží se se scénářem' : 'click = change · saved with the scenario', gx + GW / 2, ovY + BY2 + BH2 / 2 + 12); }
     // ↺ RESET
     _btnPath(s3x, ovY + BY2, RST_W, BH2);
     ctx.fillStyle = hasScen ? 'rgba(100,220,120,0.12)' : 'rgba(255,255,255,0.03)'; ctx.fill();
@@ -3213,6 +3256,31 @@ export class SandboxGame {
     ctx.fillStyle = hasScen ? '#80E890' : 'rgba(255,255,255,0.20)';
     ctx.fillText('↺', s3x + RST_W/2, ovY + BY2 + BH2/2 + (BH2 > 32 ? -1 : 5));
     if (BH2 > 32) { ctx.font = '700 9px "Segoe UI",sans-serif'; ctx.fillStyle = hasScen ? 'rgba(128,232,144,0.75)' : 'rgba(255,255,255,0.15)'; ctx.fillText('RESET', s3x + RST_W/2, ovY + BY2 + BH2/2 + 12); }
+  }
+
+  _toast(txt, col = '#7FC4FF', sec = 2) { this._toastMsg = { txt, col }; this._tabToast = sec; }
+  _startGoalRun() {
+    if (!this._goalTarget) { this._goalRun = null; return; }
+    const key = this._scenarioCode || 'free:' + this._goalTarget;
+    let best = {}; try { best = JSON.parse(localStorage.getItem('fh_scen_best') || '{}'); } catch {}
+    this._goalRun = { base: this.score.home, t: 0, done: false, best: best[key] || 0 };
+  }
+  // HUD cíle pod tabulí: „CÍL 2/5 · 0:12 · rekord 0:38“, klik/↺ = nový pokus
+  _drawGoalHud(ctx, W) {
+    const gr = this._goalRun; if (!gr || !this._goalTarget || this._isTutorial) return;
+    const L = document.documentElement.lang === 'en';
+    const n = Math.min(this._goalTarget, this.score.home - gr.base);
+    let txt = (L ? 'GOAL ' : 'CÍL ') + `${n}/${this._goalTarget} · ${_fmtT(gr.t)}`;
+    if (gr.best) txt += (L ? ' · best ' : ' · rekord ') + _fmtT(gr.best);
+    if (gr.done) txt += L ? '  ·  ↺ = again' : '  ·  ↺ = znovu';
+    ctx.save();
+    ctx.font = '700 13px "Segoe UI",sans-serif'; ctx.textAlign = 'center';
+    const tw = ctx.measureText(txt).width + 26;
+    ctx.fillStyle = gr.done ? 'rgba(122,88,0,0.92)' : 'rgba(8,12,28,0.85)';
+    ctx.beginPath(); ctx.roundRect?.(W / 2 - tw / 2, 66, tw, 24, 12); ctx.fill();
+    ctx.fillStyle = gr.done ? '#FFFFFF' : '#F5C840';
+    ctx.fillText(txt, W / 2, 83);
+    ctx.restore();
   }
 
   _handleGoal(result) {
@@ -3309,6 +3377,7 @@ export class SandboxGame {
   }
 
   _reset(clearStats = true) {
+    if (this._goalRun) this._startGoalRun();   // R = nový pokus o cíl
     const cx = RINK.centerX, cy = RINK.h / 2;
     const p = this.local;
     p.vx = p.vy = 0;
