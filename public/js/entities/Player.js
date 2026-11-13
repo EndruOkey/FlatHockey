@@ -926,8 +926,9 @@ function _kickPuck(p, blade) {
 //  • hlava míří za kurzorem s malým zpožděním (vůči tělu, max ±head rad); v klidu jemné dýchání.
 // st = stav kresby (mutuje _bp*); o = { b, x, y, vx, vy, ba, aim, dcv, sw (průběh švihu 0..1, < 0 = žádný), hasPuck, hnd, stagT, stagDir, swing }
 // → { ux, uy (posun horního těla vůči bokům, lokál, svět. j.), tw (natočení ramen navíc, rad), hd (natočení hlavy vůči tělu), sway (horní ruka napříč, j.) }
-export const BODY_B1 = { k: 0.014, umax: 0.42, aMax: 700, rate: 10, w: 14, z: 0.55, jolt: 3500, jk: 0.35, jMax: 40, stagV: 26, stagW: 5,
-  twStride: 0.12, sway: 0.13, wind: 0.5, windU: 0.14, follow: 0.35, pass: 0.24, passT: 0.2, breath: 0.05, breathT: 2.8, head: 0.6, headRate: 12 };
+// 2026-11-13: amplitudy × ~1,7 (Ondřej: „hráč je furt moc strohý" — v 1× byl rozdíl B0/B1 skoro neviditelný, 2–4 px)
+export const BODY_B1 = { k: 0.024, umax: 0.7, aMax: 700, rate: 10, w: 14, z: 0.55, jolt: 3500, jk: 0.5, jMax: 60, stagV: 40, stagW: 7,
+  twStride: 0.2, sway: 0.22, wind: 0.7, windU: 0.24, follow: 0.5, pass: 0.35, passT: 0.2, breath: 0.055, breathT: 2.8, head: 0.6, headRate: 12 };
 export function bodyPose(st, o, dt = 1 / 60) {
   const out = { ux: 0, uy: 0, tw: 0, hd: 0, sway: 0 };
   if (!o.b) { st._bpPv = null; return out; }
