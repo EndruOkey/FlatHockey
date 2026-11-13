@@ -498,6 +498,12 @@ export class Goalie {
       if (r.y < 0 || r.high) gy += clamp(r.y + 7.5, -4, 4) - (r.high ? 1.5 : 0); else by += clamp(r.y - 7.5, -4, 4);
     }
     A.hx = spring(A.hx, hx, A.react ? 40 : 12); A.gy = spring(A.gy, gy, A.react ? 40 : 12); A.by = spring(A.by, by, A.react ? 40 : 12);
+    // HOKEJKA (2026-11-13, jen kresba): čepel drží led před betony a lehce sleduje puk; při nízké střele jde čepel k místu
+    // dopadu (−6…+3,5 px) a vpřed; po zákroku (odskok) se vrátí doprostřed = zakryje five-hole. Lokál: −X k puku, +Y dolů.
+    let sx = -0.6 * set, sy = clamp(dyP / 20, -1, 1) * 1.2;
+    if (A.react && A.react.t >= ANIM_LAT && !A.react.high) { sx -= 1.5; sy = clamp(A.react.y, -6, 3.5); }   // k vyrážečce méně: dřík by se zkrátil do „L", kryje tam vyrážečka
+    if (A.rec > 0.3) { sx = -0.5; sy = 0; }
+    A.sx = spring(A.sx || 0, sx, A.react ? 40 : 12); A.sy = spring(A.sy || 0, sy, A.react ? 40 : 12);
     A.crouch += (set - A.crouch) * k(1 / 0.15 * 3);
     A.rec = Math.max(0, A.rec - 6 * dt * Math.max(0.3, A.rec));
     // mikrokroky: každé 3 px posunu jeden krok (střídavě pady „kopnou")
@@ -881,7 +887,7 @@ export class Goalie {
     ctx.save();
     ctx.scale(s, s);
     skinGoalie(ctx, G, goalieKit(this, baseColor), {
-      stance: holding ? 'cover' : this.stance, tilt: this._tilt, recoil: recoil + (A ? A.rec * 1.5 : 0), holding, inX: this.inX, drawPuck: false,
+      stance: holding ? 'cover' : this.stance, tilt: this._tilt, recoil: recoil + (A ? A.rec * 1.5 : 0), holding, inX: this.inX, drawPuck: false, stickX: A ? A.sx || 0 : 0, stickY: A ? A.sy || 0 : 0,
       padFlash: type === 'pads' ? flash : 0, blockFlash: type === 'blocker' ? flash : 0, gloveFlash: (type === 'glove' || type === 'cover') ? flash : 0,
     });
     ctx.restore();

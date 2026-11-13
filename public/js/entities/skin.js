@@ -197,7 +197,7 @@ export function skinGoalie(c, G, K, o) {
   const bmS = new DOMMatrix().translate(G.bodyX + (o.recoil || 0), G.bodyY).rotate((o.tilt || 0) * 180 / Math.PI);
   let stk = null;
   if (cover) { const h = bmS.transformPoint({ x: G.handX + 2, y: G.blockY + 1 }); stk = { hx: h.x, hy: h.y, b0: { x: -1, y: 18 }, b1: { x: -6.5, y: 19.5 } }; }
-  else { const h = bmS.transformPoint({ x: G.handX, y: G.blockY }), hx = h.x, hy = h.y, bx = Math.min(hx - 5, -9); stk = { hx, hy, b0: { x: bx, y: hy * 0.55 }, b1: { x: bx - 0.6, y: hy * 0.55 - 7.5 * Math.sign(hy || 1) } }; }
+  else { const h = bmS.transformPoint({ x: G.handX, y: G.blockY }), hx = h.x, hy = h.y, bx = Math.min(hx - 5, -9); const ox = o.stickX || 0, oy = o.stickY || 0; stk = { hx, hy, b0: { x: bx + ox, y: hy * 0.55 + oy }, b1: { x: bx - 0.6 + ox, y: hy * 0.55 - 7.5 * Math.sign(hy || 1) + oy } }; }   // o.stickX/Y = animace čepele (Goalie._animUpdate)
   // pady (rámec padu jako Goalie.js _gPad)
   const padPaths = G.pads.map(pd => { const P = new Path2D(), m = new DOMMatrix().translate(pd.kx, pd.ky).rotate(pd.angle * pd.dir * 180 / Math.PI), q = new Path2D(); q.roundRect(-pd.pw / 2, pd.dir > 0 ? 0 : -pd.ph, pd.pw, pd.ph, 2.4); P.addPath(q, m); return P; });
   // tělo v rámci těla (translate bodyX/Y, rotate tilt) — sestavíme cesty v lokálu gólmana přes matici
@@ -212,20 +212,19 @@ export function skinGoalie(c, G, K, o) {
   const glove = new Path2D(); { const q = new Path2D(); ellP(q, G.handX, G.gloveY, 3.5 * 1.1, 3.8 * 1.1); const cuffQ = new Path2D(); cuffQ.roundRect(G.handX + 1.3 * 1.1, G.gloveY - 2.4 * 1.1, 3.2 * 1.1, 4.8 * 1.1, 1.2); q.addPath(cuffQ); glove.addPath(q, bm); }
   const block = new Path2D(); { const q = new Path2D(); q.roundRect(G.handX - 1.6 * 1.1, G.blockY - 3.5 * 1.1, 2.8 * 1.1, 7 * 1.1, 0.9); q.roundRect(G.handX + 0.8, G.blockY - 1.6, 2.6, 3.2, 0.9); block.addPath(q, bm); }
   const all = new Path2D(); for (const p of padPaths) all.addPath(p); all.addPath(B); all.addPath(M); all.addPath(glove); all.addPath(block);
+  // HOKEJKA v2 (2026-11-13, Ondřej: čepel = tmavý špalek, dřík tlustý dvoubarevný): tenká plochá čepel s omotávkou,
+  // jednobarevný tenký dřík, rozšířená brankářská část (paddle) u čepele. o.stickStyle 'a' tmavá / 'b' bílá / 'c' týmová.
+  const SS = { a: { st: '#23272f', tp: '#f4f6fa' }, b: { st: '#eef1f5', tp: '#23272f' }, c: { st: K.padAccent, tp: '#f4f6fa' } }[o.stickStyle || 'a'];
+  const pq = t => ({ x: stk.b0.x + (stk.hx - stk.b0.x) * t, y: stk.b0.y + (stk.hy - stk.b0.y) * t }), pE = pq(0.42);
+  const seg = (a, b, w, col) => { c.strokeStyle = col; c.lineWidth = w; c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.stroke(); };
   // 1) obrys jednou: hokejka + celé tělo s pady
-  c.lineCap = 'round'; c.lineJoin = 'round'; c.strokeStyle = SKIN_OUT;
-  c.lineWidth = 4.6; c.beginPath(); c.moveTo(stk.b0.x, stk.b0.y); c.lineTo(stk.b1.x, stk.b1.y); c.stroke();
-  c.lineWidth = 3.4; c.beginPath(); c.moveTo(stk.b0.x, stk.b0.y); c.lineTo(stk.hx, stk.hy); c.stroke();
-  if (!lod) { const q = t => ({ x: stk.b0.x + (stk.hx - stk.b0.x) * t, y: stk.b0.y + (stk.hy - stk.b0.y) * t }), a = q(0.2), z = q(0.6);   // zesílený úsek dříku u paže = žádná díra hůl–paže (v 1× nevzniká)
-    c.lineWidth = 6.0; c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(z.x, z.y); c.stroke(); }
-  c.lineWidth = 2.0; c.stroke(all);
-  // 2) hokejka
-  const dx = stk.b1.x - stk.b0.x, dy = stk.b1.y - stk.b0.y;
-  c.strokeStyle = '#1b1f27'; c.lineWidth = 3.0; c.beginPath(); c.moveTo(stk.b0.x, stk.b0.y); c.lineTo(stk.b1.x, stk.b1.y); c.stroke();
-  if (!lod) { c.strokeStyle = 'rgba(244,246,250,0.9)'; c.lineWidth = 1.0; c.beginPath(); c.moveTo(stk.b0.x + dx * 0.55, stk.b0.y + dy * 0.55); c.lineTo(stk.b1.x, stk.b1.y); c.stroke(); }
-  const px = stk.b0.x + (stk.hx - stk.b0.x) * 0.45, py = stk.b0.y + (stk.hy - stk.b0.y) * 0.45;
-  c.strokeStyle = K.padAccent; c.lineWidth = 2.6; c.beginPath(); c.moveTo(stk.b0.x, stk.b0.y); c.lineTo(px, py); c.stroke();
-  c.strokeStyle = '#1b1f27'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(px, py); c.lineTo(stk.hx, stk.hy); c.stroke();
+  c.lineCap = 'round'; c.lineJoin = 'round';
+  seg(stk.b0, stk.b1, 2.9, SKIN_OUT); seg(stk.b0, pE, 3.3, SKIN_OUT); seg(pE, { x: stk.hx, y: stk.hy }, 2.4, SKIN_OUT);
+  c.strokeStyle = SKIN_OUT; c.lineWidth = 2.0; c.stroke(all);
+  // 2) hokejka: čepel (plochá, omotávka), paddle, dřík
+  seg(stk.b0, stk.b1, 1.7, SS.st);
+  if (!lod) seg({ x: stk.b0.x + (stk.b1.x - stk.b0.x) * 0.2, y: stk.b0.y + (stk.b1.y - stk.b0.y) * 0.2 }, stk.b1, 0.9, SS.tp);
+  seg(stk.b0, pE, 2.1, SS.st); seg(pE, { x: stk.hx, y: stk.hy }, 1.2, SS.st);
   // 3) betony: výplň + válce/bloky (záměrné linky výstroje)
   G.pads.forEach((pd, i) => {
     c.fillStyle = o.padFlash > 0 ? 'rgba(200,220,255,0.98)' : K.pad; c.fill(padPaths[i]);
