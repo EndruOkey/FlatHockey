@@ -3,7 +3,7 @@
 // k = bruslení (0 dřívější, 1 krok do stran, 2 velký odraz + skluz, 3 plynulý krok s odrazem ven a přenosem váhy = výchozí), h = hlava (0 v barvě dresu, 1 oddělená helma, 2 světlá helma jako dřív),
 // b = tělo (0 dřívější: jen přenos váhy K3, 1 živé tělo: náklon do zrychlení/zatáčky, protirotace ramen, nápřah, švih, hlava za kurzorem, trhnutí, dýchání = výchozí).
 // Objekt se čte každý snímek → změna z dev panelu platí hned.
-export const DEFAULT_VIS = { g: 12, s: 3, k: 3, h: 1, p: 1, b: 1, o: 0 };   // o = čitelnost postav (0 dnes, 1 lem, 2 lem + stín)   // 2026-11-12 Ondřej: hlava oddělená (H1), hokejka dnešní štíhlejší (S3); bruslení K3 plynulý krok (scripts/skate_anim_metrics.mjs)   // p = kresba výšky puku (0 šikmo nahoru, 1 shora: zvětšení + stín = jako branka)
+export const DEFAULT_VIS = { g: 12, s: 3, k: 3, h: 1, p: 1, b: 1 };   // 2026-11-12 Ondřej: hlava oddělená (H1), hokejka dnešní štíhlejší (S3); bruslení K3 plynulý krok (scripts/skate_anim_metrics.mjs)   // p = kresba výšky puku (0 šikmo nahoru, 1 shora: zvětšení + stín = jako branka)
 // JEDNO PRAVIDLO VÝŠKY (kamera kolmo shora): výška = zvětšení (ve výšce břevna × (1 + k)) + stín odsunutý od světla (vlevo nahoře).
 // Branka G3 i puk ho sdílejí → puk ve výšce břevna je stejně velký a má stín stejně daleko jako břevno.
 export const HGT = { k: 0.25, lx: 0.45, ly: 0.6 };                // k = zvětšení na břevnu; lx, ly = posun stínu na 1 px výšky

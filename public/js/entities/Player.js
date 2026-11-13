@@ -1440,7 +1440,7 @@ function _renderPlayerUp(ctx, p, cam) {
     // DRES V RYCHLOSTI (2026-11-13): zadní lem se táhne proti jízdě a vlaje v rytmu kroku (fáze z ujeté dráhy → deterministické)
     const _jk = Math.max(0, Math.min(1, (_spd / PLAYER.speed - 0.35) / 0.65)), _jm = _k === 3 ? (p._mLocS ?? _mLoc) : _mLoc;   // trup se v skinBody neotáčí o tw → směr vůči trupu = mLoc
     const _jd = _jk > 0 && VIS.b ? { mx: Math.cos(_jm), my: Math.sin(_jm), k: _jk, fl: Math.sin(2 * (p._skatePhase ?? 0)) } : null;
-    skinBody(ctx, { feet: feetW.map(f => ({ x: f.x - bo.x, y: f.y - bo.y, side: f.side })), top: toL(topH), bot: toL(botH), hnd: p.handed ?? 1, tw: bo.tw + _bp.tw, ux: _bp.ux, uy: _bp.uy, hd: _bp.hd, lx: llx, ly: lly, jd: _jd, sep: VIS.o | 0 }, K);
+    skinBody(ctx, { feet: feetW.map(f => ({ x: f.x - bo.x, y: f.y - bo.y, side: f.side })), top: toL(topH), bot: toL(botH), hnd: p.handed ?? 1, tw: bo.tw + _bp.tw, ux: _bp.ux, uy: _bp.uy, hd: _bp.hd, lx: llx, ly: lly, jd: _jd }, K);
     ctx.restore();
   }
 

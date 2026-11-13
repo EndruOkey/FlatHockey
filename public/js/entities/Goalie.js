@@ -3,7 +3,6 @@ import { clamp } from '../utils.js';
 import { t } from '../i18n.js';
 import { defaultRng } from '../rng.js';
 import { skinGoalie, goalieKit } from './skin.js';
-import { VIS } from '../vis.js';
 
 // ── Save profil (naškálováno na reálnou branku 6 ft = 32px) ───────────────
 const COVER_H  = 14;  // vizuální pady sahají ~13px od středu + puk radius 3 = ~16px effective
@@ -882,7 +881,7 @@ export class Goalie {
     ctx.save();
     ctx.scale(s, s);
     skinGoalie(ctx, G, goalieKit(this, baseColor), {
-      stance: holding ? 'cover' : this.stance, tilt: this._tilt, recoil: recoil + (A ? A.rec * 1.5 : 0), holding, inX: this.inX, drawPuck: false, sep: VIS.o | 0,
+      stance: holding ? 'cover' : this.stance, tilt: this._tilt, recoil: recoil + (A ? A.rec * 1.5 : 0), holding, inX: this.inX, drawPuck: false,
       padFlash: type === 'pads' ? flash : 0, blockFlash: type === 'blocker' ? flash : 0, gloveFlash: (type === 'glove' || type === 'cover') ? flash : 0,
     });
     ctx.restore();
