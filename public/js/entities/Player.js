@@ -353,7 +353,7 @@ export class PlayerBase {
     const manoeuvrability = clamp(ad / 60, 0, 1);  // 0=kurzor na hráči, 1=kurzor daleko
     const spd  = Math.hypot(this.vx, this.vy);
     const baseRate = 14 - Math.min(1, spd / 180) * 7;
-    const rate = baseRate * (1.4 - 0.4 * manoeuvrability) * dt;  // blízko = rychlejší rotace hole
+    const rate = baseRate * (1.4 - 0.4 * manoeuvrability) * dt * ((this.charge ?? 0) > 0.05 ? PLAYER.chargeTurnK : 1);  // blízko = rychlejší rotace hole; nápřah = pomaleji
     const prevCarry = this.carryAngle;
     this.carryAngle += clamp(angleDiff(targetAbs, this.carryAngle), -rate, rate);
     const rel = angleDiff(this.carryAngle, this.bodyAngle);
@@ -617,7 +617,8 @@ export class PlayerBase {
     const targetBodyAngle = down ? this.skateAngle : crossChecking
       ? (hasInput ? Math.atan2(iy, ix) : this.bodyAngle)
       : this.aimAngle;
-    const bodyLerpRate = this._stagT > 0 ? 2.5 : rising ? 6 : crossChecking ? 9 : 14;   // otřesený hráč se srovnává pomalu
+    // NÁPŘAH (2026-11-13, Ondřej: „při chargování se jde až moc otáčet, mělo by jít méně"): tělo i hůl × chargeTurnK
+    const bodyLerpRate = (this._stagT > 0 ? 2.5 : rising ? 6 : crossChecking ? 9 : 14) * (charging ? PLAYER.chargeTurnK : 1);   // otřesený hráč se srovnává pomalu
     const _prevSkateAngle = this.skateAngle;
     this.skateAngle = lerpAngle(this.skateAngle, targetBodyAngle, Math.min(1, bodyLerpRate * dt));
     // ŽÁDNÁ HELIKOPTÉRA (2026-11-13, Ondřej: „točit se dokola myší = nepřirozená rotace"): souvislé otáčení JEDNÍM směrem
@@ -626,10 +627,11 @@ export class PlayerBase {
     if (!down) {
       let dTh = angleDiff(this.skateAngle, _prevSkateAngle), sp0 = this._spin || 0;
       const dTg = this._prevTgt != null ? angleDiff(targetBodyAngle, this._prevTgt) : 0;   // kam se točí CÍL (myš), ne tělo
-      if (Math.abs(sp0) >= PLAYER.spinFree) {
+      const spF = PLAYER.spinFree * (charging ? PLAYER.chargeTurnK : 1), spS = PLAYER.spinSlow * (charging ? 0.6 : 1);
+      if (Math.abs(sp0) >= spF) {
         // omezený: myš krouží dál stejným směrem → tělo pokračuje stropem tím směrem (i když je cíl „předběhnutý");
         // myš se otočila opačně → omezení pryč; myš stojí → tělo dojede k cíli stropovou rychlostí
-        const lim = PLAYER.spinSlow * dt;
+        const lim = spS * dt;
         if (dTg * sp0 > 0) { dTh = Math.sign(sp0) * lim; this.skateAngle = _prevSkateAngle + dTh; }
         else if (dTg * sp0 < 0 && Math.abs(dTg) > 0.01) sp0 = 0;   // práh: chvění myši není změna směru
         else if (Math.abs(dTh) > lim) { dTh = Math.sign(dTh) * lim; this.skateAngle = _prevSkateAngle + dTh; }
@@ -637,7 +639,7 @@ export class PlayerBase {
       this._prevTgt = targetBodyAngle;
       sp0 += dTh;
       const rec = PLAYER.spinRec * dt; sp0 = Math.abs(sp0) <= rec ? 0 : sp0 - Math.sign(sp0) * rec;
-      this._spin = clamp(sp0, -PLAYER.spinFree - 1.5, PLAYER.spinFree + 1.5);
+      this._spin = clamp(sp0, -spF - 1.5, spF + 1.5);
     } else this._spin = 0;
     // Zakolísání: tělo se po zásahu stočí po směru úderu (oblouk stagSpin rad, plynule zpět)
     if (this._stagT > 0) this.skateAngle += this._stagDir * 2 * PLAYER.stagSpin / PLAYER.stagT * (this._stagT / PLAYER.stagT) * dt;   // lineárně doznívá, celkem stagSpin rad

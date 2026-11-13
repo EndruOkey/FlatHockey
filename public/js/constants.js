@@ -34,7 +34,7 @@ export const PLAYER = {
   accel: 140,      // rozjezd — pomalejší, hráč rychlost BUDUJE (víc setrvačnosti, míň frantického svištění
                    // při plném hřišti); top speed zůstává, takže bot pořád obere nosiče (stall guardrail OK)
   decel: 70,       // skluz při puštění (glide), ale kontrolovatelný
-  spinFree: _penv('FH_SPINFREE', 4.7), spinSlow: _penv('FH_SPINSLOW', 2.5), spinRec: _penv('FH_SPINREC', 1.5),   // anti-helikoptéra: volné otočení (rad, ¾ ot.), pak strop rad/s; odtok rad/s
+  spinFree: _penv('FH_SPINFREE', 4.7), spinSlow: _penv('FH_SPINSLOW', 2.5), spinRec: _penv('FH_SPINREC', 1.5), chargeTurnK: _penv('FH_CHTURN', 0.4),   // anti-helikoptéra: volné otočení (rad, ¾ ot.), pak strop rad/s; odtok rad/s
   turnRate: 3.8,   // rotace — střed: ovladatelná, ne těžkopádná ani twitchy
   stickLen: _penv('FH_STICK', 16),    // dosah hole na puk (= balanc, NEzkracovat: 14 rozbilo bot_1v1 a stall). Vizuální délka se krátí zvlášť přes stickDraw.
   stickDraw: _penv('FH_STICKDRAW', 0.86),   // jen VIZUÁLNÍ zkrácení kreslené hole (dřík+čepel), nemění dosah/pickup → hůl nepůsobí dlouhá u menšího těla
