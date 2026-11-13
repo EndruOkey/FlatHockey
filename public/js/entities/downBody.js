@@ -162,15 +162,19 @@ export function drawDownBody(c, P, K, R, o = {}) {
     const len = Math.max(R * 1.1, Math.hypot(hx - fx, Y('hd') - (Y('rf') + Y('lf')) / 2) / 2 + R * 0.5);
     const a = Math.atan2(Y('hd') - (Y('rf') + Y('lf')) / 2, hx - fx);
     c.beginPath(); c.ellipse(cx + 1.5, cy + 2, len, R * 1.05, a, 0, Math.PI * 2); c.fillStyle = 'rgba(0,0,0,0.22)'; c.fill(); void px; }
-  // hokejka na ledě (pod tělem)
+  // hokejka na ledě (pod tělem) — 2026-11-13: jako hůl stojícího hráče (S3): dřík s koncovkou, čepel zahnutá křivkou s háčkem, páska
   { const L = o.stickL ?? R * 2.0, a = P.sta, mx = X('st'), my = Y('st'), ca = Math.cos(a), sa = Math.sin(a);
-    const gx = mx - ca * L / 2, gy = my - sa * L / 2, bx = mx + ca * L / 2, by = my + sa * L / 2, bs = o.bladeSide ?? 1, ba = a + bs * 1.25;
-    const ex = bx + Math.cos(ba) * R * 1.05, ey = by + Math.sin(ba) * R * 1.05;
+    const gx = mx - ca * L / 2, gy = my - sa * L / 2, bx = mx + ca * L / 2, by = my + sa * L / 2, bs = o.bladeSide ?? 1;
+    const ba = a + bs * 0.55, BL = R * 1.15;                                                     // čepel: mírný úhel k dříku (lež hole)
+    const ex = bx + Math.cos(ba) * BL, ey = by + Math.sin(ba) * BL;
+    const qx = bx + ca * BL * 0.55, qy = by + sa * BL * 0.55;                                  // řídicí bod = háček čepele
     c.lineCap = 'round'; c.lineJoin = 'round';
-    c.strokeStyle = SKIN_OUT; c.lineWidth = 3.6; c.beginPath(); c.moveTo(gx, gy); c.lineTo(bx, by); c.lineTo(ex, ey); c.stroke();
-    c.strokeStyle = K.stick; c.lineWidth = 2.0; c.beginPath(); c.moveTo(gx, gy); c.lineTo(bx, by); c.stroke();
-    c.strokeStyle = K.tape; c.lineWidth = 2.2; c.beginPath(); c.moveTo(bx, by); c.lineTo(ex, ey); c.stroke();
-    c.strokeStyle = K.tape; c.lineWidth = 2.2; c.beginPath(); c.moveTo(gx, gy); c.lineTo(gx + ca * R * 0.45, gy + sa * R * 0.45); c.stroke(); }   // omotávka nahoře
+    c.strokeStyle = SKIN_OUT; c.lineWidth = 4.1; c.beginPath(); c.moveTo(gx, gy); c.lineTo(bx, by); c.stroke();
+    c.lineWidth = 4.3; c.beginPath(); c.moveTo(bx, by); c.quadraticCurveTo(qx, qy, ex, ey); c.stroke();
+    c.strokeStyle = K.stick; c.lineWidth = 2.4; c.beginPath(); c.moveTo(gx + ca * R * 0.4, gy + sa * R * 0.4); c.lineTo(bx, by); c.stroke();
+    c.strokeStyle = K.tape; c.lineWidth = 2.5; c.beginPath(); c.moveTo(bx, by); c.quadraticCurveTo(qx, qy, ex, ey); c.stroke();
+    c.strokeStyle = K.tape; c.lineWidth = 2.4; c.beginPath(); c.moveTo(gx, gy); c.lineTo(gx + ca * R * 0.4, gy + sa * R * 0.4); c.stroke();   // omotávka nahoře
+    c.beginPath(); c.arc(gx, gy, 1.5, 0, Math.PI * 2); c.fillStyle = SKIN_OUT; c.fill(); }   // koncovka
   // brusle
   for (const sd of ['r', 'l']) skate(c, X(sd + 'f'), Y(sd + 'f'), P[sd + 'fa'], P.fsh, R, K);
   // sjednocená cesta těla: štulpny (koleno→brusle), stehna (kyčel→koleno), kalhoty, trup, ramena, paže, rukavice, helma

@@ -448,8 +448,8 @@ export const GOAL_REAL = {
        post: 3.2, pipe: 2.0, out: 3.7, baseOut: 'rgb(100,118,146)', topPipe: 2.4, topOut2: 1.8, mesh: 7.5, meshA: 0.18, meshB: 0.31 },
   9: { depth: 24.4, halfBack: 28.5, r: 14, flare: 6, topDepth: 13.4, topOut: 0, topR: 8, top: false,
        post: 3.2, pipe: 3.0, out: 4.8, topPipe: 0, topOut2: 0, mesh: 7.5, meshA: 0.22 },
-  10: { depth: 24.4, halfBack: 28.5, r: 14, flare: 6, topDepth: 13.4, topOut: 0, topR: 8, top: true,
-       post: 3.2, pipe: 2.6, out: 4.4, topPipe: 2.2, topOut2: 1.8, mesh: 7.5, meshA: 0.22 },
+  10: { depth: 24.4, halfBack: 28.5, r: 14, flare: 6, topDepth: 13.4, topOut: 0, topR: 8, top: true, topA: 0.55,   // 2026-11-13: horní rám tenký a ztlumený (působil jako tyč)
+       post: 3.2, pipe: 2.6, out: 4.4, topPipe: 1.2, topOut2: 0.9, mesh: 7.5, meshA: 0.22 },
 };
 // tvar D: tyčka (u=0, ±half) → bok kvadratikou ven a dozadu do (side, ±hb) → záda jednou kubikou přes (depth, 0)
 function _dPath(x, dir, cy, half, hb, side, sideCtl, depth, s) {
@@ -506,8 +506,10 @@ function _drawGoalReal(ctx, s, x, dir, y1, y2, postColor, Hs, part, G) {
   ctx.strokeStyle = '#eef3f9'; ctx.lineWidth = G.pipe * s; ctx.stroke(base);
   // horní rám (výš, mělčí): trubka v barvě týmu → hloubka a čitelný tvar
   if (G.top) {
+    ctx.save(); ctx.globalAlpha *= G.topA ?? 1;
     ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = (G.topPipe + G.topOut2) * s; ctx.stroke(top);
     ctx.strokeStyle = postColor; ctx.lineWidth = G.topPipe * s; ctx.stroke(top);
+    ctx.restore();
   }
   // břevno přes ústí + silné tyčky s odleskem
   ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = (G.pipe + 2) * s; ctx.beginPath(); ctx.moveTo(x, y1); ctx.lineTo(x, y2); ctx.stroke();
