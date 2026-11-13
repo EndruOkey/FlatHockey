@@ -1540,7 +1540,6 @@ function _renderPlayerUp(ctx, p, cam) {
     ctx.fillText(label, sx, by + ph / 2 + 1.5 * s);
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     if (p.founder) _drawCrown(ctx, sx - pw / 2 - 9 * s, by + ph / 2, 7.5 * s);   // korunka vlevo od štítku
-    if (p.badge) drawBadge(ctx, p.badge, sx + pw / 2 + 2 * s, by + ph / 2, 10 * s);   // původ hráče vpravo od štítku
   } else
   // Jméno nad hráčem — v barvě týmu, jemný obrys pro čitelnost (tenké)
   if (p.name) {
@@ -1554,25 +1553,8 @@ function _renderPlayerUp(ctx, p, cam) {
     ctx.fillStyle = p.teamMark || color;   // rychlá hra: jméno v barvě týmu, ne vlastního dresu
     ctx.fillText(p.name, sx, ny);
     if (p.founder) _drawCrown(ctx, sx - ctx.measureText(p.name).width / 2 - 8 * s, ny - 3 * s, 7 * s);   // korunka vlevo od jména
-    if (p.badge) drawBadge(ctx, p.badge, sx + ctx.measureText(p.name).width / 2 + 2 * s, ny - 3.2 * s, 8.5 * s);   // původ vpravo od jména
     ctx.textAlign = 'left';
   }
-}
-
-// IKONKA PŮVODU (2026-11-13): odkud hráč je. Plná = účet (Discord / CrazyGames), obrys = host (itch.io / CrazyGames / web).
-// Kódy ze serveru (db.js userBadge): d c i g w. Stejné barvy a zkratky má žebříček (main.js, .pb-*). (x,y) = levý střed, h = výška.
-export const BADGES = { d: { c: '#5865F2', t: 'D', fill: true }, c: { c: '#7A3CFF', t: 'CG', fill: true },
-  g: { c: '#9B7BFF', t: 'CG', fill: false }, i: { c: '#FA5C5C', t: 'itch', fill: false }, w: { c: '#9aa3b2', t: 'WEB', fill: false } };
-export function drawBadge(ctx, code, x, y, h) {
-  const B = BADGES[code]; if (!B) return;
-  ctx.save();
-  ctx.font = `800 ${Math.round(h * 0.68)}px 'Segoe UI', sans-serif`;
-  const w = Math.max(h, ctx.measureText(B.t).width + h * 0.5), top = y - h / 2;
-  ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, top, w, h, h * 0.25); else ctx.rect(x, top, w, h);
-  if (B.fill) { ctx.fillStyle = B.c; ctx.fill(); } else { ctx.fillStyle = 'rgba(8,12,20,0.75)'; ctx.fill(); ctx.strokeStyle = B.c; ctx.lineWidth = Math.max(1, h * 0.1); ctx.stroke(); }
-  ctx.fillStyle = B.fill ? '#fff' : B.c; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText(B.t, x + w / 2, y + h * 0.04);
-  ctx.restore();
 }
 
 // Malá vektorová korunka (titul Founder) — jantarová, 3 hroty. (x,y) = levý střed, w = šířka.

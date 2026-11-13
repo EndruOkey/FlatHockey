@@ -18,7 +18,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { mountDev } from './dev-gate.js';
 import authRouter, { linkRouter, verifySession, requireAuth, bearerToken, createGuestAccount } from './auth.js';
-import { updateStats, updateRankAndCredits, getRankPosition, getLeaderboard, getStoreItems, getUserUnlocks, buyItem, getPuckCredits, getActiveSeason, logMetric, cleanOldMetrics, recordReferral, rewardReferralIfPending, isFounder, getUserById, userBadge, isGuestUser } from './db.js';
+import { updateStats, updateRankAndCredits, getRankPosition, getLeaderboard, getStoreItems, getUserUnlocks, buyItem, getPuckCredits, getActiveSeason, logMetric, cleanOldMetrics, recordReferral, rewardReferralIfPending, isFounder, getUserById, isGuestUser } from './db.js';
 
 import { World } from './public/js/world.js';
 import { Player } from './public/js/entities/Player.js';
@@ -289,7 +289,6 @@ function serverGameOver(match) {
 function buildPlayer(lobby, sid, m) {
   const p = new Player(sid, m.team, makeInput());
   p.name   = m.name;
-  p._badge = m.badge || '';
   p.handed = m.handed;
   p.num    = m.number;
   const ts = lobby.settings.teams[m.team] || {};
@@ -407,7 +406,7 @@ function snapPlayers(match) {
   for (const [id, p] of match.players) {
     const inp = match.inputs.get(id);
     players.push({
-      id, team: p.team, nm: p.name || '', fn: p._founder ? 1 : 0, bg: p._badge || '', sq: (inp && inp._sq) || 0,
+      id, team: p.team, nm: p.name || '', fn: p._founder ? 1 : 0, sq: (inp && inp._sq) || 0,
       x: r1(p.x), y: r1(p.y), ba: r3(p.bodyAngle), aa: r3(p.aimAngle), ca: r3(p.carryAngle),
       sd: r3(p._stickDisp), dr: r1(p._dispReach), dc: r2(p._dispCharge),
       fh: p.forehand ? 1 : 0, hp: p.hasPuck ? 1 : 0, ch: r2(p.charge),
@@ -493,7 +492,7 @@ function memberFor(socket, profile, team) {
   let guest = true;
   try { guest = !uid || isGuestUser(uid); } catch {}
   const m = makeMember(guest ? { handed: profile?.handed, code: profile?.code } : profile, team);
-  if (uid) { try { const u = getUserById(uid); if (u?.display_name) m.name = u.display_name; m.badge = userBadge(uid); } catch {} }
+  if (uid) { try { const u = getUserById(uid); if (u?.display_name) m.name = u.display_name; } catch {} }   // ikonka původu jen ve statistikách (Ondřej), ve hře jen barva týmu
   m.guest = guest;
   return m;
 }

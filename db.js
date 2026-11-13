@@ -294,14 +294,7 @@ export const createGuestUser = db.transaction((did, display_name = 'Hráč' + ra
   return id;
 });
 
-/** Ikonka původu hráče: 'd' Discord, 'c' CrazyGames účet, 'i' host z itch.io, 'g' host na CrazyGames, 'w' host z webu. */
-export function userBadge(user_id) {
-  if (!user_id) return '';
-  if (userHasIdentity(user_id, 'discord')) return 'd';
-  if (userHasIdentity(user_id, 'crazygames')) return 'c';
-  const src = db.prepare('SELECT source FROM users WHERE id = ?').get(user_id)?.source;
-  return src === 'itch' ? 'i' : src === 'cg' ? 'g' : 'w';
-}
+// users.source zůstává (odkud účet přišel) — pro statistiky portálů; ikonka v žebříčku se počítá v getLeaderboard
 // (setGuestName odstraněno 2026-11-13: host se nepřejmenovává — jméno přidělí server, účet má jméno z Discordu/CrazyGames)
 
 /**
