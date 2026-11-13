@@ -511,13 +511,14 @@ function _drawGoalReal(ctx, s, x, dir, y1, y2, postColor, Hs, part, G) {
     ctx.strokeStyle = postColor; ctx.lineWidth = G.topPipe * s; ctx.stroke(top);
     ctx.restore();
   }
-  // břevno přes ústí + silné tyčky s odleskem
-  ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = (G.pipe + 2) * s; ctx.beginPath(); ctx.moveTo(x, y1); ctx.lineTo(x, y2); ctx.stroke();
-  ctx.strokeStyle = postColor; ctx.lineWidth = G.pipe * s; ctx.stroke();
-  for (const yy of [y1, y2]) {
-    ctx.beginPath(); ctx.arc(x, yy, G.post * s, 0, Math.PI * 2); ctx.fillStyle = postColor; ctx.fill(); ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = 1.2 * s; ctx.stroke();
-    ctx.beginPath(); ctx.arc(x - 1.0 * s, yy - 1.0 * s, 1.0 * s, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.fill();
-  }
+  // přední tyč = JEDNA souvislá trubka (tyčka–břevno–tyčka), zaoblené konce, jeden obrys, odlesk po délce (2026-11-13:
+  // dřív dva kroužky s vlastním obrysem + úsečka mezi = „dvě tyče a tyč mezi")
+  const tw = G.post * 2;   // tloušťka trubky = průměr tyčky
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = (tw + 2.2) * s; ctx.beginPath(); ctx.moveTo(x, y1); ctx.lineTo(x, y2); ctx.stroke();
+  ctx.strokeStyle = postColor; ctx.lineWidth = tw * s; ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = tw * 0.28 * s; ctx.beginPath();
+  ctx.moveTo(x - dir * tw * 0.22 * s, y1 + 0.5 * s); ctx.lineTo(x - dir * tw * 0.22 * s, y2 - 0.5 * s); ctx.stroke();   // odlesk po délce
   ctx.restore();
 }
 
