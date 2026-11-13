@@ -5,7 +5,7 @@ import { Player } from './entities/Player.js';
 import { PLAYER, RINK } from './constants.js';
 import { t, applyI18n, toggleLang, setOnChange } from './i18n.js';
 import { setVolume, getVolume } from './sound.js';
-import { loadSession, onAuthChange, loginWithDiscord, logout, handleOAuthRedirect, getUser, loadServerStats, saveServerProfile, loadRankAndCredits, getKind, requestLinkCode, redeemLinkCode, isFounder } from './auth.js';
+import { loadSession, onAuthChange, loginWithDiscord, logout, handleOAuthRedirect, getUser, loadServerStats, saveServerProfile, loadRankAndCredits, getKind, requestLinkCode, redeemLinkCode, isFounder, hasProgress, loadStore, buyStoreItem } from './auth.js';
 const FOUNDER_CROWN_SVG = '<svg width="13" height="11" viewBox="0 0 14 11" style="vertical-align:-1px" aria-hidden="true"><path d="M1 10 L1 3 L4 6 L7 1 L10 6 L13 3 L13 10 Z" fill="#FFB020" stroke="rgba(0,0,0,.4)" stroke-width="0.8" stroke-linejoin="round"/></svg>';
 import { makeRng, hashSeed } from './rng.js';
 import { initLockerPreview } from './locker-preview.js';
@@ -48,6 +48,8 @@ function makeSwatches(el, initial, onChange, opts = {}) {
   const free = opts.free;                 // null = vše povolené; jinak pole povolených barev
   const isFree = c => !free || free.includes(c);
   let value = (colors.includes(initial) && isFree(initial)) ? initial : (free ? free[0] : colors[0]);
+  const want = initial;   // uložená barva může být koupená z obchodu → vybere se, až dorazí seznam (setPremium)
+  let prem = [];          // koupitelné barvy z obchodu: [{ c, owned, item }]
   el.innerHTML = '';
   const clearActive = () => [...el.children].forEach(x => x.classList.remove('active'));
   colors.forEach(c => {
@@ -78,14 +80,32 @@ function makeSwatches(el, initial, onChange, opts = {}) {
     el.appendChild(cb); el.appendChild(ci);
   }
   function set(c) {
-    if (!colors.includes(c)) return;
-    if (!isFree(c) && !isSponsor) return;
+    const pOwned = prem.some(p => p.c === c && p.owned);
+    if (!colors.includes(c) && !pOwned) return;
+    if (colors.includes(c) && !isFree(c) && !isSponsor && !pOwned) return;
     value = c; clearActive();
     const btn = [...el.querySelectorAll('.sw')].find(b => b.dataset.color === c);
     if (btn) btn.classList.add('active');
     onChange?.(value);
   }
-  return { get: () => value, set };
+  // Barvy z obchodu: vlastněné jdou vybrat, ostatní zamčené → klik otevře obchod (opts.onBuy)
+  function setPremium(list, onBuy) {
+    prem = list.filter(p => !colors.includes(p.c));   // barvy z obchodu nejsou v základní paletě (ověřeno: db.js seed)
+    el.querySelectorAll('.sw.premium').forEach(b => b.remove());
+    const before = el.querySelector('.sw.custom');
+    for (const p of prem) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'sw premium' + (p.owned ? '' : ' locked') + (p.c === value ? ' active' : '');
+      b.dataset.color = p.c; b.style.background = p.c; b.title = p.item.name + (p.owned ? '' : ` · ⊙ ${p.item.price}`);
+      b.addEventListener('click', () => {
+        if (!p.owned && !isSponsor) { onBuy?.(p.item); return; }
+        value = p.c; clearActive(); b.classList.add('active'); onChange?.(value);
+      });
+      el.insertBefore(b, before || null);
+    }
+    if (want && want !== value && prem.some(p => p.c === want && p.owned)) set(want);
+  }
+  return { get: () => value, set, setPremium };
 }
 
 // Výběr typu (chips s popiskem). items: [{val, key, free}]. Zamčené = sponzor.
@@ -959,7 +979,8 @@ function showView(name) {
   lobby.classList.toggle('on-store',   name === 'store');
   const activeTab = _tabFor[name] || null;
   document.querySelectorAll('.mn-tab').forEach(t => t.classList.toggle('active', t.id === activeTab));
-  if (name === 'main' || name === 'stats' || name === 'store') _loadStats();
+  if (name === 'main' || name === 'stats') _loadStats();
+  if (name === 'store') refreshStore();
   if (name === 'splash') {
     const tutorialDone = !!localStorage.getItem('hockey_tutorial_done');
     $('splash-first').style.display  = tutorialDone ? 'none' : '';
@@ -1120,6 +1141,68 @@ $('profile-done').onclick = () => {
 $('go-profile').onclick = () => { showView('profile'); drawPreview(); _loadStats(); };
 $('go-stats').onclick = () => showView('stats');
 $('go-store').onclick = () => showView('store');
+
+// ── OBCHOD (2026-11-13): kredity ⊙ za online zápasy → barvy helmy, stopy puku a hokejky. Koupené barvy se objeví v Šatně.
+// Tituly zatím ne: nikde se nezobrazují a koupě by přepsala titul Founder (db.js buyItem) → v obchodě skryté.
+const STORE_CATS = [ { type: 'helmet', key: 'store_cat_helmet' }, { type: 'trail', key: 'store_cat_trail' }, { type: 'stick', key: 'store_cat_stick' } ];
+const _swFor = () => ({ helmet: swHelmet, trail: swTrail, stick: swStick });
+let _store = null, _storeFocus = null;
+async function refreshStore() {
+  const d = await loadStore();
+  _store = d ? { items: d.items.filter(i => STORE_CATS.some(c => c.type === i.item_type)), owned: new Set(d.owned), credits: d.puck_credits ?? 0 } : null;
+  // Šatna: koupitelné barvy (vlastněné odemčené, ostatní zamčené → klik otevře obchod)
+  const sw = _swFor();
+  for (const c of STORE_CATS) sw[c.type].setPremium((_store?.items || []).filter(i => i.item_type === c.type)
+    .map(i => ({ c: String(i.item_value).toLowerCase(), owned: _store.owned.has(i.id), item: i })), openStoreAt);
+  renderStore();
+}
+function openStoreAt(item) { _storeFocus = item?.id ?? null; showView('store'); }
+function renderStore() {
+  const list = $('st-list'), bal = $('store-credits'), empty = $('st-empty');
+  if (!list) return;
+  if (bal) bal.textContent = _store ? _store.credits : 0;
+  if (!_store) { list.innerHTML = ''; empty.style.display = ''; return; }
+  empty.style.display = 'none';
+  const sw = _swFor();
+  list.innerHTML = '';
+  for (const cat of STORE_CATS) {
+    const items = _store.items.filter(i => i.item_type === cat.type);
+    if (!items.length) continue;
+    const sec = document.createElement('section'); sec.className = 'st-cat';
+    sec.innerHTML = `<h3 class="st-cat-h">${esc(t(cat.key))}</h3><div class="st-grid"></div>`;
+    const grid = sec.querySelector('.st-grid');
+    for (const it of items) {
+      const col = String(it.item_value).toLowerCase(), owned = _store.owned.has(it.id), worn = owned && sw[cat.type].get() === col;
+      const short = !owned && _store.credits < it.price;
+      const card = document.createElement('div');
+      card.className = 'st-card' + (owned ? ' owned' : '') + (_storeFocus === it.id ? ' focus' : '');
+      card.innerHTML = `<div class="st-sample st-${cat.type}" style="--c:${col}"></div>` +
+        `<div class="st-name">${esc(it.name)}</div>` +
+        `<div class="st-price">${owned ? esc(t('store_owned')) : '⊙ ' + it.price}</div>`;
+      const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'st-btn';
+      if (worn) { btn.textContent = t('store_worn'); btn.disabled = true; }
+      else if (owned) { btn.textContent = t('store_wear'); btn.onclick = () => { sw[cat.type].set(col); commitProfile(); renderStore(); setStatus(t('store_worn_toast', it.name), '#6ee0a0'); }; }
+      else if (short) { btn.textContent = t('store_short', it.price - _store.credits); btn.disabled = true; }
+      else { btn.textContent = t('store_buy', it.price); btn.onclick = () => buyItem(it, btn); }
+      card.appendChild(btn); grid.appendChild(card);
+    }
+    list.appendChild(sec);
+  }
+  const f = list.querySelector('.st-card.focus'); if (f) f.scrollIntoView({ block: 'center' });
+  _storeFocus = null;
+}
+async function buyItem(it, btn) {
+  btn.disabled = true;
+  const r = await buyStoreItem(it.id);
+  if (r?.ok) {
+    await refreshStore();
+    _swFor()[it.item_type].set(String(it.item_value).toLowerCase()); commitProfile(); renderStore();   // koupené rovnou nasaď
+    setStatus(t('store_bought', it.name), '#6ee0a0'); _loadStats();
+  } else {
+    setStatus(t(r?.error === 'insufficient_credits' ? 'store_err_credits' : 'store_err'), '#ff4455');
+    btn.disabled = false; refreshStore();
+  }
+}
 // ── Divák (sledování běžícího zápasu bez ovládání) ───────────────────
 let _spectating = false;
 function watchLobby(l) {
@@ -1171,10 +1254,11 @@ m3Select(IS_MOBILE ? 1 : 0);
 async function _loadStats() {
   const [stats, rankData] = await Promise.all([loadServerStats(), loadRankAndCredits()]);
   const user = getUser();
+  const prog = hasProgress();   // i host má na serveru statistiky a kredity (účet zařízení) — dřív je UI hostovi schovávalo
 
   // Profile stats grid (Locker Room)
   const statsEl = $('profile-stats');
-  if (!stats || !user) { statsEl.style.display = 'none'; }
+  if (!stats || !prog) { statsEl.style.display = 'none'; }
   else {
     statsEl.style.display = '';
     $('stat-goals').textContent   = stats.goals        ?? 0;
@@ -1187,7 +1271,7 @@ async function _loadStats() {
 
   // Profile rank + credits row
   const rankRow = $('profile-rank-row');
-  if (rankData && user) {
+  if (rankData && prog) {
     rankRow.classList.add('show');
     $('stat-rank').textContent     = rankData.rank_points ?? 1000;
     $('stat-position').textContent = rankData.position ? `#${rankData.position}` : '#—';
@@ -1206,15 +1290,15 @@ async function _loadStats() {
 
   // ELO overlay on art panel — only for logged-in users
   const statOverlay = $('vm-stat-overlay');
-  if (statOverlay) statOverlay.style.display = user ? '' : 'none';
+  if (statOverlay) statOverlay.style.display = prog ? '' : 'none';
   const eloEl = $('vm-elo-val');
-  if (eloEl && user) eloEl.textContent = rp;
+  if (eloEl && prog) eloEl.textContent = rp;
 
   // Footer stats row (main menu)
   const footerGuest = $('vm-footer-guest');
   if (footerGuest) footerGuest.style.display = user ? 'none' : 'flex';
   document.querySelectorAll('#vm-footer .vmsb-card').forEach(c => {
-    c.style.display = user ? '' : 'none';
+    c.style.display = prog ? '' : 'none';
   });
   const footerRank = $('vm-footer-rank');
   if (footerRank) {
@@ -1243,12 +1327,10 @@ async function _loadStats() {
     $('vs-saves').textContent    = stats?.saves   ?? 0;
     $('vs-winrate').textContent  = wr;
     const guestCta = $('stats-guest-cta');
-    if (guestCta) guestCta.style.display = user ? 'none' : '';
+    if (guestCta) guestCta.style.display = user ? 'none' : '';   // host: postup se ukládá jen v tomto zařízení → nabídka Discordu
   }
 
-  // Store screen credits
-  const storeCredEl = $('store-credits');
-  if (storeCredEl) storeCredEl.textContent = cred;
+  // Store screen credits (obchod má vlastní načtení — refreshStore)
 
   // Leaderboard — populate global list
   _renderLeaderboard('global');
@@ -1274,18 +1356,18 @@ async function _renderLeaderboard(mode) {
   }
 
   if (friendsCta) friendsCta.style.display = 'none';
-  list.innerHTML = '<div class="sv-lb-empty">LOADING...</div>';
+  list.innerHTML = `<div class="sv-lb-empty">${esc(t('lb_loading'))}</div>`;
 
   try {
     const resp = await fetch('/api/leaderboard?limit=50');
     if (!resp.ok) throw new Error();
     const rows = await resp.json();
     if (!rows.length) { list.innerHTML = `<div class="sv-lb-empty">${esc(t('lb_empty'))}</div>`; return; }
-    const me = getUser();
+    const myName = getUser()?.display_name || (nameInput.value || '').trim();   // host: jméno z profilu
     list.innerHTML = rows.map((r, i) => {
       const rank = i + 1;
       const gp = r.games_played ?? 0;          // server posílá display_name / rank_points / games_played
-      const isMe = me && r.display_name === me.display_name;
+      const isMe = !!myName && r.display_name === myName;
       const wr = gp > 0 ? Math.round(r.wins / gp * 100) + '%' : '—';
       return `<div class="sv-lb-row${isMe ? ' me' : ''}">
         <span class="sv-lb-rank${rank <= 3 ? ' top3' : ''}">${rank}</span>
@@ -1404,6 +1486,11 @@ function renderLobbyList(list) {
       `<div class="li-sub">${esc(l.home)} vs ${esc(l.away)} · ${l.count}/${l.max}</div></div>` + right;
     if (full) div.classList.add('full');
     div.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); div.click(); } });
+    if (!full && !IS_MOBILE) {   // viditelné PŘIPOJIT (dřív šlo jen kliknout na řádek — u běžící hry bylo vidět jen SLEDOVAT)
+      const j = document.createElement('button'); j.type = 'button'; j.className = 'li-join'; j.textContent = t('join_btn');
+      j.onclick = (e) => { e.stopPropagation(); div.click(); };
+      div.appendChild(j);
+    }
     if (l.state === 'playing') {
       const w = document.createElement('button'); w.type = 'button'; w.className = 'li-watch'; w.textContent = t('watch');
       w.onclick = (e) => { e.stopPropagation(); watchLobby(l); };
@@ -1584,9 +1671,12 @@ function _startTutorial() {
   const pr = profile();
   Object.assign(g.local, { name: pr.name, handed: pr.handed, num: pr.number, helmet: pr.helmet, jersey: pr.jersey, shorts: pr.shorts, stripe: pr.stripe, laces: pr.laces, gloves: pr.gloves, tape: pr.tape, trail: pr.trail, stick: pr.stick, tapeStyle: pr.tapeStyle, helmetType: pr.helmetType, visor: pr.visor });
   g.local.color = pr.jersey;
-  g.onComplete = (isFirst) => {
+  // Konec tutoriálu: „jdi hrát" → rovnou zápas; něco nešlo → trénink; přeskočeno → menu
+  g.onComplete = (isFirst, skipped, missed) => {
     stopGame();
     showView('main');
+    if (skipped) return;
+    if (missed?.length) $('go-solo').click(); else playNow();
   };
   startGame(g);
 }
@@ -1661,6 +1751,7 @@ function updateAuthUI(user) {
   $('profile-guest-login').style.display = user ? 'none' : '';
   $('profile-stats').style.display = 'none'; // stats se načítají lazy při otevření profilu
   updateLinkUI();
+  if (!inGame) { _loadStats(); refreshStore(); }   // host dostal token / přihlášení → ukaž statistiky, kredity a obchod hned
 }
 
 // ── Propojení účtů (link kód) ─────────────────────────────────────────

@@ -1421,7 +1421,32 @@
        ═══════════════════════════════════════════════════════════════ */
     .sv-body-store { grid-template-columns: 260px 1fr; overflow: hidden; background: #060810; }
 
-    /* STORE — coming soon placeholder */
+    /* STORE (2026-11-13) — položky z /api/store; kredity za online zápasy */
+    #v-store { overflow-y: auto; }
+    .st-wrap { max-width: 980px; margin: 0 auto; padding: 96px 24px 64px; }
+    .st-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap; margin-bottom: 22px; }
+    .st-title { font-family: 'Barlow Condensed', system-ui; font-size: clamp(2.6rem,6vw,4rem); font-weight: 900; font-style: italic; line-height: .95; color: #e2e2eb; }
+    .st-earn { font-family: 'Hanken Grotesk', sans-serif; font-size: .9rem; color: rgba(182,196,255,.75); max-width: 520px; line-height: 1.5; margin: 8px 0 0; }
+    .st-empty { padding: 28px; border: 1px dashed rgba(182,196,255,.25); color: rgba(182,196,255,.75); font-family: 'Hanken Grotesk', sans-serif; text-align: center; }
+    .st-cat { margin-top: 22px; }
+    .st-cat-h { font-family: 'JetBrains Mono', monospace; font-size: .75rem; letter-spacing: .22em; color: #ffade2; text-transform: uppercase; margin: 0 0 10px; }
+    .st-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+    .st-card { background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.07); padding: 14px 12px 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; transition: border-color .15s, transform .15s; }
+    .st-card:hover { border-color: rgba(182,196,255,.35); transform: translateY(-2px); }
+    .st-card.owned { border-color: rgba(110,224,160,.35); }
+    .st-card.focus { border-color: #ffcf3a; box-shadow: 0 0 0 2px rgba(255,207,58,.35); }
+    .st-sample { width: 64px; height: 64px; display: grid; place-items: center; }
+    .st-helmet { border-radius: 50% 50% 42% 42%; background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--c) 55%, #fff), var(--c) 60%, color-mix(in srgb, var(--c) 70%, #000)); border: 2px solid #0b0d12; }
+    .st-trail { height: 22px; width: 100%; border-radius: 11px; background: linear-gradient(90deg, transparent, var(--c)); box-shadow: 0 0 14px var(--c); align-self: stretch; margin: 21px 0; }
+    .st-stick { width: 86%; height: 10px; border-radius: 5px; background: var(--c); border: 2px solid #0b0d12; transform: rotate(-18deg); margin: 27px 0; }
+    .st-name { font-family: 'Barlow Condensed', system-ui; font-weight: 800; font-size: 1.15rem; color: #e2e2eb; text-align: center; }
+    .st-price { font-family: 'JetBrains Mono', monospace; font-size: .8rem; color: #ffade2; }
+    .st-card.owned .st-price { color: #6ee0a0; }
+    .st-btn { width: 100%; padding: 8px 6px; border: 0; cursor: pointer; font-family: 'Barlow Condensed', system-ui; font-weight: 800; font-size: .95rem; letter-spacing: .04em; text-transform: uppercase; background: #b6c4ff; color: #0b0d12; }
+    .st-btn:hover:not(:disabled) { background: #d4dcff; }
+    .st-btn:disabled { background: rgba(255,255,255,.08); color: rgba(226,226,235,.55); cursor: default; }
+    .sw.premium { box-shadow: inset 0 0 0 2px rgba(255,207,58,.85); }
+    /* STORE — coming soon placeholder (původní styly; .store-soon-* sdílí hlavička obchodu) */
     .sv-store-soon {
       flex: 1; display: flex; align-items: center; justify-content: center;
       background: #060810; position: relative; overflow: hidden;
@@ -2776,19 +2801,22 @@
 
       <!-- STORE — coming soon -->
       <div id="v-store" class="view" style="display:none">
-        <div class="sv-store-soon">
-          <div class="store-soon-inner">
-            <div class="store-soon-eyebrow" data-i18n="store_eyebrow">PUCK STORE</div>
-            <div class="store-soon-title"><span style="color:inherit" data-i18n="store_soon_a">COMING</span><span data-i18n="store_soon_b">SOON.</span></div>
-            <div class="store-soon-sub" data-i18n="store_sub">Trails, helmets &amp; premium skins unlock with Alpha Season 1.</div>
+        <div class="st-wrap">
+          <div class="st-head">
+            <div>
+              <div class="store-soon-eyebrow" data-i18n="store_eyebrow">OBCHOD S PUKY</div>
+              <div class="st-title" data-i18n="store_title">OBCHOD</div>
+              <p class="st-earn" data-i18n="store_earn">Kredity získáš v online zápasech.</p>
+            </div>
             <div class="store-soon-credits">
-              <div class="store-soon-credits-label" data-i18n="store_balance">Your balance</div>
+              <div class="store-soon-credits-label" data-i18n="store_balance">Tvůj zůstatek</div>
               <div class="store-soon-credits-val">⊙ <span id="store-credits">0</span> <span class="store-soon-credits-unit">PC</span></div>
             </div>
           </div>
+          <div id="st-empty" class="st-empty" data-i18n="store_empty" style="display:none">Obchod je dostupný po připojení ke hře.</div>
+          <div id="st-list"></div>
         </div>
       </div>
-
       <!-- PROFIL — LOCKER ROOM (single-column, player top, identity below) -->
       <div id="v-profile" class="view" style="display:none">
         <!-- Atmospheric bg spans whole screen -->
@@ -3154,7 +3182,7 @@
               <div class="sv-eyebrow" data-i18n="leaderboard">LEADERBOARD</div>
               <div class="sv-lb-toggle" id="sv-lb-toggle">
                 <button class="sv-lb-tab active" data-mode="global" data-i18n="lb_all">ALL PLAYERS</button>
-                <button class="sv-lb-tab" data-mode="friends" data-i18n="lb_friends">FRIENDS</button>
+                <!-- Záložka Přátelé skrytá (2026-11-13): systém přátel neexistuje, vedla na „coming soon“ -->
               </div>
             </div>
 

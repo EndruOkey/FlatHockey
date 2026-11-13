@@ -467,9 +467,11 @@ export function updateRankAndCredits(user_id, { rankDelta = 0, creditsDelta = 0,
 }
 
 export function getRankPosition(user_id) {
-  const row = db.prepare('SELECT rank_points FROM stats WHERE user_id = ?').get(user_id);
+  const row = db.prepare('SELECT rank_points, games_played FROM stats WHERE user_id = ?').get(user_id);
   if (!row) return null;
-  const pos = db.prepare('SELECT COUNT(*) AS n FROM stats WHERE rank_points > ?').get(row.rank_points).n + 1;
+  // pořadí jako žebříček (getLeaderboard): jen hráči s odehraným zápasem; bez zápasu pozice není (dřív nováček „#1“)
+  if (!row.games_played) return { rank_points: row.rank_points, position: null };
+  const pos = db.prepare('SELECT COUNT(*) AS n FROM stats WHERE rank_points > ? AND games_played > 0').get(row.rank_points).n + 1;
   return { rank_points: row.rank_points, position: pos };
 }
 

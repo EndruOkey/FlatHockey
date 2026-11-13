@@ -9,6 +9,8 @@ export function getUser() { return _user; }
 export function isGuest() { return _user === null; }
 export function getKind() { return _kind; }
 export function isFounder() { return _founder; }
+// Má hráč na serveru postup? (Discord účet NEBO host s účtem zařízení — i hostům se ukládají statistiky a kredity)
+export function hasProgress() { return _user !== null || _kind === 'guest'; }
 
 // Token zařízení (hostující účet): funguje i v iframe třetích stran, kde cookies nejdou
 export function getDeviceToken() { try { return localStorage.getItem(TOKEN_KEY); } catch { return null; } }
@@ -51,7 +53,7 @@ export async function loadSession() {
 }
 
 export async function loadServerStats() {
-  if (!_user) return null;
+  if (!hasProgress()) return null;
   try {
     const res = await authFetch('/auth/stats');
     if (res.ok) return await res.json();
@@ -60,7 +62,7 @@ export async function loadServerStats() {
 }
 
 export async function loadRankAndCredits() {
-  if (!_user) return null;
+  if (!hasProgress()) return null;
   try {
     const [rankRes, credRes] = await Promise.all([
       authFetch('/api/me/rank'),
@@ -75,6 +77,18 @@ export async function loadRankAndCredits() {
     };
   } catch {}
   return null;
+}
+
+// Obchod: položky + co hráč vlastní + zůstatek (host i Discord účet). null = bez účtu / chyba.
+export async function loadStore() {
+  if (!hasProgress()) return null;
+  try { const r = await authFetch('/api/store'); return r.ok ? await r.json() : null; } catch { return null; }
+}
+export async function buyStoreItem(itemId) {
+  try {
+    const r = await authFetch('/api/store/buy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ item_id: itemId }) });
+    return await r.json().catch(() => ({ ok: false, error: 'network' }));
+  } catch { return { ok: false, error: 'network' }; }
 }
 
 export async function saveServerProfile(data) {

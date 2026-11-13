@@ -3672,7 +3672,7 @@ export class TutorialGame extends SandboxGame {
   }
 
   // Společný konec (normální dokončení i přeskočení): flag + onComplete(isFirst) právě jednou
-  _tutComplete() {
+  _tutComplete(skipped = false) {
     if (this._completed) return;
     this._completed = true;
     let isFirst = true;
@@ -3680,7 +3680,7 @@ export class TutorialGame extends SandboxGame {
       isFirst = !localStorage.getItem('hockey_tutorial_done');
       localStorage.setItem('hockey_tutorial_done', '1');
     } catch (e) { /* storage nedostupný */ }
-    this.onComplete?.(isFirst);
+    this.onComplete?.(isFirst, skipped, this._tutMissed || []);
   }
 
   _handleGoal(result) {
@@ -3723,7 +3723,7 @@ export class TutorialGame extends SandboxGame {
     const sb = this._skipBtn;
     if (this._preLmb && sb && this.input.mouseX >= sb.x && this.input.mouseX <= sb.x + sb.w &&
         this.input.mouseY >= sb.y && this.input.mouseY <= sb.y + sb.h) {
-      if (this._skipArm > 0) { this._tutComplete(); return; }
+      if (this._skipArm > 0) { this._tutComplete(true); return; }
       this._skipArm = 3;
     }
     if (this._tutNote && (this._tutNote.t -= dt) <= 0) this._tutNote = null;
@@ -4209,7 +4209,7 @@ export class TutorialGame extends SandboxGame {
     _rrect(ctx, btnX, btnY, btnW, btnH, 10); ctx.fill();
     ctx.shadowBlur = 0;
     ctx.font = 'bold 16px "Segoe UI", sans-serif'; ctx.fillStyle = '#050a14';
-    ctx.fillText(lang === 'en' ? 'Continue →' : 'Pokračovat →', W / 2, btnY + 28);
+    ctx.fillText(t(this._tutMissed.length ? 'tut_go_train' : 'tut_go_play'), W / 2, btnY + 28);   // tlačítko rovnou spustí to, co text radí
 
     ctx.font = '10px "Segoe UI", sans-serif'; ctx.fillStyle = '#2a3a52';
     ctx.fillText('Enter', W / 2, by + bh - 8);
