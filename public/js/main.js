@@ -9,6 +9,7 @@ import { loadSession, onAuthChange, loginWithDiscord, logout, handleOAuthRedirec
 const FOUNDER_CROWN_SVG = '<svg width="13" height="11" viewBox="0 0 14 11" style="vertical-align:-1px" aria-hidden="true"><path d="M1 10 L1 3 L4 6 L7 1 L10 6 L13 3 L13 10 Z" fill="#FFB020" stroke="rgba(0,0,0,.4)" stroke-width="0.8" stroke-linejoin="round"/></svg>';
 import { makeRng, hashSeed } from './rng.js';
 import { initLockerPreview } from './locker-preview.js';
+import { initMenuBg } from './menu-bg.js';
 
 const $ = id => document.getElementById(id);
 const canvas = $('canvas');
@@ -975,7 +976,15 @@ function readSettings() {
 // ── Navigace mezi obrazovkami ─────────────────────────────────────────
 const VIEWS = { splash:'v-splash', main:'v-main', profile:'v-profile', browse:'v-browse', create:'v-create', wait:'v-wait', stats:'v-stats', store:'v-store' };
 const _tabFor = { main: 'mn-tab-home', store: 'mn-tab-store', browse: 'mn-tab-home', create: 'mn-tab-home', wait: 'mn-tab-home', profile: 'mn-tab-locker', stats: 'mn-tab-stats' };
+// Živé pozadí menu (menu-bg.js): boti hrají za úvodem a hlavním menu; v podobrazovkách stojí (závoj 78 %), ve hře uvolněné.
+const menuBg = initMenuBg(document.querySelector('#lobby .scene3'));
+let _menuView = null;
+function _syncMenuBg() {
+  if (lobby.style.display === 'none') return;                        // ve hře/tréninku: řeší startGame (uvolní)
+  if (_menuView === 'main' || _menuView === 'splash') menuBg.start(true); else menuBg.stop();
+}
 function showView(name) {
+  _menuView = name; _syncMenuBg();
   document.documentElement.classList.remove('resume');   // splash už není skrytý (viz head skript v index.html)
   for (const [k, id] of Object.entries(VIEWS)) $(id).style.display = (k === name) ? '' : 'none';
   lobby.classList.toggle('on-splash',  name === 'splash');
@@ -1687,6 +1696,7 @@ function startGame(game) {
   inGame = true; currentGame = game;
   window.__fhGame = game;   // měřicí háček (scripts/stutter_probe.mjs)
   lobby.style.display = 'none'; canvas.style.cursor = 'crosshair';
+  menuBg.stop(true);   // pozadí menu zastavit a uvolnit — hra má celý výkon
   // SandboxGame má vlastní dock s popisy — hint překrýval dock
   const hintEl = document.getElementById('hint');
   if (hintEl) hintEl.style.display = game instanceof SandboxGame ? 'none' : '';
@@ -1696,6 +1706,7 @@ function startGame(game) {
 function stopGame()  {
   if (currentGame?.stop) currentGame.stop(); currentGame = null; inGame = false;
   lobby.style.display = ''; canvas.style.cursor = 'default';
+  _syncMenuBg();       // návrat do menu: scéna znovu od buly (stejný seed)
   const hintEl = document.getElementById('hint');
   if (hintEl) hintEl.style.display = '';
   cgGameplay(false);

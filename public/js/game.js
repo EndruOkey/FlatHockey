@@ -51,7 +51,9 @@ export class NetGame {
     this.myId    = myId;
     this.settings = settings || { teams: { home: { name: t('team_home_default'), color: '#3a9fff' }, away: { name: t('team_away_default'), color: '#ff4455' } } };
     this.clk = 0; this.per = 1; this.pers = 1; this.ended = false;
-    this.input   = new Input(canvas);
+    // attract = boti vs boti za menu (menu-bg.js): žádné vstupy z klávesnice/myši, žádný zvuk, žádný člověk
+    this.attract = !!(settings && settings.attract);
+    this.input   = this.attract ? { online: false } : new Input(canvas);
     this.engine  = new Engine(canvas);
 
     // Difficulty: 'competitive' v ranked/tournaments, 'casual' v public lobbies
@@ -107,7 +109,7 @@ export class NetGame {
   // Postav lokální zápas (match-core): 1 člověk + boti, efekty (gól/píšťalka) stejné jako net handlery.
   _initOffline(settings) {
     const seed = (settings && settings.seed) || ((Math.random() * 2147483647) >>> 0);
-    const hooks = {
+    const hooks = this.attract ? {} : {
       goal: (result) => {
         const side = result === 'goal-away' ? 'away' : 'home', sh = this.match?.puck?._shot, sp = sh ? this.match.players.get(sh.id) : null;
         this._goalBanner(side, sp && sp.team === side ? (sp.name || '') : '');
@@ -142,12 +144,11 @@ export class NetGame {
       m.inputs.set(id, p.input);
       return p;
     };
-    const human = makeP(this.myId, 'home', true);
-    human.name = (settings && settings.myName) || 'TY';
-    human.num = (settings && settings.myNum) || 99;
+    const human = this.attract ? null : makeP(this.myId, 'home', true);
+    if (human) { human.name = (settings && settings.myName) || 'TY'; human.num = (settings && settings.myNum) || 99; }
     let bi = 0;
     for (const team of ['home', 'away']) {
-      const humans = team === 'home' ? 1 : 0;
+      const humans = team === 'home' && human ? 1 : 0;
       for (let k = humans; k < fill; k++) makeP(`bot:${team}:${bi++}`, team, false);
     }
     rebuildEntities(m);

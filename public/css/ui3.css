@@ -37,6 +37,13 @@ kbd, .key3 { display: inline-block; min-width: 30px; text-align: center; border:
 /* ── Scéna: rozostřené kluziště za menu ─────────────────────────── */
 .scene3 { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
 .scene3 svg { position: absolute; inset: -12px; width: calc(100% + 24px); height: calc(100% + 24px); filter: blur(2.5px) saturate(.9); }
+/* Živá scéna (menu-bg.js): boti hrají skutečný zápas; blur/závoj jen CSS (ne ctx.filter). SVG = záloha, když scéna neběží. */
+.scene3-live { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
+.scene3.live .scene3-live { display: block; }
+/* backdrop-filter nad pohyblivou scénou se přepočítává každý snímek (headless: 58 → 17 fps) → když scéna běží, vypnout;
+   za tlačítky je závoj 94 %, rozdíl není vidět */
+#lobby:has(.scene3.run) * { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+.scene3.live svg { display: none; }
 .scene3::after { content: ''; position: absolute; inset: 0;
   background: linear-gradient(90deg, rgba(5,10,20,.94) 0%, rgba(5,10,20,.82) 36%, rgba(5,10,20,.30) 62%, rgba(5,10,20,.6) 100%),
               radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(0,0,0,.6) 100%); }
