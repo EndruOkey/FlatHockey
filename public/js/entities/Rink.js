@@ -554,7 +554,8 @@ function _drawGoalReal(ctx, s, x, dir, y1, y2, postColor, Hs, part, G) {
 // G11 = boky rozevřené (záda širší než ústí), G12 = boky skoro rovnoběžné. Vzpěry rovné z rohu police do zadního rohu základny.
 export const GOAL_NHL = {
   11: { depth: 23.2, bow: 2.4, shelf: 11, halfBack: 28.5, r: 5, shelfR: 4.5, bar: 2.4, tube: 1.8, mesh: 4.4 },
-  12: { depth: 23.2, bow: 2.4, shelf: 11, halfBack: 23.5, r: 5, shelfR: 4.5, bar: 2.4, tube: 1.8, mesh: 4.4 },
+  12: { depth: 23.2, bow: 2.4, shelf: 11, halfBack: 23.5, r: 8,   // r 5 → 8: plynulejší přechod bok → záda (Ondřej 2026-11-13)
+        shelfR: 4.5, bar: 2.4, tube: 1.8, mesh: 4.4 },
 };
 function _drawGoalNHL(ctx, s, x, dir, y1, y2, postColor, Hs, part, G) {
   const cy = (y1 + y2) / 2, half = (y2 - y1) / 2 / s;

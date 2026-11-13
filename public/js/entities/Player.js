@@ -1180,7 +1180,8 @@ function _renderPlayerUp(ctx, p, cam) {
     ctx.scale(s * ls, s * ls); skinSkate(ctx, K);   // brusle C-d2 (skin.js), s obrysem
     ctx.restore();
     if (p._animDbg) p._animDbg.push({ side: f.side, fx: f.x * s, fy: f.y * s, fa: f.a });
-    feetW.push({ x: f.x, y: f.y, side: f.side });
+    // kotník = nad botou u paty (brusle: pata −0,6 R, špička +0,55 R) → noha končí tam, ne uprostřed nože (2026-11-13, Ondřej)
+    feetW.push({ x: f.x - Math.cos(f.a) * 0.32 * PLAYER.radius, y: f.y - Math.sin(f.a) * 0.32 * PLAYER.radius, side: f.side });
   }
   ctx.restore();   // konec rámce bruslí (hůl a tělo navrch: brusle → hůl/puk → tělo = pořadí y−z)
 

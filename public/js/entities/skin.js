@@ -119,7 +119,7 @@ export function skinBody(c, B, K) {
   const body = new Path2D();
   // NOHY (2026-11-13, Ondřej: „nohy vypadají jen jako tyčky"): dřív jedna kapsle 1,4 → 1,15 px. Nově stehno (kalhoty, široké, z kalhot
   // ke koleni) + lýtko se štulpnou zúžené ke kotníku; koleno lehce vybočené ven (do strany nohy) → noha má tvar, ne čáru.
-  const legs = B.feet.map(f => { const hx = -R * 0.6, hy = f.side * R * 0.58, ax = f.x - 0.4, ay = f.y;
+  const legs = B.feet.map(f => { const hx = -R * 0.6, hy = f.side * R * 0.58, ax = f.x, ay = f.y;   // f = kotník (Player posílá bod nad botou u paty)
     const kx = (hx + ax) / 2, ky = (hy + ay) / 2 + f.side * R * 0.12;
     const th = new Path2D(); capsule(th, hx, hy, R * 0.4, kx, ky, R * 0.3);
     const sh = new Path2D(); capsule(sh, kx, ky, R * 0.27, ax, ay, R * 0.2);
