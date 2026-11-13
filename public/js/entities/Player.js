@@ -858,7 +858,7 @@ export function skatePose(o) {
     }
     // přenos váhy: odraz tlačí tělo od odrazové nohy (napříč boky), ramena se lehce protočí proti odrazové noze
     const swing = Math.sin(2 * Math.PI * uA) * amp * w * (1 - 0.6 * bw);
-    body.x = 0.11 * R * swing * sh * (1 - bw); body.y = -0.11 * R * swing * (ch * (1 - bw) + bw); body.tw = -0.08 * swing;
+    body.x = 0.11 * R * swing * sh * (1 - bw); body.y = -0.11 * R * swing * (ch * (1 - bw) + bw); body.tw = -0.08 * swing; body.sw = swing;
     if (stopT > 0) { const m = o.stopLoc ?? 0, e = _ss(0, 1, stopT); body.x -= Math.cos(m) * 0.32 * R * e; body.y -= Math.sin(m) * 0.32 * R * e; }   // záklon
     return { feet, body };
   }
@@ -883,6 +883,7 @@ export function skatePose(o) {
     feet.push({ side, x: fx * (1 - stopT) + (-R * 0.85) * stopT, y: fy * (1 - stopT) + side * R * 0.55 * stopT, a: lerpAngle(fa, stopA, stopT), lift: 0 });
   }
   if (k) body.y = Math.sin(ph) * R * 0.07 * sf;   // K1/K2: tělo nad odrazovou nohu (dřív px: r·0.07)
+  body.sw = Math.sin(ph) * sf * (spd > 8 ? 1 : 0);
   return { feet, body };
 }
 
@@ -915,12 +916,82 @@ function _kickPuck(p, blade) {
   const sx = p.x + p._kickOx, sy = p.y + p._kickOy;
   return { x: sx + (blade.x - sx) * u, y: sy + (blade.y - sy) * u, _kick: true };
 }
+// ══ TĚLO B1 (2026-11-13) — pohyb horní poloviny těla nad boky. Jen kresba: čistá funkce stavu simulace + dt snímku
+// (žádná náhoda, žádné hodiny ze zdi), volá ji draw() i scripts/body_anim_metrics.mjs. B0 = dřívější (nic navíc).
+//  • náklon do zrychlení: ramena+trup+helma se posunou ve směru zrychlení (rozjezd = předklon, brzda = záklon, zatáčka = dovnitř);
+//    zrychlení přes dolní propust, měkké nasycení (tanh), pružina (lehký dojezd);
+//  • náraz (skok rychlosti > jolt px/s²) / zakolísání = trhnutí horního těla po směru úderu + protočení ramen, pružina vrátí;
+//  • protirotace ramen v rytmu kroku (k přenosu váhy K3), houpání horní ruky s holí napříč;
+//  • nápřah: ramena se natočí dozadu na forhend a těžiště se „nabije“ dozadu; po ráně švih přes směr střely; přihrávka = krátké cuknutí ramen;
+//  • hlava míří za kurzorem s malým zpožděním (vůči tělu, max ±head rad); v klidu jemné dýchání.
+// st = stav kresby (mutuje _bp*); o = { b, x, y, vx, vy, ba, aim, dcv, sw (průběh švihu 0..1, < 0 = žádný), hasPuck, hnd, stagT, stagDir, swing }
+// → { ux, uy (posun horního těla vůči bokům, lokál, svět. j.), tw (natočení ramen navíc, rad), hd (natočení hlavy vůči tělu), sway (horní ruka napříč, j.) }
+export const BODY_B1 = { k: 0.014, umax: 0.42, aMax: 700, rate: 10, w: 14, z: 0.55, jolt: 3500, jk: 0.35, jMax: 40, stagV: 26, stagW: 5,
+  twStride: 0.12, sway: 0.13, wind: 0.5, windU: 0.14, follow: 0.35, pass: 0.24, passT: 0.2, breath: 0.05, breathT: 2.8, head: 0.6, headRate: 12 };
+export function bodyPose(st, o, dt = 1 / 60) {
+  const out = { ux: 0, uy: 0, tw: 0, hd: 0, sway: 0 };
+  if (!o.b) { st._bpPv = null; return out; }
+  const B = BODY_B1, R = PLAYER.radius, c = Math.cos(o.ba), s = Math.sin(o.ba), hnd = o.hnd ?? 1;
+  const spd = Math.hypot(o.vx, o.vy), mv = _ss(4, 30, spd);
+  const A = st._bpA || (st._bpA = { x: 0, y: 0 }), U = st._bpU || (st._bpU = { x: 0, y: 0, vx: 0, vy: 0, t: 0, vt: 0 });
+  // 1) zrychlení v lokálu těla (teleport / první snímek = nic)
+  const pv = st._bpPv; let ax = 0, ay = 0;
+  if (pv && dt > 0 && Math.hypot(o.x - pv.x, o.y - pv.y) < 30) {
+    const dvx = o.vx - pv.vx, dvy = o.vy - pv.vy, lx = dvx * c + dvy * s, ly = -dvx * s + dvy * c, am = Math.hypot(lx, ly) / dt;
+    if (am > B.jolt) { const k = Math.min(B.jMax, Math.hypot(lx, ly) * B.jk) / (Math.hypot(lx, ly) || 1); U.vx += lx * k; U.vy += ly * k; }   // náraz: trhnutí po směru úderu
+    else { const k = am > B.aMax ? B.aMax / am : 1; ax = lx / dt * k; ay = ly / dt * k; }
+  }
+  st._bpPv = { x: o.x, y: o.y, vx: o.vx, vy: o.vy };
+  const f = Math.min(1, B.rate * dt); A.x += (ax - A.x) * f; A.y += (ay - A.y) * f;
+  // zakolísání (začátek): horní tělo hodí do strany úderu, ramena se protočí
+  if ((o.stagT ?? 0) > 0 && !((st._bpSt ?? 0) > 0)) { U.vy += (o.stagDir ?? 1) * B.stagV; U.vt += (o.stagDir ?? 1) * B.stagW; }
+  st._bpSt = o.stagT ?? 0;
+  // cíl: náklon do zrychlení (měkké nasycení), nápřah = těžiště dozadu a na forhend, dýchání v klidu
+  const am = Math.hypot(A.x, A.y) * B.k, um = B.umax * R, g = am > 1e-9 ? um * Math.tanh(am / um) / am * B.k : 0;
+  const dcv = o.dcv ?? 0;
+  st._bpT = ((st._bpT ?? 0) + dt) % (B.breathT * 1000);
+  const br = Math.sin(2 * Math.PI * st._bpT / B.breathT) * B.breath * R * (1 - mv);
+  let tx = A.x * g - B.windU * R * dcv + br, ty = A.y * g + B.windU * R * dcv * hnd;
+  // přihrávka: puk odešel bez nabití → krátké cuknutí ramen a předklon
+  if (st._bpHad && !o.hasPuck && (st._bpDc ?? 0) <= 0.15) st._bpPass = B.passT;
+  st._bpHad = !!o.hasPuck; st._bpDc = dcv;
+  let pu = 0; if ((st._bpPass ?? 0) > 0) { pu = Math.sin(Math.PI * (1 - st._bpPass / B.passT)); st._bpPass = Math.max(0, st._bpPass - dt); }
+  tx += 0.1 * R * pu;
+  // pružina (polo-implicitní Euler, podkroky ≤ 1/120 s → nezávislé na fps)
+  const n = Math.max(1, Math.ceil(dt * 120)), h = dt / n, w2 = B.w * B.w, zw = 2 * B.z * B.w;
+  for (let i = 0; i < n; i++) {
+    U.vx += (w2 * (tx - U.x) - zw * U.vx) * h; U.vy += (w2 * (ty - U.y) - zw * U.vy) * h; U.vt += (w2 * (0 - U.t) - zw * U.vt) * h;
+    U.x += U.vx * h; U.y += U.vy * h; U.t += U.vt * h;
+  }
+  // ramena: protirotace v kroku + nápřah dozadu na forhend + dokončení švihu + přihrávka + trhnutí
+  // švih po ráně (u = 0..1): z natočení v okamžiku rány (W0) přes směr střely na druhou stranu (−follow), pak plynule zpět k nápřahu
+  const sw = o.sw ?? -1, wind = hnd * B.wind * dcv;
+  if (sw >= 0 && !((st._bpSw ?? -1) >= 0)) st._bpW0 = hnd * B.wind * (st._bpDcP ?? dcv);
+  st._bpSw = sw; st._bpDcP = dcv;
+  let twShot = wind;
+  if (sw >= 0) { const e = _ss(0, 0.45, sw), e2 = _ss(0.45, 1, sw); twShot = (1 - e) * (st._bpW0 ?? 0) + e * (1 - e2) * -hnd * B.follow + e2 * wind; }
+  out.tw = -B.twStride * (o.swing ?? 0) + twShot - hnd * B.pass * pu + U.t;
+  out.ux = U.x; out.uy = U.y;
+  out.sway = B.sway * R * (o.swing ?? 0) * (1 - dcv) * (o.hasPuck ? 0.6 : 1);
+  // hlava za kurzorem (vůči tělu), malé zpoždění
+  const ht = Math.max(-B.head, Math.min(B.head, angleDiff(o.aim ?? o.ba, o.ba)));
+  st._bpHd = (st._bpHd ?? 0) + (ht - (st._bpHd ?? 0)) * Math.min(1, B.headRate * dt);
+  out.hd = st._bpHd + 0.5 * U.t;
+  return out;
+}
+// horní a dolní ruka na holi (svět): sdílí draw i metrika. tipW = špička dříku, sway = posun horní ruky napříč (B1)
+export function stickHands(x, y, ba, dcv, hnd, tipW, sway = 0) {
+  const R0 = PLAYER.radius, fC = Math.cos(ba), fS = Math.sin(ba), sC = -fS, sS = fC;
+  const tF = R0 * (0.55 - 0.35 * dcv), tSd = R0 * (-0.15 + 0.55 * dcv) * hnd + sway;
+  const topW = { x: x + fC * tF + sC * tSd, y: y + fS * tF + sS * tSd };
+  return { topW, botW: { x: topW.x + (tipW.x - topW.x) * 0.42, y: topW.y + (tipW.y - topW.y) * 0.42 } };
+}
 
 // ROZPLÁCNUTÍ (2026-11-12): ležící hráč = protažená postava hlavou ve směru úderu, ruce a nohy roztažené, hokejka
 // odletí vedle na led; prvních 0,25 s záblesk + ledová tříšť (deterministicky z id a pořadí pádu). Zvedání = prolnutí
 // ležící postavy (stahuje nohy) do normální kresby. Jen kresba: stav (_downT/_upT/_fallA) nese simulace / snapshot (kd).
 function _renderPlayer(ctx, p, cam) {
-  if (p._downT > 0) { _renderDown(ctx, p, cam, 0); return; }
+  if (p._downT > 0) { p._bpPv = null; _renderDown(ctx, p, cam, 0); return; }   // B1: po pádu bez falešného zrychlení
   if (p._upT > 0) {
     const u = clamp(1 - p._upT / PLAYER.upT, 0, 1), a0 = ctx.globalAlpha;
     ctx.globalAlpha = a0 * (1 - u); _renderDown(ctx, p, cam, u);
@@ -1120,6 +1191,9 @@ function _renderPlayerUp(ctx, p, cam) {
 
   if (_k === 3) skateFeetSmooth(p, _pose.feet, _rdt(cam));
   _kickFoot(p, _pose.feet, ba);   // Q: brusle zastaví puk / máchne naprázdno (časová osa ze simulace)
+  // Tělo B1: pohyb horní poloviny těla (sdílená čistá funkce bodyPose; B0 = nic navíc)
+  const _bp = bodyPose(p, { b: p.crossCheck ? 0 : VIS.b | 0, x: p.x, y: p.y, vx: p.vx ?? 0, vy: p.vy ?? 0, ba, aim: p.aimAngle, dcv: p._dispCharge ?? 0,
+    sw: p._sw ? 1 - p._sw.t / p._sw.T : -1, hasPuck: !!p.hasPuck, hnd: p.handed ?? 1, stagT: p._stagT ?? 0, stagDir: p._stagDir ?? 1, swing: _pose.body.sw ?? 0 }, _rdt(cam));
   ctx.lineCap = 'round';
   const feetW = [];   // polohy bruslí v lokálu (svět. jednotky) pro štulpny v skinBody
   for (const f of _pose.feet) {
@@ -1259,15 +1333,10 @@ function _renderPlayerUp(ctx, p, cam) {
   // Pravák (handed 1): hůl vpravo, HORNÍ ruka = levá u konce hole PŘED tělem, DOLNÍ ruka = pravá níž na dříku;
   // čepel prohnutá DOVNITŘ (forhend = prohnutá strana hledí dopředu k tělu), puk leží na prohnuté straně.
   // Levák zrcadlově. Jen kresba: špička/čepel = fyzikální poloha (dosah), mění se ruce, dřík, prohnutí, puk.
-  const R0 = PLAYER.radius;
-  const fA = p.bodyAngle ?? windAngle, fC = Math.cos(fA), fS = Math.sin(fA);
-  const sC = Math.cos(fA + Math.PI / 2), sS = Math.sin(fA + Math.PI / 2);   // +strana = hnd 1 (pravá)
-  // horní ruka: před tělem u středu, mírně k bekhendu; v nápřahu se stáhne k forhendovému boku
-  const tF = R0 * (0.55 - 0.35 * dcv), tSd = R0 * (-0.15 + 0.55 * dcv) * hnd;
-  const topW = { x: p.x + fC * tF + sC * tSd, y: p.y + fS * tF + sS * tSd };
+  // horní ruka: před tělem u středu, mírně k bekhendu; v nápřahu se stáhne k forhendovému boku; B1: houpe se v rytmu kroku (sway)
   const tipW = { x: gxw + windCos * wt, y: gyw + windSin * wt };
+  const { topW, botW } = stickHands(p.x, p.y, p.bodyAngle ?? windAngle, dcv, hnd, tipW, _bp.sway);
   const shDir = Math.atan2(tipW.y - topW.y, tipW.x - topW.x), shC = Math.cos(shDir), shS = Math.sin(shDir);
-  const botW = { x: topW.x + (tipW.x - topW.x) * 0.42, y: topW.y + (tipW.y - topW.y) * 0.42 };
   p._visTopW = topW; p._visBotW = botW;
   const tx0 = ox + topW.x * s, ty0 = oy + topW.y * s;
 
@@ -1388,7 +1457,7 @@ function _renderPlayerUp(ctx, p, cam) {
     ctx.save();
     ctx.translate(sx, sy); ctx.rotate(ba); ctx.translate(bo.x * s, (leanW + bo.y) * s); ctx.scale(s, s);
     K.headV = VIS.h;
-    skinBody(ctx, { feet: feetW.map(f => ({ x: f.x - bo.x, y: f.y - bo.y, side: f.side })), top: toL(topH), bot: toL(botH), hnd: p.handed ?? 1, tw: bo.tw, lx: llx, ly: lly }, K);
+    skinBody(ctx, { feet: feetW.map(f => ({ x: f.x - bo.x, y: f.y - bo.y, side: f.side })), top: toL(topH), bot: toL(botH), hnd: p.handed ?? 1, tw: bo.tw + _bp.tw, ux: _bp.ux, uy: _bp.uy, hd: _bp.hd, lx: llx, ly: lly }, K);
     ctx.restore();
   }
 

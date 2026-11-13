@@ -90,24 +90,33 @@ function pattern(c, K) {
   }
 }
 
-// ── TĚLO HRÁČE (lokál: +x = dopředu/obličej, +y = doprava). B = { feet:[{x,y,side}], top, bot (ruce), hnd, tw (natočení ramen), lx, ly (světlo v lokálu) }
-export function skinBody(c, B, K) {
-  const tw = B.tw || 0, hnd = B.hnd || 1, lod = lodSmall(c);   // lod: malé měřítko → silnější tóny tvarů, méně drobných linek
-  const S = [{ x: R * 0.25, y: -R * 0.9 }, { x: R * 0.25, y: R * 0.9 }].map(p => rot(p, tw));
+// ── KOSTRA TĚLA (čistá geometrie, bez canvasu): sdílí skinBody i scripts/body_anim_metrics.mjs.
+// B.ux, B.uy = posun horního těla (trup, ramena, helma) vůči bokům; B.hd = natočení hlavy kolem krku (Tělo B1, Player.js bodyPose)
+export function skinRig(B) {
+  const tw = B.tw || 0, hnd = B.hnd || 1, ux = B.ux || 0, uy = B.uy || 0, hd = B.hd || 0;
+  const S = [{ x: R * 0.25, y: -R * 0.9 }, { x: R * 0.25, y: R * 0.9 }].map(p => { const q = rot(p, tw); return { x: q.x + ux, y: q.y + uy }; });
   const H = hnd > 0 ? [B.top, B.bot] : [B.bot, B.top];
   const E = [0, 1].map(i => ({ x: (S[i].x + H[i].x) / 2 + R * 0.1, y: (S[i].y + H[i].y) / 2 + (i ? 1 : -1) * R * 0.25 }));
+  const hp = rot({ x: R * 0.72 - R * 0.25, y: 0 }, hd);
+  return { S, H, E, ux, uy, tw, hd, head: { x: R * 0.25 + ux + hp.x, y: uy + hp.y } };
+}
+// ── TĚLO HRÁČE (lokál: +x = dopředu/obličej, +y = doprava). B = { feet:[{x,y,side}], top, bot (ruce), hnd, tw (natočení ramen), ux, uy, hd, lx, ly (světlo v lokálu) }
+export function skinBody(c, B, K) {
+  const lod = lodSmall(c);   // lod: malé měřítko → silnější tóny tvarů, méně drobných linek
+  const Rg = skinRig(B), { S, H, E, ux, uy, tw, hd } = Rg;
   const hx = R * 0.72, hrx = R * 0.55 * GS, hry = R * 0.5 * GS;
+  const HM = new DOMMatrix().translate(Rg.head.x, Rg.head.y).rotate(hd * 180 / Math.PI).translate(-hx, 0);   // rámec helmy (hlava kolem krku)
+  const shY = s => (s.y - uy) * 0.98 + uy;   // ramenní chrániče (B0: s.y·0,98)
   // rukavice: natočené podél předloktí (sdílená tečna paže → rukavice)
   const gl = [0, 1].map(i => ({ x: H[i].x, y: H[i].y, a: Math.atan2(H[i].y - E[i].y, H[i].x - E[i].x) }));
   // 1) sjednocená cesta těla
   const body = new Path2D();
   for (const f of B.feet) capsule(body, -R * 0.55, f.side * R * 0.55, 1.4, f.x - 0.4, f.y, 1.15);           // štulpny
   ellP(body, -R * 0.62, -R * 0.62, R * 0.5, R * 0.46); ellP(body, -R * 0.62, R * 0.62, R * 0.5, R * 0.46);  // kalhoty
-  const tor = new Path2D(); torso(tor);
-  const up = new Path2D(); torso(up); for (const s of S) ellP(up, s.x - R * 0.12, s.y * 0.98, R * 0.48, R * 0.42);   // trup + ramena
+  const up = new Path2D(); { const q = new Path2D(); torso(q); up.addPath(q, new DOMMatrix().translate(ux, uy)); } for (const s of S) ellP(up, s.x - R * 0.12, shY(s), R * 0.48, R * 0.42);   // trup + ramena
   for (let i = 0; i < 2; i++) { capsule(up, S[i].x, S[i].y, 1.9, E[i].x, E[i].y, 1.5); capsule(up, E[i].x, E[i].y, 1.5, H[i].x, H[i].y, 1.25); }   // paže: plynulé zúžení
   const gloves = new Path2D(); for (const g of gl) { const m = new DOMMatrix().translate(g.x, g.y).rotate(g.a * 180 / Math.PI); const q = new Path2D(); q.roundRect(-2.6 * GS + 0.6, -1.9 * GS, 4.6 * GS, 3.8 * GS, 1.5); gloves.addPath(q, m); }
-  const helm = new Path2D(); ellP(helm, hx, 0, hrx, hry);
+  const helm = new Path2D(); { const q = new Path2D(); ellP(q, hx, 0, hrx, hry); helm.addPath(q, HM); }
   const hv = K.headV || 0;   // H0 helma v jedné cestě s tělem; H1/H2 samostatný tvar s vlastním obrysem (dev playground)
   body.addPath(up); body.addPath(gloves); if (!hv) body.addPath(helm);
   // 2) obrys jednou (pod výplněmi) → zůstane jen vnější hrana
@@ -118,15 +127,15 @@ export function skinBody(c, B, K) {
   c.fillStyle = K.jersey; c.fill(up);
   // čitelné tvary v 1× tónem (ne linkou → obrys zůstává jeden): ramena světlejší, rukávy tmavší; vzor dresu jde přes ně
   const lt = luma(K.jersey) > 0.55;
-  c.fillStyle = shade(K.jersey, (lt ? -0.55 : 1) * (lod ? 0.22 : 0.13)); c.beginPath(); for (const s of S) { c.moveTo(s.x - R * 0.12 + R * 0.48, s.y * 0.98); c.ellipse(s.x - R * 0.12, s.y * 0.98, R * 0.48, R * 0.42, 0, 0, Math.PI * 2); } c.fill();
+  c.fillStyle = shade(K.jersey, (lt ? -0.55 : 1) * (lod ? 0.22 : 0.13)); c.beginPath(); for (const s of S) { c.moveTo(s.x - R * 0.12 + R * 0.48, shY(s)); c.ellipse(s.x - R * 0.12, shY(s), R * 0.48, R * 0.42, 0, 0, Math.PI * 2); } c.fill();
   const arms = new Path2D(); for (let i = 0; i < 2; i++) { capsule(arms, S[i].x, S[i].y, 1.9, E[i].x, E[i].y, 1.5); capsule(arms, E[i].x, E[i].y, 1.5, H[i].x, H[i].y, 1.25); }
   c.fillStyle = shade(K.jersey, lod ? -0.22 : -0.14); c.fill(arms);
-  c.save(); c.clip(up); c.rotate(tw); pattern(c, K); c.restore();
+  c.save(); c.clip(up); c.translate(ux, uy); c.rotate(tw); pattern(c, K); c.restore();
   // rukávový pruh (sleeves/stripes) — páska na předloktí
   if (K.pattern === 'sleeves' || K.pattern === 'stripes') for (let i = 0; i < 2; i++) { const mx = (E[i].x + H[i].x) / 2, my = (E[i].y + H[i].y) / 2, a = Math.atan2(H[i].y - E[i].y, H[i].x - E[i].x);
     c.save(); c.translate(mx, my); c.rotate(a); c.fillStyle = K.accent; c.fillRect(-0.5, -1.45, 1.0, 2.9); c.restore(); }
   // číslo na zádech (vrchem k hlavě)
-  c.save(); c.rotate(tw); c.translate(-R * 0.42, 0); c.rotate(Math.PI / 2); c.font = `900 ${R * 1.25}px 'Segoe UI', sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.save(); c.translate(ux, uy); c.rotate(tw); c.translate(-R * 0.42, 0); c.rotate(Math.PI / 2); c.font = `900 ${R * 1.25}px 'Segoe UI', sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle';
   const lightJ = luma(K.jersey) > 0.4; c.lineJoin = 'round'; c.lineWidth = 1.1; c.strokeStyle = lightJ ? '#ffffff' : (K.accent === '#f4f7fb' || K.accent === '#ffffff') ? shade(K.jersey, -0.5) : K.accent;
   c.strokeText(String(K.num), 0, 0.3); c.fillStyle = lightJ ? '#1a1f29' : '#ffffff'; c.fillText(String(K.num), 0, 0.3); c.restore();
   // rukavice + manžeta (záměrná linka výstroje)
@@ -136,28 +145,32 @@ export function skinBody(c, B, K) {
   if (!hv) { c.fillStyle = K.helmet === K.jersey ? shade(K.helmet, lt ? -0.18 : -0.24) : K.helmet; c.fill(helm); }   // helma v barvě dresu o tón tmavší = hlava se oddělí od ramen c.strokeStyle = shade(K.helmet, -0.38); c.lineWidth = 0.6; c.stroke(helm);   // okraj helmy = hlava a směr pohledu (informační linka)
   // 4) jedno stínování přes celé tělo (světlo pevné ve světě, předané v lokálu)
   const lx = B.lx ?? -0.5, ly = B.ly ?? -0.5;
-  const g = c.createRadialGradient(lx * R * 0.7, ly * R * 0.7, R * 0.2, 0, 0, R * 1.9);
+  const g = c.createRadialGradient(ux + lx * R * 0.7, uy + ly * R * 0.7, R * 0.2, ux, uy, R * 1.9);
   g.addColorStop(0, 'rgba(255,255,255,0.30)'); g.addColorStop(0.5, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(10,16,40,0.24)');
   c.save(); c.clip(body); c.fillStyle = g; c.fillRect(-R * 2.5, -R * 2.5, R * 5, R * 5); c.restore();
+  c.save(); c.setTransform(c.getTransform().multiply(HM));   // helma a linky obličeje v rámci hlavy
+  const hlx = lx * Math.cos(hd) + ly * Math.sin(hd), hly = -lx * Math.sin(hd) + ly * Math.cos(hd);   // světlo v rámci hlavy
+  const helmL = new Path2D(); ellP(helmL, hx, 0, hrx, hry);
   if (hv) {   // H1: tón odlišený od dresu; H2: světlá helma jako dřív (pokud hráč nemá vlastní barvu helmy)
     const own = K.helmet !== K.jersey;
     const hc = hv === 2 ? (own ? K.helmet : '#eef2f8') : (own ? K.helmet : shade(K.jersey, lt ? -0.45 : 0.42));
-    c.lineJoin = 'round'; c.strokeStyle = SKIN_OUT; c.lineWidth = 2.0; c.stroke(helm);
-    c.fillStyle = hc; c.fill(helm);
-    const hg = c.createRadialGradient(hx + lx * R * 0.25, ly * R * 0.25, R * 0.05, hx, 0, hrx * 1.2);
-    hg.addColorStop(0, 'rgba(255,255,255,0.35)'); hg.addColorStop(1, 'rgba(10,16,40,0.18)'); c.fillStyle = hg; c.fill(helm);
+    c.lineJoin = 'round'; c.strokeStyle = SKIN_OUT; c.lineWidth = 2.0; c.stroke(helmL);
+    c.fillStyle = hc; c.fill(helmL);
+    const hg = c.createRadialGradient(hx + hlx * R * 0.25, hly * R * 0.25, R * 0.05, hx, 0, hrx * 1.2);
+    hg.addColorStop(0, 'rgba(255,255,255,0.35)'); hg.addColorStop(1, 'rgba(10,16,40,0.18)'); c.fillStyle = hg; c.fill(helmL);
     K = { ...K, helmet: hc };   // hřebínek a lesk níž počítají s barvou helmy
   }
   // 5) informační linky navrch: hřebínek helmy, lesk, ochrana obličeje
   c.lineCap = 'round';
   // v 1× (lod) bez hřebínku a lesku helmy (splývají ve skvrnu), směr hlavy nese hledí
   if (!lod) { c.beginPath(); c.moveTo(hx - hrx * 0.85, 0); c.lineTo(hx + hrx * 0.15, 0); c.strokeStyle = mix(K.helmet, K.helmet === K.jersey ? K.accent : K.jersey, 0.6); c.lineWidth = 0.9; c.stroke(); }   // hřebínek: tón, ne tvrdá linka
-  if (!lod) { c.beginPath(); c.ellipse(hx + lx * R * 0.22, ly * R * 0.22, R * 0.16, R * 0.1, 0, 0, Math.PI * 2); c.fillStyle = 'rgba(255,255,255,0.8)'; c.fill(); }
+  if (!lod) { c.beginPath(); c.ellipse(hx + hlx * R * 0.22, hly * R * 0.22, R * 0.16, R * 0.1, 0, 0, Math.PI * 2); c.fillStyle = 'rgba(255,255,255,0.8)'; c.fill(); }
   const ht = K.helmetType;
   if (ht === 'cage') { c.beginPath(); c.arc(hx, 0, hrx * 1.12, -0.9, 0.9); for (const yy of [-0.22, 0, 0.22]) { c.moveTo(hx + R * 0.34, R * yy); c.lineTo(hx + hrx * 1.12 * Math.cos(Math.asin(R * yy / (hrx * 1.12))), R * yy); } c.strokeStyle = '#2b2f36'; c.lineWidth = 0.5; c.stroke(); }
   else if (ht === 'visor') { c.beginPath(); c.arc(hx, 0, hrx * 0.98, -0.85, 0.85); c.strokeStyle = K.visor; c.lineWidth = 1.5; c.stroke(); }
   else if (ht === 'shield') { c.beginPath(); c.arc(hx, 0, hrx * 1.04, -1.1, 1.1); c.closePath(); c.fillStyle = rgba(K.visor, 0.45); c.fill(); c.strokeStyle = shade(K.visor, -0.3); c.lineWidth = 0.6; c.stroke(); }
   else { c.beginPath(); c.ellipse(hx + hrx * 0.78, 0, R * 0.16, R * 0.26, 0, 0, Math.PI * 2); c.fillStyle = '#e8b896'; c.fill(); }
+  c.restore();
 }
 
 // ── GÓLMAN (lokál gólmana: −X = k puku, +Y = dolů; po ctx.scale(−inX·s, s)). G = goalieGeom(...) ze simulace (beze změny).
