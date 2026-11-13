@@ -236,7 +236,7 @@ function _drawGoal(ctx, cam, glx, dir, postColor, part = 'base') {
   const y1 = oy + RINK.goalY * s, y2 = oy + (RINK.goalY + RINK.goalH) * s;
   if (VIS.g === 1) return _drawGoalTop(ctx, s, x, xB, y1, y2, dir, postColor);
   if (VIS.g === 5) return _drawGoalExact(ctx, s, x, xB, y1, y2, dir, postColor, PUCK.crossbarHeight * s, part);
-  if (VIS.g === 8) return _drawGoalReal(ctx, s, x, dir, y1, y2, postColor, PUCK.crossbarHeight * s, part);
+  if (VIS.g === 8 || VIS.g === 9) return _drawGoalReal(ctx, s, x, dir, y1, y2, postColor, PUCK.crossbarHeight * s, part, GOAL_REAL[VIS.g]);
   if (VIS.g === 6 || VIS.g === 7) return _drawGoalNice(ctx, s, x, xB, y1, y2, dir, postColor, PUCK.crossbarHeight * s, part, GOAL_STYLE[VIS.g]);
   if (part === 'front') return;
   if (VIS.g === 3 || VIS.g === 4) return _drawGoalPersp(ctx, s, x, xB, y1, y2, dir, postColor, VIS.g === 4 ? 1.45 : 1 + HGT.k, PUCK.crossbarHeight * s);
@@ -432,46 +432,59 @@ function _drawGoalNice(ctx, s, x, xB, y1, y2, dir, postColor, Hs, part, st) {
 // G8 „skutečný tvar" (2026-11-12, NÁHLED — kolize zatím obdélník): NHL branka shora = základna tvaru D (dimensions.com: hloubka 40",
 // šířka 88", rohy r 18") přepočtená na ústí 44 px (72") → 0,611 px/″: hloubka 24,4, polovina šířky zad 26,9, rohy r 11. Horní rám mělčí
 // (≈ 22″ = 13,4 px). Tyčky a trubky záměrně silné (stylizace; skutečné 2″ by byly ~1,2 px).
-export const GOAL_REAL = { depth: 24.4, halfBack: 26.9, r: 11, topDepth: 13.4, post: 3.2, pipe: 3.0, out: 5.0 };
-function _realPath(x, dir, cy, half, depth, halfBack, r, s) {
-  // půlka obrysu od tyčky (u=0, y=±half) k zádům; u = hloubka za čarou, směr dir
+// Čitelnost v 1× (scripts/goal8_rubric.py, řezy z pixelů): základna se od tyčky hned rozšíří do strany (flare — jako skutečná NHL
+// základna, která se rozbíhá už u tyček) a záda jsou o 1,6 px širší než ve skutečnosti → u tyček se nespojí s horním rámem
+// (dřív na řezu 6 px za čarou jen jedna zdvojená tmavá čára, bílá základna 0 px). Obrys 0,9 na stranu = jako hráči.
+// Rohy zad r 14 (místo 11) a horního rámu r 8 → víc „D", méně krabice (Ondřej: „tvar brány není takhle rovný").
+// G9 = totéž bez horního rámu (jen základna + břevno + tyčky, výška jen stínem) — srovnání „méně čar".
+export const GOAL_REAL = {
+  8: { depth: 24.4, halfBack: 28.5, r: 14, flare: 6, topDepth: 13.4, topOut: 0, topR: 8, top: true,
+       post: 3.2, pipe: 2.6, out: 4.4, topPipe: 2.2, topOut2: 1.8, mesh: 7.5, meshA: 0.22 },
+  9: { depth: 24.4, halfBack: 28.5, r: 14, flare: 6, topDepth: 13.4, topOut: 0, topR: 8, top: false,
+       post: 3.2, pipe: 3.0, out: 4.8, topPipe: 0, topOut2: 0, mesh: 7.5, meshA: 0.22 },
+};
+function _realPath(x, dir, cy, half, depth, halfBack, r, s, flare = 0) {
+  // půlka obrysu od tyčky (u=0, y=±half) k zádům; u = hloubka za čarou, směr dir. flare > 0: od tyčky nejdřív do strany (oblouk), pak dozadu.
   const P = new Path2D(), X = u => x + dir * u * s, Y = v => cy + v * s;
   const hb = halfBack, d = depth;
   P.moveTo(X(0), Y(-half));
-  P.lineTo(X(d - r * 0.9), Y(-hb));                       // bok: od tyčky šikmo ven k zadnímu rohu
+  if (flare > 0) { P.quadraticCurveTo(X(0), Y(-hb), X(flare), Y(-hb)); P.lineTo(X(d - r), Y(-hb)); }
+  else P.lineTo(X(d - r * 0.9), Y(-hb));                  // bok: od tyčky šikmo ven k zadnímu rohu
   P.quadraticCurveTo(X(d), Y(-hb), X(d), Y(-hb + r));     // zaoblený roh
   P.lineTo(X(d), Y(hb - r));                              // záda
-  P.quadraticCurveTo(X(d), Y(hb), X(d - r * 0.9), Y(hb));
-  P.lineTo(X(0), Y(half));
+  if (flare > 0) { P.quadraticCurveTo(X(d), Y(hb), X(d - r), Y(hb)); P.lineTo(X(flare), Y(hb)); P.quadraticCurveTo(X(0), Y(hb), X(0), Y(half)); }
+  else { P.quadraticCurveTo(X(d), Y(hb), X(d - r * 0.9), Y(hb)); P.lineTo(X(0), Y(half)); }
   return P;
 }
-function _drawGoalReal(ctx, s, x, dir, y1, y2, postColor, Hs, part) {
-  const G = GOAL_REAL, cy = (y1 + y2) / 2, half = (y2 - y1) / 2 / s;
-  const base = _realPath(x, dir, cy, half, G.depth, G.halfBack, G.r, s);
-  const top  = _realPath(x, dir, cy, half, G.topDepth, half + 1.5, G.r * 0.6, s);   // horní rám: mělčí a skoro rovnoběžný s ústím
+function _drawGoalReal(ctx, s, x, dir, y1, y2, postColor, Hs, part, G) {
+  const cy = (y1 + y2) / 2, half = (y2 - y1) / 2 / s;
+  const base = _realPath(x, dir, cy, half, G.depth, G.halfBack, G.r, s, G.flare);
+  const top  = _realPath(x, dir, cy, half, G.topDepth, half + G.topOut, G.topR, s);   // horní rám: mělčí, boky přímo nad tyčkami
   ctx.save(); ctx.lineJoin = ctx.lineCap = 'round';
   if (part === 'base') {
-    // měkký stín od horního rámu (výška břevna) + základny
+    // měkký stín od horního rámu (výška břevna)
     ctx.save(); ctx.filter = `blur(${(1.8 * s).toFixed(1)}px)`; ctx.translate(Hs * HGT.lx * 0.8, Hs * HGT.ly * 0.8);
-    ctx.strokeStyle = 'rgba(20,40,70,0.16)'; ctx.lineWidth = G.pipe * 1.4 * s; ctx.stroke(top); ctx.restore();
+    ctx.strokeStyle = 'rgba(20,40,70,0.16)'; ctx.lineWidth = 3.0 * 1.4 * s; ctx.stroke(top); ctx.restore();
     // vnitřek základny: od ústí světlý → vzadu tmavší
     const g = ctx.createLinearGradient(x, 0, x + dir * G.depth * s, 0); g.addColorStop(0, 'rgb(236,243,250)'); g.addColorStop(1, 'rgb(170,188,210)');
     const fill = new Path2D(base); fill.closePath(); ctx.fillStyle = g; ctx.fill(fill);
     ctx.restore(); return;
   }
   const fill = new Path2D(base); fill.closePath();
-  ctx.fillStyle = 'rgba(225,236,248,0.34)'; ctx.fill(fill);
+  ctx.fillStyle = 'rgba(225,236,248,0.24)'; ctx.fill(fill);   // závoj sítě slabší (0,34 → 0,24): puk v síti ≥ 3:1 i v detailu (R8)
   // síť: diagonální, oříznutá tvarem základny
-  ctx.save(); ctx.clip(fill); ctx.strokeStyle = 'rgba(80,100,128,0.32)'; ctx.lineWidth = 0.7 * s; ctx.beginPath();
-  const sp = 7.5 * s, lo = Math.min(x, x + dir * G.depth * s), w = G.depth * s, t0 = cy - G.halfBack * s, hh = 2 * G.halfBack * s;
+  ctx.save(); ctx.clip(fill); ctx.strokeStyle = `rgba(80,100,128,${G.meshA})`; ctx.lineWidth = 0.7 * s; ctx.beginPath();
+  const sp = G.mesh * s, lo = Math.min(x, x + dir * G.depth * s), w = G.depth * s, t0 = cy - G.halfBack * s, hh = 2 * G.halfBack * s;
   for (let k = -hh; k < w + hh; k += sp) { ctx.moveTo(lo + k, t0); ctx.lineTo(lo + k + hh, t0 + hh); ctx.moveTo(lo + k, t0 + hh); ctx.lineTo(lo + k + hh, t0); }
   ctx.stroke(); ctx.restore();
   // základna (na ledu): obrys + bílá trubka
   ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = G.out * s; ctx.stroke(base);
   ctx.strokeStyle = '#eef3f9'; ctx.lineWidth = G.pipe * s; ctx.stroke(base);
-  // horní rám (výš, mělčí): tenčí trubka v barvě týmu → hloubka a čitelný tvar
-  ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = (G.pipe * 0.8 + 2) * s; ctx.stroke(top);
-  ctx.strokeStyle = postColor; ctx.lineWidth = G.pipe * 0.8 * s; ctx.stroke(top);
+  // horní rám (výš, mělčí): trubka v barvě týmu → hloubka a čitelný tvar
+  if (G.top) {
+    ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = (G.topPipe + G.topOut2) * s; ctx.stroke(top);
+    ctx.strokeStyle = postColor; ctx.lineWidth = G.topPipe * s; ctx.stroke(top);
+  }
   // břevno přes ústí + silné tyčky s odleskem
   ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = (G.pipe + 2) * s; ctx.beginPath(); ctx.moveTo(x, y1); ctx.lineTo(x, y2); ctx.stroke();
   ctx.strokeStyle = postColor; ctx.lineWidth = G.pipe * s; ctx.stroke();
