@@ -1616,6 +1616,7 @@ function showMatchResult(rewards, game) {
   const eloEl = $('mr-elo');
   eloEl.textContent = (elo >= 0 ? '+' : '') + elo;
   eloEl.className = 'mr-reward-val ' + (elo > 0 ? 'elo-pos' : elo < 0 ? 'elo-neg' : 'elo-zero');
+  if (rewards.vsHuman === false) { eloEl.textContent = '—'; eloEl.title = t('elo_bots_only'); setStatus(t('elo_bots_only'), '#b6c4ff'); }   // ELO jen proti lidem
   $('mr-credits').textContent = '+' + cred + ' ⊙';
   $('mr-mvp-badge').style.display = rewards.isMVP ? '' : 'none';
   // Founder: pozvaný právě dohrál → odemčen titul oběma

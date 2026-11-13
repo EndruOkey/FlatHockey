@@ -30,16 +30,17 @@ try {
   const codes = [];
   for (let i = 0; i < 12; i++) codes.push((await post({ origin: BASE })).status);
   check(codes.includes(429) && codes[0] === 401, `buy -> 429 po limitu (${codes.join(',')})`);
-  // Rate limit čtení: /api/leaderboard 120/min
-  let last = 0, first429 = -1;
-  for (let i = 0; i < 125; i++) { last = (await fetch(BASE + '/api/leaderboard', T)).status; if (last === 429 && first429 < 0) first429 = i; }
-  check(first429 === 120, `leaderboard 429 od 121. požadavku (první 429 na indexu ${first429})`);
-  // Auth router limit 20/min
+  // /auth POST bez originu → 403 (před vyčerpáním limitu čtení)
+  check((await fetch(BASE + '/auth/profile', { method: 'POST', signal: AbortSignal.timeout(5000) })).status === 403, 'POST /auth/profile bez originu -> 403 (před limitem)');
+  // Přihlášení (/auth/discord, crazygames, logout) přísně 20/min
   let a429 = -1;
-  for (let i = 0; i < 25; i++) { const r = await fetch(BASE + '/auth/me', T); if (r.status === 429 && a429 < 0) a429 = i; }
-  check(a429 === 20, `/auth/me 429 od 21. požadavku (index ${a429})`);
-  // /auth POST bez originu → 403
-  check((await fetch(BASE + '/auth/profile', { method: 'POST', signal: AbortSignal.timeout(5000) })).status === 403, 'POST /auth/profile bez originu -> 403');
+  for (let i = 0; i < 25; i++) { const r = await fetch(BASE + '/auth/discord', { ...T, redirect: 'manual' }); if (r.status === 429 && a429 < 0) a429 = i; }
+  check(a429 === 20, `/auth/discord 429 od 21. požadavku (index ${a429})`);
+  // Čtení (leaderboard, /api/me, /auth/me…) 600/min na IP — jedna skupina (2026-11-13: dřív 120 a /auth/me 20 → hráč proklikávající menu narazil)
+  let last = 0, first429 = -1;
+  for (let i = 0; i < 605; i++) { last = (await fetch(BASE + '/api/leaderboard', T)).status; if (last === 429 && first429 < 0) first429 = i; }
+  check(first429 === 600, `leaderboard 429 od 601. požadavku (první 429 na indexu ${first429})`);
+  check((await fetch(BASE + '/auth/me', T)).status === 429, '/auth/me sdílí limit čtení (po 600 → 429)');
 
   // Reconnect token: handshake přes engine.io polling (bez klienta), pak zkontroluj metric_events (pid = rt)
   const connect = async (rt) => {

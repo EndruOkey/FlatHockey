@@ -82,12 +82,16 @@ app.post(['/auth/*splat', '/api/store/buy', '/api/link/*splat'], sameOrigin);
 
 app.use(express.json());
 app.use(cookieParser());
-app.use('/auth', rateLimit('auth', 20), authRouter);
+// /auth: přísně jen přihlášení (Discord/CrazyGames/odhlášení); čtení profilu a statistik volá UI při každé obrazovce
+// → limit čtení (dřív 20/min na IP pro vše = jeden hráč proklikávající menu nebo škola za jednou IP narazila; průzkum 2026-11-13)
+// read 600/min na IP: celá třída (≈30 hráčů za jednou IP) × ~10 čtení za minutu proklikávání menu = ODHAD 300
+const _authStrict = rateLimit('auth', 20), _authRead = rateLimit('read', 600);
+app.use('/auth', (req, res, next) => (/^\/(discord|crazygames|logout)/.test(req.path) ? _authStrict : _authRead)(req, res, next), authRouter);
 app.use('/api/link/code', rateLimit('linkcode', 5));
 app.use('/api/link/redeem', rateLimit('linkredeem', 10));
 app.use('/api/link', linkRouter);
-app.use('/api/me', rateLimit('read', 120));
-app.use('/api/leaderboard', rateLimit('read', 120));
+app.use('/api/me', rateLimit('read', 600));
+app.use('/api/leaderboard', rateLimit('read', 600));
 app.use('/api/store/buy', rateLimit('buy', 10));
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -252,8 +256,10 @@ function serverGameOver(match) {
       const isMVP   = sid === mvpSid;
       const pm      = (match._plusMinus?.get(sid)) || 0;
   
-      // NHL-style rank delta
-      const rankDelta = (isWin ? 20 : isLoss ? -10 : 0)
+      // NHL-style rank delta — ELO jen když v soupeřově týmu od startu hrál aspoň jeden ČLOVĚK (proti samým botům
+      // se ELO nefarmí; průzkum 2026-11-13: rychlá hra = 1 člověk + boti → žebříček by vyhrál, kdo nahraje nejvíc zápasů s boty)
+      const humanOpp = [...endLobby.members].some(([s2, m2]) => m2.team !== mem.team && match._startSids?.has(s2));
+      const rankDelta = !humanOpp ? 0 : (isWin ? 20 : isLoss ? -10 : 0)
         + goals * 5 + assists * 3 + pm * 2 + (isMVP ? 10 : 0);
   
       // Puck Credits earned
@@ -276,7 +282,7 @@ function serverGameOver(match) {
       } catch {}
   
       // Pošli hráči výsledek s jeho odměnami
-      sock.emit('match_rewards', { goals, assists, isWin, isMVP, rankDelta, creditsDelta, pm, founderUnlocked });
+      sock.emit('match_rewards', { goals, assists, isWin, isLoss, isMVP, rankDelta, creditsDelta, pm, founderUnlocked, vsHuman: humanOpp });
     }
   }
   match.rematchTimer = setTimeout(() => {
