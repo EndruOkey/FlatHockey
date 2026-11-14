@@ -103,6 +103,13 @@ kbd, .key3 { display: inline-block; min-width: 30px; text-align: center; border:
 .m3-season-elo { font-size: 36px; line-height: 1; }
 .m3-muted { font: 600 13px 'Barlow', sans-serif; color: var(--a3-mute); }
 /* ── Pozvánka kamaráda (CTA) — nativní sklo panel, seříznutý roh, jantarový akcent ── */
+.m3-news { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 10px 0 0 4px; padding: 6px 0; text-decoration: none; color: var(--a3-mute2); }
+.m3-news .k3 { font-size: 13px; }
+.m3-news-t { font: 600 15px/1.3 'Barlow', sans-serif; }
+.m3-news-a { color: var(--a3-ice); }
+.m3-news:hover .m3-news-t, .m3-news:focus-visible .m3-news-t { color: var(--a3-text); text-decoration: underline; }
+.m3-news:focus-visible { outline: 2px solid var(--a3-ice); outline-offset: 2px; }
+.m3-menu[data-sub] .m3-news { display: none; }
 .m3-invite { padding: 20px 28px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; border-left: 3px solid var(--a3-amber); }
 .m3-invite-text { margin: 0; font: 500 14px/1.45 'Barlow', sans-serif; color: var(--a3-mute2); }
 .m3-invite-text b { color: var(--a3-amber); font-weight: 700; }
