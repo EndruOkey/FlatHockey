@@ -786,11 +786,17 @@ const SKATE_CYCLE = 95;   // K0–K2: px ujeté dráhy na celý cyklus kroku (2 
 export const SKATE_K3 = { cyc0: 60, cycV: 0.26, push: 0.36, land: 0.80, hip: 1.25, accHz: 1.5, accLo: 40, accHi: 260,
   latW: 0.65, ccW: 1.45, reachK: 1.2, reachM: 1.5, ampK: 1, y0: 1.05,          // šíře odrazu / C-cutu (×R), měkký dosah nohy od kyčle (×R)
   silF: 1.25, silS: 1.5, silB: 1.1,                       // obrys trupu+paží vpřed/do boku/vzad (×R)
-  stopX: -0.45, stopW: 1.45, stopLead: 0.55, stopToe: 0.26, stopBack: 0.25, stopAe: 0.55 };
+  stopX: -0.45, stopW: 1.45, stopLead: 0.55, stopToe: 0.26, stopBack: 0.25, stopAe: 0.55 };   // stop: střed bruslí vpřed, rozkročení do boku, posun po jízdě (×R), špička ven k předku (rad), záklon (×R), ostří napříč do stopT
 // PŘECHODY (2026-11-14, Ondřej z klipů F9: „nohy nebo tělo v nepřirozené pozici"): latA = zkrácení kroku při jízdě bokem vůči pohledu
 // (dřív plná délka jako vpřed → zadní noha 2,2 R přímo za trupem = „ocas"); bwR = max. rychlost přechodu vpřed ↔ couvání (1/s).
 // scripts/pose_transition_metrics.mjs
-SKATE_K3.latA = 0.4; SKATE_K3.bwR = 4; SKATE_K3.bwA = 1.6; SKATE_K3.bwB = 2.5; SKATE_K3.psiM = 0.35;   // psiM = max. natočení kroku vůči bokům (rad); dřív bez limitu → za hranicí boků krok mířil dozadu   // bwA–bwB = směr jízdy vůči tělu (rad), kde se krok vpřed mění v couvání (C-cuty)   // stop: střed bruslí vpřed, rozkročení do boku, posun po jízdě (×R), špička ven k předku (rad), záklon (×R), ostří napříč do stopT
+SKATE_K3.latA = 0.4; SKATE_K3.bwR = 4; SKATE_K3.bwA = 1.6; SKATE_K3.bwB = 2.5; SKATE_K3.psiM = 0.35;
+// bwA–bwB = směr jízdy vůči tělu (rad), kde se krok vpřed mění v couvání (C-cuty); psiM = max. natočení kroku vůči bokům (rad; dřív bez limitu → za hranicí boků krok mířil dozadu)
+// BOČNÍ KROK (shuffle, 2026-11-14, Ondřej: „jízda bokem furt jedna noha je hrozně vykloubená"): čelem vpřed + jízda do boku = obě brusle
+// pod tělem na své straně (shX, shY0), ostří dopředu (špička lehce ven shA), odraz do strany o shY, návrat nad ledem (shL); váha podle
+// směru jízdy vůči tělu lbA–lbB (rad). scripts/side_skate_metrics.mjs
+SKATE_K3.lbA = 0.8; SKATE_K3.lbB = 1.3; SKATE_K3.shX = -0.35; SKATE_K3.shY0 = 1.1; SKATE_K3.shY = 0.4; SKATE_K3.shA = 0.15; SKATE_K3.shL = 0.6;
+if (typeof process !== "undefined" && process.env && process.env.FH_K3) Object.assign(SKATE_K3, JSON.parse(process.env.FH_K3));   // jen měření / hledání (Node)
 // K4 (2026-11-13, jen /dev k výběru): tělo jako celek + odraz. back = délka zaprutí dozadu (×R), hold = podíl rychlosti těla,
 // kterým noha jede dozadu (≥ 0,6 → brusle ve světě skoro stojí), latK = šíře odrazu ven, hip = max natočení boků, twK = podíl zkrutu,
 // který vezme trup (zbytek paže/hůl), sway = přenos váhy napříč (×R). Měření: scripts/body_unity_metrics.mjs --k=4
@@ -816,7 +822,9 @@ export function skateAdvance(st, x, y, ba, spd, k, mLoc = 0, dt = 1 / 60) {
   } else {
     st._mLocS = st._mLocS == null ? mLoc : angleDiff(lerpAngle(st._mLocS, mLoc, Math.min(1, 6 * dt)), 0);
     if (k === 3) { const bwT = spd > 8 ? _ss(SKATE_K3.bwA, SKATE_K3.bwB, Math.abs(st._mLocS)) : 0, b0 = st._bwS ?? bwT;   // K3: vpřed ↔ couvání max. bwR/s (dřív skok nohy 0,53 R za snímek)
-      st._bwS = b0 + Math.max(-SKATE_K3.bwR * dt, Math.min(SKATE_K3.bwR * dt, bwT - b0)); }
+      st._bwS = b0 + Math.max(-SKATE_K3.bwR * dt, Math.min(SKATE_K3.bwR * dt, bwT - b0));
+      const lT = spd > 8 ? (1 - st._bwS) * _ss(SKATE_K3.lbA, SKATE_K3.lbB, Math.abs(st._mLocS)) : 0, l0 = st._lbS ?? lT;   // boční krok taky max. bwR/s (švih myší bez skoku)
+      st._lbS = l0 + Math.max(-SKATE_K3.bwR * dt, Math.min(SKATE_K3.bwR * dt, lT - l0)); }
   }
   if (pv) {
     const dd = Math.min(30, Math.hypot(x - pv.x, y - pv.y));             // teleport (buly) nepočítej
@@ -923,6 +931,7 @@ export function skatePose(o) {
     // K4 PŘEŠLAP: při přechodu vpřed ↔ vzad a ve stoje, když se boky dorovnávají za tělem, se nohy zvednou (brusle nesmýkají po ledě)
     const pivL = K4 ? Math.min(0.9, Math.max(0.9 * Math.min(1, (o.bwV ?? 0) / 3), 0.9 * (1 - _ss(4, 30, spd)) * Math.min(1, Math.abs(mLoc) / 0.25))) : 0;   // natočení boků k jízdě (při couvání rovně)
     const psiB = angleDiff(mLoc, Math.PI);                             // couvání: odchylka od přímo dozadu
+    const latB = K4 ? 0 : o.lbS != null ? o.lbS : !moving ? 0 : (1 - bw) * _ss(SKATE_K3.lbA, SKATE_K3.lbB, Math.abs(mLoc));   // K3: váha bočního kroku (časově omezená ze skateAdvance)
     // rozjezd: kroky rychlé A KRÁTKÉ (až −35 % délky při plném zrychlení) — jako hokejista z místa; o.thr = vyhlazené zrychlení
     const amp = Math.min(1, 0.45 + spd / 220) * (1 - 0.35 * _ss(SKATE_K3.accLo, SKATE_K3.accHi, o.thr ?? 0)), lean = Math.max(-1, Math.min(1, o.lean ?? 0));
     const pcx = -0.5 * R, ch = Math.cos(h), sh = Math.sin(h);
@@ -937,6 +946,11 @@ export function skatePose(o) {
         const G = _k3Leg(u, amp, C, side * psiB, true);
         const gx = pcx - 0.2 * R + G.x, gy = side * G.y, ga = side * G.a;   // C-cut za rameny (trup se dozadu zužuje → brusle vidět; dřív +0,25 R = pod rameny)
         x += (gx - x) * bw; y += (gy - y) * bw; a = lerpAngle(a, ga, bw); lift *= 1 - bw;
+      }
+      if (latB > 0) {                                                  // K3 boční krok: brusle na své straně, odraz do strany, návrat nad ledem
+        const q = Math.sin(2 * Math.PI * u), Ks = SKATE_K3;
+        const bx = (Ks.shX + 0.08 * Math.cos(2 * Math.PI * u)) * R, by = side * (Ks.shY0 + Ks.shY * Math.max(0, q)) * R, ba2 = side * Ks.shA;
+        x += (bx - x) * latB; y += (by - y) * latB; a = lerpAngle(a, ba2, latB); lift += (Ks.shL * Math.max(0, -q) - lift) * latB;
       }
       const rx = -0.62 * R, ry = side * 0.5 * R, ra = side * 0.2;     // klid: mírné V (špičky lehce ven)
       x = rx + (x - rx) * w; y = ry + (y - ry) * w; a = ra + angleDiff(a, ra) * w; lift *= w;
@@ -957,7 +971,7 @@ export function skatePose(o) {
       // jako odtržená. Měkký limit: do 1,0 R beze změny, nad tím plynule stlačeno k max. 1,25 R (rytmus kroku zůstává).
       // (2026-11-13 večer: 1,25 R schovalo brusle pod trup do boku a vzad — ve hře vidět jen vpřed; skripts/skate_visibility.py → 1,8 R; stop bez limitu)
       { const ex = 1 + 1.5 * _ss(0, 0.6, stopT);   // ve stopu se limit plynule uvolní (nohy vpředu za obrysem)
-        const hp = skinHip(side, hv * (1 - _ss(0, 1, stopT))), hx = hp.x, hy = hp.y, dx = x - hx, dy = y - hy, r = Math.hypot(dx, dy), k = SKATE_K3.reachK * R * ex, M = SKATE_K3.reachM * R * ex;   // kyčel natočená s boky (jako ji kreslí skin)
+        const hp = skinHip(side, hv * (1 - latB) * (1 - _ss(0, 1, stopT))), hx = hp.x, hy = hp.y, dx = x - hx, dy = y - hy, r = Math.hypot(dx, dy), k = SKATE_K3.reachK * R * ex, M = SKATE_K3.reachM * R * ex;   // kyčel natočená s boky (jako ji kreslí skin)
         if (r > k) { const r2 = k + (M - k) * (1 - Math.exp(-(r - k) / (M - k))); x = hx + dx * r2 / r; y = hy + dy * r2 / r; } }
       if (pivL > lift) lift = pivL;
       feet.push({ side, x, y, a, lift, push: K4 && !!F.push && bw < 0.5 });
@@ -969,7 +983,7 @@ export function skatePose(o) {
     body.twT = K4 ? h * SKATE_K4.twK : 0;   // K4: trup se natočí s boky (část zkrutu), hůl a hlava zůstanou na myši   // natočení boků → skinBody B.hh
     if (stopT > 0) { const m = o.stopLoc ?? 0, e = _ss(0, 1, stopT); body.x -= Math.cos(m) * SKATE_K3.stopBack * R * e; body.y -= Math.sin(m) * SKATE_K3.stopBack * R * e;
       body.h *= 1 - e; body.twT *= 1 - e; }
-    body.hh = hv * (1 - _ss(0, 1, stopT));   // viditelné boky (skinBody B.hh) — stejný úhel jako kyčel v dosahu nohy výš   // záklon; ve stopu se boky srovnají s tělem (jinak se při obratu přetáčely o ±1,25 rad a kyčle utekly od bruslí)
+    body.hh = hv * (1 - latB) * (1 - _ss(0, 1, stopT));   // boční krok: boky rovně s trupem   // viditelné boky (skinBody B.hh) — stejný úhel jako kyčel v dosahu nohy výš   // záklon; ve stopu se boky srovnají s tělem (jinak se při obratu přetáčely o ±1,25 rad a kyčle utekly od bruslí)
     return { feet, body };
   }
   // ── K0–K2 (dřívější varianty beze změny; přepočteno z px na svět. jednotky)
@@ -1311,7 +1325,7 @@ function _renderPlayerUp(ctx, p, cam) {
   const _mLoc = _spd > 8 ? angleDiff(Math.atan2(p.vy ?? 0, p.vx ?? 0), ba) : 0;   // směr pohybu vůči tělu
   skateAdvance(p, p.x, p.y, ba, _spd, _k, _mLoc, _rdt(cam));
   const _pose = skatePose({ k: _k, phase: p._skatePhase ?? 0, spd: _spd, mLoc: _k >= 3 ? p._mLocS : _mLoc, stopT: (_k >= 3 ? p._stopK3 : p._stopTSmooth) ?? 0,
-    stopLoc: p._hsDir != null ? angleDiff(p._hsDir, ba) : 0, rotSf: p._rotSf ?? 0, lean: p._lean ?? 0, hs: p.handed ?? 1, thr: p._thr ?? 0, bwS: p._bwS, bwV: p._bwV });
+    stopLoc: p._hsDir != null ? angleDiff(p._hsDir, ba) : 0, rotSf: p._rotSf ?? 0, lean: p._lean ?? 0, hs: p.handed ?? 1, thr: p._thr ?? 0, bwS: p._bwS, bwV: p._bwV, lbS: p._lbS });
 
   if (_k === 4) skateFeetSmooth(p, _pose.feet, _rdt(cam), ba, null, null, true); else if (_k === 3) skateFeetSmooth(p, _pose.feet, _rdt(cam));
   if (globalThis.__fhSkateDbg) p._dbgPose = { feet: _pose.feet.map(f => ({ ...f })), stopT: (_k >= 3 ? p._stopK3 : p._stopTSmooth) ?? 0, stopLoc: p._hsDir != null ? angleDiff(p._hsDir, ba) : null };   // scripts/skate_visibility.py

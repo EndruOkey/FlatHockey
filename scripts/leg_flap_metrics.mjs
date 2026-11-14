@@ -13,7 +13,7 @@ for (const k of KS) {
     const st = { _skatePhase: 0 }; let x = 0, y = 0; const P = { '-1': [], '1': [] };
     for (let t = 0; t < 300; t++) { x += Math.cos(m) * 165 * DT; y += Math.sin(m) * 165 * DT;
       skateAdvance(st, x, y, 0, 165, k, m > Math.PI - 1e-9 ? -Math.PI : m, DT);
-      const pose = skatePose({ k, phase: st._skatePhase, spd: 165, mLoc: st._mLocS, stopT: 0, stopLoc: 0, rotSf: st._rotSf ?? 0, lean: 0, hs: 1, thr: st._thr ?? 0, bwS: st._bwS, bwV: st._bwV });
+      const pose = skatePose({ k, phase: st._skatePhase, spd: 165, mLoc: st._mLocS, stopT: 0, stopLoc: 0, rotSf: st._rotSf ?? 0, lean: 0, hs: 1, thr: st._thr ?? 0, bwS: st._bwS, lbS: st._lbS, bwV: st._bwV });
       if (k === 4) skateFeetSmooth(st, pose.feet, DT, 0, null, null, true); else skateFeetSmooth(st, pose.feet, DT);
       if (t >= 120) for (const f of pose.feet) P[f.side].push([f.x * SC, f.y * SC]); }
     let w = 0; for (const s of ['-1', '1']) { const xs = P[s].map(p => p[0]), ys = P[s].map(p => p[1]); w = Math.max(w, Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)); }

@@ -35,7 +35,7 @@ function run(k, vx, vy, T, stopT = 0) {
   const st = { _skatePhase: 0 }; let x = 0, y = 0; const F = [], spd = Math.hypot(vx, vy), mLoc = spd > 8 ? Math.atan2(vy, vx) : 0;
   for (let t = 0; t < T; t++) { x += vx * DT; y += vy * DT;
     skateAdvance(st, x, y, 0, spd, k, mLoc, DT);
-    const pose = skatePose({ k, phase: st._skatePhase, spd, mLoc: st._mLocS, stopT, stopLoc: mLoc, rotSf: st._rotSf ?? 0, lean: 0, hs: 1, thr: st._thr ?? 0, bwS: st._bwS, bwV: st._bwV });
+    const pose = skatePose({ k, phase: st._skatePhase, spd, mLoc: st._mLocS, stopT, stopLoc: mLoc, rotSf: st._rotSf ?? 0, lean: 0, hs: 1, thr: st._thr ?? 0, bwS: st._bwS, lbS: st._lbS, bwV: st._bwV });
     if (k === 4) skateFeetSmooth(st, pose.feet, DT, 0, null, null, true); else skateFeetSmooth(st, pose.feet, DT);
     F.push(pose); }
   return F; }

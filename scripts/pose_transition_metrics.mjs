@@ -24,7 +24,7 @@ function run(T, fn) {
     const t = i * DT, { mv, spd, ba } = fn(t); x += Math.cos(mv) * spd * DT; y += Math.sin(mv) * spd * DT;
     const mLoc = spd > 8 ? ad(mv - ba) : 0;
     skateAdvance(st, x, y, ba, spd, K, mLoc, DT);
-    const P = skatePose({ k: K, phase: st._skatePhase ?? 0, spd, mLoc: K >= 3 ? st._mLocS : mLoc, stopT: 0, stopLoc: 0, rotSf: st._rotSf ?? 0, lean: 0, hs: 1, thr: st._thr ?? 0, bwS: st._bwS, bwV: st._bwV });
+    const P = skatePose({ k: K, phase: st._skatePhase ?? 0, spd, mLoc: K >= 3 ? st._mLocS : mLoc, stopT: 0, stopLoc: 0, rotSf: st._rotSf ?? 0, lean: 0, hs: 1, thr: st._thr ?? 0, bwS: st._bwS, lbS: st._lbS, bwV: st._bwV });
     if (K === 4) skateFeetSmooth(st, P.feet, DT, ba, null, null, true); else if (K === 3) skateFeetSmooth(st, P.feet, DT);
     const feet = P.feet.map(f => ({ side: f.side, a: Math.abs(ad(f.a)), hx: f.x - Math.cos(f.a) * 0.32 * R, hy: f.y - Math.sin(f.a) * 0.32 * R, tx: f.x + Math.cos(f.a) * 0.55 * R, ty: f.y + Math.sin(f.a) * 0.55 * R, x: f.x, y: f.y }));
     const row = { t, mLoc, feet, jump: 0 };

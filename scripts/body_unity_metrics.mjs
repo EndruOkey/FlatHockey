@@ -26,7 +26,7 @@ function run(k, step, T) {
     const s = step(t); x += s.vx * DT; y += s.vy * DT; const spd = Math.hypot(s.vx, s.vy);
     const mLoc = spd > 8 ? wrap(Math.atan2(s.vy, s.vx) - s.ba) : 0;
     skateAdvance(st, x, y, s.ba, spd, k, mLoc, DT);
-    const pose = skatePose({ k, phase: st._skatePhase, spd, mLoc: k >= 3 ? st._mLocS : mLoc, stopT: 0, stopLoc: 0, rotSf: st._rotSf ?? 0, lean: 0, hs: 1, thr: st._thr ?? 0, bwS: st._bwS, bwV: st._bwV });
+    const pose = skatePose({ k, phase: st._skatePhase, spd, mLoc: k >= 3 ? st._mLocS : mLoc, stopT: 0, stopLoc: 0, rotSf: st._rotSf ?? 0, lean: 0, hs: 1, thr: st._thr ?? 0, bwS: st._bwS, lbS: st._lbS, bwV: st._bwV });
     if (k === 4) skateFeetSmooth(st, pose.feet, DT, s.ba, null, null, true); else if (k === 3) skateFeetSmooth(st, pose.feet, DT);
     const c = Math.cos(s.ba), sn = Math.sin(s.ba);
     const feetW = pose.feet.map(f => ({ side: f.side, lift: f.lift, x: x + f.x * c - f.y * sn, y: y + f.x * sn + f.y * c, a: f.a + s.ba }));
