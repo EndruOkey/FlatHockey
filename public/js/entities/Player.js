@@ -646,11 +646,10 @@ export class PlayerBase {
     this.bodyAngle  = this.skateAngle;
 
 
-    // Náklon do oblouku (vizuál)
-    const leanTarget = hasInput
-      ? clamp(angleDiff(Math.atan2(iy, ix), this.skateAngle) * 1.3, -1, 1) * Math.min(1, sp2 / 130)
-      : 0;
-    this._lean += (leanTarget - this._lean) * Math.min(1, 8 * dt);
+    // Náklon do oblouku (vizuál). FYZIKA (2026-11-14, Ondřej: „pořád blbnou zatáčky"): dřív z úhlu kláves vůči bruslím → WASD má jen
+    // 8 směrů, náklon v plynulém kruhu kmital −0,17 ↔ −0,67 při každé změně kláves. Nově z dostředivého zrychlení skutečné dráhy
+    // (tg φ = v·ω / g): ω = změna směru rychlosti za čas, LEAN_G px/s² = plný náklon. scripts/turn_metrics.mjs
+    this._lean = leanStep(this, this.vx, this.vy, dt);
 
     // Pohyb + WALL-SLIDE: u mantinelu zruš složku rychlosti DO zdi → sklouzneš podél,
     // nezasekneš se a netočíš se o band (heading se příští frame srovná podél zdi).
@@ -853,6 +852,14 @@ export function skateAdvance(st, x, y, ba, spd, k, mLoc = 0, dt = 1 / 60) {
     st._rotSf = Math.min(1, dr / 0.12) * (1 - sf);                        // otáčení na místě → pivot kroky
   }
   st._animPrev = { x, y, ba, spd };
+}
+// NÁKLON DO ZATÁČKY z dostředivého zrychlení (čistá funkce; sim i měření). st._lvD = minulý směr rychlosti, st._lean = náklon −1..1.
+export const LEAN = { g: 600, rate: 2.5, vMin: 20, max: 2.5 };   // max = nejrychlejší změna náklonu (1/s), bez cuku v ostré zatáčce
+export function leanStep(st, vx, vy, dt) {
+  const sp = Math.hypot(vx, vy), dir = Math.atan2(vy, vx);
+  const om = sp > LEAN.vMin && st._lvD != null ? angleDiff(dir, st._lvD) / Math.max(dt, 1e-4) : 0; st._lvD = sp > LEAN.vMin ? dir : null;
+  const tgt = clamp(sp * om / LEAN.g, -1, 1), l0 = st._lean ?? 0;
+  const d = (tgt - l0) * Math.min(1, LEAN.rate * dt); return l0 + Math.max(-LEAN.max * dt, Math.min(LEAN.max * dt, d));
 }
 // HOKEJOVÝ STOP K3 PODLE FYZIKY (2026-11-14, Ondřej: „chceme hockey stop"): dřív póza běžela pevně 0,55–0,9 s od stisku a náběh trval 0,29 s,
 // fyzika ale zastaví z 140 px/s za ~0,25 s jen po dobu DRŽENÍ Space → plné brusle napříč až po zastavení, ťuknutí / zatáčka = brusle napříč v plné jízdě.
