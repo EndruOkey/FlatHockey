@@ -1,0 +1,158 @@
+<!doctype html>
+<!-- Devlog FlatHockey. Nový zápis přidej NAHORU (nejnovější první).
+     Podklad z gitu: node scripts/devlog-draft.mjs  (vypíše změny od posledního zápisu). -->
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Devlog — FlatHockey</title>
+  <meta name="description" content="Co je nového ve FlatHockey: online hokej v prohlížeči. Zápisy z vývoje týden po týdnu.">
+  <meta name="robots" content="index,follow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@1,800&family=Barlow:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:#050A14; --card:rgba(8,16,30,.72); --line:rgba(255,255,255,.14);
+      --fg:#F2F6FB; --mute:#A9BBD1; --red:#E4002B; --ice:#7FD4FF; --amber:#FFB020;
+      --gut:clamp(16px,4vw,40px);
+    }
+    * { box-sizing:border-box; }
+    html { background:var(--bg); }
+    body { margin:0; background:var(--bg); color:var(--fg); font:500 17px/1.6 'Barlow',system-ui,sans-serif; }
+    .wrap { max-width:760px; margin:0 auto; padding:32px var(--gut) 80px; }
+    .c3 { font-family:'Barlow Condensed',sans-serif; font-style:italic; font-weight:800; text-transform:uppercase; letter-spacing:.01em; }
+    .back { display:inline-block; color:var(--mute); text-decoration:none; font-size:15px; padding:8px 0; }
+    .back:hover, .back:focus-visible { color:var(--ice); }
+    header { margin:20px 0 36px; }
+    h1 { font-size:clamp(44px,9vw,72px); line-height:.95; margin:0; }
+    h1 span { color:var(--red); }
+    .lead { color:var(--mute); margin:12px 0 0; max-width:52ch; }
+    article { background:var(--card); border:1px solid var(--line); border-left:4px solid var(--ice);
+      clip-path:polygon(0 0, calc(100% - 28px) 0, 100% 28px, 100% 100%, 0 100%);
+      padding:22px clamp(18px,4vw,30px) 24px; margin:0 0 20px; }
+    article:first-of-type { border-left-color:var(--red); }
+    time { display:block; color:var(--amber); font-size:16px; letter-spacing:.14em; }
+    h2 { font-size:clamp(26px,5vw,34px); line-height:1.05; margin:4px 0 12px; }
+    article p { margin:0 0 12px; }
+    ul { margin:0; padding-left:20px; }
+    li { margin:6px 0; }
+    li::marker { color:var(--ice); }
+    strong { color:#fff; }
+    .new { display:inline-block; background:var(--red); color:#fff; font-size:14px; padding:1px 10px 0; margin-left:8px;
+      clip-path:polygon(0 0, 100% 0, calc(100% - 8px) 100%, 0 100%); vertical-align:middle; }
+    footer { color:var(--mute); text-align:center; margin-top:40px; font-size:15px; }
+    footer a { color:var(--ice); }
+    a:focus-visible { outline:2px solid var(--ice); outline-offset:3px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <a class="back" href="/">← Zpět do hry</a>
+    <header>
+      <h1 class="c3">Flat<span>Hockey</span> devlog</h1>
+      <p class="lead">Co se ve hře změnilo, týden po týdnu. Nejnovější nahoře.</p>
+    </header>
+
+    <article>
+      <time class="c3" datetime="2026-11-09" data-do="2026-11-14">9.–14. listopadu <span class="new">Nové</span></time>
+      <h2 class="c3">Hokej, který se dá číst</h2>
+      <p>Tenhle týden byl o pocitu z bruslení a o tom, aby bylo na ledě vidět, co se děje. Hráči se pohybují jako hokejisti a brankář reaguje jako brankář.</p>
+      <ul>
+        <li>Menší hráči a klidnější tempo, takže je na ledě víc místa na kombinace</li>
+        <li>Nové bruslení: výbušný rozjezd krátkými kroky, hokejový stop, C-cuty při couvání a boční krok</li>
+        <li>Živé tělo: hráč se naklání do zatáčky, napřahuje se, dýchá a při tvrdém zásahu se rozplácne na led</li>
+        <li>Nová branka při pohledu shora podle skutečných rozměrů a síť, která se chová podle jejího tvaru</li>
+        <li>Brankář jde při kličce do rozkleku, přikryje přízemní ránu a vypíchne puk hokejkou</li>
+        <li><strong>Q</strong> u nohou přikopne puk do jízdy a před brankou tečuje ránu spoluhráče, <strong>E</strong> si řekne o přihrávku</li>
+        <li>Finta, krytí puku tělem a odrazy od mantinelu a plexi</li>
+        <li>Hlášky za akce: KOMBO GÓL, ONE-TIMER!, FINTA!, CLONA! A v rychlé hře každý týden jiné pravidlo, třeba první gól ×2</li>
+        <li>Pozvi kamaráda a oba dostanete titul <strong>Founder</strong> s korunkou u jména</li>
+        <li>Nový formát 2v2 a rychlé kolo na jednu třetinu</li>
+        <li>Trénink má vlastní menu: volné bruslení, sólo zápas, nájezd, rána z první, vlastní cvičení na čas s rekordem a tutoriál o 11 krocích</li>
+        <li>Menu je přehlednější: <strong>Rychlá hra</strong> tě hned pustí do online 3v3 a za menu běží živý zápas botů s filmovou kamerou</li>
+        <li>Jedinečná jména hráčů a ostrý obraz i na displejích s vysokým rozlišením</li>
+      </ul>
+    </article>
+
+    <article>
+      <time class="c3" datetime="2026-11-02">2.–8. listopadu</time>
+      <h2 class="c3">Přihrávky, co dorazí</h2>
+      <p>Po pár zápasech bylo jasné, že přihrávky chodí pozdě a za záda. Tenhle týden šel skoro celý na to, aby hra působila klidněji a čitelněji.</p>
+      <ul>
+        <li>Přihrávky jsou 2× rychlejší a míří na hokejku, ne do brusle</li>
+        <li>Hokejky už neprojdou tělem ani soupeřovou holí a hráči se nepřekrývají</li>
+        <li>Svého hráče poznáš v chumlu podle ledového kruhu a jmenovky</li>
+        <li>Nový režim <strong>Proti botům</strong> běží celý v prohlížeči, takže nic nezpožďuje</li>
+        <li>Boti brání s odstupem, takže se dostaneš ke střele, a přihrávají jen volnou dráhou</li>
+        <li>Po převzetí puku máš chvilku klidu, než ti ho někdo vypíchne</li>
+        <li>Brankář pod tlakem podrží puk a následuje buly</li>
+        <li>Nový vzhled menu, HRÁT jedním klikem a šatna se záložkami: dres, pruh, kalhoty i tkaničky</li>
+        <li>Na mobilu teď můžeš sledovat zápasy</li>
+      </ul>
+    </article>
+
+    <article>
+      <time class="c3" datetime="2026-10-29">29. října – 1. listopadu</time>
+      <h2 class="c3">Návrat na led</h2>
+      <p>Po letní pauze jsem se ke hře vrátil a hned jsem chtěl vyřešit jednu věc: aby se dalo hrát, i když zrovna nikdo jiný není online.</p>
+      <ul>
+        <li>Boti doplní prázdná místa v týmu. Při zakládání hry si vybereš kolik (0–5 na tým)</li>
+        <li>Boti hrají v rolích, přihrávají nejlepšímu volnému spoluhráči a osobně brání</li>
+        <li>Bruslení v hokejových obloucích místo otáčení na místě</li>
+        <li>Rána se dá zvednout pod víko, ale hrozí, že přestřelíš</li>
+        <li>Horní roh je trefitelný a brankář na něj umí chytře reagovat</li>
+        <li>Nová šatna: živá figurka, sady výstroje, náhodná kostka a kód vzhledu, který můžeš poslat kamarádovi</li>
+        <li>Hraješ hned jako host a později si účet propojíš s Discordem, postup zůstane</li>
+        <li>Plynulejší online hra i na slabším připojení</li>
+        <li>Faul na brankáře odpíská rozhodčí a zákroky se počítají do statistik</li>
+      </ul>
+    </article>
+
+    <article>
+      <time class="c3" datetime="2026-06-15">15.–19. června</time>
+      <h2 class="c3">Žebříček</h2>
+      <p>Když už se hrají zápasy, ať je vidět, kdo vede.</p>
+      <ul>
+        <li>Nová obrazovka statistik a žebříček hráčů</li>
+        <li>Doladěný brankář</li>
+        <li>Gól se počítá jen ze střely, puk se do branky nedá dovézt na hokejce</li>
+      </ul>
+    </article>
+
+    <article>
+      <time class="c3" datetime="2026-06-08">8.–14. června</time>
+      <h2 class="c3">Váha ledu a první sezóna</h2>
+      <p>Chtěl jsem, aby bruslení mělo váhu: rozjezd, klouzání a ostré zatáčky. A k tomu pořádný zvuk a důvod hrát dál.</p>
+      <ul>
+        <li>Bruslení s plynulým zrychlením, klouzáním a ostrými obraty</li>
+        <li>Vypíchnutí puku, rána z první a stopa za pukem</li>
+        <li>Nové přizpůsobení: barva hokejky, páska, typy mřížky na helmě a barva hledí</li>
+        <li>Chytřejší brankář, který se staví podle toho, odkud se nejčastěji skóruje</li>
+        <li>Kompletní zvuky: tyčka, mantinel, rána, zákrok i píšťalka</li>
+        <li>Přihlášení přes Discord nebo hra jako host</li>
+        <li>Pořadí, Puck Credits, obchod a start <strong>Alpha Season 1</strong></li>
+        <li>Nový vzhled celého menu</li>
+      </ul>
+    </article>
+
+    <article>
+      <time class="c3" datetime="2026-05-28">28. května – 7. června</time>
+      <h2 class="c3">Hra dostala jméno</h2>
+      <p>Začátek. Pár dní ladění, aby se puk choval stejně u všech hráčů, a pak už se hra začala podobat hokeji. Na konci týdne dostala jméno FlatHockey.</p>
+      <ul>
+        <li>Online zápasy, ve kterých puk vidí všichni stejně</li>
+        <li>Ovládání: WASD bruslí, myš míří hokejkou</li>
+        <li>Kličky, nabíjená rána, crosscheck a brankáři v obou brankách</li>
+        <li>Zakázané uvolnění a ofsajd, čára na ledě předem ukáže, že hrozí</li>
+        <li>Formáty 1v1 až 5v5, seznam her bez kódů místností a hry s heslem</li>
+        <li>Připojení do rozehraného zápasu</li>
+        <li>Vlastní dres: barva, střih, číslo, helma, rukavice a páska</li>
+        <li>Čeština i angličtina podle prohlížeče</li>
+      </ul>
+    </article>
+
+    <footer>Uvidíme se na ledě. <a href="/">Hrát FlatHockey</a></footer>
+  </div>
+</body>
+</html>
