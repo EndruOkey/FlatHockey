@@ -81,7 +81,7 @@ for (const hs of [1, -1]) for (const m of [0, Math.PI / 4, -Math.PI / 4, Math.PI
   const P = skatePose({ k: 3, phase: 0, spd: 0, mLoc: 0, stopT: 1, stopLoc: m, rotSf: 0, lean: 0, hs, thr: 0 });
   const [f1, f2] = P.feet, tx = Math.cos(m), ty = Math.sin(m);
   for (const f of P.feet) { const d = lineDiff(f.a, m); GG.h4 = [Math.min(GG.h4[0], d), Math.max(GG.h4[1], d)];
-    const kx = f.x - Math.cos(f.a) * 0.32 * R, ky = f.y - Math.sin(f.a) * 0.32 * R, hp = skinHip(f.side, P.body.hh ?? 0); GG.h8 = Math.max(GG.h8, Math.hypot(kx - hp.x, ky - hp.y) / R); }
+    const kx = f.x - Math.cos(f.a) * 0.32 * R, ky = f.y - Math.sin(f.a) * 0.32 * R, hp = skinHip(f.side, P.body.hh ?? 0); GG.h8 = Math.max(GG.h8, Math.hypot(kx - P.body.x - hp.x, ky - P.body.y - hp.y) / R); }   // kyčel jede s trupem (záklon body.x/y), jako ve skinBody
   { const M = maskFor(P.body.tw), e = P.feet.map(ft => { let v = 0; for (const [x, y] of skatePts(ft)) v = Math.max(v, outside(x - P.body.x, y - P.body.y, M)); return v * SC; });
     GG.h9 = [Math.min(GG.h9[0], Math.min(...e)), Math.min(GG.h9[1], Math.max(...e))]; }
   GG.h5 = Math.max(GG.h5, lineDiff(f1.a, f2.a));
