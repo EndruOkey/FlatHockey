@@ -2,7 +2,7 @@ import { RINK, PLAYER, PUCK } from '../constants.js';
 import { clamp, lerpAngle, angleDiff } from '../utils.js';
 import { SFX } from '../sound.js';
 import { defaultRng } from '../rng.js';
-import { skaterKit, skinSkate, skinBody, skinHip, SKIN_OUT, shade, luma } from './skin.js';
+import { skaterKit, skinSkate, skinBody, skinHip, SKIN_OUT, shade, luma, drawTextCached } from './skin.js';
 import { VIS } from '../vis.js';
 import { downPose, drawDownBody } from './downBody.js';
 
@@ -1741,9 +1741,7 @@ function _renderPlayerUp(ctx, p, cam) {
     ctx.fillStyle = p.teamMark || '#1F4FD8';   // rychlá hra: štítek v barvě týmu
     ctx.fillRect(sx - pw / 2, by, pw, ph);
     ctx.beginPath(); ctx.moveTo(sx - 4 * s, by + ph); ctx.lineTo(sx + 4 * s, by + ph); ctx.lineTo(sx, by + ph + 5 * s); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(label, sx, by + ph / 2 + 1.5 * s);
-    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    drawTextCached(ctx, label, ctx.font, 'center', 'middle', sx, by + ph / 2 + 1.5 * s, '#fff', null, 0);   // text z keše (výkon)
     if (p.founder) _drawCrown(ctx, sx - pw / 2 - 9 * s, by + ph / 2, 7.5 * s);   // korunka vlevo od štítku
   } else
   // Jméno nad hráčem — v barvě týmu, jemný obrys pro čitelnost (tenké)
@@ -1752,11 +1750,7 @@ function _renderPlayerUp(ctx, p, cam) {
     ctx.textAlign = 'center';
     ctx.lineJoin = 'round';
     const ny = sy - r - 7 * s;
-    ctx.lineWidth = 1.4 * s;
-    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-    ctx.strokeText(p.name, sx, ny);
-    ctx.fillStyle = p.teamMark || color;   // rychlá hra: jméno v barvě týmu, ne vlastního dresu
-    ctx.fillText(p.name, sx, ny);
+    drawTextCached(ctx, p.name, ctx.font, 'center', 'alphabetic', sx, ny, p.teamMark || color, 'rgba(0,0,0,0.5)', 1.4 * s);   // rychlá hra: jméno v barvě týmu; text z keše (výkon)
     if (p.founder) _drawCrown(ctx, sx - ctx.measureText(p.name).width / 2 - 8 * s, ny - 3 * s, 7 * s);   // korunka vlevo od jména
     ctx.textAlign = 'left';
   }

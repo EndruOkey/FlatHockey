@@ -108,6 +108,30 @@ export function skinRig(B) {
   return { S, H, E, ux, uy, tw, hd, head: { x: R * 0.25 + ux + hp.x, y: uy + hp.y } };
 }
 // Kyčel a střed kalhot vůči středu hráče, natočené s boky o hh (rad). Sdílí skinBody, Player.skatePose (dosah nohy) i scripts/leg_attach_metrics.mjs.
+// TEXT Z KEŠE (2026-11-14, Ondřej: „Rychlá hra má nízký framerate"): fillText/strokeText každý snímek = přes polovinu snímku v Rychlé hře
+// (scripts/fps_ops_ab.mjs: 3,6 → 1,7 ms bez textu, RTX 2070; Ondřejův Chrome kreslí na integrované Vega 11). Text se vykreslí JEDNOU
+// do skrytého plátna v rozlišení podle aktuálního měřítka (krok 1/4) a pak se jen razítkuje. Než se načtou webová písma, kreslí se přímo
+// (jinak by se do keše uložilo náhradní písmo). V Node (měření bez prohlížeče) vždy přímo.
+const _txt = new Map();
+export function drawTextCached(c, text, font, align, baseline, x, y, fill, stroke, lw) {
+  const direct = () => { c.save(); c.font = font; c.textAlign = align; c.textBaseline = baseline; c.lineJoin = 'round';
+    if (stroke) { c.lineWidth = lw; c.strokeStyle = stroke; c.strokeText(text, x, y); } if (fill) { c.fillStyle = fill; c.fillText(text, x, y); } c.restore(); };
+  if (typeof document === 'undefined' || !c.getTransform || (document.fonts && document.fonts.status !== 'loaded')) return direct();
+  const T = c.getTransform(), k = Math.max(0.25, Math.round(Math.hypot(T.a, T.b) * 4) / 4), key = `${text}|${font}|${fill}|${stroke}|${lw}|${k}`;
+  let e = _txt.get(key);
+  if (!e) {
+    if (_txt.size > 400) _txt.clear();
+    const m = document.createElement('canvas').getContext('2d'); m.font = font; const mt = m.measureText(text);
+    const pad = (lw || 0) + 2, l = mt.actualBoundingBoxLeft, r = mt.actualBoundingBoxRight, asc = mt.actualBoundingBoxAscent, desc = mt.actualBoundingBoxDescent;
+    const w = l + r + 2 * pad, h = asc + desc + 2 * pad, cv = document.createElement('canvas'); cv.width = Math.max(1, Math.ceil(w * k)); cv.height = Math.max(1, Math.ceil(h * k));
+    const g = cv.getContext('2d'); g.scale(k, k); g.font = font; g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.lineJoin = 'round';
+    const bx = pad + l, by = pad + asc;
+    if (stroke) { g.lineWidth = lw; g.strokeStyle = stroke; g.strokeText(text, bx, by); } if (fill) { g.fillStyle = fill; g.fillText(text, bx, by); }
+    e = { cv, w, h, bx, by, adv: mt.width, mid: ((mt.emHeightAscent ?? mt.fontBoundingBoxAscent) - (mt.emHeightDescent ?? mt.fontBoundingBoxDescent)) / 2 }; _txt.set(key, e);
+  }
+  const ax = align === 'center' ? e.adv / 2 : (align === 'right' || align === 'end') ? e.adv : 0, yA = baseline === 'middle' ? y + e.mid : y;
+  c.drawImage(e.cv, x - ax - e.bx, yA - e.by, e.w, e.h);
+}
 export function skinHip(side, hh) { const x = -R * 0.6, y = side * R * 0.58, c = Math.cos(hh || 0), s = Math.sin(hh || 0); return { x: x * c - y * s, y: x * s + y * c }; }
 export function skinPants(side, hh) { const x = -R * 0.62, y = side * R * 0.62, c = Math.cos(hh || 0), s = Math.sin(hh || 0); return { x: x * c - y * s, y: x * s + y * c }; }
 // ── TĚLO HRÁČE (lokál: +x = dopředu/obličej, +y = doprava). B = { feet:[{x,y,side}], top, bot (ruce), hnd, tw (natočení ramen), ux, uy, hd, lx, ly (světlo v lokálu) }
@@ -157,9 +181,9 @@ export function skinBody(c, B, K) {
   if (K.pattern === 'sleeves' || K.pattern === 'stripes') for (let i = 0; i < 2; i++) { const mx = (E[i].x + H[i].x) / 2, my = (E[i].y + H[i].y) / 2, a = Math.atan2(H[i].y - E[i].y, H[i].x - E[i].x);
     c.save(); c.translate(mx, my); c.rotate(a); c.fillStyle = K.accent; c.fillRect(-0.5, -1.45, 1.0, 2.9); c.restore(); }
   // číslo na zádech (vrchem k hlavě)
-  c.save(); c.translate(ux, uy); c.rotate(tw); c.translate(-R * 0.42, 0); c.rotate(Math.PI / 2); c.font = `900 ${R * 1.25}px 'Segoe UI', sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle';
-  const lightJ = luma(K.jersey) > 0.4; c.lineJoin = 'round'; c.lineWidth = 1.1; c.strokeStyle = lightJ ? '#ffffff' : (K.accent === '#f4f7fb' || K.accent === '#ffffff') ? shade(K.jersey, -0.5) : K.accent;
-  c.strokeText(String(K.num), 0, 0.3); c.fillStyle = lightJ ? '#1a1f29' : '#ffffff'; c.fillText(String(K.num), 0, 0.3); c.restore();
+  c.save(); c.translate(ux, uy); c.rotate(tw); c.translate(-R * 0.42, 0); c.rotate(Math.PI / 2);
+  const lightJ = luma(K.jersey) > 0.4, numStroke = lightJ ? '#ffffff' : (K.accent === '#f4f7fb' || K.accent === '#ffffff') ? shade(K.jersey, -0.5) : K.accent;
+  drawTextCached(c, String(K.num), `900 ${R * 1.25}px 'Segoe UI', sans-serif`, 'center', 'middle', 0, 0.3, lightJ ? '#1a1f29' : '#ffffff', numStroke, 1.1); c.restore();   // číslo z keše
   // rukavice + manžeta (záměrná linka výstroje)
   c.fillStyle = K.glove; c.fill(gloves);   // ruce čte manžeta (záměrná linka), ne šev
   for (const g of gl) { c.save(); c.translate(g.x, g.y); c.rotate(g.a); c.fillStyle = mix(K.glove, K.cuff, 0.75); c.fillRect(-2.6 * GS + 0.6, -1.9 * GS + 0.3, 0.9, 3.8 * GS - 0.6); c.restore(); }
@@ -281,7 +305,7 @@ export function skinGoalie(c, G, K, o) {
   const tone = shade(K.gk, 0.2);   // lem ramen a páska na paži tónem dresu (ne bílou) → čte se tvar, ne šev
   if (!lod) for (const sd of [-1, 1]) { c.beginPath(); c.arc(rb * 0.05, sd * rb * 0.68, rb * 0.42, Math.PI * 0.6, Math.PI * 1.4); c.strokeStyle = tone; c.lineWidth = 0.9; c.stroke(); }
   for (const hy of [G.gloveY, G.blockY]) { const hX = hy === G.blockY ? (G.blockX ?? G.handX) : G.handX; const mxx = (-rb * 0.1 + hX) / 2, myy = (Math.sign(hy) * rb * 0.75 + hy) / 2; c.save(); c.translate(mxx, myy); c.rotate(Math.atan2(hy - Math.sign(hy) * rb * 0.75, hX + rb * 0.1)); if (!lod) { c.fillStyle = tone; c.fillRect(-0.45, -1.7, 0.9, 3.4); } c.restore(); }
-  c.save(); c.translate(rb * 0.45, 0); c.rotate(Math.PI / 2 * (o.inX || 1)); c.scale(-(o.inX || 1), 1); c.font = `900 ${rb * 0.7}px 'Segoe UI', sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = luma(K.gk) > 0.4 ? '#1a1f29' : '#ffffff'; c.fillText(String(K.num), 0, 0.3); c.restore();
+  c.save(); c.translate(rb * 0.45, 0); c.rotate(Math.PI / 2 * (o.inX || 1)); c.scale(-(o.inX || 1), 1); drawTextCached(c, String(K.num), `900 ${rb * 0.7}px 'Segoe UI', sans-serif`, 'center', 'middle', 0, 0.3, luma(K.gk) > 0.4 ? '#1a1f29' : '#ffffff', null, 0); c.restore();   // číslo z keše
   c.restore();
   // 5) vyrážečka, lapačka, maska
   c.fillStyle = lod ? K.glove : shade(K.glove, -0.15); c.fill(block);
