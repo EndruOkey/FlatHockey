@@ -53,6 +53,16 @@
     .cat { margin-top:16px; }
     .cat h3 { font-size:17px; letter-spacing:.14em; color:var(--ice); margin:0 0 2px; }
     [hidden] { display:none !important; }
+    .has-clip { cursor:pointer; }
+    .has-clip:hover, .has-clip:focus-visible, .has-clip[aria-expanded="true"] { color:#fff; }
+    .has-clip:focus-visible { outline:2px solid var(--ice); outline-offset:2px; }
+    .clip-ic { display:inline-block; font-size:11px; color:var(--bg); background:var(--ice); padding:1px 6px 1px 7px; margin-left:4px;
+      clip-path:polygon(0 0, 100% 0, calc(100% - 4px) 100%, 0 100%); vertical-align:2px; }
+    .clip-pop { position:fixed; z-index:10; width:min(400px, calc(100vw - 32px)); pointer-events:none; background:#07090f;
+      border:1px solid var(--line); border-left:4px solid var(--ice); box-shadow:0 12px 40px rgba(0,0,0,.6); }
+    .clip-pop video, .clip-inline video { display:block; width:100%; aspect-ratio:16/9; background:#07090f; }
+    .clip-inline { margin:8px 0 4px; border-left:4px solid var(--ice); }
+    .lead small { display:block; margin-top:4px; font-size:15px; }
   </style>
 </head>
 <body>
@@ -60,7 +70,7 @@
     <a class="back" href="/">← Zpět do hry</a>
     <header>
       <h1 class="c3">Flat<span>Hockey</span> devlog</h1>
-      <p class="lead">Co se ve hře změnilo, týden po týdnu. Nejnovější nahoře.</p>
+      <p class="lead">Co se ve hře změnilo, týden po týdnu. Nejnovější nahoře.<small>Body se značkou <span class="clip-ic" aria-hidden="true">▶</span> mají krátkou ukázku přímo ze hry: najeď myší, na mobilu klepni.</small></p>
     </header>
 
     <nav class="filters" aria-label="Filtr kategorií">
@@ -77,17 +87,17 @@
       <p>Tenhle týden byl o pocitu z bruslení a o tom, aby bylo na ledě vidět, co se děje. Hráči se pohybují jako hokejisti a brankář reaguje jako brankář.</p>
       <section class="cat" data-cat="led"><h3 class="c3">Na ledě</h3><ul>
         <li>Menší hráči a klidnější tempo, takže je na ledě víc místa na kombinace</li>
-        <li>Bruslení s výbušným rozjezdem krátkými kroky, hokejovým stopem a ostrým obratem, který stojí rychlost</li>
+        <li class="has-clip" data-clip="stop" tabindex="0">Bruslení s výbušným rozjezdem krátkými kroky, hokejovým stopem a ostrým obratem, který stojí rychlost <span class="clip-ic" aria-hidden="true">▶</span></li>
         <li><strong>Q</strong> u nohou přikopne puk do jízdy a před brankou tečuje ránu spoluhráče, <strong>E</strong> si řekne o přihrávku</li>
         <li>Finta, krytí puku tělem a odrazy od mantinelu a plexi</li>
-        <li>Brankář jde při kličce do rozkleku, přikryje přízemní ránu a vypíchne puk hokejkou</li>
-        <li>Tvrdý zásah má tři stupně: postrčení, zakolísání a rozplácnutí na led</li>
+        <li class="has-clip" data-clip="save" tabindex="0">Brankář jde při kličce do rozkleku, přikryje přízemní ránu a vypíchne puk hokejkou <span class="clip-ic" aria-hidden="true">▶</span></li>
+        <li class="has-clip" data-clip="down" tabindex="0">Tvrdý zásah má tři stupně: postrčení, zakolísání a rozplácnutí na led <span class="clip-ic" aria-hidden="true">▶</span></li>
         <li>Boti mají povahu střelce nebo nahrávače a plánují útoky</li>
       </ul></section>
       <section class="cat" data-cat="vzhled"><h3 class="c3">Vzhled a zvuk</h3><ul>
-        <li>Živé tělo: hráč se naklání do zatáčky, napřahuje se, dýchá a dres mu vlaje v rychlosti</li>
+        <li class="has-clip" data-clip="carry" tabindex="0">Živé tělo: hráč se naklání do zatáčky, napřahuje se, dýchá a dres mu vlaje v rychlosti <span class="clip-ic" aria-hidden="true">▶</span></li>
         <li>Viditelné brusle: C-cuty při couvání, boční krok a čitelný stop</li>
-        <li>Nová branka při pohledu shora podle skutečných rozměrů a síť, která se chová podle jejího tvaru</li>
+        <li class="has-clip" data-clip="goal" tabindex="0">Nová branka při pohledu shora podle skutečných rozměrů a síť, která se chová podle jejího tvaru <span class="clip-ic" aria-hidden="true">▶</span></li>
         <li>Záblesk v místě, kam puk trefil, a banner gólu se jménem střelce</li>
         <li>Hlášky za akce: KOMBO GÓL, ONE-TIMER!, FINTA!, CLONA!</li>
         <li>Tišší a příjemnější zvukový mix</li>
@@ -111,14 +121,14 @@
       <h2 class="c3">Přihrávky, co dorazí</h2>
       <p>Po pár zápasech bylo jasné, že přihrávky chodí pozdě a za záda. Tenhle týden šel skoro celý na to, aby hra působila klidněji a čitelněji.</p>
       <section class="cat" data-cat="led"><h3 class="c3">Na ledě</h3><ul>
-        <li>Přihrávky jsou 2× rychlejší a míří na hokejku, ne do brusle</li>
+        <li class="has-clip" data-clip="pass" tabindex="0">Přihrávky jsou 2× rychlejší a míří na hokejku, ne do brusle <span class="clip-ic" aria-hidden="true">▶</span></li>
         <li>Hokejky už neprojdou tělem ani soupeřovou holí a hráči se nepřekrývají</li>
         <li>Po převzetí puku máš chvilku klidu, než ti ho někdo vypíchne</li>
         <li>Brankář pod tlakem podrží puk a následuje buly</li>
         <li>Boti brání s odstupem, takže se dostaneš ke střele, a přihrávají jen volnou dráhou</li>
       </ul></section>
       <section class="cat" data-cat="vzhled"><h3 class="c3">Vzhled a zvuk</h3><ul>
-        <li>Svého hráče poznáš v chumlu podle ledového kruhu a jmenovky</li>
+        <li class="has-clip" data-clip="ring" tabindex="0">Svého hráče poznáš v chumlu podle ledového kruhu a jmenovky <span class="clip-ic" aria-hidden="true">▶</span></li>
         <li>Nový vzhled menu</li>
       </ul></section>
       <section class="cat" data-cat="rezimy"><h3 class="c3">Režimy a menu</h3><ul>
@@ -224,6 +234,39 @@
     }
     btns.forEach(b=>b.addEventListener('click',()=>{ history.replaceState(null,'',b.dataset.f==='all'?location.pathname:'#'+b.dataset.f); apply(b.dataset.f); }));
     apply(location.hash.slice(1)||'all');
+  </script>
+  <script>
+    // Ukázky ke značeným bodům: myš = plovoucí náhled, dotyk/klávesnice (Enter) = video rozbalené pod bodem.
+    // Klipy generuje node scripts/devlog-clips.mjs (vykreslené herním kódem). Video se stáhne až při prvním použití.
+    (() => {
+      const hover = matchMedia('(hover: hover) and (pointer: fine)').matches;
+      const vid = (k) => { const v = document.createElement('video'); v.muted = true; v.loop = true; v.playsInline = true; v.autoplay = true;
+        v.setAttribute('muted', ''); v.poster = 'clips/' + k + '.jpg'; v.src = 'clips/' + k + '.mp4'; return v; };
+      let pop = null;
+      const place = (li) => {
+        const r = li.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight, m = 12;
+        let x = Math.min(Math.max(16, r.left), innerWidth - w - 16);
+        if (innerWidth >= 1240) x = Math.min(r.right + 24, innerWidth - w - 16);
+        let y = innerWidth >= 1240 ? r.top + r.height / 2 - h / 2 : (r.bottom + m + h < innerHeight ? r.bottom + m : r.top - m - h);
+        pop.style.left = x + 'px'; pop.style.top = Math.min(Math.max(8, y), innerHeight - h - 8) + 'px';
+      };
+      const show = (li) => { hide(); pop = document.createElement('div'); pop.className = 'clip-pop'; pop.setAttribute('aria-hidden', 'true');
+        pop.appendChild(vid(li.dataset.clip)); document.body.appendChild(pop); place(li); };
+      const hide = () => { if (pop) { pop.remove(); pop = null; } };
+      const toggle = (li) => {
+        const open = li.querySelector('.clip-inline');
+        if (open) { open.remove(); li.setAttribute('aria-expanded', 'false'); return; }
+        const d = document.createElement('div'); d.className = 'clip-inline'; d.appendChild(vid(li.dataset.clip));
+        li.appendChild(d); li.setAttribute('aria-expanded', 'true');
+      };
+      document.querySelectorAll('.has-clip').forEach(li => {
+        li.setAttribute('role', 'button'); li.setAttribute('aria-expanded', 'false');
+        if (hover) { li.addEventListener('mouseenter', () => show(li)); li.addEventListener('mouseleave', hide); }
+        li.addEventListener('click', () => { if (!hover) toggle(li); });
+        li.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); hide(); toggle(li); } });
+      });
+      addEventListener('scroll', hide, { passive: true });
+    })();
   </script>
 </body>
 </html>
