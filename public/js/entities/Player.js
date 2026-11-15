@@ -1158,6 +1158,121 @@ function _kickPuck(p, blade) {
   const sx = p.x + p._kickOx, sy = p.y + p._kickOy;
   return { x: sx + (blade.x - sx) * u, y: sy + (blade.y - sy) * u, _kick: true };
 }
+// ══ PŘÍJEM A PŘIHRÁVKA (VIS.r, 2026-11-15; scripts/pass_recv_metrics.mjs R1–R4) — jen KRESBA, simulace beze změny.
+// Dřív: při převzetí puk skočil z místa, kde byl vidět, rovnou na čepel (5–12 px za snímek), při přihrávce z kreslené čepele na
+// fyzikální špičku hole (2–4 px). Nově (rešerše: čepel jde puku naproti, v dotyku „povolí" po směru puku = cushioning, po pasu
+// dojede za pukem):
+//  • předstih: hůl se natočí k místu, kudy puk projede (max ±aimMax rad, váha podle času do průjezdu, tlumená pružina);
+//  • chycení: puk pokračuje viditelnou rychlostí a dojede na klidové místo na čepeli po Hermitově křivce (doba z catchT s nejmenším
+//    největším zrychlením). Kde by křivka přejela PŘES čepel (překmit po směru puku), puk čepel zatlačí: čepel ustoupí o tolik, o kolik
+//    puk přejel (vyhlazeno trojúhelníkem ±cushK s, náběh cushW s), a s ním se vrátí = cushioning vzniká z pohybu puku, ne z nezávislé
+//    animace; vyhlazení = čepel se dá do pohybu o chvilku dřív než dotyk (měkké ruce) → špička hole bez cuku;
+//  • vypuštění: puk odejde z místa, kde byl vidět (Puck.draw), čepel dojede za pukem (follow, sin²).
+// Čas = hodiny kresby (_rdt) → deterministické.
+export const RECV = { aimMax: 0.45, aimT: 0.4, aimNear: 30, aimRate: 18, catchT: [0.1, 0.15], aMax: 3600, cushK: 0.04, cushW: 0.03,
+  follow: 3, followT: 0.2, followV: 200, jump: 60 };
+const _sin2 = (t, T) => { const s = Math.sin(Math.PI * clamp(t / T, 0, 1)); return s * s; };
+// předstih: odchylka úhlu hole (rad) k průjezdu volného puku; base = úhel hole bez předstihu
+export function recvAim(p, base, dt) {
+  const pk = p._puckView || p._puckRef;
+  let tgt = 0;
+  if (pk && !p.hasPuck && !p.crossCheck && !p.isDown && (p._dispCharge ?? 0) < 0.05 && !(pk._carrier && pk._carrier.hasPuck) && (pk.z ?? 0) < 1.5) {
+    const g = p.gripPoint, rx = pk.x - g.x, ry = pk.y - g.y, vx = (pk.vx || 0) - (p.vx || 0), vy = (pk.vy || 0) - (p.vy || 0), vv = vx * vx + vy * vy;
+    if (vv > 900) {
+      const tc = -(rx * vx + ry * vy) / vv, cx = rx + vx * tc, cy = ry + vy * tc;
+      if (tc > 0 && tc < RECV.aimT && Math.hypot(cx, cy) < RECV.aimNear) {
+        const w = _sm(1 - tc / RECV.aimT), a = Math.atan2(cy, cx);
+        tgt = clamp(angleDiff(a, base), -RECV.aimMax, RECV.aimMax) * w;
+      }
+    }
+  }
+  // kriticky tlumená pružina (ne exponenciála): natočení i návrat po převzetí začnou plynule, bez skoku rychlosti hole
+  const w = RECV.aimRate, A = p._rvA ?? 0, V = p._rvAv ?? 0, acc = w * w * (tgt - A) - 2 * w * V;
+  p._rvAv = V + acc * dt; p._rvA = A + p._rvAv * dt;
+  return p._rvA;
+}
+// Brzdění puku vůči čepeli s NEJMENŠÍM největším zrychlením (osa po směru příletu a napříč zvlášť, stejná doba T): v 1D je to
+// „bang-bang" — stálé zrychlení −a do přepnutí s, pak +a do T; z podmínek x(T) = 0, v(T) = 0 vyjde kvadratická rovnice pro s
+// (v0·s² + 2·x0·s − T·x0 − v0·T²/2 = 0) a a = v0 / (2s − T). Polohy jsou hladké (C¹), zrychlení po snímcích ≤ a·dt².
+function _bb(x0, v0, T) {
+  if (Math.abs(v0) < 1e-6) return Math.abs(x0) < 1e-9 ? { x0, v0, s: T / 2, a: 0 } : { x0, v0, s: T / 2, a: 4 * x0 / (T * T) };
+  const D = x0 * x0 + v0 * T * x0 + v0 * v0 * T * T / 2; if (D < 0) return null;
+  let best = null;
+  for (const sg of [1, -1]) { const s = (-x0 + sg * Math.sqrt(D)) / v0;
+    if (s < -1e-9 || s > T + 1e-9 || Math.abs(2 * s - T) < 1e-9) continue;
+    const a = v0 / (2 * s - T); if (!best || Math.abs(a) < Math.abs(best.a)) best = { x0, v0, s: clamp(s, 0, T), a }; }
+  return best;
+}
+function _bbAt(B, t) {
+  if (t <= B.s) return B.x0 + B.v0 * t - B.a * t * t / 2;
+  const xs = B.x0 + B.v0 * B.s - B.a * B.s * B.s / 2, vs = B.v0 - B.a * B.s, d = t - B.s;
+  return xs + vs * d + B.a * d * d / 2;
+}
+// odchylka puku od klidového místa na čepeli v čase C.t (po směru příletu u, napříč n)
+function _catchRel(C) {
+  const t = Math.min(C.t, C.T), a = _bbAt(C.bu, t), b = _bbAt(C.bn, t);
+  return { x: C.ux * a - C.uy * b, y: C.uy * a + C.ux * b, a };
+}
+// ustoupení čepele (svět) = hladký překmit puku přes čepel po směru jeho příletu; od počáteční hodnoty se odečte (začíná v 0, končí v 0)
+function _catchCush(C) {
+  const G = C.G, x = C.t / RECV_H, i = Math.floor(x);
+  const a = i + 1 >= G.length ? 0 : G[i] + (G[i + 1] - G[i]) * (x - i);
+  return { x: C.ux * a, y: C.uy * a };
+}
+// průběh ustoupení čepele (po 1/600 s): překmit max(0, odchylka po směru příletu) vyhlazený trojúhelníkem ±cushK, náběh smoothstep cushW
+const RECV_H = 1 / 600;
+function _cushPlan(bu, T) {
+  const K = Math.round(RECV.cushK / RECV_H), n = Math.ceil(T / RECV_H) + K + 1, o = [], G = [];
+  for (let i = 0; i <= n; i++) o.push(i * RECV_H <= T ? Math.max(0, _bbAt(bu, i * RECV_H)) : 0);
+  for (let i = 0; i <= n; i++) { let sum = 0, wsum = 0;
+    for (let j = -K; j <= K; j++) { const w = K + 1 - Math.abs(j), k = i + j; wsum += w; if (k >= 0 && k <= n) sum += o[k] * w; }
+    G.push(sum / wsum * _sm(i * RECV_H / RECV.cushW)); }
+  G.push(0);
+  return G;
+}
+// posun špičky hole (svět): ustoupení při příjmu + dojezd za pukem po přihrávce
+export function recvTipOffset(p, dt) {
+  let x = 0, y = 0;
+  if (p._rvC) { const c = _catchCush(p._rvC); x += c.x; y += c.y; }
+  const f = p._rvF; if (f) { const a = f.A * _sin2(f.t, f.T); x += f.ux * a; y += f.uy * a; f.t += dt; if (f.t >= f.T) p._rvF = null; }
+  return x || y ? { x, y } : null;
+}
+// doba T z intervalu catchT s nejmenším největším zrychlením (|a| po ose u i n); vrací brzdění pro obě osy
+export function recvCatchPlan(ru, rn, vu, vn) {
+  let best = null;
+  for (let i = 0; RECV.catchT[0] + i * 0.005 <= RECV.catchT[1] + 1e-9; i++) {
+    const T = RECV.catchT[0] + i * 0.005, bu = _bb(ru, vu, T), bn = _bb(rn, vn, T); if (!bu || !bn) continue;
+    // překmit přes čepel (= o kolik puk čepel zatlačí): co nejmenší, dokud zrychlení nepřesáhne aMax; když to nejde, nejmenší zrychlení
+    let ov = 0; for (let k = 0; k <= 24; k++) ov = Math.max(ov, _bbAt(bu, T * k / 24));
+    const m = Math.hypot(bu.a, bn.a), ok = m <= RECV.aMax;
+    if (!best || (ok && (!best.ok || ov < best.ov - 1e-9)) || (!ok && !best.ok && m < best.m - 1e-9)) best = { T, bu, bn, m, ov, ok };
+  }
+  return best;
+}
+// chycení: q = klidové místo puku na (už ustoupené) kreslené čepeli (bladePuck) → kreslená poloha puku
+export function recvCatch(p, cp, q, dt) {
+  let cush = p._rvC ? _catchCush(p._rvC) : null;
+  if (!p._rvHad && cp._drawn && cp._dv && !(p._kickFx > 0)) {
+    const rx = cp._drawn.x + cp._dv.x * dt - q.x, ry = cp._drawn.y + cp._dv.y * dt - q.y, vx = cp._dv.x - (p.vx || 0), vy = cp._dv.y - (p.vy || 0);
+    if (Math.hypot(rx, ry) <= RECV.jump) {
+      const v = Math.hypot(vx, vy), ux = v > 1e-6 ? vx / v : 1, uy = v > 1e-6 ? vy / v : 0;
+      const ru = rx * ux + ry * uy, rn = -rx * uy + ry * ux, P = recvCatchPlan(ru, rn, v, 0);
+      if (P) { p._rvC = { ux, uy, bu: P.bu, bn: P.bn, T: P.T, G: _cushPlan(P.bu, P.T), t: 0 }; cush = { x: 0, y: 0 }; }
+    }
+  }
+  const C = p._rvC; if (!C) return q;
+  // q0 = klidové místo bez ustoupení čepele; ke konci (posledních cushW s před T) se puk plynule „přilepí" na ustupující čepel
+  const r = _catchRel(C), b = _sm((C.t - C.T + RECV.cushW) / RECV.cushW), q0x = q.x - cush.x * (1 - b), q0y = q.y - cush.y * (1 - b);
+  C.t += dt; if (C.t >= C.T + RECV.cushK - 1e-9) p._rvC = null;   // ustoupení čepele doběhne o cushK později než puk
+  return { x: q0x + r.x, y: q0y + r.y };
+}
+// vypuštění (pas): čepel dojede za pukem; rána má vlastní švih (p._sw), pomalé ztráty puku (obrání) bez dojezdu
+export function recvRelease(p) {
+  const pk = p._carriedPuck; p._rvC = null;
+  if (!pk || p._sw) return;
+  const v = Math.hypot(pk.vx || 0, pk.vy || 0);
+  if (v >= RECV.followV) p._rvF = { ux: pk.vx / v, uy: pk.vy / v, A: RECV.follow, t: 0, T: RECV.followT };
+}
 // ══ TĚLO B1 (2026-11-13) — pohyb horní poloviny těla nad boky. Jen kresba: čistá funkce stavu simulace + dt snímku
 // (žádná náhoda, žádné hodiny ze zdi), volá ji draw() i scripts/body_anim_metrics.mjs. B0 = dřívější (nic navíc).
 //  • náklon do zrychlení: ramena+trup+helma se posunou ve směru zrychlení (rozjezd = předklon, brzda = záklon, zatáčka = dovnitř);
@@ -1574,7 +1689,8 @@ function _renderPlayerUp(ctx, p, cam) {
   const hnd = p.handed ?? 1, dcv = p._dispCharge ?? 0;
   let follow = 0;
   if (p._sw) { const u = 1 - p._sw.t / p._sw.T; follow = -hnd * PLAYER.followArc * Math.sin(Math.PI * Math.min(1, u * 1.4)) * (1 - u); }
-  const windAngle = p.crossCheck ? _ccSd : _ccSd + hnd * dcv * (0.85 + PLAYER.windBack) + follow;
+  const _rvA = VIS.r ? recvAim(p, _ccSd, _rdt(cam)) : 0;   // příjem: hůl se s předstihem natočí k průjezdu puku (RECV)
+  const windAngle = p.crossCheck ? _ccSd : _ccSd + hnd * dcv * (0.85 + PLAYER.windBack) + follow + _rvA;
   p._visStick = windAngle;
   const windLen   = (p._dispReach ?? PLAYER.stickLen) * (1 - dcv * PLAYER.windPull) * PLAYER.stickDraw;
   const windCos   = Math.cos(windAngle);
@@ -1635,6 +1751,8 @@ function _renderPlayerUp(ctx, p, cam) {
   // čepel prohnutá DOVNITŘ (forhend = prohnutá strana hledí dopředu k tělu), puk leží na prohnuté straně.
   // Levák zrcadlově. Jen kresba: špička/čepel = fyzikální poloha (dosah), mění se ruce, dřík, prohnutí, puk.
   // horní ruka: před tělem u středu, mírně k bekhendu; v nápřahu se stáhne k forhendovému boku; B1: houpe se v rytmu kroku (sway)
+  // příjem: čepel povolí po směru puku; pas: dojede za pukem. Posune se celá čepel (ne natočí): ruce a směr dříku z neposunuté špičky
+  const _rvO = VIS.r ? recvTipOffset(p, _rdt(cam)) : null;
   const tipW = { x: gxw + windCos * wt, y: gyw + windSin * wt };
   let { topW, botW } = stickHands(p.x, p.y, p.bodyAngle ?? windAngle, dcv, hnd, tipW, _bp.sway);
   let shDir = Math.atan2(tipW.y - topW.y, tipW.x - topW.x), buttW = topW;
@@ -1651,6 +1769,7 @@ function _renderPlayerUp(ctx, p, cam) {
     gripF = mx(0.22, 0.35); mainF = mx(0.18, 0.325);
     const S0 = STICK_V[0]; SV = { ...SV, out: mx(SV.out, S0.out), sh: mx(SV.sh, S0.sh), bl: mx(SV.bl, S0.bl), blo: mx(SV.blo, S0.blo) };
   }
+  if (_rvO) { tipX += _rvO.x * s; tipY += _rvO.y * s; }
   const shC = Math.cos(shDir), shS = Math.sin(shDir);
   p._visTopW = topW; p._visBotW = botW;
   const tx0 = ox + buttW.x * s, ty0 = oy + buttW.y * s;
@@ -1724,11 +1843,13 @@ function _renderPlayerUp(ctx, p, cam) {
     p._visSide = p._visSide == null ? sT : p._visSide + (sT - p._visSide) * Math.min(1, 9 * _rdt(cam));
     const q = bladePuck(p._visBlade, 0.5 - 0.3 * dcv, hnd, p._visSide, PUCK.radius);
     puckSpinStep(cp, q, p._visBlade, _rdt(cam));
-    const vx = q.x, vy = q.y;
-    p._visPuck = _kickPuck(p, { x: vx, y: vy });   // po přikopnutí puk z brusle plynule dojede na čepel
+    const Q = VIS.r ? recvCatch(p, cp, q, _rdt(cam)) : q;   // příjem: puk dojede z místa, kde byl vidět (RECV)
+    p._visRest = q;
+    p._visPuck = _kickPuck(p, { x: Q.x, y: Q.y });   // po přikopnutí puk z brusle plynule dojede na čepel
     p._kickTop = p._visPuck._kick === true;        // puk „pod nohama" je pod rukama/tělem → během dojezdu ho kreslíme navrch (čitelnost)
     if (!p._kickTop) cp.draw(ctx, cam, p._visPuck);
-  } else { p._visPuck = null; p._kickTop = false; }
+  } else { if (p._rvHad && VIS.r) recvRelease(p); p._visPuck = null; p._visRest = null; p._kickTop = false; }
+  p._rvHad = !!cp;
 
   // Obrys čepele (C-d2, místo stínu)
   if (SV.sh2) { const o = 1.6 * s; ctx.beginPath(); ctx.moveTo(bStartX + o, bStartY + o); ctx.quadraticCurveTo(bCtrlX + o, bCtrlY + o, bEndX + o, bEndY + o);

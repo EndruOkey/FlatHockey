@@ -315,7 +315,23 @@ export class Puck {
     const { ox, oy } = cam;
     const car  = this._carrier && this._carrier.hasPuck ? this._carrier : null;
     if (car && !at && !car.crossCheck) return;
-    const vp   = at || this;
+    let   vp   = at || this;
+    // PLYNULÉ VYPUŠTĚNÍ (VIS.r, 2026-11-15; scripts/pass_recv_metrics.mjs): puk právě opustil kreslenou čepel → neskočí na fyzikální
+    // špičku hole, ale odejde z místa, kde byl vidět, rychlostí simulace; odchylka od simulace dozní za REL_T s (smoothstep).
+    // _drawn / _dv = kde a jak rychle byl puk naposledy vidět (čte i Player recvCatch → plynulé chycení). Hodiny kresby → deterministické.
+    if (!again) {
+      const dt = cam.dt != null ? Math.min(0.05, cam.dt) : 1 / 60;
+      if (VIS.r && !at && this._rvOn && this._drawn) {
+        const ox = this._drawn.x + this.vx * dt - this.x, oy = this._drawn.y + this.vy * dt - this.y;
+        this._vo = Math.hypot(ox, oy) <= REL_JUMP ? { x: ox, y: oy, t: 0 } : null;
+      }
+      if (at || !VIS.r) this._vo = null;
+      this._rvOn = !!at;
+      if (this._vo) { const u = this._vo.t / REL_T, k = u >= 1 ? 0 : 1 - u * u * (3 - 2 * u);
+        vp = { x: this.x + this._vo.x * k, y: this.y + this._vo.y * k }; this._vo.t += dt; if (k <= 0) this._vo = null; }
+      if (this._drawn && dt > 0) this._dv = { x: (vp.x - this._drawn.x) / dt, y: (vp.y - this._drawn.y) / dt };
+      this._drawn = { x: vp.x, y: vp.y };
+    }
     const sx   = ox + vp.x * s;
     const sy   = oy + vp.y * s;
     const r    = PUCK.radius * s;
@@ -399,6 +415,9 @@ function _puckFace(ctx, sx, sy, rr, a, s) {
   ctx.beginPath(); ctx.arc(sx + c * L * 1.15, sy + n * L * 1.15, W * 1.1, 0, Math.PI * 2); ctx.fillStyle = 'rgba(225,232,242,0.55)'; ctx.fill();
   ctx.beginPath(); ctx.arc(sx - rr * 0.3, sy - rr * 0.3, rr * 0.35, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,0.16)'; ctx.fill();   // lesk (objem)
 }
+
+const REL_T = 0.1, REL_JUMP = 30;   // plynulé vypuštění: doba doznění odchylky (s); větší odchylka = teleport (vhazování, reset) → bez doznění
+// (30 j.: nahrávač drží puk ve středu těla, kreslí ho na čepeli ~20 j. odtud; hráč 2–4 j.)
 
 function _alpha(col, a) {
   if (typeof col !== 'string' || col[0] !== '#' || col.length < 7) return col;

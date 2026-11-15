@@ -1,5 +1,6 @@
 import { RINK, PUCK, PLAYER } from '../constants.js';
 import { PlayerBase } from './Player.js';
+import { VIS } from '../vis.js';
 
 const RECEIVE_RADIUS   = 35;
 const RETURN_DELAY_MIN = 0.9;
@@ -102,7 +103,7 @@ export class Passer extends PlayerBase {
     // Aim toward local player when holding, otherwise track puck
     if (world) {
       const local  = world.players.find(p => 'input' in p);
-      const puck   = world.puck;
+      const puck   = world.puck; this._pkRef = puck;
       const target = (this.hasPuck && local) ? local : puck;
       if (target) {
         const dx = target.x - this.x;
@@ -116,6 +117,12 @@ export class Passer extends PlayerBase {
 
   draw(ctx, cam) {
     if (!this.active) return;
+    // 2026-11-15 (VIS.r): držený puk kreslí nahrávač na ČEPELI jako hráč (dřív ležel uprostřed těla → při příjmu skočil až o 35 px
+    // do středu, při vrácení pasu ze středu). Jen kresba: simulace dál drží puk ve středu nahrávače; Player.draw puk plynule
+    // dovede na čepel (recvCatch) a Puck.draw ho při vrácení pasu plynule vypustí.
+    const pk = this._pkRef;
+    if (pk && VIS.r && this.hasPuck) { pk._carrier = this; this._carriedPuck = pk; }
+    else if (pk && pk._carrier === this) pk._carrier = null;
     super.draw(ctx, cam); // renders full player visual (body, stick, etc.)
 
     const s  = cam.scale;
