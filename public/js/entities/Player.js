@@ -775,6 +775,15 @@ const STICK_V = [
   { out: 3.6, sh: 2.0, bl: 4.2, blo: 5.8, knob: 1, hi: 1, sh2: 1, paddle: 1 },   // paddle = čepel jako plochá lopatka (vyplněný tvar)
   { out: 4.1, sh: 2.4, bl: 2.5, blo: 4.3 },   // S3 = dnešní, lehce štíhlejší (~15 %) — výchozí od 2026-11-12
 ];
+// CROSSCHECK: délka prolnutí póz hůl ↔ napříč (s, jen kresba) a poloha hole napříč před tělem ve SVĚTĚ (jako blok crosschecku v kresbě):
+// konec hole (butt), pata čepele (heel), směr dříku, délka a ruce jako podíl délky od konce (uT horní, uB dolní)
+const CC_BLEND = 0.15;
+function _ccGeom(p, base = p._stickDisp) {
+  const dir = base + (p.handed ?? 1) * Math.PI / 2, c = Math.cos(dir), sn = Math.sin(dir);
+  const half = PLAYER.stickLen * 0.7 * PLAYER.stickDraw, hh = PLAYER.stickLen * 0.7;
+  const cx = p.x + Math.cos(base) * (PLAYER.radius + 2), cy = p.y + Math.sin(base) * (PLAYER.radius + 2);
+  return { dir, len: 2 * half, butt: { x: cx - c * half, y: cy - sn * half }, uT: (half - hh * 0.62) / (2 * half), uB: (half + hh * 0.42) / (2 * half) };
+}
 const SKATE_CYCLE = 95;   // K0–K2: px ujeté dráhy na celý cyklus kroku (2 odrazy) — 165 px/s ≈ 1,7 cyklu/s
 
 // ══ ANIMACE BRUSLENÍ — čisté funkce (bez canvasu, bez hodin): volá je draw() i scripts/skate_anim_metrics.mjs ══
@@ -1401,9 +1410,25 @@ function _renderPlayerUp(ctx, p, cam) {
   if (_k === 4) skateFeetSmooth(p, _pose.feet, _rdt(cam), ba, null, null, true); else if (_k === 3) { if (SKATE_K3.plant || VIS.n) skateFeetSmooth(p, _pose.feet, _rdt(cam), ba, p.x, p.y); else skateFeetSmooth(p, _pose.feet, _rdt(cam)); }   // K3: ukotvení k ledu (plant)
   if (globalThis.__fhSkateDbg) p._dbgPose = { feet: _pose.feet.map(f => ({ ...f })), stopT: (_k >= 3 ? p._stopK3 : p._stopTSmooth) ?? 0, stopLoc: p._hsDir != null ? angleDiff(p._hsDir, ba) : null };   // scripts/skate_visibility.py
   _kickFoot(p, _pose.feet, ba);   // Q: brusle zastaví puk / máchne naprázdno (časová osa ze simulace)
-  // Tělo B1: pohyb horní poloviny těla (sdílená čistá funkce bodyPose; B0 = nic navíc)
-  const _bp = bodyPose(p, { b: p.crossCheck ? 0 : VIS.b | 0, x: p.x, y: p.y, vx: p.vx ?? 0, vy: p.vy ?? 0, ba, aim: p.aimAngle, dcv: p._dispCharge ?? 0,
+  // CROSSCHECK PLYNULE (2026-11-14, Ondřej: „crosscheck by neměl být sekavá animace"): přepnutí hůl ↔ crosscheck se prolne za CC_BLEND s
+  // (hodiny kresby _rdt → deterministické; hladký náběh smoothstep). _ccE = 0 běžné držení, 1 crosscheck; hůl, ruce i tělo se míchají
+  // mezi oběma pózami (scripts/crosscheck_anim_metrics.mjs C1–C6). Jen kresba — simulace crosschecku beze změny.
+  const _ccT = globalThis.__fhCcT ?? CC_BLEND;
+  p._ccB = _ccT > 0 ? clamp((p._ccB ?? 0) + (p.crossCheck ? 1 : -1) * _rdt(cam) / _ccT, 0, 1) : (p.crossCheck ? 1 : 0);
+  const _ccE = p._ccB * p._ccB * (3 - 2 * p._ccB), _ccN = 1 - _ccE;
+  // úhel hole při přechodu: sim _stickDisp se po přepnutí stáčí exponenciálně (26/s → první snímek ~35 % cesty = cuk) → kresba ho
+  // od přepnutí převezme hladce (smoothstep za CC_BLEND s) z úhlu, který byl vidět; po dojetí přesně _stickDisp (cílová póza beze změny)
+  if (p._ccOn === undefined) { p._ccOn = p.crossCheck; p._ccU = 1; }
+  if (p._ccOn !== p.crossCheck) { p._ccOn = p.crossCheck; p._ccA0 = p._ccA ?? p._stickDisp; p._ccU = 0; }
+  p._ccU = _ccT > 0 ? Math.min(1, (p._ccU ?? 1) + _rdt(cam) / _ccT) : 1;
+  const _ccW = p._ccU * p._ccU * (3 - 2 * p._ccU);
+  const _ccSd = _ccW >= 1 ? p._stickDisp : lerpAngle(p._ccA0, p._stickDisp, _ccW);
+  p._ccA = _ccSd;
+  const _ccFull = _ccE >= 1 && _ccW >= 1;
+  // Tělo B1: pohyb horní poloviny těla (sdílená čistá funkce bodyPose; B0 = nic navíc); v crosschecku se plynule utlumí (× _ccN)
+  const _bp = bodyPose(p, { b: VIS.b | 0, x: p.x, y: p.y, vx: p.vx ?? 0, vy: p.vy ?? 0, ba, aim: p.aimAngle, dcv: p._dispCharge ?? 0,
     sw: p._sw ? 1 - p._sw.t / p._sw.T : -1, hasPuck: !!p.hasPuck, hnd: p.handed ?? 1, stagT: p._stagT ?? 0, stagDir: p._stagDir ?? 1, swing: _pose.body.sw ?? 0 }, _rdt(cam));
+  if (_ccE > 0) { _bp.ux *= _ccN; _bp.uy *= _ccN; _bp.tw *= _ccN; _bp.hd *= _ccN; _bp.sway *= _ccN; }
   ctx.lineCap = 'round';
   const feetW = [];   // polohy bruslí v lokálu (svět. jednotky) pro štulpny v skinBody
   for (const f of _pose.feet) {
@@ -1421,7 +1446,7 @@ function _renderPlayerUp(ctx, p, cam) {
 
   // Cross-check: hůl držená napříč PŘED TĚLEM. Kreslí se přes vyhlazený úhel
   // _stickDisp (dojíždí k bodyAngle), takže přepnutí RMB hokejku neteleportuje.
-  if (p.crossCheck) {
+  if (_ccFull) {
     ctx.lineCap = 'round';
     const baseDir   = p._stickDisp;            // dojíždí k bodyAngle (před tělem)
     const stickDir  = baseDir + (p.handed ?? 1) * Math.PI / 2;   // čepel na straně DOLNÍ ruky (pravák vpravo, levák vlevo)
@@ -1474,9 +1499,10 @@ function _renderPlayerUp(ctx, p, cam) {
     ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = 4.8 * s; ctx.stroke();   // obrys čepele
 
     _drawBlade(ctx, bladeX, bladeY, bCtrlX, bCtrlY, bEndX, bEndY, tapeCol, tapeSty, 2.8 * s, bladeCol);
+    if (globalThis.__fhCcDbg) p._ccSt = { butt: { x: (gripX - ox) / s, y: (gripY - oy) / s }, heel: { x: (bladeX - ox) / s, y: (bladeY - oy) / s }, end: { x: (bEndX - ox) / s, y: (bEndY - oy) / s } };
   }
 
-  if (!p.crossCheck) {
+  if (!_ccFull) {
   // ── Stick ──────────────────────────────────────────────────────────────
   // Vyhlazený úhel + charge → wind-up i zrušení charge jsou plynulé (bez skoku)
   // VIZUÁL STŘELY TAHEM: nápřah na FORHEND (strana rukou) a k tělu, po ráně švih + dokončení přes směr střely.
@@ -1484,7 +1510,7 @@ function _renderPlayerUp(ctx, p, cam) {
   const hnd = p.handed ?? 1, dcv = p._dispCharge ?? 0;
   let follow = 0;
   if (p._sw) { const u = 1 - p._sw.t / p._sw.T; follow = -hnd * PLAYER.followArc * Math.sin(Math.PI * Math.min(1, u * 1.4)) * (1 - u); }
-  const windAngle = p.crossCheck ? p._stickDisp : p._stickDisp + hnd * dcv * (0.85 + PLAYER.windBack) + follow;
+  const windAngle = p.crossCheck ? _ccSd : _ccSd + hnd * dcv * (0.85 + PLAYER.windBack) + follow;
   p._visStick = windAngle;
   const windLen   = (p._dispReach ?? PLAYER.stickLen) * (1 - dcv * PLAYER.windPull) * PLAYER.stickDraw;
   const windCos   = Math.cos(windAngle);
@@ -1519,8 +1545,8 @@ function _renderPlayerUp(ctx, p, cam) {
   }
   wt = Math.max(0, wt - BLADE);   // stáhni zpět o čepel → čepel skončí přesně u překážky
 
-  const tipX = ox + (gxw + windCos * wt) * s;
-  const tipY = oy + (gyw + windSin * wt) * s;
+  let tipX = ox + (gxw + windCos * wt) * s;
+  let tipY = oy + (gyw + windSin * wt) * s;
   // STOPA TAHU: hráč právě vystřelil z nápřahu (puk pryč, nápřah byl nabitý) → oblouk po dráze čepele
   if (p._visHad && !p.hasPuck && (p._visDc ?? 0) > 0.15) p._sw = { a0: p._visSd, t: 0.22, T: 0.22 };
   p._visHad = p.hasPuck; p._visDc = p._dispCharge ?? 0; p._visSd = windAngle;
@@ -1546,13 +1572,26 @@ function _renderPlayerUp(ctx, p, cam) {
   // Levák zrcadlově. Jen kresba: špička/čepel = fyzikální poloha (dosah), mění se ruce, dřík, prohnutí, puk.
   // horní ruka: před tělem u středu, mírně k bekhendu; v nápřahu se stáhne k forhendovému boku; B1: houpe se v rytmu kroku (sway)
   const tipW = { x: gxw + windCos * wt, y: gyw + windSin * wt };
-  const { topW, botW } = stickHands(p.x, p.y, p.bodyAngle ?? windAngle, dcv, hnd, tipW, _bp.sway);
-  const shDir = Math.atan2(tipW.y - topW.y, tipW.x - topW.x), shC = Math.cos(shDir), shS = Math.sin(shDir);
+  let { topW, botW } = stickHands(p.x, p.y, p.bodyAngle ?? windAngle, dcv, hnd, tipW, _bp.sway);
+  let shDir = Math.atan2(tipW.y - topW.y, tipW.x - topW.x), buttW = topW;
+  let gripF = 0.22, mainF = 0.18;   // podíl omotávky / začátek hlavního dříku (od konce hole)
+  let SV = STICK_V[VIS.s] || STICK_V[0];
+  if (_ccE > 0) {   // PŘECHOD do crosschecku: konec hole, směr a délka dříku, ruce (podíl po dříku) i tloušťky čar se míchají k póze napříč
+    const G = _ccGeom(p, _ccSd), lN = Math.hypot(tipW.x - topW.x, tipW.y - topW.y), bfN = lN > 1e-6 ? Math.hypot(botW.x - topW.x, botW.y - topW.y) / lN : 0;
+    const mx = (a, b) => a + (b - a) * _ccE;
+    buttW = { x: mx(topW.x, G.butt.x), y: mx(topW.y, G.butt.y) };
+    shDir = lerpAngle(shDir, G.dir, _ccE);
+    const L = mx(lN, G.len), dc = Math.cos(shDir), ds = Math.sin(shDir), uT = mx(0, G.uT), uB = mx(bfN, G.uB);
+    topW = { x: buttW.x + dc * L * uT, y: buttW.y + ds * L * uT }; botW = { x: buttW.x + dc * L * uB, y: buttW.y + ds * L * uB };
+    tipX = ox + (buttW.x + dc * L) * s; tipY = oy + (buttW.y + ds * L) * s;
+    gripF = mx(0.22, 0.35); mainF = mx(0.18, 0.325);
+    const S0 = STICK_V[0]; SV = { ...SV, out: mx(SV.out, S0.out), sh: mx(SV.sh, S0.sh), bl: mx(SV.bl, S0.bl), blo: mx(SV.blo, S0.blo) };
+  }
+  const shC = Math.cos(shDir), shS = Math.sin(shDir);
   p._visTopW = topW; p._visBotW = botW;
-  const tx0 = ox + topW.x * s, ty0 = oy + topW.y * s;
+  const tx0 = ox + buttW.x * s, ty0 = oy + buttW.y * s;
 
   // ── Shaft ─────────────────────────────────────────────────────────────────
-  const SV = STICK_V[VIS.s] || STICK_V[0];
   ctx.lineCap = 'round';
   if (SV.sh2) {   // stín hole na ledu (světlo vlevo nahoře → stín vpravo dole)
     const o = 1.6 * s; ctx.strokeStyle = 'rgba(20,40,70,0.22)'; ctx.lineWidth = SV.sh * s;
@@ -1562,12 +1601,12 @@ function _renderPlayerUp(ctx, p, cam) {
   ctx.beginPath(); ctx.moveTo(tx0, ty0); ctx.lineTo(tipX, tipY); ctx.stroke();
   ctx.beginPath();   // konec hole + omotávka (od horní ruky)
   ctx.moveTo(tx0, ty0);
-  ctx.lineTo(tx0 + (tipX - tx0) * 0.22, ty0 + (tipY - ty0) * 0.22);
+  ctx.lineTo(tx0 + (tipX - tx0) * gripF, ty0 + (tipY - ty0) * gripF);
   ctx.strokeStyle = _shade(stickCol, -0.55);
   ctx.lineWidth   = SV.sh * s;
   ctx.stroke();
   ctx.beginPath();   // hlavní dřík
-  ctx.moveTo(tx0 + (tipX - tx0) * 0.18, ty0 + (tipY - ty0) * 0.18);
+  ctx.moveTo(tx0 + (tipX - tx0) * mainF, ty0 + (tipY - ty0) * mainF);
   ctx.lineTo(tipX, tipY);
   ctx.strokeStyle = stickCol;
   ctx.lineWidth   = SV.sh * s;
@@ -1648,12 +1687,13 @@ function _renderPlayerUp(ctx, p, cam) {
     p._kickTop = p._visPuck._kick === true;        // puk „pod nohama" je pod rukama/tělem → během dojezdu ho kreslíme navrch (čitelnost)
     if (!p._kickTop) cp.draw(ctx, cam, p._visPuck);
   } else { p._visPuck = null; p._kickTop = false; }
-  } // end !crossCheck stick
+  if (globalThis.__fhCcDbg) p._ccSt = { butt: buttW, heel: { x: (tipX - ox) / s, y: (tipY - oy) / s }, end: { x: (bEndX - ox) / s, y: (bEndY - oy) / s } };
+  } // end běžná hůl / přechod do crosschecku
 
   // ── TĚLO C-d2 (skin.js): jedna sjednocená cesta, obrys jednou, jedno stínování; ruce z držení hole ──
   {
     let topH, botH;
-    if (p.crossCheck) {
+    if (_ccFull) {
       const baseDir = p._stickDisp, stickDir = baseDir + (p.handed ?? 1) * Math.PI / 2;
       const sc = Math.cos(stickDir), ss = Math.sin(stickDir), half = PLAYER.stickLen * 0.7;
       const cxW = p.x + Math.cos(baseDir) * (PLAYER.radius + 2), cyW = p.y + Math.sin(baseDir) * (PLAYER.radius + 2);
@@ -1662,7 +1702,7 @@ function _renderPlayerUp(ctx, p, cam) {
     } else if (p._visTopW && p._visBotW) { topH = p._visTopW; botH = p._visBotW; }
     else { const gp = p.gripPoint; topH = { x: p.x + fcos * PLAYER.radius * 0.5, y: p.y + fsin * PLAYER.radius * 0.5 }; botH = { x: gp.x, y: gp.y }; }
     const leanW = (p._lean ?? 0) * PLAYER.radius * 0.15;
-    const bo = p.crossCheck ? { x: 0, y: 0, tw: 0 } : _pose.body;   // přenos váhy (K1–K3); ruce zůstanou na holi → odečti posun
+    const bo = _ccFull ? { x: 0, y: 0, tw: 0 } : _ccE > 0 ? { x: (_pose.body.x ?? 0) * _ccN, y: (_pose.body.y ?? 0) * _ccN, tw: (_pose.body.tw ?? 0) * _ccN } : _pose.body;   // přenos váhy (K1–K3; v crosschecku plynule pryč); ruce zůstanou na holi → odečti posun
     const toL = h => { const dx = h.x - p.x, dy = h.y - p.y; return { x: dx * fcos + dy * fsin - bo.x, y: -dx * fsin + dy * fcos - leanW - bo.y }; };
     const llx = Math.cos(-ba) * -0.7 - Math.sin(-ba) * -0.7, lly = Math.sin(-ba) * -0.7 + Math.cos(-ba) * -0.7;   // světlo vlevo nahoře, pevné ve světě
     ctx.save();
@@ -1671,8 +1711,10 @@ function _renderPlayerUp(ctx, p, cam) {
     // DRES V RYCHLOSTI (2026-11-13): zadní lem se táhne proti jízdě a vlaje v rytmu kroku (fáze z ujeté dráhy → deterministické)
     const _jk = Math.max(0, Math.min(1, (_spd / PLAYER.speed - 0.35) / 0.65)), _jm = _k >= 3 ? (p._mLocS ?? _mLoc) : _mLoc;   // trup se v skinBody neotáčí o tw → směr vůči trupu = mLoc
     const _jd = _jk > 0 && VIS.b ? { mx: Math.cos(_jm), my: Math.sin(_jm), k: _jk, fl: _k === 4 ? 0 : Math.sin(2 * (p._skatePhase ?? 0)) } : null;   // K4: lem se jen táhne, nekmitá
-    skinBody(ctx, { feet: feetW.map(f => ({ x: f.x - bo.x, y: f.y - bo.y, side: f.side })), top: toL(topH), bot: toL(botH), hnd: p.handed ?? 1, tw: bo.tw + _bp.tw + (_pose.body.twT || 0), twT: _pose.body.twT || 0, ux: _bp.ux, uy: _bp.uy, hd: _bp.hd, hh: _pose.body.hh ?? _pose.body.h ?? 0, lx: llx, ly: lly, jd: _jd }, K);
+    const _B = { feet: feetW.map(f => ({ x: f.x - bo.x, y: f.y - bo.y, side: f.side })), top: toL(topH), bot: toL(botH), hnd: p.handed ?? 1, tw: bo.tw + _bp.tw + (_pose.body.twT || 0), twT: _pose.body.twT || 0, ux: _bp.ux, uy: _bp.uy, hd: _bp.hd, hh: _pose.body.hh ?? _pose.body.h ?? 0, lx: llx, ly: lly, jd: _jd };
+    skinBody(ctx, _B, K);
     ctx.restore();
+    if (globalThis.__fhCcDbg) p._ccDbg = { e: _ccE, b: p._ccB, ...p._ccSt, B: _B, bx: bo.x, by: leanW + bo.y };   // scripts/crosscheck_anim_metrics.mjs
   }
 
 
