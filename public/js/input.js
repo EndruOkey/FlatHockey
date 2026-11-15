@@ -15,7 +15,7 @@ export class Input {
     this.mmbJustPressed  = false;
     // Ovládání: 'A' = WASD ve světě (výchozí), 'B2' = za kurzorem (steer.js). Q přepíná; hra pak dosadí this.steer.
     // Režimy ovládání jsou pokus → jen v dev playgroundu (window.FH_DEV); běžní hráči mají vždy WASD
-    this.mode = 'A'; if (globalThis.FH_DEV) try { const m = localStorage.getItem('fh_ctrl'); if (m === 'B2' || m === 'R1') this.mode = m; } catch {}
+    this.mode = 'R1'; if (globalThis.FH_DEV) try { const m = localStorage.getItem('fh_ctrl'); if (m === 'A' || m === 'B2' || m === 'R1') this.mode = m; } catch {}   // 2026-11-15: výchozí Zaoblené WASD pro všechny (Ondřej z dev)
     if (globalThis.FH_DEV) window.addEventListener('fh-ctrl', e => { this.mode = e.detail; this.steer = null; });
     this.steer = null;          // { dx, dy } od hry (jen v režimu B2)
     this.modeToggled = false;   // hrana pro hru

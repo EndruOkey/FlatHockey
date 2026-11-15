@@ -821,6 +821,7 @@ SKATE_K3.stopV = 3; SKATE_K3.hsD = 1.4; SKATE_K3.hsLead = -0.1; SKATE_K3.hsN = 0
 // místo ve SVĚTĚ a klouže jen podél ostří (do strany max perpMax ×R odchylky od pózy), ve vzduchu dojíždí k póze (airK).
 // Dřív se větev ukotvení ve skateFeetSmooth nikdy nespustila (draw ji volal bez x, y) → nohy v rámci trupu, otáčely se s ním.
 // plant 0 = vypnuto. scripts/leg_weight_metrics.mjs
+SKATE_K3.plBw = 0.5;    // couvání nad tuto váhu = bez ukotvení (C-cut)
 SKATE_K3.plant = 0; SKATE_K3.perpMax = 0.6; SKATE_K3.airK = 0.45;
 // plant 2 = stavový automat: plRot max. dotáčení opěrné brusle (rad/s), krok když póza zvedá nohu (lift > stepL) nebo odchylka > stepD (×R,
 // úhel váha stepA na rad), švih trvá swT s.
@@ -960,7 +961,8 @@ export function skateFeetSmooth(st, feet, dt, ba = 0, x = null, y = null, k4 = f
     const Q = st._pl || (st._pl = {}), c = Math.cos(ba), s = Math.sin(ba), R = PLAYER.radius, K = SKATE_K3;
     const T = feet.map(f => ({ f, x: x + f.x * c - f.y * s, y: y + f.x * s + f.y * c, a: f.a + ba }));
     const bdx = x - (Q._bx ?? x), bdy = y - (Q._by ?? y); Q._bx = x; Q._by = y;
-    if ((st._stopK3 ?? 0) > 0.05) { for (const t of T) Q[t.f.side] = { x: t.x, y: t.y, a: t.a, sw: 0 }; return; }   // hokejový stop: brusle záměrně kloužou napříč → bez ukotvení
+    if ((st._stopK3 ?? 0) > 0.05) { for (const t of T) Q[t.f.side] = { x: t.x, y: t.y, a: t.a, sw: 0 }; return; }
+    if ((st._bwS ?? 0) > SKATE_K3.plBw) { for (const t of T) Q[t.f.side] = { x: t.x, y: t.y, a: t.a, sw: 0 }; return; }   // couvání (C-cut): brusle opisuje oblouk po hraně → bez ukotvení (jinak stály pod tělem, viditelnost 62 → 42 %)   // hokejový stop: brusle záměrně kloužou napříč → bez ukotvení
     const go = q => { q.sw = K.swT; q.lx = (q.x - x) * c + (q.y - y) * s; q.ly = -(q.x - x) * s + (q.y - y) * c; };   // začátek kroku   // posun těla za snímek: opěrná brusle klouže podél ostří jen s tělem
     for (const t of T) { const q = Q[t.f.side];
       if (!q || Math.hypot(t.x - q.x, t.y - q.y) > 4 * R) { Q[t.f.side] = { x: t.x, y: t.y, a: t.a, sw: 0 }; continue; }   // první snímek / teleport (buly)

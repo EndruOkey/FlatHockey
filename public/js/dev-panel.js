@@ -8,7 +8,7 @@ const ROWS = [
   { key: 's', label: 'Hokejka', opts: [[3, 'Dnešní štíhlejší'], [0, 'Dnešní (původní)'], [1, 'Štíhlá'], [2, 'Lopatka']] },
   { key: 'b', label: 'Tělo', opts: [[1, 'Živé tělo (nové)'], [0, 'Dřívější (strohé)']] },
   { key: 'k', label: 'Bruslení', opts: [[3, 'Plynulý krok (nový)'], [0, 'Dřívější'], [1, 'Krok do stran'], [2, 'Velký odraz'], [4, 'K4 celek + odraz (test)']] },
-  { key: 'n', label: 'Nohy', opts: [[0, 'Bez ukotvení'], [1, 'Ukotvené k ledu (test)']] },
+  { key: 'n', label: 'Nohy', opts: [[1, 'Ukotvené k ledu'], [0, 'Bez ukotvení']] },
 ];
 const css = `#fh-dev{position:fixed;left:12px;bottom:12px;z-index:9998;background:rgba(10,20,35,.94);color:#eef4fb;border:2px solid #4cc3ff;
 border-radius:8px;font:600 13px/1.3 system-ui,sans-serif;padding:8px 10px;max-width:calc(100vw - 24px);box-sizing:border-box}
@@ -20,7 +20,7 @@ function build() {
   const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
   const d = document.createElement('details'); d.id = 'fh-dev'; d.open = true;
   d.innerHTML = '<summary>DEV PLAYGROUND</summary>';
-  let ctrl = 'A'; try { ctrl = localStorage.getItem('fh_ctrl') || 'A'; } catch {}
+  let ctrl = 'R1'; try { ctrl = localStorage.getItem('fh_ctrl') || 'R1'; } catch {}
   for (const r of ROWS) {
     const row = document.createElement('label'); row.className = 'r';
     const sel = document.createElement('select'); sel.dataset.k = r.key;
