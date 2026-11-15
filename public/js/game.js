@@ -564,18 +564,41 @@ export class NetGame {
       if (score > bestScore) { bestScore = score; best = o; }
     }
     const tgt = req || best; if (!tgt) return;
-    const s = cam.scale, saucer = this._rmbT >= 0.15;
-    const ax = cam.ox + this.puck.x * s, ay = cam.oy + this.puck.y * s, bx = cam.ox + tgt.x * s, by = cam.oy + tgt.y * s;
-    const col = saucer ? '230,150,0' : '31,79,216';   // vzduchem = jantar, po ledě = modrá štítku TY (kontrast na bílém ledu)
-    ctx.save();
-    ctx.setLineDash([5 * s, 4 * s]); ctx.lineWidth = 1.6 * s; ctx.strokeStyle = `rgba(${col},${rmb ? 0.9 : 0.35})`;
-    ctx.beginPath(); ctx.moveTo(ax, ay);
-    if (saucer) { const L = Math.hypot(bx - ax, by - ay) || 1, k = 0.25; ctx.quadraticCurveTo((ax + bx) / 2 - (by - ay) / L * L * k, (ay + by) / 2 + (bx - ax) / L * L * k, bx, by); }   // oblouk = puk letí vzduchem
-    else ctx.lineTo(bx, by);
-    ctx.stroke(); ctx.setLineDash([]);
-    ctx.beginPath(); ctx.arc(bx, by, (PLAYER.radius + 6) * s, 0, Math.PI * 2);
-    ctx.lineWidth = 2.2 * s; ctx.strokeStyle = `rgba(${col},0.95)`; ctx.stroke();
+    // Decentní značení (2026-11-15, dřív čára přes celý led): podkova u cíle (mezera míří ke mně = odkud puk přijde)
+    // + krátká lehká šipka od mé postavy. Barva týmu ztmavená na ~62 % (čitelná na světlém ledu); vzduchem = jantar.
+    const s = cam.scale, R = PLAYER.radius, saucer = this._rmbT >= 0.15;
+    const dx = tgt.x - me.x, dy = tgt.y - me.y, d = Math.hypot(dx, dy) || 1, ux = dx / d, uy = dy / d;
+    const col = saucer ? '200,128,0' : this._passAimRgb(me);
+    const mx = cam.ox + me.x * s, my = cam.oy + me.y * s, bx = cam.ox + tgt.x * s, by = cam.oy + tgt.y * s;
+    ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    // podkova: puls ±8 % z hodin kresby (cam.t → deterministické), 1,2 Hz
+    const pr = (R + 6) * s * (1 + 0.08 * Math.sin((cam.t || 0) * Math.PI * 2.4));
+    const toMe = Math.atan2(-uy, -ux), gap = 0.9;
+    ctx.beginPath(); ctx.arc(bx, by, pr, toMe + gap, toMe + Math.PI * 2 - gap);
+    ctx.lineWidth = 1.1 * s; ctx.strokeStyle = `rgba(${col},${rmb ? 0.8 : 0.65})`; ctx.stroke();
+    // šipka: začíná těsně za ramenem mé postavy, délka ≤ 1,6 R, nikdy nezasáhne do podkovy cíle
+    const a0 = R + 5, L = Math.min(1.6 * R, d - a0 - (R + 11));
+    if (L > R * 0.6) {
+      const sx = mx + ux * a0 * s, sy = my + uy * a0 * s, ex = mx + ux * (a0 + L) * s, ey = my + uy * (a0 + L) * s;
+      const hl = 0.75 * R * s, hw = 0.5 * R * s;
+      ctx.strokeStyle = `rgba(${col},${rmb ? 0.5 : 0.4})`; ctx.lineWidth = 1.3 * s;
+      ctx.beginPath(); ctx.moveTo(sx, sy);
+      if (saucer) ctx.quadraticCurveTo((sx + ex) / 2 + uy * 0.35 * L * s, (sy + ey) / 2 - ux * 0.35 * L * s, ex, ey);   // prohnutá = puk letí vzduchem
+      else ctx.lineTo(ex, ey);
+      ctx.moveTo(ex - ux * hl - uy * hw, ey - uy * hl + ux * hw); ctx.lineTo(ex, ey); ctx.lineTo(ex - ux * hl + uy * hw, ey - uy * hl - ux * hw);
+      ctx.stroke();
+    }
     ctx.restore();
+  }
+
+  // barva týmu pro ukazatel přihrávky: "r,g,b" ztmavená na 62 % (kontrast na světlém ledu), kešováno podle hex
+  _passAimRgb(me) {
+    const hex = this.settings?.teams?.[me.team]?.color || '#3a9fff';
+    if (this._passAimHex === hex) return this._passAimCol;
+    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+    const c = m ? [m[1], m[2], m[3]].map(h => Math.round(parseInt(h, 16) * 0.62)) : [31, 79, 216];
+    this._passAimHex = hex; this._passAimCol = c.join(',');
+    return this._passAimCol;
   }
 
   // Záblesk plexiskla (ev 32) a puk letící přes mantinel ven (ev 64) — na místě nárazu, u nejbližší stěny
