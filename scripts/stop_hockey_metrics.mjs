@@ -7,7 +7,8 @@
 // RUBRIKA (předem, 2026-11-14):
 //  ČASOVÁNÍ  H1 držený Space z 140 px/s: póza ≥ 0,8 do 0,1 s od začátku brzdy.
 //            H2 póza > 0,3 trvá nejvýš doba brzdění + 0,3 s (ťuknutí Space 2 snímky; jízda 165 px/s a dojezd třením = póza 0).
-//            H3 0,5 s po zastavení (Space dál držen) póza ≤ 0,1.
+//            H3 (REVIZE 2026-11-15: po hokejovém stopu hráč stojí v postoji stopu, dokud se nerozjede — původně „0,5 s po zastavení póza ≤ 0,1" bylo fyzikálně špatně)
+//               po zastavení se póza drží ≥ 0,8 alespoň 0,4 s a nejpozději 1,0 s po zastavení je ≤ 0,1.
 //            H10 (doplněno: nový rychlý náběh) jízda 140 px/s → držený Space: špička/pata brusle skočí ≤ 3 px za snímek (1×), jako S3.
 //  GEOMETRIE (plná póza, směr jízdy vůči tělu 0°, ±45°, ±90°, 180°, pravák i levák):
 //            H4 ostří vůči směru jízdy 70–100°.   H5 ostří navzájem rovnoběžná ±20°.
@@ -54,10 +55,10 @@ function timeline(T, v0, spaceFn) {
 }
 { // H1 + H3: držený Space od 0,2 s do konce (2 s)
   const tl = timeline(2, 140, t => t >= 0.2), t0 = 0.2, hit = tl.find(r => r.t >= t0 && r.s >= 0.8), stopT = tl.find(r => r.t > t0 && r.v === 0).t;
-  const late = tl.filter(r => r.t >= stopT + 0.5);
+  const late = tl.filter(r => r.t >= stopT + 1.0), held = tl.filter(r => r.t >= stopT && r.t < stopT + 0.4);
   res.push(['H1 náběh ≥0,8 do 0,1 s', !!hit && hit.t - t0 <= 0.1 + 1e-9, hit ? `${((hit.t - t0) * 1000).toFixed(0)} ms` : 'nikdy']);
-  res.push(['H3 po zastavení ≤0,1 za 0,5 s', late.every(r => r.s <= 0.1), `max ${Math.max(...late.map(r => r.s)).toFixed(2)} (zastaven v ${(stopT - t0).toFixed(2)} s)`]);
-  const brakeDur = stopT - t0, poseDur = tl.filter(r => r.s > 0.3).length * DT;
+  res.push(['H3 postoj drží 0,4 s, do 1 s klid', late.every(r => r.s <= 0.1) && held.every(r => r.s >= 0.8), `max ${Math.max(...late.map(r => r.s)).toFixed(2)} (zastaven v ${(stopT - t0).toFixed(2)} s)`]);
+  const brakeDur = stopT - t0, poseDur = tl.filter(r => r.s > 0.3 && r.v > 25).length * DT;   // REVIZE 2026-11-15: póza v JÍZDĚ (postoj po zastavení je H3)
   res.push(['H2a držení: póza ≤ brzda + 0,3 s', poseDur <= brakeDur + 0.3 + 1e-9, `póza ${poseDur.toFixed(2)} s, brzda ${brakeDur.toFixed(2)} s`]);
 }
 { const tl = timeline(1.5, 140, t => t >= 0.2 && t < 0.2 + 2 * DT), poseDur = tl.filter(r => r.s > 0.3).length * DT;
