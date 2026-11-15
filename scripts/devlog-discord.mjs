@@ -42,6 +42,7 @@ export function payload(e) {
   if (desc.length > 4000) desc = desc.slice(0, 3990) + '…';
   return {
     username: 'FlatHockey',
+    avatar_url: `${SITE}/brand/bot-avatar.png`,   // node scripts/bot-avatar.mjs (varianta hráč)
     allowed_mentions: { parse: [] },
     embeds: [{ title: `Devlog: ${e.title}`, url: `${SITE}/devlog/`, description: desc, color: 0xE4002B,
                image: { url: e.image }, footer: { text: e.date } }],
