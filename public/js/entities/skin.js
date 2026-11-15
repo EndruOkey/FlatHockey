@@ -132,8 +132,10 @@ export function drawTextCached(c, text, font, align, baseline, x, y, fill, strok
   const ax = align === 'center' ? e.adv / 2 : (align === 'right' || align === 'end') ? e.adv : 0, yA = baseline === 'middle' ? y + e.mid : y;
   c.drawImage(e.cv, x - ax - e.bx, yA - e.by, e.w, e.h);
 }
-export function skinHip(side, hh) { const x = -R * 0.6, y = side * R * 0.58, c = Math.cos(hh || 0), s = Math.sin(hh || 0); return { x: x * c - y * s, y: x * s + y * c }; }
-export function skinPants(side, hh) { const x = -R * 0.62, y = side * R * 0.62, c = Math.cos(hh || 0), s = Math.sin(hh || 0); return { x: x * c - y * s, y: x * s + y * c }; }
+// KYČLE A KALHOTY (2026-11-15, Ondřej: „kalhoty / stehna jsou za zády až moc"): poloha vpřed/vzad (×R) jako parametr — scripts/pants_behind_metrics.mjs
+export const SKIN_HIP = { hx: -0.35, px: -0.37 };   // dřív −0,6 / −0,62: viditelné kalhoty+stehna 37,4 → 14,5 px² (39 %)
+export function skinHip(side, hh) { const x = R * SKIN_HIP.hx, y = side * R * 0.58, c = Math.cos(hh || 0), s = Math.sin(hh || 0); return { x: x * c - y * s, y: x * s + y * c }; }
+export function skinPants(side, hh) { const x = R * SKIN_HIP.px, y = side * R * 0.62, c = Math.cos(hh || 0), s = Math.sin(hh || 0); return { x: x * c - y * s, y: x * s + y * c }; }
 // ── TĚLO HRÁČE (lokál: +x = dopředu/obličej, +y = doprava). B = { feet:[{x,y,side}], top, bot (ruce), hnd, tw (natočení ramen), ux, uy, hd, lx, ly (světlo v lokálu) }
 export function skinBody(c, B, K) {
   const lod = lodSmall(c);   // lod: malé měřítko → silnější tóny tvarů, méně drobných linek
