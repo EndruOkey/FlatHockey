@@ -798,13 +798,13 @@ export const SKATE_K3 = { cyc0: 60, cycV: 0.26, push: 0.36, land: 0.80, hip: 1.2
 // PŘECHODY (2026-11-14, Ondřej z klipů F9: „nohy nebo tělo v nepřirozené pozici"): latA = zkrácení kroku při jízdě bokem vůči pohledu
 // (dřív plná délka jako vpřed → zadní noha 2,2 R přímo za trupem = „ocas"); bwR = max. rychlost přechodu vpřed ↔ couvání (1/s).
 // scripts/pose_transition_metrics.mjs
-SKATE_K3.latA = 0.4; SKATE_K3.bwR = 4; SKATE_K3.bwA = 1.6; SKATE_K3.bwB = 2.5; SKATE_K3.psiM = 0.35;
+SKATE_K3.latA = 0.4; SKATE_K3.bwR = 3.5; SKATE_K3.bwA = 1.6; SKATE_K3.bwB = 2.5; SKATE_K3.psiM = 0.35;
 // bwA–bwB = směr jízdy vůči tělu (rad), kde se krok vpřed mění v couvání (C-cuty); psiM = max. natočení kroku vůči bokům (rad; dřív bez limitu → za hranicí boků krok mířil dozadu)
 // BOČNÍ KROK (shuffle, 2026-11-14, Ondřej: „jízda bokem furt jedna noha je hrozně vykloubená"): čelem vpřed + jízda do boku = obě brusle
 // pod tělem na své straně (shX, shY0), ostří dopředu (špička lehce ven shA), odraz do strany o shY, návrat nad ledem (shL); váha podle
 // směru jízdy vůči tělu lbA–lbB (rad). scripts/side_skate_metrics.mjs
 SKATE_K3.cx = 0.3;   // posun celé soustavy nohou vůči tělu (×R), 2026-11-15 „nohy pozadu" — scripts/feet_behind_metrics.mjs
-SKATE_K3.lbA = 0.8; SKATE_K3.lbB = 1.3; SKATE_K3.shX = -0.2; SKATE_K3.shY0 = 1.4; SKATE_K3.shY = 0.32; SKATE_K3.shA = 0.15; SKATE_K3.shL = 0.3; SKATE_K3.shM = 0;
+SKATE_K3.lbA = 1.3; SKATE_K3.lbB = 1.55; SKATE_K3.shX = -0.2; SKATE_K3.shY0 = 1.3; SKATE_K3.shY = 0.6; SKATE_K3.shA = 0.15; SKATE_K3.shL = 0.3; SKATE_K3.shM = 0;
 // HOKEJOVÝ STOP (2026-11-14): stopV 2 = předloha (Hockey Canada, MAHG, Riedell): boky otočené o 90°, obě ostří ROVNOBĚŽNĚ kolmo k jízdě,
 // brusle za sebou PODÉL jízdy na šíři ramen (hsD ×R), střed o hsLead ×R před tělem (váha vzad), o hsN ×R ke špičkám. stopV 1 = dřívější
 // (brusle vedle sebe po stranách těla, výchozí do 2026-11-14; teď stopV 3 níž) (stopV 2 schová brusle pod trup, viz stop_hockey_metrics H9).
@@ -822,7 +822,7 @@ SKATE_K3.stopV = 3; SKATE_K3.hsD = 1.4; SKATE_K3.hsLead = -0.1; SKATE_K3.hsN = 0
 // Dřív se větev ukotvení ve skateFeetSmooth nikdy nespustila (draw ji volal bez x, y) → nohy v rámci trupu, otáčely se s ním.
 // plant 0 = vypnuto. scripts/leg_weight_metrics.mjs
 SKATE_K3.plBw = 0.5; SKATE_K3.relT = 0.03; SKATE_K3.relS = 0.08; SKATE_K3.skidK = 0; SKATE_K3.plLb = 0.5;
-SKATE_K3.lbCyc = 1.8;   // boční krok: násobek délky cyklu (klidnější rytmus, 2026-11-15 „přešlapování do stran se seká“)
+SKATE_K3.lbCyc = 1.2;   // boční krok: násobek délky cyklu (klidnější rytmus, 2026-11-15 „přešlapování do stran se seká“)
 SKATE_K3.twK5 = 0.6; SKATE_K3.swK5 = 0.08;   // K5: podíl zkrutu trupu s boky, houpání trupu (×R)    // couvání nad tuto váhu = bez ukotvení (C-cut)
 SKATE_K3.plant = 0; SKATE_K3.perpMax = 0.6; SKATE_K3.airK = 0.45;
 // plant 2 = stavový automat: plRot max. dotáčení opěrné brusle (rad/s), krok když póza zvedá nohu (lift > stepL) nebo odchylka > stepD (×R,
@@ -1055,8 +1055,8 @@ export function skatePose(o) {
       }
       if (latB > 0) {                                                  // K3 boční krok: brusle na své straně, odraz do strany, návrat nad ledem
         const q = Math.sin(2 * Math.PI * u), Ks = SKATE_K3;
-        const bx = (Ks.shX + 0.08 * Math.cos(2 * Math.PI * u)) * R, by = side * (Ks.shY0 + Ks.shY * Math.max(0, q)) * R, ba2 = side * Ks.shA + Math.sign(mLoc || 1) * Ks.shM;   // shM: ostří šikmo do směru pohybu (opěrná brusle klouže)
-        x += (bx - x) * latB; y += (by - y) * latB; a = lerpAngle(a, ba2, latB); lift += (Ks.shL * Math.max(0, -q) - lift) * latB;
+        const bx = (Ks.shX + 0.08 * Math.cos(2 * Math.PI * u)) * R, by = side * (Ks.shY0 + Ks.shY * (0.5 - 0.5 * Math.cos(2 * Math.PI * u))) * R, ba2 = side * Ks.shA + Math.sign(mLoc || 1) * Ks.shM;   // shM: ostří šikmo do směru pohybu (opěrná brusle klouže)
+        x += (bx - x) * latB; y += (by - y) * latB; a = lerpAngle(a, ba2, latB); lift += (Ks.shL * (0.5 + 0.5 * Math.sin(2 * Math.PI * u + Math.PI)) - lift) * latB;   // plynulá vlna místo max(0, …): noha nikdy půl cyklu nestojí (videa F9: „zamrzlé nohy")
       }
       const rx = (K4 ? -0.62 : SKATE_K3.cx - 0.12) * R, ry = side * 0.5 * R, ra = side * 0.2;     // klid: mírné V (špičky lehce ven)
       x = rx + (x - rx) * w; y = ry + (y - ry) * w; a = ra + angleDiff(a, ra) * w; lift *= w;
