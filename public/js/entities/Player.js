@@ -821,12 +821,12 @@ SKATE_K3.stopV = 3; SKATE_K3.hsD = 1.4; SKATE_K3.hsLead = -0.1; SKATE_K3.hsN = 0
 // místo ve SVĚTĚ a klouže jen podél ostří (do strany max perpMax ×R odchylky od pózy), ve vzduchu dojíždí k póze (airK).
 // Dřív se větev ukotvení ve skateFeetSmooth nikdy nespustila (draw ji volal bez x, y) → nohy v rámci trupu, otáčely se s ním.
 // plant 0 = vypnuto. scripts/leg_weight_metrics.mjs
-SKATE_K3.plBw = 0.5; SKATE_K3.relT = 0.03; SKATE_K3.relS = 0.08;
+SKATE_K3.plBw = 0.5; SKATE_K3.relT = 0.03; SKATE_K3.relS = 0.08; SKATE_K3.skidK = 0; SKATE_K3.plLb = 0.5;
 SKATE_K3.twK5 = 0.6; SKATE_K3.swK5 = 0.08;   // K5: podíl zkrutu trupu s boky, houpání trupu (×R)    // couvání nad tuto váhu = bez ukotvení (C-cut)
 SKATE_K3.plant = 0; SKATE_K3.perpMax = 0.6; SKATE_K3.airK = 0.45;
 // plant 2 = stavový automat: plRot max. dotáčení opěrné brusle (rad/s), krok když póza zvedá nohu (lift > stepL) nebo odchylka > stepD (×R,
 // úhel váha stepA na rad), švih trvá swT s.
-SKATE_K3.plRot = 1.5; SKATE_K3.stepD = 0.5; SKATE_K3.stepA = 0.5; SKATE_K3.swT = 0.14; SKATE_K3.stepL = 0.3; SKATE_K3.glC = 0.02; SKATE_K3.stepR = 0.7; SKATE_K3.reachS = 1.25; SKATE_K3.swT = 0.16; SKATE_K3.stepD = 0.35;   // vybráno mřížkou 48 kombinací (jen W4 bokem neprošlo)   // glC korekce podél ostří (×R/snímek), stepR nouzový krok (×R od pózy)
+SKATE_K3.plRot = 1.5; SKATE_K3.stepD = 0.5; SKATE_K3.stepA = 0.5; SKATE_K3.swT = 0.14; SKATE_K3.stepL = 0.3; SKATE_K3.glC = 0.02; SKATE_K3.stepR = 0.5; SKATE_K3.reachS = 1.25; SKATE_K3.swT = 0.16; SKATE_K3.stepD = 0.35;   // vybráno mřížkou 48 kombinací (jen W4 bokem neprošlo)   // glC korekce podél ostří (×R/snímek), stepR nouzový krok (×R od pózy)
 SKATE_K3.stopVmin = 25; SKATE_K3.stopDec = 450; SKATE_K3.stopUp = 9; SKATE_K3.stopHold = 0.6; SKATE_K3.stopDn = 4;
 if (typeof process !== "undefined" && process.env && process.env.FH_K3) Object.assign(SKATE_K3, JSON.parse(process.env.FH_K3));   // jen měření / hledání (Node)
 // K4 (2026-11-13, jen /dev k výběru): tělo jako celek + odraz. back = délka zaprutí dozadu (×R), hold = podíl rychlosti těla,
@@ -964,7 +964,7 @@ export function skateFeetSmooth(st, feet, dt, ba = 0, x = null, y = null, k4 = f
     const bdx = x - (Q._bx ?? x), bdy = y - (Q._by ?? y); Q._bx = x; Q._by = y;
     // bez ukotvení (hokejový stop: brusle kloužou napříč; couvání: C-cut po hraně) → brusle DOJEDOU k póze za ~relT s, ne skokem
     // (2026-11-15, Ondřej: „bruslení glitchuje": dřív teleport na pózu = skok 5–6 px/snímek, scripts/skate_glitch_game.mjs)
-    if ((st._stopK3 ?? 0) > 0.05 || (st._bwS ?? 0) > SKATE_K3.plBw) {
+    if ((st._stopK3 ?? 0) > 0.05 || (st._bwS ?? 0) > SKATE_K3.plBw || (st._lbS ?? 0) > SKATE_K3.plLb) {   // + boční krok: ostří dopředu, pohyb do strany → ukotvená brusle se táhla za tělem (klipy F9)
       const kf = 1 - Math.exp(-dt / ((st._stopK3 ?? 0) > 0.05 ? SKATE_K3.relS : SKATE_K3.relT));   // stop pomaleji (plynulost), couvání rychleji (noha nepřetáhne)
       for (const t of T) { const q = Q[t.f.side]; if (!q) { Q[t.f.side] = { x: t.x, y: t.y, a: t.a, sw: 0 }; continue; }
         q.x += (t.x - q.x) * kf; q.y += (t.y - q.y) * kf; q.a += angleDiff(t.a, q.a) * kf; q.sw = 0;
@@ -980,6 +980,7 @@ export function skateFeetSmooth(st, feet, dt, ba = 0, x = null, y = null, k4 = f
         q.a += angleDiff(t.a, q.a) * k; q.sw = Math.max(0, q.sw - dt); }
       else { const ax = Math.cos(q.a), ay = Math.sin(q.a), al = (t.x - q.x) * ax + (t.y - q.y) * ay, gb = bdx * ax + bdy * ay;   // na ledě: klouže jen podél ostří,
         const g = gb + Math.max(-K.glC * R, Math.min(K.glC * R, al - gb)); q.x += ax * g; q.y += ay * g;   // o kolik ho nese tělo (+ malá korekce k póze)
+        { const pe = -(t.x - q.x) * ay + (t.y - q.y) * ax; q.x += -ay * pe * K.skidK; q.y += ax * pe * K.skidK; }   // smyk po hraně napříč (skidK/snímek): brusle se netáhne za tělem (klipy F9 2026-11-15)
         const da = angleDiff(t.a, q.a); q.a += Math.max(-K.plRot * dt, Math.min(K.plRot * dt, da)); }
     }
     for (const t of T) { const q = Q[t.f.side]; if (q.sw > 0) continue;   // nouzový krok: brusle utekla od pózy, nebo by se noha utrhla (kotník daleko od kyčle)

@@ -10,6 +10,8 @@
 //     v každé situaci (jízda vpřed 165, dokola s pevným pohledem, švih myší 180° v jízdě 120, bokem 120, rozjezd 0 → 165).
 //  W2 ve stoje při švihu myší 180°: brusle na ledě se posune ≤ 0,5 j za snímek (tělo se otočí nad nohama).
 //  W3 noha nepřetažená: kotník ≤ 1,6 R od kyčle ve všech snímcích (ukotvení nesmí nohu utrhnout).
+//  W5 (doplněno 2026-11-15 po klipech F9: nohy se táhnou za tělem při jízdě bokem) ukotvená brusle zaostává za pózou ≤ 0,4 R (odhad viditelnosti). REVIZE po 1. běhu: neměří se jízda vpřed a rozjezd —
+//     tam je zaostání odrazové nohy záměr (noha drží led, tělo jede; biomechanika „ven a dozadu").
 //  W4 (doplněno po 1. běhu automatu: bokem jen 47 snímků na ledě = noha „hrabe") kroky ≤ 3 za s na nohu v každé situaci
 //     (C-cut 2,2–2,4 kroku/s, „Analysis of Selected Mechanics of the Backward C-Cut", ojs.ub.uni-konstanz.de/cpa/article/view/1699; +25 % rezerva = odhad).
 import { PLAYER } from '../public/js/constants.js';
@@ -23,9 +25,11 @@ function run(step, T) {
     const s = step(i * DT); x += s.vx * DT; y += s.vy * DT; const spd = Math.hypot(s.vx, s.vy), mLoc = spd > 8 ? ad(Math.atan2(s.vy, s.vx) - s.ba) : 0;
     skateAdvance(st, x, y, s.ba, spd, 3, mLoc, DT);
     const P = skatePose({ k: 3, phase: st._skatePhase ?? 0, spd, mLoc: st._mLocS, stopT: 0, stopLoc: 0, rotSf: st._rotSf ?? 0, lean: 0, hs: 1, thr: st._thr ?? 0, bwS: st._bwS, lbS: st._lbS });
+    const tgt = P.feet.map(f => ({ side: f.side, x: f.x, y: f.y }));
     if (SKATE_K3.plant) skateFeetSmooth(st, P.feet, DT, s.ba, x, y); else skateFeetSmooth(st, P.feet, DT);
+    let lag = 0; for (const f of P.feet) { const q = tgt.find(u => u.side === f.side); if (f.lift < 0.05) lag = Math.max(lag, Math.hypot(f.x - q.x, f.y - q.y) / R); }
     const c = Math.cos(s.ba), sn = Math.sin(s.ba);
-    F.push({ t: i * DT, x, y, ba: s.ba, P, W: P.feet.map(f => ({ side: f.side, lift: f.lift, a: f.a + s.ba, x: x + f.x * c - f.y * sn, y: y + f.x * sn + f.y * c })) });
+    F.push({ t: i * DT, x, y, ba: s.ba, P, lag, W: P.feet.map(f => ({ side: f.side, lift: f.lift, a: f.a + s.ba, x: x + f.x * c - f.y * sn, y: y + f.x * sn + f.y * c })) });
   }
   return F.slice(45);   // 0,75 s rozjezd vyhlazení se neměří
 }
@@ -37,7 +41,7 @@ const S = {
   'bokem 120': run(() => ({ vx: 0, vy: 120, ba: 0 }), 3),
   'rozjezd 0→165': run(t => ({ vx: Math.min(165, Math.max(0, t - 0.8) * 330), vy: 0, ba: 0 }), 2.2),
 };
-let fail = 0, w3 = 0, w4 = 0, w4n = '';
+let fail = 0, w3 = 0, w4 = 0, w4n = '', w5 = 0, w5n = '';
 for (const [n, F] of Object.entries(S)) {
   let on = 0, bad = 0;
   for (let i = 1; i < F.length; i++) for (const side of [-1, 1]) {
@@ -47,6 +51,8 @@ for (const [n, F] of Object.entries(S)) {
   for (const f of F) for (const ft of f.P.feet) { const kx = ft.x - Math.cos(ft.a) * 0.32 * R, ky = ft.y - Math.sin(ft.a) * 0.32 * R, hp = skinHip(ft.side, f.P.body.hh ?? 0); { const d = Math.hypot(kx - f.P.body.x - hp.x, ky - f.P.body.y - hp.y) / R; if (d > w3) { w3 = d; globalThis.__w3 = `${n} t=${f.t.toFixed(2)} s${ft.side} lift ${ft.lift.toFixed(2)}`; } } }
   { let steps = 0; for (let i = 1; i < F.length; i++) for (const side of [-1, 1]) { const a = F[i].W.find(q => q.side === side), b = F[i - 1].W.find(q => q.side === side); if (a.lift >= 0.05 && b.lift < 0.05) steps++; }
     const rate = steps / 2 / (F.length * DT); if (rate > w4) { w4 = rate; w4n = n; } }
+  const lagN = Math.max(...F.map(f => f.lag)); console.log(`        zpoždění ${n}: ${lagN.toFixed(2)} R`);
+  if (!/vpřed|rozjezd/.test(n)) for (const f of F) if (f.lag > w5) { w5 = f.lag; w5n = n; }
   const r = on ? bad / on : 0, ok = r <= 0.05; if (!ok) fail++;
   console.log(`  ${ok ? 'OK' : 'NE'}   W1 ${n.padEnd(22)} skating ratio ${(r * 100).toFixed(1).padStart(5)} %  (na ledě ${on} sn.)`);
 }
@@ -55,4 +61,5 @@ for (const [n, F] of Object.entries(S)) {
   const ok = worst <= 0.5; if (!ok) fail++; console.log(`  ${ok ? 'OK' : 'NE'}   W2 švih ve stoje: posun brusle na ledě max ${worst.toFixed(2)} j/sn. (≤ 0,5)`); }
 { const ok = w3 <= 1.6; if (!ok) fail++; console.log(`  ${ok ? 'OK' : 'NE'}   W3 kotník od kyčle max ${w3.toFixed(2)} R (≤ 1,6) — ${globalThis.__w3 ?? ""}`); }
 { const ok = w4 <= 3; if (!ok) fail++; console.log(`  ${ok ? 'OK' : 'NE'}   W4 kroky max ${w4.toFixed(2)} /s na nohu (${w4n}) (≤ 3)`); }
+{ const ok = w5 <= 0.4; if (!ok) fail++; console.log(`  ${ok ? 'OK' : 'NE'}   W5 zpoždění ukotvené brusle max ${w5.toFixed(2)} R (${w5n}) (≤ 0,4)`); }
 console.log(`plant ${SKATE_K3.plant}: ${fail ? 'NEPROŠLO ' + fail : 'VŠE OK'}`); process.exit(fail ? 1 : 0);
