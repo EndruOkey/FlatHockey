@@ -47,11 +47,12 @@ const ROUTES      = _envE('FH_ROUTES', 1);
 const ROUTE_X     = _envE('FH_RTX', 185);    // px před brankou — bod obratu
 const ROUTE_W     = _envE('FH_RTW', 90);     // px od osy — šířka kraje
 const ROUTE_MIN   = 260;                     // px od branky — kratší nájezd jede rovnou
-const SUP_AHEAD   = _envE('FH_SUPA', 80), SUP_BACK = _envE('FH_SUPB', 55), SUP_WIDE = _envE('FH_SUPW', 100);  // rozestavení podpory
+const SUP_AHEAD   = _envE('FH_SUPA', 80), SUP_BACK = _envE('FH_SUPB', 150), SUP_WIDE = _envE('FH_SUPW', 130);  // rozestavení podpory
 // CHOVÁNÍ JAKO HRÁČ (2026-11-14, Ondřej: „jezdí jak idioti, chasují, nepůsobí jako hráč"; test/bot-behavior.mjs B1–B5):
 // LOOSE 1 = při VOLNÉM puku druhý nejbližší nejede na puk (dřív dva na puk: 36,9 % času), ale jistí prostor mezi pukem a vlastní brankou;
+// LOOSE 2 = i při volném puku osobní obrana (viz SECOND_COVER).
 // SEP px = cíl bota bez puku (mimo honiče) se odsune od spoluhráčů blíž než SEP (dřív nahloučení 66,6 % času).
-const LOOSE = _envE('FH_LOOSE', 1), SEP = _envE('FH_SEP', 120), LOOSE_K = _envE('FH_LOOSEK', 0.5);   // výchozí: bot-behavior B1 66,6 → 26,4 %, B2 36,9 → 25,2 %, B5 53 → 67 %; botq a balanc v rubrice
+const LOOSE = _envE('FH_LOOSE', 2), SEP = _envE('FH_SEP', 280), LOOSE_K = _envE('FH_LOOSEK', 0.5);   // výchozí: bot-behavior B1 66,6 → 26,4 %, B2 36,9 → 25,2 %, B5 53 → 67 %; botq a balanc v rubrice
 const _env = (k, d) => (typeof process !== 'undefined' && process.env[k] != null && process.env[k] !== '') ? Number(process.env[k]) : d;
 // Obrana s odstupem (gap control): napadající bot drží GAP px před nosičem na obranné straně a napadne ho,
 // až je nosič blíž než ENGAGE px k naší brance. 0 = staré chování (napadá hned). Měřeno scripts/attack_test.mjs
@@ -60,7 +61,12 @@ const ENGAGE      = _env('FH_ENGAGE', 200);
 const PASS_LEAD   = _env('FH_PLEAD', 1);   // dráhu pasu kontroluj k místu setkání, ne k příjemci teď
 const GAP         = _env('FH_GAP', 120);
 const ATTACK_V    = _env('FH_ATTV', 60);   // px/s — rychlost nosiče směrem k naší brance, od které jde o nájezd
-const SECOND_COVER = _env('FH_COVER', 1);   // 1 = druhý bot kryje prostor před brankou místo druhého tlaku na puk
+// OSOBNÍ OBRANA 3v3 (2026-11-15, taktika F1 napadá / ostatní každý svého hráče z brankové strany; LOOSE/COVER = 2):
+// mřížka test/bot-behavior.mjs (20 seedů) → SEP 280, SUPB 150, SUPW 130, MARKK 0.6, PUCKSEP 100:
+// B1 26,4 → 10,0 % (rev. 7,0), B2 25,2 → 10,5 % (rev. 4,1), B4 58,2 → 90,1 %, B5 66,9 → 73,9 %.
+const SECOND_COVER = _env('FH_COVER', 2);   // 1 = druhý bot kryje prostor před brankou místo druhého tlaku na puk; 2 = osobní obrana (bez nosiče)
+const PUCK_SEP = _env('FH_PUCKSEP', 100);   // px — obránce mimo honiče nejede k puku blíž (žádný „pytel")
+const COVER_K = _env('FH_COVERK', 0.55), MARK_K = _env('FH_MARKK', 0.6), MARK_FREE = _env('FH_MARKFREE', 0);   // podíl cesty k brance (kryt / osobní obrana); soupeř u puku blíž než MARK_FREE se nehlídá
 const CARRY_TURN  = _env('FH_CTURN', 0.4);   // rad za think (10×/s) — max otočení míření s pukem; 0 = vypnuto
 const DIAG        = 0.38;        // práh pro diagonálu (8 směrů jako WASD)
 
@@ -551,9 +557,23 @@ export function botThink(p, inp, match) {
       //    si rozeberou soupeře OSOBNĚ (goal-side marking), ať to vypadá jako hra s lidmi. ──
       p._botMode = 'defend';
       const oppCarrier = [...match.players.values()].find(o => o.team !== p.team && o.hasPuck) || null;
-      if (rank === 0 && SECOND_COVER && oppCarrier) {
+      const manRank = (SECOND_COVER === 2 && oppCarrier) || (LOOSE === 2 && !oppCarrier) ? rank + 1 : rank;   // 2 = osobní obrana (3v3: jeden na puk, ostatní každý svého)
+      if (manRank !== rank) {
+        const threats = [...match.players.values()]
+          .filter(o => o.team !== p.team && o !== oppCarrier && !o.isGoalie && Math.hypot(o.x - puck.x, o.y - puck.y) > MARK_FREE)
+          .sort((a, c) => (Math.hypot(a.x - ownX, a.y - goalY) - Math.hypot(c.x - ownX, c.y - goalY)) || (a.id < c.id ? -1 : 1));
+        const mark = threats[rank] || null;
+        if (mark) {
+          tx = mark.x + (ownX - mark.x) * MARK_K; ty = mark.y + (goalY - mark.y) * MARK_K;
+          ax = mark.x; ay = mark.y;
+        } else {
+          // Nikoho volného k bránění → jisti prostor mezi pukem a brankou (slot), ne puk
+          const k = rank === 0 ? COVER_K : 0.85;
+          tx = puck.x + (ownX - puck.x) * k; ty = puck.y + (goalY - puck.y) * k;
+        }
+      } else if (rank === 0 && SECOND_COVER && oppCarrier) {
         // Druhý obránce nejde na puk (to by byli dva na jednoho) — kryje prostor mezi nosičem a brankou
-        tx = oppCarrier.x + (ownX - oppCarrier.x) * 0.55; ty = oppCarrier.y + (goalY - oppCarrier.y) * 0.55;
+        tx = oppCarrier.x + (ownX - oppCarrier.x) * COVER_K; ty = oppCarrier.y + (goalY - oppCarrier.y) * COVER_K;
         ax = oppCarrier.x; ay = oppCarrier.y;
       } else if (rank === 0 && LOOSE && !oppCarrier) {
         // Volný puk: druhý hráč nejede k puku (honič už jede), jistí prostor mezi pukem a vlastní brankou
@@ -582,6 +602,11 @@ export function botThink(p, inp, match) {
 
   // Rozestup: cíl hráče bez puku (mimo honiče) se odsune od spoluhráčů blíž než SEP — tým se nehloučí
   if (SEP > 0 && !p.hasPuck && p._botMode !== 'chase') {
+    // Mimo honiče se do „pytle" kolem volného / soupeřova puku nejede (F1 napadá sám; F2/F3 nabízí a jistí z odstupu PUCK_SEP px)
+    if (PUCK_SEP > 0 && p._botMode === 'defend') {
+      const dx = tx - puck.x, dy = ty - puck.y, d = Math.hypot(dx, dy);
+      if (d < PUCK_SEP) { const ux = d > 1 ? dx / d : (ownX - puck.x) / (Math.hypot(ownX - puck.x, goalY - puck.y) || 1), uy = d > 1 ? dy / d : (goalY - puck.y) / (Math.hypot(ownX - puck.x, goalY - puck.y) || 1); tx = puck.x + ux * PUCK_SEP; ty = puck.y + uy * PUCK_SEP; }
+    }
     for (const o of match.players.values()) {
       if (o === p || o.team !== p.team || o.isGoalie) continue;
       const dx = tx - o.x, dy = ty - o.y, d = Math.hypot(dx, dy);
