@@ -27,7 +27,7 @@ function run(k, step, T) {
     const mLoc = spd > 8 ? wrap(Math.atan2(s.vy, s.vx) - s.ba) : 0;
     skateAdvance(st, x, y, s.ba, spd, k, mLoc, DT);
     const pose = skatePose({ k, phase: st._skatePhase, spd, mLoc: k >= 3 ? st._mLocS : mLoc, stopT: 0, stopLoc: 0, rotSf: st._rotSf ?? 0, lean: 0, hs: 1, thr: st._thr ?? 0, bwS: st._bwS, lbS: st._lbS, bwV: st._bwV });
-    if (k === 4) skateFeetSmooth(st, pose.feet, DT, s.ba, null, null, true); else if (k === 3) skateFeetSmooth(st, pose.feet, DT);
+    if (k === 4) skateFeetSmooth(st, pose.feet, DT, s.ba, null, null, true); else if (k === 5) { st._plant5 = true; skateFeetSmooth(st, pose.feet, DT, s.ba, x, y); } else if (k === 3) skateFeetSmooth(st, pose.feet, DT);   // K5 = s ukotvením (jako ve hře)
     const c = Math.cos(s.ba), sn = Math.sin(s.ba);
     const feetW = pose.feet.map(f => ({ side: f.side, lift: f.lift, x: x + f.x * c - f.y * sn, y: y + f.x * sn + f.y * c, a: f.a + s.ba }));
     F.push({ x, y, ba: s.ba, spd, vx: s.vx, vy: s.vy, pose, feetW, ph: st._skatePhase });

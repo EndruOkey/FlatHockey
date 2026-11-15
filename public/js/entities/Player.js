@@ -821,7 +821,8 @@ SKATE_K3.stopV = 3; SKATE_K3.hsD = 1.4; SKATE_K3.hsLead = -0.1; SKATE_K3.hsN = 0
 // místo ve SVĚTĚ a klouže jen podél ostří (do strany max perpMax ×R odchylky od pózy), ve vzduchu dojíždí k póze (airK).
 // Dřív se větev ukotvení ve skateFeetSmooth nikdy nespustila (draw ji volal bez x, y) → nohy v rámci trupu, otáčely se s ním.
 // plant 0 = vypnuto. scripts/leg_weight_metrics.mjs
-SKATE_K3.plBw = 0.5;    // couvání nad tuto váhu = bez ukotvení (C-cut)
+SKATE_K3.plBw = 0.5; SKATE_K3.relT = 0.03; SKATE_K3.relS = 0.08;
+SKATE_K3.twK5 = 0.6; SKATE_K3.swK5 = 0.08;   // K5: podíl zkrutu trupu s boky, houpání trupu (×R)    // couvání nad tuto váhu = bez ukotvení (C-cut)
 SKATE_K3.plant = 0; SKATE_K3.perpMax = 0.6; SKATE_K3.airK = 0.45;
 // plant 2 = stavový automat: plRot max. dotáčení opěrné brusle (rad/s), krok když póza zvedá nohu (lift > stepL) nebo odchylka > stepD (×R,
 // úhel váha stepA na rad), švih trvá swT s.
@@ -852,7 +853,7 @@ export function skateAdvance(st, x, y, ba, spd, k, mLoc = 0, dt = 1 / 60) {
     st._bwV = Math.abs(nb - b0) / Math.max(dt, 1e-4); st._bwS = nb;
   } else {
     st._mLocS = st._mLocS == null ? mLoc : angleDiff(lerpAngle(st._mLocS, mLoc, Math.min(1, 6 * dt)), 0);
-    if (k === 3) { const bwT = spd > 8 ? _ss(SKATE_K3.bwA, SKATE_K3.bwB, Math.abs(st._mLocS)) : 0, b0 = st._bwS ?? bwT;   // K3: vpřed ↔ couvání max. bwR/s (dřív skok nohy 0,53 R za snímek)
+    if (k === 3 || k === 5) { const bwT = spd > 8 ? _ss(SKATE_K3.bwA, SKATE_K3.bwB, Math.abs(st._mLocS)) : 0, b0 = st._bwS ?? bwT;   // K3: vpřed ↔ couvání max. bwR/s (dřív skok nohy 0,53 R za snímek)
       st._bwS = b0 + Math.max(-SKATE_K3.bwR * dt, Math.min(SKATE_K3.bwR * dt, bwT - b0));
       const lT = spd > 8 ? (1 - st._bwS) * _ss(SKATE_K3.lbA, SKATE_K3.lbB, Math.abs(st._mLocS)) : 0, l0 = st._lbS ?? lT;   // boční krok taky max. bwR/s (švih myší bez skoku)
       st._lbS = l0 + Math.max(-SKATE_K3.bwR * dt, Math.min(SKATE_K3.bwR * dt, lT - l0)); }
@@ -957,18 +958,25 @@ export function skateFeetSmooth(st, feet, dt, ba = 0, x = null, y = null, k4 = f
       if (st._k4L && !f.push && Math.abs(d) > 0.35) f.lift = Math.max(f.lift, Math.min(0.9, 0.3 + Math.abs(d)));   // K4: ostří se ještě dotáčí → brusle nad ledem
     }
     S[f.side] = angleDiff(f.a + ba, 0); }
-  if (!k4 && x != null && (SKATE_K3.plant === 2 || (VIS.n && !SKATE_K3.plant))) {   // K3 STAVOVÝ AUTOMAT (foot locking): opěrná brusle ve světě, krok jen jednou nohou
+  if (!k4 && x != null && (SKATE_K3.plant === 2 || st._plant5 || (VIS.n && !SKATE_K3.plant))) {   // st._plant5: K5 je ukotvené vždy   // K3 STAVOVÝ AUTOMAT (foot locking): opěrná brusle ve světě, krok jen jednou nohou
     const Q = st._pl || (st._pl = {}), c = Math.cos(ba), s = Math.sin(ba), R = PLAYER.radius, K = SKATE_K3;
     const T = feet.map(f => ({ f, x: x + f.x * c - f.y * s, y: y + f.x * s + f.y * c, a: f.a + ba }));
     const bdx = x - (Q._bx ?? x), bdy = y - (Q._by ?? y); Q._bx = x; Q._by = y;
-    if ((st._stopK3 ?? 0) > 0.05) { for (const t of T) Q[t.f.side] = { x: t.x, y: t.y, a: t.a, sw: 0 }; return; }
-    if ((st._bwS ?? 0) > SKATE_K3.plBw) { for (const t of T) Q[t.f.side] = { x: t.x, y: t.y, a: t.a, sw: 0 }; return; }   // couvání (C-cut): brusle opisuje oblouk po hraně → bez ukotvení (jinak stály pod tělem, viditelnost 62 → 42 %)   // hokejový stop: brusle záměrně kloužou napříč → bez ukotvení
-    const go = q => { q.sw = K.swT; q.lx = (q.x - x) * c + (q.y - y) * s; q.ly = -(q.x - x) * s + (q.y - y) * c; };   // začátek kroku   // posun těla za snímek: opěrná brusle klouže podél ostří jen s tělem
+    // bez ukotvení (hokejový stop: brusle kloužou napříč; couvání: C-cut po hraně) → brusle DOJEDOU k póze za ~relT s, ne skokem
+    // (2026-11-15, Ondřej: „bruslení glitchuje": dřív teleport na pózu = skok 5–6 px/snímek, scripts/skate_glitch_game.mjs)
+    if ((st._stopK3 ?? 0) > 0.05 || (st._bwS ?? 0) > SKATE_K3.plBw) {
+      const kf = 1 - Math.exp(-dt / ((st._stopK3 ?? 0) > 0.05 ? SKATE_K3.relS : SKATE_K3.relT));   // stop pomaleji (plynulost), couvání rychleji (noha nepřetáhne)
+      for (const t of T) { const q = Q[t.f.side]; if (!q) { Q[t.f.side] = { x: t.x, y: t.y, a: t.a, sw: 0 }; continue; }
+        q.x += (t.x - q.x) * kf; q.y += (t.y - q.y) * kf; q.a += angleDiff(t.a, q.a) * kf; q.sw = 0;
+        const lx = q.x - x, ly = q.y - y; t.f.x = lx * c + ly * s; t.f.y = -lx * s + ly * c; t.f.a = q.a - ba; }
+      return;
+    }   // couvání (C-cut): brusle opisuje oblouk po hraně → bez ukotvení (jinak stály pod tělem, viditelnost 62 → 42 %)   // hokejový stop: brusle záměrně kloužou napříč → bez ukotvení
+    const go = q => { q.sw = K.swT; q.wx = q.x - x; q.wy = q.y - y; };   // začátek kroku: odstup od těla v osách SVĚTA (posun s tělem, ne rotace s trupem)   // posun těla za snímek: opěrná brusle klouže podél ostří jen s tělem
     for (const t of T) { const q = Q[t.f.side];
       if (!q || Math.hypot(t.x - q.x, t.y - q.y) > 4 * R) { Q[t.f.side] = { x: t.x, y: t.y, a: t.a, sw: 0 }; continue; }   // první snímek / teleport (buly)
       if (q.sw > 0) {   // krok ve vzduchu: dráha v rámci TĚLA (kolem kyčle), ne napříč ledem — jinak se noha v oblouku přetáhla (W3)
-        const k = Math.min(1, dt / q.sw);   // poloha vůči tělu uložená při odrazu (q.lx, q.ly) → noha ve vzduchu letí s tělem
-        q.lx += (t.f.x - q.lx) * k; q.ly += (t.f.y - q.ly) * k; q.x = x + q.lx * c - q.ly * s; q.y = y + q.lx * s + q.ly * c;
+        const k = Math.min(1, dt / q.sw);   // noha ve vzduchu letí s tělem (posun), ale netočí se s trupem → při švihu myší nepřeletí led (glitch 5,5 px)
+        q.wx += ((t.x - x) - q.wx) * k; q.wy += ((t.y - y) - q.wy) * k; q.x = x + q.wx; q.y = y + q.wy;
         q.a += angleDiff(t.a, q.a) * k; q.sw = Math.max(0, q.sw - dt); }
       else { const ax = Math.cos(q.a), ay = Math.sin(q.a), al = (t.x - q.x) * ax + (t.y - q.y) * ay, gb = bdx * ax + bdy * ay;   // na ledě: klouže jen podél ostří,
         const g = gb + Math.max(-K.glC * R, Math.min(K.glC * R, al - gb)); q.x += ax * g; q.y += ay * g;   // o kolik ho nese tělo (+ malá korekce k póze)
@@ -1014,13 +1022,13 @@ export function skatePose(o) {
   const stopT = o.stopT ?? 0, rv = o.rotSf ?? 0, stopA = (o.stopLoc ?? 0) + Math.PI / 2;
   const feet = [], body = { x: 0, y: 0, tw: 0 };
   if (k >= 3) {
-    const K4 = k === 4;
+    const K4 = k === 4, K5 = k === 5;   // K5 (2026-11-15) = K3 + trup natočený s boky a klidnější trup z K4; ukotvení vždy (scripts/k5_compare.mjs)
     const C = skateCycle(3, spd), uA = _wrap1(ph / (Math.PI * 2));
     const w = _ss(4, 30, spd) * (1 - stopT);                          // váha kroku (klid ↔ jízda, plynule)
     const bw = o.bwS != null ? o.bwS : moving ? (K4 ? _ss(1.6, 2.5, Math.abs(mLoc)) : _ss(SKATE_K3.bwA, SKATE_K3.bwB, Math.abs(mLoc))) : 0;   // K3 i K4: časově omezený přechod ze skateAdvance (bez něj okamžitý)            // váha couvání (C-cut), široký přechod = plynulá otočka
     const hipM = K4 ? SKATE_K4.hip : SKATE_K3.hip, h = Math.max(-hipM, Math.min(hipM, mLoc)) * (1 - bw), psi0 = mLoc - h, psi = K4 ? psi0 : Math.max(-SKATE_K3.psiM, Math.min(SKATE_K3.psiM, psi0));
     // VIDITELNÉ BOKY (kyčle + kalhoty, skinBody B.hh): natočené max ±SKATE_HIPV vůči trupu (twT) → kalhoty nevyjedou z trupu; brusle dál v rámci h
-    const twT0 = K4 ? h * SKATE_K4.twK : 0, hvM = K4 ? SKATE_HIPV.k4 : SKATE_HIPV.k3, hv = twT0 + Math.max(-hvM, Math.min(hvM, h - twT0));
+    const twT0 = K4 ? h * SKATE_K4.twK : K5 ? h * SKATE_K3.twK5 : 0, hvM = K4 ? SKATE_HIPV.k4 : SKATE_HIPV.k3, hv = twT0 + Math.max(-hvM, Math.min(hvM, h - twT0));
     // K4 PŘEŠLAP: při přechodu vpřed ↔ vzad a ve stoje, když se boky dorovnávají za tělem, se nohy zvednou (brusle nesmýkají po ledě)
     const pivL = K4 ? Math.min(0.9, Math.max(0.9 * Math.min(1, (o.bwV ?? 0) / 3), 0.9 * (1 - _ss(4, 30, spd)) * Math.min(1, Math.abs(mLoc) / 0.25))) : 0;   // natočení boků k jízdě (při couvání rovně)
     const psiB = angleDiff(mLoc, Math.PI);                             // couvání: odchylka od přímo dozadu
@@ -1086,9 +1094,9 @@ export function skatePose(o) {
     }
     // přenos váhy: odraz tlačí tělo od odrazové nohy (napříč boky), ramena se lehce protočí proti odrazové noze
     const swing = Math.sin(2 * Math.PI * uA) * amp * w * (1 - 0.6 * bw);
-    const swK = K4 ? SKATE_K4.sway : 0.11;
+    const swK = K4 ? SKATE_K4.sway : K5 ? SKATE_K3.swK5 : 0.11;
     body.x = swK * R * swing * sh * (1 - bw); body.y = -swK * R * swing * (ch * (1 - bw) + bw); body.tw = -0.08 * swing; body.sw = swing; body.h = h;
-    body.twT = K4 ? h * SKATE_K4.twK : 0;   // K4: trup se natočí s boky (část zkrutu), hůl a hlava zůstanou na myši   // natočení boků → skinBody B.hh
+    body.twT = K4 ? h * SKATE_K4.twK : K5 ? h * SKATE_K3.twK5 : 0;   // K4: trup se natočí s boky (část zkrutu), hůl a hlava zůstanou na myši   // natočení boků → skinBody B.hh
     if (stopT > 0) { const m = o.stopLoc ?? 0, e = _ss(0, 1, stopT); body.x -= Math.cos(m) * SKATE_K3.stopBack * R * e; body.y -= Math.sin(m) * SKATE_K3.stopBack * R * e;
       body.h *= 1 - e; body.twT *= 1 - e; }
     body.hh = hvF;   // boční krok: boky rovně s trupem   // viditelné boky (skinBody B.hh) — stejný úhel jako kyčel v dosahu nohy výš   // záklon; ve stopu se boky srovnají s tělem (jinak se při obratu přetáčely o ±1,25 rad a kyčle utekly od bruslí)
@@ -1461,7 +1469,7 @@ function _renderPlayerUp(ctx, p, cam) {
   const _pose = skatePose({ k: _k, phase: p._skatePhase ?? 0, spd: _spd, mLoc: _k >= 3 ? p._mLocS : _mLoc, stopT: (_k >= 3 ? p._stopK3 : p._stopTSmooth) ?? 0,
     stopLoc: p._hsDir != null ? angleDiff(p._hsDir, ba) : 0, rotSf: p._rotSf ?? 0, lean: p._lean ?? 0, hs: p.handed ?? 1, thr: p._thr ?? 0, bwS: p._bwS, bwV: p._bwV, lbS: p._lbS, hsSig: p._hsSig, stopDn: _k >= 3 && !!p._sdDn });
 
-  if (_k === 4) skateFeetSmooth(p, _pose.feet, _rdt(cam), ba, null, null, true); else if (_k === 3) { if (SKATE_K3.plant || VIS.n) skateFeetSmooth(p, _pose.feet, _rdt(cam), ba, p.x, p.y); else skateFeetSmooth(p, _pose.feet, _rdt(cam)); }   // K3: ukotvení k ledu (plant)
+  if (_k === 4) skateFeetSmooth(p, _pose.feet, _rdt(cam), ba, null, null, true); else if (_k === 3 || _k === 5) { p._plant5 = _k === 5; if (SKATE_K3.plant || VIS.n || _k === 5) skateFeetSmooth(p, _pose.feet, _rdt(cam), ba, p.x, p.y); else skateFeetSmooth(p, _pose.feet, _rdt(cam)); }   // K3: ukotvení k ledu (plant)
   if (globalThis.__fhSkateDbg) p._dbgPose = { feet: _pose.feet.map(f => ({ ...f })), stopT: (_k >= 3 ? p._stopK3 : p._stopTSmooth) ?? 0, stopLoc: p._hsDir != null ? angleDiff(p._hsDir, ba) : null };   // scripts/skate_visibility.py
   _kickFoot(p, _pose.feet, ba);   // Q: brusle zastaví puk / máchne naprázdno (časová osa ze simulace)
   // CROSSCHECK PLYNULE (2026-11-14, Ondřej: „crosscheck by neměl být sekavá animace"): přepnutí hůl ↔ crosscheck se prolne za CC_BLEND s
