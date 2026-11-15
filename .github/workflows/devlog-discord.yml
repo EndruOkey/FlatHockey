@@ -1,0 +1,20 @@
+# Ručně: GitHub → Actions → Devlog na Discord → Run workflow  (pošle nejnovější zápis znovu, i když už byl odeslán)
+name: Devlog na Discord
+on:
+  workflow_dispatch:
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Odeslat nejnovější zápis
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then echo "::error::Chybí secret DISCORD_WEBHOOK_URL"; exit 1; fi
+          node scripts/devlog-discord.mjs --force

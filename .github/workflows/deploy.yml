@@ -79,3 +79,20 @@ jobs:
             sleep 3
           done
           echo "web neodpovídá ($code)"; exit 1
+
+  # Nový zápis devlogu → zpráva na Discord (webhook v secrets.DISCORD_WEBHOOK_URL; bez něj se krok jen přeskočí)
+  discord:
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Devlog na Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: node scripts/devlog-discord.mjs --since "${{ github.event.before }}"
