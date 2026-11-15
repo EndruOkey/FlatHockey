@@ -804,7 +804,7 @@ SKATE_K3.latA = 0.4; SKATE_K3.bwR = 4; SKATE_K3.bwA = 1.6; SKATE_K3.bwB = 2.5; S
 // pod tělem na své straně (shX, shY0), ostří dopředu (špička lehce ven shA), odraz do strany o shY, návrat nad ledem (shL); váha podle
 // směru jízdy vůči tělu lbA–lbB (rad). scripts/side_skate_metrics.mjs
 SKATE_K3.cx = 0.3;   // posun celé soustavy nohou vůči tělu (×R), 2026-11-15 „nohy pozadu" — scripts/feet_behind_metrics.mjs
-SKATE_K3.lbA = 0.8; SKATE_K3.lbB = 1.3; SKATE_K3.shX = -0.2; SKATE_K3.shY0 = 1.4; SKATE_K3.shY = 0.4; SKATE_K3.shA = 0.15; SKATE_K3.shL = 0.6; SKATE_K3.shM = 0;
+SKATE_K3.lbA = 0.8; SKATE_K3.lbB = 1.3; SKATE_K3.shX = -0.2; SKATE_K3.shY0 = 1.4; SKATE_K3.shY = 0.32; SKATE_K3.shA = 0.15; SKATE_K3.shL = 0.3; SKATE_K3.shM = 0;
 // HOKEJOVÝ STOP (2026-11-14): stopV 2 = předloha (Hockey Canada, MAHG, Riedell): boky otočené o 90°, obě ostří ROVNOBĚŽNĚ kolmo k jízdě,
 // brusle za sebou PODÉL jízdy na šíři ramen (hsD ×R), střed o hsLead ×R před tělem (váha vzad), o hsN ×R ke špičkám. stopV 1 = dřívější
 // (brusle vedle sebe po stranách těla, výchozí do 2026-11-14; teď stopV 3 níž) (stopV 2 schová brusle pod trup, viz stop_hockey_metrics H9).
@@ -822,6 +822,7 @@ SKATE_K3.stopV = 3; SKATE_K3.hsD = 1.4; SKATE_K3.hsLead = -0.1; SKATE_K3.hsN = 0
 // Dřív se větev ukotvení ve skateFeetSmooth nikdy nespustila (draw ji volal bez x, y) → nohy v rámci trupu, otáčely se s ním.
 // plant 0 = vypnuto. scripts/leg_weight_metrics.mjs
 SKATE_K3.plBw = 0.5; SKATE_K3.relT = 0.03; SKATE_K3.relS = 0.08; SKATE_K3.skidK = 0; SKATE_K3.plLb = 0.5;
+SKATE_K3.lbCyc = 1.8;   // boční krok: násobek délky cyklu (klidnější rytmus, 2026-11-15 „přešlapování do stran se seká“)
 SKATE_K3.twK5 = 0.6; SKATE_K3.swK5 = 0.08;   // K5: podíl zkrutu trupu s boky, houpání trupu (×R)    // couvání nad tuto váhu = bez ukotvení (C-cut)
 SKATE_K3.plant = 0; SKATE_K3.perpMax = 0.6; SKATE_K3.airK = 0.45;
 // plant 2 = stavový automat: plRot max. dotáčení opěrné brusle (rad/s), krok když póza zvedá nohu (lift > stepL) nebo odchylka > stepD (×R,
@@ -867,7 +868,7 @@ export function skateAdvance(st, x, y, ba, spd, k, mLoc = 0, dt = 1 / 60) {
     let acc = 0;
     if (k >= 3 && pv.spd != null && dd < 30) { const th = Math.max(0, (spd - pv.spd) / dt), t0 = st._thr ?? 0; st._thr = t0 + (th - t0) * Math.min(1, (th > t0 ? 10 : 2.5) * dt);   // nárůst rychle, odeznění pomalu (bez skoku délky kroku)
       acc = SKATE_K3.accHz * _ss(SKATE_K3.accLo, SKATE_K3.accHi, st._thr) * dt * Math.PI * 2; }
-    st._skatePhase = ((st._skatePhase ?? 0) + dd / skateCycle(k, spd) * Math.PI * 2 + acc + Math.min(0.6, dr) * rotK) % (Math.PI * 2);
+    st._skatePhase = ((st._skatePhase ?? 0) + dd / (skateCycle(k, spd) * (1 + (SKATE_K3.lbCyc - 1) * ((k === 3 || k === 5) ? (st._lbS ?? 0) : 0))) * Math.PI * 2 + acc + Math.min(0.6, dr) * rotK) % (Math.PI * 2);
     st._rotSf = Math.min(1, dr / 0.12) * (1 - sf);                        // otáčení na místě → pivot kroky
   }
   st._animPrev = { x, y, ba, spd };
