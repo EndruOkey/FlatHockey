@@ -45,6 +45,11 @@ const DEKE_D = _genv('FH_DEKED', 90), DEKE_V = _genv('FH_DEKEV', 90);   // klič
 const LOW_COVER_V = _genv('FH_LCV', 420), LOW_COVER_Y = _genv('FH_LCY', 8);   // sweep: chyceno 25 → 39/48 %   // přízemní puk do těla → přikrytí
 const RB_CAP = _genv('FH_RBCAP', 150);   // sweep 2026-11-12: U 5–50°, strop 150 → nebezpečné odrazy 16/19 %, dorážka 3,3/1,8 %
 const G_COV = _genv('FH_GCOV', 50), G_DUMP = _genv('FH_GDUMP', 130);
+// Rozehrávka z držení (2026-11-15, test/goalie-pass.mjs): adresát = volný spoluhráč (žádný soupeř do OUT_LANE px od úsečky
+// pas, mimo brankoviště, ne za brankou, OUT_MIN..OUT_MAX px), skóre = dál od soupeřů; síla tak, aby puk k adresátovi dojel
+// rychlostí OUT_ARR px/s (pas bruslaře má ≥ 400 px/s; pomalejší pas soupeř dobruslí a sebere). Nikdo volný → podrž OUT_WAIT s (max OUT_WAITS×), pak odlož do rohu.
+const OUT_LANE = _genv('FH_OUTLANE', 18), OUT_MIN = 40, OUT_MAX = _genv('FH_OUTMAX', 420), OUT_ARR = _genv('FH_OUTARR', 270);   // sweep 120/180/210/240/270: soupeř sebral 29/18/11/6/2 %
+const OUT_WAIT = _genv('FH_OUTWAIT', 0.3), OUT_WAITS = _genv('FH_OUTWAITS', 3), OUT_LEAD = 0.78, OUT_PASSMAX = 450;
 
 // Animace brankáře (jen kresba): FH_GANIM=0 vypne (A/B měření); latence reakce rukou na výstřel (s) — ODHAD dle reakční doby ~0,2 s
 const GANIM = (typeof process !== 'undefined' && process.env?.FH_GANIM != null) ? process.env.FH_GANIM !== '0' : true;
@@ -828,13 +833,29 @@ export class Goalie {
       return;
     }
     this._froze = false;
+    const o = (GSTANCE && world) ? _outlet(world, this, this.x + this.inX * 16, this.y) : null;
+    if (GSTANCE && world && !o && (this._waits || 0) < OUT_WAITS) { this._waits = (this._waits || 0) + 1; this._holdTimer = OUT_WAIT; return; }   // nikdo volný → chvilku podrž
+    this._waits = 0;
     const p = this._heldPuck;
     this._heldPuck = null;
     this._noGrab = 0.6;   // bez toho pas na spoluhráče <15 px dojel pomalu (<90 px/s) a gólman ho hned znovu chytil → držel navždy
     p.x = this.x + this.inX * 16; p.y = this.y; p.z = 0; p.vz = 0;
 
-    // Bez tlaku: měkká přihrávka jen VOLNÉMU blízkému spoluhráči (dřív laser na kohokoli = okamžitá rozehrávka),
-    // jinak puk jen odloží do strany pro obránce.
+    if (GSTANCE && world) {
+      if (o) {
+        const ang = Math.atan2(o.y - p.y, o.x - p.x);
+        p.vx = Math.cos(ang) * o.sp; p.vy = Math.sin(ang) * o.sp;
+        p._passTo = o.q.id; p._gkTo = o.q.id; p._gkTeam = this.team; p._passT = o.t + 0.6;   // adresát má větší zónu převzetí (jako pas bruslaře) po celou dobu letu
+      } else {
+        // odlož do rohu na stranu dál od soupeřů (součet stran, ne jen nejbližší), pomalu → dojede k mantinelu u brankové čáry
+        let side = 0; for (const q of world.players) if (q.team !== this.team) side += q.y < this.y ? 1 : -1;
+        const toBoard = side > 0 ? 1 : side < 0 ? -1 : (this.y < RINK.h / 2 ? -1 : 1);
+        const angle = Math.atan2(toBoard * 60, this.inX * 120);
+        p.vx = Math.cos(angle) * G_DUMP; p.vy = Math.sin(angle) * G_DUMP;
+      }
+      return;
+    }
+    // FH_GSTANCE=0: staré chování (A/B měření)
     const mate = world ? _nearestMate(world, this.team, this) : null;
     const mDist = mate ? Math.hypot(mate.x - p.x, mate.y - p.y) : Infinity;
     const mateOpen = mate && (!GSTANCE || (mDist < 170 && !world.players.some(o => o.team !== this.team && Math.hypot(o.x - mate.x, o.y - mate.y) < G_COV)));
@@ -1058,6 +1079,48 @@ function _nearestMate(world, team, goalie) {
     if (p.team !== team) continue;
     const d = Math.hypot(p.x - goalie.x, p.y - goalie.y);
     if (d < bd) { bd = d; best = p; }
+  }
+  return best;
+}
+
+function _segDist(px, py, ax, ay, bx, by) {
+  const vx = bx - ax, vy = by - ay, L = vx * vx + vy * vy || 1, t = clamp(((px - ax) * vx + (py - ay) * vy) / L, 0, 1);
+  return Math.hypot(px - ax - vx * t, py - ay - vy * t);
+}
+
+// Volný adresát rozehrávky z bodu (px,py): vrací { q, x, y, sp } (cíl s předsazením na pohyb a rychlost puku) nebo null.
+// Pevné pořadí (world.players) a ostré nerovnosti → deterministické.
+function _outlet(world, g, px, py) {
+  const opp = world.players.filter(o => o.team !== g.team);
+  let best = null, bs = -Infinity;
+  for (const q of world.players) {
+    if (q.team !== g.team || q.isDown) continue;
+    const fx = g.inX * (q.x - g.netX);                                         // px před brankovou čarou
+    if (fx < 20) continue;                                                     // za brankou / na čáře
+    if (fx < 80 && Math.abs(q.y - RINK.h / 2) < RINK.goalH / 2 + 30) continue; // v brankovišti
+    let tx = q.x, ty = q.y, sp = 0, d = 0;
+    for (let i = 0; i < 3; i++) {                                              // předsazení: kde bude, až puk dojede
+      d = Math.hypot(tx - px, ty - py);
+      sp = Math.min(OUT_PASSMAX, Math.sqrt(OUT_ARR * OUT_ARR + 2 * PUCK.decel * d));
+      const t = (sp - Math.sqrt(Math.max(0, sp * sp - 2 * PUCK.decel * d))) / PUCK.decel;
+      tx = q.x + (q.vx || 0) * t * OUT_LEAD; ty = q.y + (q.vy || 0) * t * OUT_LEAD;
+    }
+    if (d < OUT_MIN || d > OUT_MAX) continue;
+    if (ty < 10 || ty > RINK.h - 10) continue;
+    let lane = Infinity, near = Infinity;
+    const ux = (tx - px) / (d || 1), uy = (ty - py) / (d || 1);
+    for (const o of opp) {
+      // soupeř teď i tam, kde bude, až puk projede kolem něj (napadající bruslí do linie)
+      const ts = clamp((o.x - px) * ux + (o.y - py) * uy, 0, d) / Math.max(1, (sp + OUT_ARR) / 2);
+      lane = Math.min(lane, _segDist(o.x, o.y, px, py, tx, ty), _segDist(o.x + (o.vx || 0) * ts, o.y + (o.vy || 0) * ts, px, py, tx, ty));
+      near = Math.min(near, Math.hypot(o.x - tx, o.y - ty));
+    }
+    if (lane < OUT_LANE) continue;                                             // linie zavřená
+    // jiný spoluhráč v linii by pas sebral dřív (a „jinému" ho gólman nechtěl dát) → tahle volba není čistá
+    let mateIn = false; for (const r of world.players) if (r !== q && r.team === g.team && _segDist(r.x, r.y, px, py, tx, ty) < OUT_LANE) { mateIn = true; break; }
+    if (mateIn) continue;
+    const s = Math.min(near, 160) + Math.min(lane, 60) * 0.5 - Math.abs(d - 170) * 0.15;
+    if (s > bs) { bs = s; best = { q, x: tx, y: ty, sp, t: (sp - Math.sqrt(Math.max(0, sp * sp - 2 * PUCK.decel * d))) / PUCK.decel }; }
   }
   return best;
 }

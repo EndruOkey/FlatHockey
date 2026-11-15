@@ -25,6 +25,7 @@ const COAST       = 0.35;         // s — kam bot dojede setrvačností za náp
 const BRAKE_V     = 25;           // px/s — nad tuhle rychlostí bot za nápřahu brzdí
 const CORNER_IN   = 2;            // px od horní tyčky, kam míří
 const CREASE_OUT  = 140;          // px před brankou — kam se stáhne, když gólman drží puk
+const OUT_WIDE_X = 110, OUT_WIDE_Y = 120, OUT_HIGH = 240;   // nabídka na rozehrávku vlastního gólmana: kraje (x před čarou, ±y od středu) a vysoko
 const PUCK_LEAD   = 0.25;         // s — jede tam, kam puk dojede, ne kde je
 const LEAD_MAX     = 0.7;          // s — strop předstihu při pronásledování
 const PLAYER_V     = (typeof process !== 'undefined' && process.env.FH_PSPEED != null && process.env.FH_PSPEED !== '') ? Number(process.env.FH_PSPEED) : 165;          // px/s — rychlost bruslaře (= PLAYER.speed, čte stejný FH_PSPEED)
@@ -186,6 +187,9 @@ function nearestToPuck(match, team) {
 }
 function pickChaser(match, team, prevId) {
   const near = nearestToPuck(match, team); if (!near) return null;
+  // Rozehrávka gólmana letí adresátovi (Goalie._release nastaví _passTo i _gkTo) → jede si pro ni on, ne nejbližší spoluhráč
+  const pk = match.puck, rc = pk._passTo != null && pk._passTo === pk._gkTo ? match.players.get(pk._passTo) : null;
+  if (rc && rc.team === team) return rc.id;
   const prev = prevId != null ? match.players.get(prevId) : null;
   if (prev && prev.team === team) {
     const pd = Math.hypot(prev.x - match.puck.x, prev.y - match.puck.y);
@@ -475,6 +479,13 @@ export function botThink(p, inp, match) {
     p._botMode = 'wait';
     // Gólman drží puk → neblokuj brankoviště, počkej před ním
     tx = g.netX + g.inX * CREASE_OUT; ty = goalY;
+    // VLASTNÍ gólman drží → nabídni se na rozehrávku (2026-11-15, test/goalie-pass.mjs): dřív všech 6 botů stálo v jednom bodě
+    // před brankovištěm → pas šel do hloučku a soupeř ho sebral. Sloty podle pořadí id: dva kraje u mantinelu + jeden vysoko.
+    if (g.team === p.team) {
+      const ids = []; for (const q of match.players.values()) if (q.team === p.team && !q.isGoalie) ids.push(q.id);
+      ids.sort(); const i = ids.indexOf(p.id) % 3;
+      tx = g.netX + g.inX * (i === 2 ? OUT_HIGH : OUT_WIDE_X); ty = i === 2 ? goalY : goalY + (i === 0 ? -OUT_WIDE_Y : OUT_WIDE_Y);
+    }
     ax = puck.x; ay = puck.y;
   } else if (ENGAGE > 0 && isChaser(p, match) && (() => { const oc = [...match.players.values()].find(o => o.team !== p.team && o.hasPuck); if (!oc) return false; const dx = ownX - oc.x, dy = goalY - oc.y, dd = Math.hypot(dx, dy) || 1;
       // odstup jen proti nájezdu: nosič jede k naší brance rychleji než ATTACK_V (stojící/couvající se napadá hned)

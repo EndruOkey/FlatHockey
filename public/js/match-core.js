@@ -179,7 +179,7 @@ export function rebuildEntities(match) {
 // ── Vhazování ──────────────────────────────────────────────────────────────
 const FO_X = 248, FO_Y = 114;   // buly body v pásmech (stejné jako kreslí Rink.js)
 export function faceoffAt(match, fx, fy) {
-  for (const g of [match.goalieL, match.goalieR]) if (g) { g._holdTimer = 0; g._heldPuck = null; g._froze = false; }
+  for (const g of [match.goalieL, match.goalieR]) if (g) { g._holdTimer = 0; g._heldPuck = null; g._froze = false; g._waits = 0; }
   const home = [], away = [];
   for (const p of match.players.values()) (p.team === 'home' ? home : away).push(p);
   const SPOTS = [

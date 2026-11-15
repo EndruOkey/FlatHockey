@@ -131,6 +131,8 @@ export class PlayerBase {
     if (this._shootCooldown > 0) return false;
     if (this.crossCheck || this.isDown) return false;   // crosscheck = ignoruje pickup; ležící hráč puk nehraje
     if (this._deflQ > 0 && this.deflectWindow(puck) >= 0) return false;   // Q na teč je nachystané → puk neber, tečuj
+    // Rozehrávka vlastního gólmana letí jinému spoluhráči → bot ji pustí (nechytá ji adresátovi před hokejkou; test/goalie-pass.mjs)
+    if (this.isBot && puck._passTo != null && puck._passTo === puck._gkTo && puck._passTo !== this.id && puck._gkTeam === this.team) return false;
     const tip = this.stickTip;
     // Grab zóna kolem celé čepele — nejen špička, ale i podél lopaty (přesahuje za tip)
     const bladeDir = (this.carryAngle ?? this.aimAngle) + (this.handed ?? 1) * Math.PI / 6.5;
