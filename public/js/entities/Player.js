@@ -1184,6 +1184,31 @@ export function bodyPose(st, o, dt = 1 / 60) {
   out.hd = st._bpHd + 0.5 * U.t;
   return out;
 }
+// PUK NA ČEPELI (2026-11-14, scripts/puck_carry_metrics.mjs P1–P7). Jen kresba, simulace beze změny.
+// Dřív: puk na středu TĚTIVY čepele + 1,05 r kolmo k přímce → u zahnuté čepele 0,8 px vedle (zanořený do obrysu), vždy jen na
+// forhendu (při kličce na bekhend zůstal kreslený na forhendu) a bez rotace. Nově: bod na ZAHNUTÉ čepeli (bezier v parametru t,
+// uprostřed), kolmo k její tečně o (poloviční tloušťku čepele s obrysem + poloměr puku) = puk se čepele právě dotýká; strana
+// spojitě podle p._visSide (+1 forhend = prohnutá strana, −1 bekhend) → při kličce puk přejede pod čepelí na druhou stranu.
+// B = p._visBlade (svět), t = poloha po čepeli (0 pata, 1 špička), hnd = ruka, side = p._visSide, r = poloměr puku → { x, y, t, tx, ty, sg }
+export function bladePuck(B, t, hnd, side, r) {
+  const u = 1 - t, x = u * u * B.sx + 2 * u * t * B.cx + t * t * B.ex, y = u * u * B.sy + 2 * u * t * B.cy + t * t * B.ey;
+  let tx = 2 * u * (B.cx - B.sx) + 2 * t * (B.ex - B.cx), ty = 2 * u * (B.cy - B.sy) + 2 * t * (B.ey - B.cy);
+  const tl = Math.hypot(tx, ty) || 1; tx /= tl; ty /= tl;
+  const sd = Math.max(-1, Math.min(1, side)), sg = -hnd * sd;   // + = vlevo od tečny (−ty, tx); forhend praváka = vlevo
+  const off = (B.hw + r) * sg;
+  return { x: x - ty * off, y: y + tx * off, t, tx, ty, sg };
+}
+// ROTACE PUKU (jen kresba): puk se o čepel neprokluzuje → otáčí se s čepelí (změna úhlu tečny) a kutálí se, když po ní popojede
+// (ds po čepeli → −sg·ds/r). Jízda rovně se stálou holí = puk klouže s čepelí, netočí se. Volný puk rotaci podrží a ta dozní (Puck.draw).
+// Stav na puku: _spin (rad), _spinW (rad/s), _spinPv (minulý dotyk). Deterministické: jen geometrie snímku a dt kamery.
+export function puckSpinStep(puck, q, B, dt = 1 / 60) {
+  const a = Math.atan2(q.ty, q.tx), L = Math.hypot(B.ex - B.sx, B.ey - B.sy), s = q.t * L, pv = puck._spinPv;
+  let d = 0;
+  if (pv) { d = Math.atan2(Math.sin(a - pv.a), Math.cos(a - pv.a)) - (q.sg || 0) * (s - pv.s) / PUCK.radius; if (Math.abs(d) > 1.2) d = 0; }   // teleport = bez skoku
+  puck._spin = ((puck._spin ?? 0) + d) % (Math.PI * 2);
+  puck._spinW = dt > 0 ? d / dt : 0;
+  puck._spinPv = { a, s };
+}
 // horní a dolní ruka na holi (svět): sdílí draw i metrika. tipW = špička dříku, sway = posun horní ruky napříč (B1)
 export function stickHands(x, y, ba, dcv, hnd, tipW, sway = 0) {
   const R0 = PLAYER.radius, fC = Math.cos(ba), fS = Math.sin(ba), sC = -fS, sS = fC;
@@ -1647,6 +1672,25 @@ function _renderPlayerUp(ctx, p, cam) {
     }
   }
 
+  // kreslená čepel ve SVĚTĚ (bezier pata → špička, poloviční tloušťka s obrysem) — čte scripts/puck_carry_metrics.mjs
+  p._visBlade = { sx: (bStartX - ox) / s, sy: (bStartY - oy) / s, cx: (bCtrlX - ox) / s, cy: (bCtrlY - oy) / s, ex: (bEndX - ox) / s, ey: (bEndY - oy) / s, hw: (SV.paddle ? 3.1 : SV.blo / 2) };
+  // PUK NA ČEPELI (nese ho tento hráč): uprostřed zahnuté čepele, na straně podle _cradleSide, v nápřahu u paty (tah od paty ke špičce).
+  // Kreslí se PŘED čepelí: usazený se jí jen dotýká, při přehozu forhend↔bekhend podjede POD zvednutou čepelí (bladePuck, puckSpinStep).
+  const cp = p.hasPuck && p._carriedPuck && p._carriedPuck._carrier === p ? p._carriedPuck : null;
+  if (cp) {
+    // strana puku: forhend, dokud hůl nejde zřetelně přes tělo na bekhend (hystereze −0,25 / −0,05 rad vůči ose těla) — simulační
+    // příznak forehand se překlápí už při ±0 (hůl rovně před tělem), kresba by pak puk házela přes čepel tam a zpět
+    const rel = angleDiff(p.carryAngle ?? p.aimAngle, p.bodyAngle ?? 0) * hnd;
+    const sT = rel < -0.25 ? -1 : rel > -0.05 ? 1 : (p._visSideT ?? 1); p._visSideT = sT;
+    p._visSide = p._visSide == null ? sT : p._visSide + (sT - p._visSide) * Math.min(1, 9 * _rdt(cam));
+    const q = bladePuck(p._visBlade, 0.5 - 0.3 * dcv, hnd, p._visSide, PUCK.radius);
+    puckSpinStep(cp, q, p._visBlade, _rdt(cam));
+    const vx = q.x, vy = q.y;
+    p._visPuck = _kickPuck(p, { x: vx, y: vy });   // po přikopnutí puk z brusle plynule dojede na čepel
+    p._kickTop = p._visPuck._kick === true;        // puk „pod nohama" je pod rukama/tělem → během dojezdu ho kreslíme navrch (čitelnost)
+    if (!p._kickTop) cp.draw(ctx, cam, p._visPuck);
+  } else { p._visPuck = null; p._kickTop = false; }
+
   // Obrys čepele (C-d2, místo stínu)
   if (SV.sh2) { const o = 1.6 * s; ctx.beginPath(); ctx.moveTo(bStartX + o, bStartY + o); ctx.quadraticCurveTo(bCtrlX + o, bCtrlY + o, bEndX + o, bEndY + o);
     ctx.strokeStyle = 'rgba(20,40,70,0.22)'; ctx.lineWidth = SV.bl * s; ctx.lineCap = 'round'; ctx.stroke(); }
@@ -1675,18 +1719,6 @@ function _renderPlayerUp(ctx, p, cam) {
     if (tapeSty && tapeSty !== 'full') { ctx.save(); ctx.clip(blade); _drawBlade(ctx, bStartX, bStartY, bCtrlX, bCtrlY, bEndX, bEndY, tapeCol, tapeSty, 5.2 * s, bladeCol); ctx.restore(); }
   } else
   _drawBlade(ctx, bStartX, bStartY, bCtrlX, bCtrlY, bEndX, bEndY, tapeCol, tapeSty, SV.bl * s, bladeCol);
-  // PUK NA ČEPELI (nese ho tento hráč): na prohnuté straně, v nápřahu u paty čepele (tah od paty ke špičce)
-  const cp = p.hasPuck && p._carriedPuck && p._carriedPuck._carrier === p ? p._carriedPuck : null;
-  if (cp) {
-    const along = 0.5 - 0.3 * dcv;
-    const mx = bStartX + (bEndX - bStartX) * along, my = bStartY + (bEndY - bStartY) * along;
-    const nA = bladeDir - hnd * Math.PI / 2;        // normála k prohnuté straně
-    const off = PUCK.radius * 1.05 * s;
-    const vx = (mx + Math.cos(nA) * off - ox) / s, vy = (my + Math.sin(nA) * off - oy) / s;
-    p._visPuck = _kickPuck(p, { x: vx, y: vy });   // po přikopnutí puk z brusle plynule dojede na čepel
-    p._kickTop = p._visPuck._kick === true;        // puk „pod nohama" je pod rukama/tělem → během dojezdu ho kreslíme navrch (čitelnost)
-    if (!p._kickTop) cp.draw(ctx, cam, p._visPuck);
-  } else { p._visPuck = null; p._kickTop = false; }
   if (globalThis.__fhCcDbg) p._ccSt = { butt: buttW, heel: { x: (tipX - ox) / s, y: (tipY - oy) / s }, end: { x: (bEndX - ox) / s, y: (bEndY - oy) / s } };
   } // end běžná hůl / přechod do crosschecku
 

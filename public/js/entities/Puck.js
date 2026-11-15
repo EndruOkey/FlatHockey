@@ -282,13 +282,16 @@ export class Puck {
   // se tady přeskočí (kreslí ho nosič), volný puk se kreslí normálně.
   // KRESBA VÝŠKY SHORA (vis.js HGT, 2026-11-12): puk zůstává na své poloze (kamera kolmo shora), výška = zvětšení + stín
   // odsunutý vpravo dolů; tvrdá rána = šmouha za pukem úměrná rychlosti (letí rovně, ne obloukem nahoru jako lob).
-  _drawTop(ctx, cam, sx, sy, r, tcol, again = false) {
+  _drawTop(ctx, cam, sx, sy, r, tcol, again = false, carried = false) {
     const s = cam.scale, { ox, oy } = cam, z = Math.max(0, this.z), bar = PUCK.crossbarHeight;
     const k = hScale(z, bar), rr = r * k, shx = sx + z * HGT.lx * s, shy = sy + z * HGT.ly * s;
     const v = Math.hypot(this.vx, this.vy);
     // stopa po ledě (polohy, ne výška) — jemná
     const tr = this._trail || (this._trail = []);
-    if (!again) { tr.push({ x: this.x, y: this.y }); if (tr.length > 14) tr.shift(); }
+    // nesený puk (kreslí ho nosič na čepeli): stopa NE — body stopy by ležely na simulační poloze (dosah 16 j.), ne na kreslené
+    // čepeli (16 × 0,86) → šedé „duchy“ 2–4 px vedle puku. Stopa začne znovu až po odehrání.
+    if (carried) tr.length = 0;
+    else if (!again) { tr.push({ x: this.x, y: this.y }); if (tr.length > 14) tr.shift(); }
     for (let i = 0; i < tr.length - 1; i++) { const p = tr[i], f = i / tr.length;
       ctx.beginPath(); ctx.arc(ox + p.x * s, oy + p.y * s, r * (0.35 + 0.65 * f), 0, Math.PI * 2); ctx.fillStyle = _alpha(tcol, f * 0.12); ctx.fill(); }
     // stín (ve výšce dál od puku, větší a světlejší)
@@ -304,8 +307,7 @@ export class Puck {
     if (z > 0.5) { ctx.beginPath(); ctx.moveTo(shx, shy); ctx.lineTo(sx, sy); ctx.strokeStyle = `rgba(${hc},0.55)`; ctx.lineWidth = 1 * s; ctx.stroke(); }
     ctx.beginPath(); ctx.arc(sx, sy, rr, 0, Math.PI * 2); ctx.fillStyle = '#1a1a1a'; ctx.fill();
     ctx.strokeStyle = z > 0.5 ? `rgb(${hc})` : '#555'; ctx.lineWidth = (z > 0.5 ? 1.6 : 1) * s; ctx.stroke();
-    // lesk navrch (objem)
-    ctx.beginPath(); ctx.arc(sx - rr * 0.3, sy - rr * 0.3, rr * 0.35, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fill();
+    _puckFace(ctx, sx, sy, rr, this._spin ?? 0, s);
   }
 
   draw(ctx, cam, at = null, again = false) {
@@ -320,7 +322,10 @@ export class Puck {
     const elev = this.z * s;
     const tcol = this.trailColor || '#9aa3b2';   // barva stopy/overlaye (dle hráče, jinak default šedá)
 
-    if (VIS.p) return this._drawTop(ctx, cam, sx, sy, r, tcol, again);
+    // volný puk: rotace z čepele dozní (tření o led, ~0,5 s); dotyk s čepelí se zapomene → nové převzetí bez skoku
+    if (!at && !again) { this._spinPv = null; const dt = cam.dt != null ? Math.min(0.05, cam.dt) : 1 / 60, w = (this._spinW ?? 0) * Math.exp(-4 * dt);
+      this._spinW = Math.abs(w) < 0.05 ? 0 : w; this._spin = ((this._spin ?? 0) + this._spinW * dt) % (Math.PI * 2); }
+    if (VIS.p) return this._drawTop(ctx, cam, sx, sy, r, tcol, again, !!at);
     // Trail — větší a širší, ale jemná (méně výrazná)
     const tr = this._trail || (this._trail = []);
     tr.push({ x: this.x, y: this.y, z: this.z });
@@ -381,6 +386,18 @@ export class Puck {
     ctx.stroke();
     ctx.restore();
   }
+}
+
+// LÍC PUKU shora (2026-11-14): pryžový kotouč — vroubkovaný okraj (světlejší prstenec), potisk uprostřed (otáčí se s pukem = vidíš
+// rotaci od čepele), lesk vlevo nahoře je pevný (světlo se netočí). rr = poloměr v px obrazovky, a = natočení (rad), s = měřítko.
+function _puckFace(ctx, sx, sy, rr, a, s) {
+  ctx.beginPath(); ctx.arc(sx, sy, rr * 0.74, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 0.5 * s; ctx.stroke();
+  const c = Math.cos(a), n = Math.sin(a), L = rr * 0.52, W = rr * 0.17;   // potisk: krátký pruh + tečka na jednom konci (čitelný směr)
+  ctx.beginPath(); ctx.moveTo(sx - c * L - n * W, sy - n * L + c * W); ctx.lineTo(sx + c * L - n * W, sy + n * L + c * W);
+  ctx.lineTo(sx + c * L + n * W, sy + n * L - c * W); ctx.lineTo(sx - c * L + n * W, sy - n * L - c * W); ctx.closePath();
+  ctx.fillStyle = 'rgba(225,232,242,0.42)'; ctx.fill();
+  ctx.beginPath(); ctx.arc(sx + c * L * 1.15, sy + n * L * 1.15, W * 1.1, 0, Math.PI * 2); ctx.fillStyle = 'rgba(225,232,242,0.55)'; ctx.fill();
+  ctx.beginPath(); ctx.arc(sx - rr * 0.3, sy - rr * 0.3, rr * 0.35, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,0.16)'; ctx.fill();   // lesk (objem)
 }
 
 function _alpha(col, a) {
