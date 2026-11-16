@@ -827,6 +827,8 @@ SKATE_K3.stopV = 3; SKATE_K3.hsD = 1.4; SKATE_K3.hsLead = -0.1; SKATE_K3.hsN = 0
 // plant 0 = vypnuto. scripts/leg_weight_metrics.mjs
 SKATE_K3.plBw = 0.5; SKATE_K3.relT = 0.03; SKATE_K3.relS = 0.08; SKATE_K3.skidK = 0; SKATE_K3.plLb = 0.5;
 SKATE_K3.lbCyc = 1.2;   // boční krok: násobek délky cyklu (klidnější rytmus, 2026-11-15 „přešlapování do stran se seká“)
+SKATE_K3.back = 1.0;   // VIS.w: délka odrazu dozadu (×R; hráči 0,6). 2026-11-16 Ondřej: „nohy do stran — měly by jít víc za tělo":
+// nejzadnější brusle −0,31 → −0,72 R, odraz vzad/bok 1,4 → 2,4 (duck_metrics Z1/Z2); latW 0,3 schová brusle pod trup (viditelnost 6/9)
 SKATE_K3.swK = 0.05; SKATE_K3.swK0 = 0.11;   // *0 = hodnoty pro VIS.w 0 (hráči; nové jen /dev)
    // K3: přenos váhy tělem do boku (×R amplituda; dřív 0,11)
 // „KAČER" (2026-11-16, Ondřej: „nohy na dobré pozici, lehce za, ale nebruslí jak naprcanej kačer do stran"): odraz do boku latW
@@ -857,7 +859,7 @@ export function skateAdvance(st, x, y, ba, spd, k, mLoc = 0, dt = 1 / 60) {
   // PŘEMÍSTĚNÍ (buly, oprava polohy ze serveru, 2026-11-16 Ondřej: „při přemístění hráčů flekatý morph"): tělo poskočí víc,
   // než stihne ujet → zapomeň stav nohou (ukotvené brusle, natočení, vyhlazené boky), brusle naskočí rovnou do pózy, nedojíždějí
   // přes led (dřív buly při brzdě 170 px, 37 snímků). scripts/morph_event_game.mjs
-  if (pv && Math.hypot(x - pv.x, y - pv.y) > 1.2 * PLAYER.radius + 1.5 * Math.max(spd, pv.spd ?? 0) * dt) {
+  if (pv && Math.hypot(x - pv.x, y - pv.y) > 1.2 * PLAYER.radius + 1.5 * Math.min(400, Math.max(spd, pv.spd ?? 0)) * dt) {   // rychlost omezená: falešná rychlost z interpolace teleport neschová
     st._pl = null; st._faS = null; st._fpW = null; st._mLocS = null; st._mvW = null; st._bwS = null; st._lbS = null; st._thr = 0; }
   // K3: směr jízdy vůči tělu vyhlazený v čase (boky se natáčejí plynule i při švihu myší) → st._mLocS
   if (k === 4) {   // K4: směr boků vyhlazený VE SVĚTĚ → při švihu myší boky (a nohy) zůstanou, tělo se otočí nad nimi
@@ -933,7 +935,7 @@ function _k3Leg(u, A, C, psi, back, k4) {
   // ROZKMIT (2026-11-14, Ondřej: „nohy hrozně vlajou"): brusle se vůči tělu rozkmitaly o 13–17 px při těle ~17 px → × ampK
   A *= k4 ? SKATE_K4.ampK : SKATE_K3.ampK;
   // K4: krátké silné zaprutí — noha vyjede dozadu ~rychlostí těla (drží led), délka odrazu z dráhy (B / 0,65 C)
-  const R = PLAYER.radius, Bk = k4 ? SKATE_K4.back * R * A : 0.6 * R * A, P = k4 ? clamp(Bk / (SKATE_K4.hold * C), k4, SKATE_K3.push) : SKATE_K3.push, L = k4 ? SKATE_K4.land : SKATE_K3.land, Y0 = (k4 ? SKATE_K4.y0 : SKATE_K3.y0) * R;
+  const R = PLAYER.radius, Bk = k4 ? SKATE_K4.back * R * A : (VIS.w ? SKATE_K3.back : 0.6) * R * A,   /* VIS.w (/dev): odraz víc za tělo */ P = k4 ? clamp(Bk / (SKATE_K4.hold * C), k4, SKATE_K3.push) : SKATE_K3.push, L = k4 ? SKATE_K4.land : SKATE_K3.land, Y0 = (k4 ? SKATE_K4.y0 : SKATE_K3.y0) * R;
   const Gf = k4 ? SKATE_K4.glide * R : 0;   // K4: přistání Gf před začátkem odrazu, skluzem se noha pod tělem vrací k němu (nohy vezou tělo)
   const mvx = back ? -Math.cos(psi) : Math.cos(psi), mvy = back ? -Math.sin(psi) : Math.sin(psi);
   let x, y, dx = 0, dy = 0, lift = 0, a = null;          // dx, dy = derivace podle u

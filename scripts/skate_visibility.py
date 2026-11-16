@@ -5,7 +5,7 @@
 # RUBRIKA (stanovena PŘEDEM, 2026-11-13; Ondřej: „nohy nejsou tak, jak by měly, při brzdě, rozjezdu, do určitých směrů"):
 #  V1 V každé jízdní situaci je brusle vidět (≥ 5 px v 1×) v ≥ 50 % snímků.
 #  V2 Brzda (mezerník z plné rychlosti): brusle vidět v ≥ 70 % snímků prvních 0,6 s.
-import sys, io, json
+import sys, io, json, os
 from playwright.sync_api import sync_playwright
 from PIL import Image
 PORT = sys.argv[1] if len(sys.argv) > 1 else '4200'
@@ -31,6 +31,7 @@ with sync_playwright() as p:
     b = p.chromium.launch(); pg = b.new_page(viewport={'width': 1366, 'height': 768})
     pg.goto('http://localhost:%s/?fhtest' % PORT); pg.evaluate("localStorage.setItem('hockey_tutorial_done','1')"); pg.reload(); pg.wait_for_timeout(1200)
     pg.click('#go-train'); pg.click('#go-solo'); pg.wait_for_timeout(1500)
+    if os.environ.get('FH_VIS'): pg.evaluate("async v => { const { VIS } = await import('/js/vis.js'); for (const t of v.split(',')) VIS[t[0]] = +t.slice(1); }", os.environ['FH_VIS'])   # dev varianty, např. FH_VIS=w1
     pg.evaluate("() => { globalThis.__fhSkateDbg = 1; const g = window.__fhGame; g.passer.active = false; if (g._defender) g._defender.active = false; }")
     cam = pg.evaluate("(() => { const c = window.__fhGame._cam; return { s: c.scale, ox: c.ox, oy: c.oy }; })()")
     for name, pre, keys, (sx, sy) in SIT:

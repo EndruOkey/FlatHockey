@@ -6,11 +6,15 @@
 //   (upřesněno po 1. běhu: K3 nemá v póze příznak odrazu → K1 jako průměr přes cyklus, ne „ve skluzu")
 //   K3 špička ven vůči směru jízdy max ≤ 50°
 //   K4 tělo do boku (body.y) rozkmit ≤ 0,15 R
+//   (2026-11-16 Ondřej: „nohy do stran — měly by jít víc za tělo"; RUBRIKA předem:)
+//   Z1 nejzadnější poloha brusle x ≤ −0,7 R (odraz za tělo)
+//   Z2 směr odrazu: dráha dozadu / do boku (rozsah x / rozsah y) ≥ 2
+//   + leg_flap F1 ≤ 9 px, skate_visibility 9/9, skate_anim R1 ≥ 40 %
 //   Zachovat: střed bruslí vpřed/vzad (x) beze změny ± 0,1 R („lehce za" je dobře) — vypisuje se
 const { skateAdvance, skatePose, skateFeetSmooth } = await import('../public/js/entities/Player.js');
 const { PLAYER } = await import('../public/js/constants.js');
 const { SKATE_K3 } = await import('../public/js/entities/Player.js');
-const { VIS } = await import('../public/js/vis.js'); VIS.w = +(process.env.FH_W ?? 1);   // měří nové nohy (VIS.w 1); FH_W=0 dřívější
+const { VIS } = await import('../public/js/vis.js'); if (!process.env.FH_VIS) VIS.w = +(process.env.FH_W ?? 1);   // měří nové nohy (VIS.w 1); FH_W=0 dřívější
 const SET = process.argv.find(a => a.startsWith('--set='));   // ladění: --set='{"y0":0.7}'
 if (SET) Object.assign(SKATE_K3, JSON.parse(SET.slice(6)));
 const R = PLAYER.radius, DT = 1 / 60;
@@ -23,6 +27,7 @@ for (const v of [100, 165, 220]) {
     for (const f of p.feet) { const y = Math.abs(f.y) / R, a = Math.abs(f.a) * 180 / Math.PI; fx.push(f.x / R); ang.push(a); allY.push(y); } }
   const mx = a => a.length ? Math.max(...a) : 0, mean = a => a.reduce((s, q) => s + q, 0) / a.length;
   const K1 = mean(allY), K2 = mx(allY), K3 = mx(ang), K4 = mx(by) - Math.min(...by);
+  const yv = allY, Z1 = Math.min(...fx), Z2 = (mx(fx) - Z1) / (mx(yv) - Math.min(...yv));
   const ok = K1 <= 0.8 && K2 <= 1.35 && K3 <= 50 && K4 <= 0.15;
-  console.log(`${ok ? 'OK' : 'NE'} ${v} px/s  K1 postoj |y| ${K1.toFixed(2)} R  K2 max |y| ${K2.toFixed(2)} R  K3 špička max ${K3.toFixed(0)}°  K4 tělo ${K4.toFixed(2)} R  | x střed ${mean(fx).toFixed(2)} R (min ${Math.min(...fx).toFixed(2)} max ${mx(fx).toFixed(2)})`);
+  console.log(`${ok ? 'OK' : 'NE'} ${v} px/s  K1 postoj |y| ${K1.toFixed(2)} R  K2 max |y| ${K2.toFixed(2)} R  K3 špička max ${K3.toFixed(0)}°  K4 tělo ${K4.toFixed(2)} R  | Z1 x min ${Z1.toFixed(2)} R ${Z1 <= -0.7 ? 'OK' : 'NE'}  Z2 vzad/bok ${Z2.toFixed(2)} ${Z2 >= 2 ? 'OK' : 'NE'} | x střed ${mean(fx).toFixed(2)} R (min ${Math.min(...fx).toFixed(2)} max ${mx(fx).toFixed(2)})`);
 }

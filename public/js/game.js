@@ -1,5 +1,6 @@
 import { RINK, PLAYER, PUCK, TEMPO } from './constants.js';
 import { lerpAngle, clamp } from './utils.js';
+import { lerpSample, extrapSample } from './net-interp.js';
 import { t } from './i18n.js';
 import { goalZone } from './goalzone.js';
 import { Input } from './input.js';
@@ -468,17 +469,11 @@ export class NetGame {
       if (A && B) {
         const a = get(A), b = get(B);
         if (!a || !b) { const o = b || a; return o ? { ...o, vx: 0, vy: 0 } : null; }
-        const iv = Math.max(0.001, (B.st - A.st) / 1000);
-        const r = { x: a.x + (b.x - a.x) * alpha, y: a.y + (b.y - a.y) * alpha, vx: (b.x - a.x) / iv, vy: (b.y - a.y) / iv };
-        for (const key of ['ba', 'aa', 'ca', 'sd', 'tilt']) if (a[key] != null && b[key] != null) r[key] = lerpAngle(a[key], b[key], alpha);
-        return r;
+        return lerpSample(a, b, alpha, Math.max(0.001, (B.st - A.st) / 1000));   // teleport (buly) = hned nová poloha (net-interp.js)
       }
       const b = newest && get(newest); if (!b) return null;
       const a = prevNewest && get(prevNewest);
-      if (a && newest.st > prevNewest.st) {
-        const iv = (newest.st - prevNewest.st) / 1000, vx = (b.x - a.x) / iv, vy = (b.y - a.y) / iv;
-        return { ...b, x: b.x + vx * aheadSec, y: b.y + vy * aheadSec, vx, vy };   // plyne dál → žádné zamrznutí
-      }
+      if (a && newest.st > prevNewest.st) return extrapSample(a, b, (newest.st - prevNewest.st) / 1000, aheadSec);   // plyne dál → žádné zamrznutí (po teleportu stojí)
       return { ...b, vx: 0, vy: 0 };
     };
 

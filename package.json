@@ -25,7 +25,8 @@
     "test:kick": "node test/kick.test.mjs",
     "test:deflect": "node test/deflect.test.mjs",
     "test:knock": "node test/knock.test.mjs",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:netteleport": "node scripts/test_net_teleport.mjs"
   },
   "engines": {
     "node": ">=18"

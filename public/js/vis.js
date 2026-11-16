@@ -14,9 +14,11 @@ export const DEV = !!globalThis.FH_DEV;
 if (DEV) try {
   // VIS_VER: při změně výchozích hodnot se uložené volby z playgroundu zahodí (jinak by tam zůstala např. stará 3D branka G4)
   let saved = JSON.parse(localStorage.getItem('fh_vis') || '{}'); if (saved._v !== VIS_VER) { saved = {}; localStorage.removeItem('fh_vis'); }
-  VIS.u = 1; VIS.w = 1;   // /dev: nové zvedání a nohy zapnuté (dokud se nevyberou v panelu)
+  VIS.w = 1;   // /dev: nové nohy zapnuté (dokud se nevyberou v panelu); zvedání u = dřívější (Ondřej: „zvedání je asi dřívější cajk"), nové jen přepnutím
   for (const k of Object.keys(DEFAULT_VIS)) if (Number.isInteger(saved[k])) VIS[k] = saved[k];
   const q = (globalThis.location?.search || '').match(/[?&]vis=([^&]*)/);
   if (q) for (const t of decodeURIComponent(q[1]).split(',')) { const m = t.match(/^([gskhpbnruw])(\d{1,2})$/); if (m) VIS[m[1]] = +m[2]; }
 } catch {}
+// Node (měřicí skripty): FH_VIS="w1,u1" nastaví varianty (stejný formát jako ?vis=)
+if (typeof process !== 'undefined' && process.env && process.env.FH_VIS) for (const t of process.env.FH_VIS.split(',')) { const m = t.match(/^([gskhpbnruw])(\d{1,2})$/); if (m) VIS[m[1]] = +m[2]; }
 export function setVis(k, v) { VIS[k] = v; try { localStorage.setItem('fh_vis', JSON.stringify({ ...VIS, _v: VIS_VER })); } catch {} }
