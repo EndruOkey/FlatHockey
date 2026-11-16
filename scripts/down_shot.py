@@ -34,7 +34,7 @@ with sync_playwright() as pw:
         page.on('response', lambda r: errors.append(f'{r.status} {r.url}') if r.status >= 400 and not (r.status == 401 and r.url.endswith('/auth/me')) else None)
         page.goto(BASE + '/?fhtest', wait_until='networkidle'); page.wait_for_timeout(400)
         if page.locator('#splash-guest-btn').is_visible(): page.click('#splash-guest-btn'); page.wait_for_timeout(400)
-        page.click('#go-solo'); page.wait_for_timeout(1500); page.mouse.move(5, 5)
+        page.click('#go-train'); page.click('#go-solo'); page.wait_for_timeout(1500); page.mouse.move(5, 5)
         page.evaluate("() => { const g = window.__fhGame; g.engine.tempo = 0; g.passer.x = 300; g.passer.y = 100; if (g._defender) { g._defender.x = 300; g._defender.y = 380; } g.puck.x = 800; g.puck.y = 380; g.puck.vx = g.puck.vy = 0; }")
         page.wait_for_timeout(200)
         cam = page.evaluate("() => { const g = window.__fhGame, k = g._cam, r = g.canvas.getBoundingClientRect(); return { ox: r.left + k.ox, oy: r.top + k.oy, s: k.scale }; }")

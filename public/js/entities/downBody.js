@@ -7,7 +7,9 @@
 import { SKIN_OUT, shade, luma, mix } from './skin.js';
 
 export const DOWN_FALL = 0.2, DOWN_SETTLE = 0.16;   // s: pád (natočení + dopad), doznění po dopadu
-const RISE_K = [0, 0.36, 0.68, 1];                       // zvedání: leží → čtyři/sed → klek → stoj (podíl upT)
+export const RISE_K = [0, 0.36, 0.68, 1];                // zvedání: leží → čtyři/sed → klek → stoj (podíl upT)
+// od kleku (RISE_K[2]) se kreslí už normální hráč, který se zvětší do stoje (Player.js _renderPlayer) — kloubový stoj shora
+// = shluk oválů („flekatý morph", 2026-11-16) a nesedí na normální kresbu (skok 0,61 siluety). scripts/rise_morph_metrics.py
 
 export function downHash(id, n, i) { let h = 2166136261 ^ n; const s = String(id); for (let k = 0; k < s.length; k++) h = Math.imul(h ^ s.charCodeAt(k), 16777619);
   h = Math.imul(h ^ (i * 374761393), 668265263); h ^= h >>> 13; h = Math.imul(h, 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
@@ -71,6 +73,8 @@ function midL(sg, A, h) {
   o.st = [0.4, y(A, 2.6)]; o.sta = (sg > 0 ? 0 : Math.PI) + 0.2 * A * sg;
   return o;
 }
+export const RISE_DX = 0.77;   // ×R: klek posunutý vpřed, aby těžiště sedělo na normální kresbu při přechodu (rise_morph_metrics FH_CENT: −1,5 → +3,9 j)
+const shiftF = (P, dx) => { const o = { ...P }; for (const k of PTS) o[k] = [P[k][0] + dx, P[k][1]]; return o; };
 const rotP = (P, d) => { const c = Math.cos(d), s = Math.sin(d), o = { ...P };
   for (const k of PTS) o[k] = [P[k][0] * c - P[k][1] * s, P[k][0] * s + P[k][1] * c]; for (const k of ANG) o[k] = P[k] + d; return o; };
 const wrapTo = (a, ref) => a + Math.round((ref - a) / (2 * Math.PI)) * 2 * Math.PI;   // úhel nejblíž referenci (žádné obíhání při interpolaci)
@@ -118,7 +122,7 @@ export function downPose(el, q, PL) {
   } else {
     const u = Math.min(1, (el - PL.downT) / PL.upT);
     const L0 = { ...LIE, hs: LIE.hs + 0.03, hd: [LIE.hd[0] - 0.08, LIE.hd[1]] };
-    const M = alignAng(midL(sg, A, q.h), LIE), KN = toL(kneelF(q.h)), ST = toL(standF(q.h, wrapTo((q.ca ?? q.ba) - q.ba, 0)));   // do stoje hůl tam, kam míří (jako normální kresba)
+    const M = alignAng(midL(sg, A, q.h), LIE), dx = q.v ? RISE_DX : 0, KN = toL(shiftF(kneelF(q.h), dx)), ST = toL(shiftF(standF(q.h, wrapTo((q.ca ?? q.ba) - q.ba, 0)), dx));   // q.v = VIS.u (nové zvedání, jen /dev)   // do stoje hůl tam, kam míří (jako normální kresba)
     P = hermite([L0, M, KN, ST], RISE_K, u);
     const ks = Math.min(1, Math.max(0, (u - 0.1) / 0.9)), fs = ks * ks * (3 - 2 * ks);   // hůl: sáhne po ní na čtyřech, do stoje ji zvedne (vlastní pomalejší oblouk)
     P.st = [LIE.st[0] + (ST.st[0] - LIE.st[0]) * fs, LIE.st[1] + (ST.st[1] - LIE.st[1]) * fs]; P.sta = LIE.sta + (ST.sta - LIE.sta) * fs;
@@ -207,18 +211,19 @@ export function drawDownBody(c, P, K, R, o = {}) {
     const bx = pcx + Math.cos(ta) * R * 0.2, by = pcy + Math.sin(ta) * R * 0.2, nx = -Math.sin(ta), ny = Math.cos(ta);
     c.moveTo(bx - nx * R, by - ny * R); c.lineTo(bx + nx * R, by + ny * R); c.stroke(); c.restore(); }
   const tl = Math.hypot(scx - pcx, scy - pcy);
-  if (P.num > 0.02) {   // číslo na zádech, vrchem k hlavě (ve stoji jako skinBody)
+  const V = !!o.v;   // VIS.u: vrstvy naráz (nové zvedání, /dev); 0 = dřívější prolínání
+  if (V ? P.num >= 0.5 : P.num > 0.02) {   // číslo na zádech (naráz, bez průhledného prolnutí s hrudí = žádné fleky), vrchem k hlavě (ve stoji jako skinBody)
     const nx = pcx + (scx - pcx) * 0.42, ny = pcy + (scy - pcy) * 0.42, fs = R * (1.1 + 0.15 * Math.min(1, tl / R / 1.5));
-    c.save(); c.globalAlpha *= Math.min(1, P.num); c.translate(tl > R * 0.3 ? nx : scx - Math.cos(P.fa) * R * 0.67, tl > R * 0.3 ? ny : scy - Math.sin(P.fa) * R * 0.67);
+    c.save(); if (!V) c.globalAlpha *= Math.min(1, P.num); c.translate(tl > R * 0.3 ? nx : scx - Math.cos(P.fa) * R * 0.67, tl > R * 0.3 ? ny : scy - Math.sin(P.fa) * R * 0.67);
     c.rotate((tl > R * 0.3 ? ta : P.fa) + Math.PI / 2); c.font = `900 ${fs}px 'Segoe UI', sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle';
     const lightJ = luma(K.jersey) > 0.4; c.lineJoin = 'round'; c.lineWidth = 1.1; c.strokeStyle = lightJ ? '#ffffff' : (K.accent === '#f4f7fb' || K.accent === '#ffffff') ? shade(K.jersey, -0.5) : K.accent;
     c.strokeText(String(K.num), 0, 0.3); c.fillStyle = lightJ ? '#1a1f29' : '#ffffff'; c.fillText(String(K.num), 0, 0.3); c.restore();
   }
-  if (P.num < 0.98) {   // na zádech: hruď = límec do V a pruh přes prsa (přední strana dresu)
-    c.save(); c.globalAlpha *= 1 - Math.max(0, P.num); c.translate(scx, scy); c.rotate(ta);
+  if (V ? P.num < 0.5 : P.num < 0.98) {   // na zádech: hruď = límec do V a pruh přes prsa (přední strana dresu)
+    c.save(); if (!V) c.globalAlpha *= 1 - Math.max(0, P.num); c.translate(scx, scy); c.rotate(ta);
     c.strokeStyle = K.accent; c.lineWidth = R * 0.18; c.lineCap = 'round';
     c.beginPath(); c.moveTo(-R * 0.05, -R * 0.42); c.lineTo(-R * 0.45, 0); c.lineTo(-R * 0.05, R * 0.42); c.stroke();
-    c.save(); c.clip(up); c.globalAlpha *= 0.85; c.lineWidth = R * 0.26; c.beginPath(); c.moveTo(-tl * 0.55, -R * 1.2); c.lineTo(-tl * 0.55, R * 1.2); c.stroke(); c.restore();
+    c.save(); c.clip(up); if (!V) c.globalAlpha *= 0.85; c.lineWidth = R * 0.26; c.beginPath(); c.moveTo(-tl * 0.55, -R * 1.2); c.lineTo(-tl * 0.55, R * 1.2); c.stroke(); c.restore();
     c.restore();
   }
   // rukavice + manžeta
@@ -228,13 +233,13 @@ export function drawDownBody(c, P, K, R, o = {}) {
   c.fillStyle = K.helmet === K.jersey ? shade(K.helmet, lt ? -0.18 : -0.24) : K.helmet; c.fill(helm);
   c.strokeStyle = shade(K.helmet, -0.38); c.lineWidth = 0.6; c.stroke(helm);
   const upF = Math.max(0, Math.min(1, P.fv)), dnF = Math.max(0, Math.min(1, -P.fv));
-  if (dnF < 0.98) {
+  if (dnF < (V ? 0.5 : 0.98)) {   // hledí / obličej naráz (bez průhledných vrstev)
     const fa = P.fa, off = upF * hrx * 0.55, rr = hrx * (0.98 - 0.4 * upF), span = 0.85 + upF * 1.6;
     const vx = hx - Math.cos(fa) * off, vy = hy - Math.sin(fa) * off;
-    c.save(); c.globalAlpha *= 1 - dnF; c.lineCap = 'round';
+    c.save(); if (!V) c.globalAlpha *= 1 - dnF; c.lineCap = 'round';
     if (K.helmetType === 'none') { c.beginPath(); c.ellipse(vx + Math.cos(fa) * rr * 0.8, vy + Math.sin(fa) * rr * 0.8, R * 0.18 * (1 + upF), R * 0.26 * (1 + upF), fa, 0, Math.PI * 2); c.fillStyle = '#e8b896'; c.fill(); }
     else { c.beginPath(); c.arc(vx, vy, rr, fa - span, fa + span); c.strokeStyle = K.helmetType === 'cage' ? '#2b2f36' : K.visor; c.lineWidth = K.helmetType === 'cage' ? 0.9 : 1.5; c.stroke();
-      if (upF > 0.3) { c.beginPath(); c.ellipse(vx + Math.cos(fa) * rr * 0.25, vy + Math.sin(fa) * rr * 0.25, rr * 0.5, rr * 0.62, fa, 0, Math.PI * 2); c.fillStyle = '#e8b896'; c.globalAlpha *= (upF - 0.3) / 0.7; c.fill(); } }   // obličej za hledím
+      if (upF > (V ? 0.5 : 0.3)) { c.beginPath(); c.ellipse(vx + Math.cos(fa) * rr * 0.25, vy + Math.sin(fa) * rr * 0.25, rr * 0.5, rr * 0.62, fa, 0, Math.PI * 2); c.fillStyle = '#e8b896'; if (!V) c.globalAlpha *= (upF - 0.3) / 0.7; c.fill(); } }   // obličej za hledím
     c.restore();
   }
   if (!lod) { c.beginPath(); c.ellipse(hx - 0.35 * hrx, hy - 0.35 * hry, R * 0.16, R * 0.1, 0, 0, Math.PI * 2); c.fillStyle = 'rgba(255,255,255,0.7)'; c.fill(); }   // lesk helmy
