@@ -827,7 +827,8 @@ SKATE_K3.stopV = 3; SKATE_K3.hsD = 1.4; SKATE_K3.hsLead = -0.1; SKATE_K3.hsN = 0
 // plant 0 = vypnuto. scripts/leg_weight_metrics.mjs
 SKATE_K3.plBw = 0.5; SKATE_K3.relT = 0.03; SKATE_K3.relS = 0.08; SKATE_K3.skidK = 0; SKATE_K3.plLb = 0.5;
 SKATE_K3.lbCyc = 1.2;   // boční krok: násobek délky cyklu (klidnější rytmus, 2026-11-15 „přešlapování do stran se seká“)
-SKATE_K3.fwV = 60; SKATE_K3.fwA = 0.6; SKATE_K3.fwT = 0.15; SKATE_K3.fwThr = 80;   // fwThr: vyhlazené zrychlení (j/s²), nad ním ukotvení   // VIS.w: nad touto rychlostí (j/s) a do tohoto úhlu jízdy vůči pohledu bez ukotvení
+SKATE_K3.fwV = 30; SKATE_K3.fwT = 0.15; SKATE_K3.fwR = 4; SKATE_K3.fwS = 0.06; SKATE_K3.fwC = 0.025;   // fwR: vyhlazená rychlost otáčení těla (rad/s), nad ní brusle dojíždí k póze za ~fwS s (švih myší)
+   // VIS.w: nad fwV j/s brusle po póze (přechod fwT s), pod ní ukotvení (otočka na místě, rozjezd z místa)
 SKATE_K3.back = 1.0;   // VIS.w: délka odrazu dozadu (×R; hráči 0,6). 2026-11-16 Ondřej: „nohy do stran — měly by jít víc za tělo":
 // nejzadnější brusle −0,31 → −0,72 R, odraz vzad/bok 1,4 → 2,4 (duck_metrics Z1/Z2); latW 0,3 schová brusle pod trup (viditelnost 6/9)
 SKATE_K3.swK = 0.05; SKATE_K3.swK0 = 0.11;   // *0 = hodnoty pro VIS.w 0 (hráči; nové jen /dev)
@@ -984,12 +985,19 @@ export function skateFeetSmooth(st, feet, dt, ba = 0, x = null, y = null, k4 = f
     // (2026-11-15, Ondřej: „bruslení glitchuje": dřív teleport na pózu = skok 5–6 px/snímek, scripts/skate_glitch_game.mjs)
     // VIS.w (/dev, 2026-11-16 Ondřej: „bruslí po kouskách, zasekává se po pidi kouscích"): v rozjeté jízdě vpřed ukotvení dělalo 2× víc
     // kroků než póza (165 px/s: 3,3 kroku/s, scripts/anchor_steps_metrics.mjs) → krok rozsekaný. Póza tam neklouže (skating ratio 0 %),
-    // takže nad fwV px/s (a směr jízdy ≤ fwA rad od pohledu) jde brusle po póze = jeden ucelený krok; ukotvení zůstává pro rozjezd a otočky.
-    const bsp = Math.hypot(bdx, bdy) / Math.max(dt, 1e-4), fwd = VIS.w && bsp > SKATE_K3.fwV && Math.abs(st._mLocS ?? 0) < SKATE_K3.fwA && (st._thr ?? 0) < SKATE_K3.fwThr;   // výbušný rozjezd = dál ukotveno (noha drží led)
-    if (fwd || (st._stopK3 ?? 0) > 0.05 || (st._bwS ?? 0) > SKATE_K3.plBw || (st._lbS ?? 0) > SKATE_K3.plLb) {   // + boční krok: ostří dopředu, pohyb do strany → ukotvená brusle se táhla za tělem (klipy F9)
-      st._fwB = fwd ? Math.min(1, (st._fwB ?? 0) + dt / SKATE_K3.fwT) : 0;   // jízda vpřed: za fwT s brusle přesně v póze (bez zpoždění)
-      const kf = Math.max(st._fwB, 1 - Math.exp(-dt / ((st._stopK3 ?? 0) > 0.05 ? SKATE_K3.relS : SKATE_K3.relT)));   // stop pomaleji (plynulost), couvání rychleji (noha nepřetáhne)
+    // takže nad fwV px/s jde brusle po póze = jeden ucelený krok. 2. kolo („furt škobrtá"): i zatáčky a myš jinam než jízda dělaly
+    // s ukotvením 1,4–2× víc kroků (scripts/stumble_metrics.mjs) → ukotvení jen skoro na místě (otočka na místě, rozjezd z místa).
+    // V jízdě se do ukotveného automatu nevrací (návrat při švihu = skok až 9,6 px): brzda a prudká otočka těla (švih myší) jen
+    // zpomalí dojíždění k póze (relS / fwS s), brusle tak nepřeskočí do nové pózy (skate_glitch_game brzda + opačně, švih myší).
+    const rr = Math.abs(angleDiff(ba, Q._ba ?? ba)) / Math.max(dt, 1e-4); Q._ba = ba; Q._rr = (Q._rr ?? 0) + (rr - (Q._rr ?? 0)) * Math.min(1, 12 * dt);
+    const brk = (st._stopK3 ?? 0) > 0.05, bsp = Math.hypot(bdx, bdy) / Math.max(dt, 1e-4), fwd = VIS.w && bsp > SKATE_K3.fwV;
+    const calm = fwd && !brk && Q._rr < SKATE_K3.fwR;   // klidná jízda: brusle přesně v póze
+    if (fwd || brk || (st._bwS ?? 0) > SKATE_K3.plBw || (st._lbS ?? 0) > SKATE_K3.plLb) {   // + boční krok: ostří dopředu, pohyb do strany → ukotvená brusle se táhla za tělem (klipy F9)
+      st._fwB = calm ? Math.min(1, (st._fwB ?? 0) + dt / SKATE_K3.fwT) : Math.max(0, (st._fwB ?? 0) - dt / SKATE_K3.fwT);   // plynulý náběh i odchod
+      const fe = st._fwB * st._fwB * (3 - 2 * st._fwB), kr = 1 - Math.exp(-dt / (brk ? SKATE_K3.relS : fwd ? SKATE_K3.fwS : SKATE_K3.relT));
+      const kf = Math.max(kr, fe * (1 - Math.exp(-dt / SKATE_K3.fwC)));   // stop pomaleji (plynulost), švih fwS, couvání rychleji; klidná jízda → póza se zpožděním fwC (rozmaže skok pózy, např. náraz do mantinelu)
       for (const t of T) { const q = Q[t.f.side]; if (!q) { Q[t.f.side] = { x: t.x, y: t.y, a: t.a, sw: 0 }; continue; }
+        if (fwd) { q.x += bdx; q.y += bdy; }   // v jízdě brusle jede s tělem (posun), k natočené póze jen dojíždí → švih myší nenatočí nohy skokem
         q.x += (t.x - q.x) * kf; q.y += (t.y - q.y) * kf; q.a += angleDiff(t.a, q.a) * kf; q.sw = 0;
         const lx = q.x - x, ly = q.y - y; t.f.x = lx * c + ly * s; t.f.y = -lx * s + ly * c; t.f.a = q.a - ba; }
       return;
