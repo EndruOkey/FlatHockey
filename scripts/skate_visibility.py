@@ -32,6 +32,8 @@ with sync_playwright() as p:
     pg.goto('http://localhost:%s/?fhtest' % PORT); pg.evaluate("localStorage.setItem('hockey_tutorial_done','1')"); pg.reload(); pg.wait_for_timeout(1200)
     pg.click('#go-train'); pg.click('#go-solo'); pg.wait_for_timeout(1500)
     if os.environ.get('FH_VIS'): pg.evaluate("async v => { const { VIS } = await import('/js/vis.js'); for (const t of v.split(',')) VIS[t[0]] = +t.slice(1); }", os.environ['FH_VIS'])   # dev varianty, např. FH_VIS=w1
+    if os.environ.get('FH_K3'): pg.evaluate("async j => { const m = await import('/js/entities/Player.js'); Object.assign(m.SKATE_K3, JSON.parse(j)); }", os.environ['FH_K3'])   # ladění parametrů
+    if os.environ.get('FH_KNEE'): pg.evaluate("async j => { const m = await import('/js/entities/skin.js'); Object.assign(m.SKIN_KNEE, JSON.parse(j)); }", os.environ['FH_KNEE'])
     pg.evaluate("() => { globalThis.__fhSkateDbg = 1; const g = window.__fhGame; g.passer.active = false; if (g._defender) g._defender.active = false; }")
     cam = pg.evaluate("(() => { const c = window.__fhGame._cam; return { s: c.scale, ox: c.ox, oy: c.oy }; })()")
     for name, pre, keys, (sx, sy) in SIT:

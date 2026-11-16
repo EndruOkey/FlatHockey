@@ -6,7 +6,7 @@ from playwright.sync_api import sync_playwright
 from PIL import Image, ImageDraw, ImageFont
 
 PORT, OUT, VARS = sys.argv[1], sys.argv[2], [v.split('|', 1) for v in sys.argv[3:]]
-HALF, N = 24, 45
+HALF, N = int(__import__("os").environ.get("FH_HALF", 24)), 45
 cols = []
 with sync_playwright() as pw:
     b = pw.chromium.launch(); ctx = b.new_context(viewport={'width': 1366, 'height': 768}, device_scale_factor=2)
@@ -14,6 +14,8 @@ with sync_playwright() as pw:
     page = ctx.new_page(); page.goto(f'http://localhost:{PORT}/?fhtest', wait_until='networkidle'); page.wait_for_timeout(400)
     if page.locator('#splash-guest-btn').is_visible(): page.click('#splash-guest-btn'); page.wait_for_timeout(400)
     page.click('#go-train'); page.click('#go-solo'); page.wait_for_timeout(1500)
+    import os
+    if os.environ.get('FH_VIS'): page.evaluate("async v => { const { VIS } = await import('/js/vis.js'); for (const t of v.split(',')) VIS[t[0]] = +t.slice(1); }", os.environ['FH_VIS'])   # dev varianty, např. FH_VIS=w1
     for label, js in VARS:
         page.evaluate("async s => { const m = await import('/js/entities/Player.js'); Object.assign(m.SKATE_K3, JSON.parse(s)); }", js)
         page.evaluate("() => { const g = window.__fhGame, L = g.local; L.x = 150; L.y = 330; L.vx = L.vy = 0; g.passer.x = 300; g.passer.y = 80; if (g._defender) { g._defender.x = 300; g._defender.y = 560; } }")

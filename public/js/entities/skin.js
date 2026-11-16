@@ -136,6 +136,17 @@ export function drawTextCached(c, text, font, align, baseline, x, y, fill, strok
 export const SKIN_HIP = { hx: -0.35, px: -0.37 };   // dřív −0,6 / −0,62: viditelné kalhoty+stehna 37,4 → 14,5 px² (39 %)
 export function skinHip(side, hh) { const x = R * SKIN_HIP.hx, y = side * R * 0.58, c = Math.cos(hh || 0), s = Math.sin(hh || 0); return { x: x * c - y * s, y: x * s + y * c }; }
 export function skinPants(side, hh) { const x = R * SKIN_HIP.px, y = side * R * 0.62, c = Math.cos(hh || 0), s = Math.sin(hh || 0); return { x: x * c - y * s, y: x * s + y * c }; }
+// KOLENO (sdílí skinBody a scripts/knee_metrics.mjs). kv 0 = dřívější: střed kyčel–kotník + 0,12 R ven (do boku).
+// kv 1 (/dev VIS.w, 2026-11-16 Ondřej: „buď kalhoty, nebo kolena jsou prověšená — působí to obtížně"): pokrčené koleno je shora vidět
+// VPŘED (nad špičkou brusle), ne vybočené ven. Pokrčení h z délky nohy SKIN_KNEE.L (×R): čím blíž kotník ke kyčli, tím víc koleno vpřed.
+export const SKIN_KNEE = { L: 1.7, f: 0.2, out: 0.03 };   // f: podíl pokrčení vpřed (0,3 → brusle pod lýtkem, skate_visibility 8/9)
+export function skinKnee(hx, hy, ax, ay, side, hh, kv) {
+  const mx = (hx + ax) / 2, my = (hy + ay) / 2;
+  if (!kv) return { x: mx, y: my + side * R * 0.12 };
+  const d = Math.hypot(ax - hx, ay - hy), L = SKIN_KNEE.L * R, h = Math.sqrt(Math.max(0, (L / 2) ** 2 - (d / 2) ** 2)) * SKIN_KNEE.f;
+  const c = Math.cos(hh || 0), s = Math.sin(hh || 0);
+  return { x: mx + c * h - s * side * R * SKIN_KNEE.out, y: my + s * h + c * side * R * SKIN_KNEE.out };
+}
 // ── TĚLO HRÁČE (lokál: +x = dopředu/obličej, +y = doprava). B = { feet:[{x,y,side}], top, bot (ruce), hnd, tw (natočení ramen), ux, uy, hd, lx, ly (světlo v lokálu) }
 export function skinBody(c, B, K) {
   const lod = lodSmall(c);   // lod: malé měřítko → silnější tóny tvarů, méně drobných linek
@@ -153,7 +164,7 @@ export function skinBody(c, B, K) {
   // kyčle i kalhoty se točí s nimi; dřív stály rovně a stehno vedlo z nenatočené kyčle napříč přes trup (scripts/leg_attach_metrics.mjs).
   const hh = B.hh || 0;
   const legs = B.feet.map(f => { const hp = skinHip(f.side, hh), hx = hp.x, hy = hp.y, ax = f.x, ay = f.y;   // f = kotník (Player posílá bod nad botou u paty)
-    const kx = (hx + ax) / 2, ky = (hy + ay) / 2 + f.side * R * 0.12;
+    const { x: kx, y: ky } = skinKnee(hx, hy, ax, ay, f.side, hh, B.kv);
     const th = new Path2D(); capsule(th, hx, hy, R * 0.4, kx, ky, R * 0.3);
     const sh = new Path2D(); capsule(sh, kx, ky, R * 0.27, ax, ay, R * 0.2);
     return { th, sh }; });

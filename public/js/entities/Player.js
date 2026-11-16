@@ -827,6 +827,7 @@ SKATE_K3.stopV = 3; SKATE_K3.hsD = 1.4; SKATE_K3.hsLead = -0.1; SKATE_K3.hsN = 0
 // plant 0 = vypnuto. scripts/leg_weight_metrics.mjs
 SKATE_K3.plBw = 0.5; SKATE_K3.relT = 0.03; SKATE_K3.relS = 0.08; SKATE_K3.skidK = 0; SKATE_K3.plLb = 0.5;
 SKATE_K3.lbCyc = 1.2;   // boční krok: násobek délky cyklu (klidnější rytmus, 2026-11-15 „přešlapování do stran se seká“)
+SKATE_K3.fwV = 60; SKATE_K3.fwA = 0.6; SKATE_K3.fwT = 0.15; SKATE_K3.fwThr = 80;   // fwThr: vyhlazené zrychlení (j/s²), nad ním ukotvení   // VIS.w: nad touto rychlostí (j/s) a do tohoto úhlu jízdy vůči pohledu bez ukotvení
 SKATE_K3.back = 1.0;   // VIS.w: délka odrazu dozadu (×R; hráči 0,6). 2026-11-16 Ondřej: „nohy do stran — měly by jít víc za tělo":
 // nejzadnější brusle −0,31 → −0,72 R, odraz vzad/bok 1,4 → 2,4 (duck_metrics Z1/Z2); latW 0,3 schová brusle pod trup (viditelnost 6/9)
 SKATE_K3.swK = 0.05; SKATE_K3.swK0 = 0.11;   // *0 = hodnoty pro VIS.w 0 (hráči; nové jen /dev)
@@ -981,8 +982,13 @@ export function skateFeetSmooth(st, feet, dt, ba = 0, x = null, y = null, k4 = f
     const bdx = x - (Q._bx ?? x), bdy = y - (Q._by ?? y); Q._bx = x; Q._by = y;
     // bez ukotvení (hokejový stop: brusle kloužou napříč; couvání: C-cut po hraně) → brusle DOJEDOU k póze za ~relT s, ne skokem
     // (2026-11-15, Ondřej: „bruslení glitchuje": dřív teleport na pózu = skok 5–6 px/snímek, scripts/skate_glitch_game.mjs)
-    if ((st._stopK3 ?? 0) > 0.05 || (st._bwS ?? 0) > SKATE_K3.plBw || (st._lbS ?? 0) > SKATE_K3.plLb) {   // + boční krok: ostří dopředu, pohyb do strany → ukotvená brusle se táhla za tělem (klipy F9)
-      const kf = 1 - Math.exp(-dt / ((st._stopK3 ?? 0) > 0.05 ? SKATE_K3.relS : SKATE_K3.relT));   // stop pomaleji (plynulost), couvání rychleji (noha nepřetáhne)
+    // VIS.w (/dev, 2026-11-16 Ondřej: „bruslí po kouskách, zasekává se po pidi kouscích"): v rozjeté jízdě vpřed ukotvení dělalo 2× víc
+    // kroků než póza (165 px/s: 3,3 kroku/s, scripts/anchor_steps_metrics.mjs) → krok rozsekaný. Póza tam neklouže (skating ratio 0 %),
+    // takže nad fwV px/s (a směr jízdy ≤ fwA rad od pohledu) jde brusle po póze = jeden ucelený krok; ukotvení zůstává pro rozjezd a otočky.
+    const bsp = Math.hypot(bdx, bdy) / Math.max(dt, 1e-4), fwd = VIS.w && bsp > SKATE_K3.fwV && Math.abs(st._mLocS ?? 0) < SKATE_K3.fwA && (st._thr ?? 0) < SKATE_K3.fwThr;   // výbušný rozjezd = dál ukotveno (noha drží led)
+    if (fwd || (st._stopK3 ?? 0) > 0.05 || (st._bwS ?? 0) > SKATE_K3.plBw || (st._lbS ?? 0) > SKATE_K3.plLb) {   // + boční krok: ostří dopředu, pohyb do strany → ukotvená brusle se táhla za tělem (klipy F9)
+      st._fwB = fwd ? Math.min(1, (st._fwB ?? 0) + dt / SKATE_K3.fwT) : 0;   // jízda vpřed: za fwT s brusle přesně v póze (bez zpoždění)
+      const kf = Math.max(st._fwB, 1 - Math.exp(-dt / ((st._stopK3 ?? 0) > 0.05 ? SKATE_K3.relS : SKATE_K3.relT)));   // stop pomaleji (plynulost), couvání rychleji (noha nepřetáhne)
       for (const t of T) { const q = Q[t.f.side]; if (!q) { Q[t.f.side] = { x: t.x, y: t.y, a: t.a, sw: 0 }; continue; }
         q.x += (t.x - q.x) * kf; q.y += (t.y - q.y) * kf; q.a += angleDiff(t.a, q.a) * kf; q.sw = 0;
         const lx = q.x - x, ly = q.y - y; t.f.x = lx * c + ly * s; t.f.y = -lx * s + ly * c; t.f.a = q.a - ba; }
@@ -1929,7 +1935,7 @@ function _renderPlayerUp(ctx, p, cam) {
     // DRES V RYCHLOSTI (2026-11-13): zadní lem se táhne proti jízdě a vlaje v rytmu kroku (fáze z ujeté dráhy → deterministické)
     const _jk = Math.max(0, Math.min(1, (_spd / PLAYER.speed - 0.35) / 0.65)), _jm = _k >= 3 ? (p._mLocS ?? _mLoc) : _mLoc;   // trup se v skinBody neotáčí o tw → směr vůči trupu = mLoc
     const _jd = _jk > 0 && VIS.b ? { mx: Math.cos(_jm), my: Math.sin(_jm), k: _jk, fl: _k === 4 ? 0 : Math.sin(2 * (p._skatePhase ?? 0)) } : null;   // K4: lem se jen táhne, nekmitá
-    const _B = { feet: feetW.map(f => ({ x: f.x - bo.x, y: f.y - bo.y, side: f.side })), top: toL(topH), bot: toL(botH), hnd: p.handed ?? 1, tw: bo.tw + _bp.tw + (_pose.body.twT || 0), twT: _pose.body.twT || 0, ux: _bp.ux, uy: _bp.uy, hd: _bp.hd, hh: _pose.body.hh ?? _pose.body.h ?? 0, lx: llx, ly: lly, jd: _jd };
+    const _B = { kv: VIS.w, feet: feetW.map(f => ({ x: f.x - bo.x, y: f.y - bo.y, side: f.side })), top: toL(topH), bot: toL(botH), hnd: p.handed ?? 1, tw: bo.tw + _bp.tw + (_pose.body.twT || 0), twT: _pose.body.twT || 0, ux: _bp.ux, uy: _bp.uy, hd: _bp.hd, hh: _pose.body.hh ?? _pose.body.h ?? 0, lx: llx, ly: lly, jd: _jd };
     skinBody(ctx, _B, K);
     ctx.restore();
     if (globalThis.__fhCcDbg) p._ccDbg = { e: _ccE, b: p._ccB, ...p._ccSt, B: _B, bx: bo.x, by: leanW + bo.y };   // scripts/crosscheck_anim_metrics.mjs
