@@ -17,13 +17,14 @@
 //  A10 v jízdě (> 30 j/s, mimo stop) vždy aspoň jedna brusle na ledě (lift ≤ 0,05)
 //  A11 paže nepřetažená: rameno → rukavice ≤ 2,6 R (upřesněno po 1. běhu: 2,1 R bylo podhodnocené, paže rameno–zápěstí ≈ 2,4–3 R; odhad)
 //  A12 kroky navíc: zvednutí brusle za s ≤ 1,15 × očekávané kadence (rychlost / délka cyklu) + 0,5 /s
+//      (upřesněno 2026-11-17: kadence vč. výbušného rozjezdu accHz — schválené rychlé krátké kroky, skate_anim R11)
 // Výstup: tabulka scénář × pravidlo (počet snímků mimo); „VŠE OK" jen když 0 všude. Dva běhy = stejný otisk (deterministické).
 import { createHash } from 'crypto';
 globalThis.Path2D = globalThis.Path2D || class { constructor() { return new Proxy(this, { get: () => () => {} }); } };
 globalThis.DOMMatrix = globalThis.DOMMatrix || class { constructor() { return new Proxy(this, { get: (t, k) => (k in t ? t[k] : () => new globalThis.DOMMatrix()) }); } };
 globalThis.__fhSkateDbg = 1; globalThis.__fhBodyDbg = 1;
 const { createMatch, makeInput, rebuildEntities, stepMatch, DT } = await import('../public/js/match-core.js');
-const { Player, skateCycle } = await import('../public/js/entities/Player.js');
+const { Player, skateCycle, SKATE_K3: SK3 } = await import('../public/js/entities/Player.js');
 const { skinHip, skinKnee, skinRig } = await import('../public/js/entities/skin.js');
 { const M = await import('../public/js/entities/Player.js'); if (process.env.FH_K3) Object.assign(M.SKATE_K3, JSON.parse(process.env.FH_K3)); if (process.env.FH_HIPV) Object.assign(M.SKATE_HIPV, JSON.parse(process.env.FH_HIPV)); }   // ladění
 const { RINK, PLAYER } = await import('../public/js/constants.js');
@@ -77,16 +78,16 @@ function run(name, fn) {
       const f = feet.find(q => q.side === s), toe = s * ad(f.a, hh) * 180 / Math.PI;   // + = špička ven
       const tin = 20 + 25 * Math.min(1, (H._bwS ?? 0) / 0.5); if (toe > (stop ? 110 : 70) + 0.5 || toe < -tin - 0.5) {   /* 0,5° = zaokrouhlení na hranici omezení */ if (process.env.FH_A5DBG === name) console.log(`  A5 ${name} tik ${n} strana ${s} špička ${toe.toFixed(0)}° stopT ${(P.stopT ?? 0).toFixed(2)} bw ${(H._bwS ?? 0).toFixed(2)} lb ${(H._lbS ?? 0).toFixed(2)} hh ${hh.toFixed(2)} mLoc ${(H._mLocS ?? 0).toFixed(2)} v ${spd.toFixed(0)} lift ${(f.lift||0).toFixed(2)}`); note('A5', Math.max(toe - (stop ? 110 : 70), -tin - toe), n); }
       const yl = -f.x * sh + f.y * ch; if (s * yl < -0.2 * R) note('A6', (-s * yl) / R - 0.2, n);
-      const l = (f.lift || 0) > 0.05; if (l && !pl[s] && n >= 20) lifts++; pl[s] = l;
+      const l = (f.lift || 0) > 0.05; if (l && !pl[s] && n >= 20) { lifts++; if (process.env.FH_A12DBG === name) console.log(`  krok ${name} tik ${n} strana ${s} v ${spd.toFixed(0)} stopT ${(P.stopT ?? 0).toFixed(2)} rot ${(H._rotSf ?? 0).toFixed(2)} fwB ${(H._fwB ?? 0).toFixed(2)} lb ${(H._lbS ?? 0).toFixed(2)}`); } pl[s] = l;
     }
     const tw = Math.abs(ad(B.tw || 0, hh)); if (tw > 1.2) note('A7', tw, n);
     if (Math.abs(B.hd || 0) > 1.3) note('A8', Math.abs(B.hd), n);
     if (prev && n >= 20) for (let i = 0; i < 2; i++) {
       const j = Math.hypot(cur.feet[i].x - prev.feet[i].x, cur.feet[i].y - prev.feet[i].y) / R; if (j > 0.35) note('A9', j, n);
       if (cur.knee[i] && prev.knee[i]) { const jk = Math.hypot(cur.knee[i].x - prev.knee[i].x, cur.knee[i].y - prev.knee[i].y) / R; if (jk > 0.35) note('A9', jk, n); } }
-    if (spd > 30 && !stop && feet.every(f => (f.lift || 0) > 0.05)) note('A10', 1, n);
+    if (spd > 30 && !stop && feet.every(f => (f.lift || 0) > 0.05)) { if (process.env.FH_A10DBG === name) console.log(`  A10 ${name} tik ${n} v ${spd.toFixed(0)} lift ${feet.map(f => (f.lift || 0).toFixed(2))} stopT ${(P.stopT ?? 0).toFixed(2)} bw ${(H._bwS ?? 0).toFixed(2)} lb ${(H._lbS ?? 0).toFixed(2)} rot ${(H._rotSf ?? 0).toFixed(2)} fwB ${(H._fwB ?? 0).toFixed(2)} mLoc ${(H._mLocS ?? 0).toFixed(2)}`); note('A10', 1, n); }
     const rig = skinRig(B); for (let i = 0; i < 2; i++) { const S = rig.S[i], Hh = rig.H[i], d = Math.hypot(Hh.x - S.x, Hh.y - S.y) / R; if (d > 2.6) note('A11', d, n); }
-    if (n >= 20 && spd > 30) liftExp += 2 * spd / skateCycle(3, spd) * DT;
+    if (n >= 20 && spd > 30) { const K = SK3, e = Math.max(0, Math.min(1, ((H._thr ?? 0) - K.accLo) / (K.accHi - K.accLo))), acc = K.accHz * e * e * (3 - 2 * e); liftExp += 2 * (spd / skateCycle(3, spd) + acc) * DT; }   // + výbušný rozjezd (accHz, R11)
     hash.update(feet.map(f => f.x.toFixed(3) + f.y.toFixed(3) + f.a.toFixed(3)).join() + (B.tw ?? 0).toFixed(3));
     prev = cur;
   }

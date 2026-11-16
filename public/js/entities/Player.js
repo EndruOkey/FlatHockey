@@ -849,7 +849,7 @@ if (typeof process !== "undefined" && process.env && process.env.FH_K3) Object.a
 // který vezme trup (zbytek paže/hůl), sway = přenos váhy napříč (×R). Měření: scripts/body_unity_metrics.mjs --k=4
 // VIDITELNÉ BOKY (2026-11-13, Ondřej: „hips jsou pozadu a vyčnívají"): kyčle a kalhoty se natočí s boky max o tolik vůči trupu
 // (rad); víc = kalhoty vyjedou z trupu do boku (scripts/hip_pants_metrics.mjs V1). Brusle se dál řídí plným natočením boků h.
-export const SKATE_HIPV = { k3: 0.7, k4: 0.5 };
+export const SKATE_HIPV = { k3: 0.7, k4: 0.5, stopW: 1.1 };   // stopW: boky ve stopu (jen /dev VIS.w)
 export const SKATE_K4 = { back: 1.1, hold: 0.62, latW: 0.35, hip: 1.0, twK: 0.5, sway: 0.08, perpMax: 0.6, airK: 0.45, pMin: 0.12, pAcc: 0.08,
   cx: 0.0, glide: 0.3, land: 0.7, y0: 0.55, ampK: 1, sideA: 0.3, m0: 0.5 };   // 2026-11-14 scripts/k4_search.mjs: 24/25 (F1 rozkmit 13,4 px > 9 — konflikt s N2 zaprutím)   // NOHY VEZOU TĚLO (2026-11-13): odraz začíná pod středem těla (cx ×R, dřív −0,5), přistání glide R před ním, skluz od land (dřív 0,8)
 if (typeof process !== "undefined" && process.env && process.env.FH_K4) Object.assign(SKATE_K4, JSON.parse(process.env.FH_K4));   // jen měření (scripts/k4_search.mjs)
@@ -1129,6 +1129,8 @@ export function skatePose(o) {
       if (pivL > lift) lift = pivL;
       feet.push({ side, x, y, a, lift, push: K4 && !!F.push && bw < 0.5 });
     }
+    // VIS.w (/dev, biomech_audit A10): vždy jedna brusle na ledě — při míchání póz (jízda vpřed → přešlap bokem) se zvedaly obě o 0,07–0,2
+    if (!K4 && VIS.w && feet.length === 2 && feet[0].lift > 0.05 && feet[1].lift > 0.05) feet[feet[0].lift < feet[1].lift ? 0 : 1].lift = 0;
     // přenos váhy: odraz tlačí tělo od odrazové nohy (napříč boky), ramena se lehce protočí proti odrazové noze
     const swing = Math.sin(2 * Math.PI * uA) * amp * w * (1 - 0.6 * bw);
     const swK = K4 ? SKATE_K4.sway : K5 ? SKATE_K3.swK5 : VIS.w ? SKATE_K3.swK : SKATE_K3.swK0;
@@ -1637,9 +1639,11 @@ function _renderPlayerUp(ctx, p, cam) {
     //    Dřív se boky při švihu otočily s trupem a brusle, které na ledě zůstaly, mířily vůči kyčli špičkou dovnitř až 56°.
     // 2) brusle vůči bokům špičkou ven ≤ 70°, dovnitř ≤ 20° (couvání C-cut 45°) — zaostávající brusli boky „přetočí“ (pivot).
     const f0 = _pose.feet[0], f1 = _pose.feet[1], fm = Math.atan2(Math.sin(f0.a) + Math.sin(f1.a), Math.cos(f0.a) + Math.cos(f1.a));
-    const hm = SKATE_HIPV.k3, stp = (p._stopK3 ?? 0) > 0.05, st0 = Math.min(1, (p._stopK3 ?? 0) / 0.3), h0 = _pose.body.hh ?? _pose.body.h ?? 0;
-    const hh = _pose.body.hh = h0 + angleDiff(Math.max(-hm, Math.min(hm, fm)), h0) * (1 - st0), Q = p._pl, tin = (20 + 25 * Math.min(1, (p._bwS ?? 0) / 0.5)) * Math.PI / 180;
-    if (!stp) for (const f of _pose.feet) { const t = f.side * angleDiff(f.a, hh), tc = Math.max(-tin, Math.min(70 * Math.PI / 180, t));
+    // STOP (2026-11-17 „oprav brzdu s obratem"): hokejista se ve stopu natočí boky k ostřím napříč → boky i ve stopu jdou s nohama, limit plynule
+    // k SKATE_HIPV.stopW (zkrut trupu ≤ 1,2 rad, biomech_audit A7); dřív boky rovně a vnitřní brusle špičkou dovnitř až 87°.
+    const st0 = Math.min(1, (p._stopK3 ?? 0) / 0.3), hm = SKATE_HIPV.k3 + (SKATE_HIPV.stopW - SKATE_HIPV.k3) * st0, h0 = _pose.body.hh ?? _pose.body.h ?? 0;
+    const hh = _pose.body.hh = h0 + angleDiff(Math.max(-hm, Math.min(hm, fm)), h0), Q = p._pl, tin = (20 + 25 * Math.min(1, (p._bwS ?? 0) / 0.5)) * Math.PI / 180;
+    for (const f of _pose.feet) { const t = f.side * angleDiff(f.a, hh), tc = Math.max(-tin, Math.min(70 * Math.PI / 180, t));
       if (tc !== t) { f.a = hh + f.side * tc; if (Q && Q[f.side]) Q[f.side].a = f.a + ba; if (p._faS) p._faS[f.side] = angleDiff(f.a + ba, 0); } } }
   if (globalThis.__fhSkateDbg) p._dbgPose = { feet: _pose.feet.map(f => ({ ...f })), stopT: (_k >= 3 ? p._stopK3 : p._stopTSmooth) ?? 0, stopLoc: p._hsDir != null ? angleDiff(p._hsDir, ba) : null };   // scripts/skate_visibility.py
   _kickFoot(p, _pose.feet, ba);   // Q: brusle zastaví puk / máchne naprázdno (časová osa ze simulace)
