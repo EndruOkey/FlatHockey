@@ -106,3 +106,6 @@ for (const [name, r] of Object.entries(out)) {
 const sums = Object.fromEntries(RULES.map(k => [k, Object.values(out).reduce((s, r) => s + r.bad[k], 0)]));
 console.log('celkem'.padEnd(18) + RULES.map(k => String(sums[k] || '·').padStart(5)).join(''));
 console.log(`deterministické: ${h1 === h2 ? 'ano' : 'NE'}   ${total ? `NEPROŠLO (${total} snímků mimo)` : 'VŠE OK'}`);
+// CI (--budget=N): hlídač regrese — selže, když snímků mimo pravidla je víc než N (dnešní stav), nebo běh není deterministický.
+{ const B = process.argv.find(a => a.startsWith('--budget=')); if (B) { const N = +B.slice(9), ok = h1 === h2 && total <= N;
+  console.log(`CI rozpočet ≤ ${N}: ${ok ? 'OK' : 'NEPROŠLO'} (${total})`); process.exit(ok ? 0 : 1); } }

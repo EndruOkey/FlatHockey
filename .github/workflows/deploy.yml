@@ -39,6 +39,8 @@ jobs:
       - run: npm run test:kick
       - run: npm run test:deflect
       - run: npm run test:knock
+      - run: npm run test:netteleport
+      - run: npm run test:biomech
 
   deploy:
     needs: test
