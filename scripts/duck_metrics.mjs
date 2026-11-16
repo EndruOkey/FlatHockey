@@ -9,6 +9,7 @@
 //   (2026-11-16 Ondřej: „nohy do stran — měly by jít víc za tělo"; RUBRIKA předem:)
 //   Z1 nejzadnější poloha brusle x ≤ −0,7 R (odraz za tělo)
 //   Z2 směr odrazu: dráha dozadu / do boku (rozsah x / rozsah y) ≥ 2
+//   Z1b (2026-11-16 „ještě malinko, aby bylo odrážení vidět za zády"): nejzadnější x ≤ −0,85 R
 //   + leg_flap F1 ≤ 9 px, skate_visibility 9/9, skate_anim R1 ≥ 40 %
 //   Zachovat: střed bruslí vpřed/vzad (x) beze změny ± 0,1 R („lehce za" je dobře) — vypisuje se
 const { skateAdvance, skatePose, skateFeetSmooth } = await import('../public/js/entities/Player.js');
