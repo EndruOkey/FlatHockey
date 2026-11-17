@@ -18,10 +18,11 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { mountDev } from './dev-gate.js';
 import authRouter, { linkRouter, verifySession, requireAuth, bearerToken, createGuestAccount } from './auth.js';
-import { updateStats, updateRankAndCredits, getRankPosition, getLeaderboard, getStoreItems, getUserUnlocks, buyItem, getPuckCredits, getActiveSeason, logMetric, cleanOldMetrics, recordReferral, rewardReferralIfPending, isFounder, getUserById, isGuestUser } from './db.js';
+import { updateStats, updateRankAndCredits, getRankPosition, getLeaderboard, getStoreItems, getUserUnlocks, buyItem, getPuckCredits, getActiveSeason, logMetric, cleanOldMetrics, recordReferral, rewardReferralIfPending, isFounder, getUserById, getStats, isGuestUser } from './db.js';
 
 import { World } from './public/js/world.js';
 import { Player } from './public/js/entities/Player.js';
+import { pickBanner, pickTitle, pickAvatar } from './public/js/cosmetics.js';   // kosmetika profilu (banner/titul/profilovka) — ověření odemčení
 import { _detectFx, createMatch as coreCreateMatch, stepMatch, makeInput, applyClientInput, computeEdges, playerActions, rebuildEntities, faceoffAt, faceoff, pendingFlags, ms2ticks } from './public/js/match-core.js';
 import { weekRuleFor, weekBonus } from './public/js/weekly.js';   // hlášky (kombo/skill) — sdílený detektor
 import { Puck } from './public/js/entities/Puck.js';
@@ -214,7 +215,8 @@ if (endLobbyPM) {
 }
 
 { const sh = match.puck._shot, sp = sh ? match.players.get(sh.id) : null, scorer = sp && sp.team === scoringTeam ? String(sp.name || '').slice(0, 24) : '';
-  io.to(match.room).emit('goal', { text: result === 'goal-away' ? 'GOAL! 🔴' : 'GOAL! 🔵', side: scoringTeam, scorer }); }
+  const card = sp && sp.team === scoringTeam ? { sid: sp.id, bn: sp.banner, tt: sp.title, av: sp.avatar, au: sp.avatarUrl || null, num: sp.num ?? null } : null;   // gólová karta střelce
+  io.to(match.room).emit('goal', { text: result === 'goal-away' ? 'GOAL! 🔴' : 'GOAL! 🔵', side: scoringTeam, scorer, card }); }
 }
 
 // Konec zápasu (háček match-core gameover): síť, statistiky, odměny, auto-rematch — přesunuto ze serverového stepMatch (2026-11-12)
@@ -297,6 +299,7 @@ function buildPlayer(lobby, sid, m) {
   p.name   = m.name;
   p.handed = m.handed;
   p.size   = m.size ?? 1;
+  p.banner = m.banner; p.title = m.title; p.avatar = m.avatar; p.avatarUrl = m.avatarUrl;   // gólová karta
   p.num    = m.number;
   const ts = lobby.settings.teams[m.team] || {};
   p.color  = ts.color || null;
@@ -499,7 +502,10 @@ function memberFor(socket, profile, team) {
   let guest = true;
   try { guest = !uid || isGuestUser(uid); } catch {}
   const m = makeMember(guest ? { handed: profile?.handed, size: profile?.size, code: profile?.code } : profile, team);   // velikost = herní volba → i host
-  if (uid) { try { const u = getUserById(uid); if (u?.display_name) m.name = u.display_name; } catch {} }   // ikonka původu jen ve statistikách (Ondřej), ve hře jen barva týmu
+  let stats = null, avUrl = null;
+  if (uid) { try { const u = getUserById(uid); if (u?.display_name) m.name = u.display_name; avUrl = u?.avatar_url || null; stats = getStats(uid); } catch {} }
+  // GÓLOVÁ KARTA (2026-11-17): banner / titul / profilovka — jen odemčené podle statistik v DB (jinak výchozí), i host
+  m.banner = pickBanner(profile?.banner, stats).id; m.title = pickTitle(profile?.title, stats).id; m.avatar = pickAvatar(profile?.avatar, !!avUrl); m.avatarUrl = m.avatar === 'discord' ? avUrl : null;   // ikonka původu jen ve statistikách (Ondřej), ve hře jen barva týmu
   m.guest = guest;
   return m;
 }

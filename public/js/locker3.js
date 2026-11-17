@@ -7,6 +7,7 @@
 // Banner / profilovka / titul / vlastní sady zatím jen v prohlížeči (localStorage 'fh_lk3'); na server až s profilem v žebříčku.
 import { Player } from './entities/Player.js';
 import { PLAYER } from './constants.js';
+import { BANNERS, TITLES, pickBanner, pickTitle } from './cosmetics.js';   // jeden zdroj se serverem a gólovou kartou
 
 const KITS = [   // [název cs, en, dres, pruh+helma, rukavice+kalhoty] — jen barvy z PALETTE (jinak je swatch.set ignoruje)
   ['Klasik', 'Classic', '#1b4fd1', '#f4f7fb', '#1a1f29'], ['Oheň', 'Fire', '#ff4455', '#1a1f29', '#1a1f29'], ['Noc', 'Night', '#1a1f29', '#ffcf3a', '#1a1f29'],
@@ -18,22 +19,6 @@ const PIPS = [[4, 5, 2, 1], [3, 3, 3, 3], [2, 1, 4, 5]];
 // (test/balance.mjs FH_STICK 15 i 18 v rubrice). Mechanika: constants.js STICKS (až bude), zatím volba v profilu.
 const STICKS = [{ cs: 'Krátká', en: 'Short', reach: 15, eff: [['turn', +1], ['reach', -1]] }, { cs: 'Střední', en: 'Medium', reach: 16, eff: [] },
   { cs: 'Dlouhá', en: 'Long', reach: 17.4, eff: [['turn', -1], ['reach', +1]] }];
-const BANNERS = [
-  { id: 'ice', cs: 'Led', en: 'Ice', bg: 'linear-gradient(120deg,#cfe7f2,#7fb6d9 60%,#2c5d8c)' },
-  { id: 'bolt', cs: 'Blesk', en: 'Bolt', bg: 'repeating-linear-gradient(115deg,#1b4fd1 0 18px,#3a9fff 18px 22px)' },
-  { id: 'night', cs: 'Noc', en: 'Night', bg: 'radial-gradient(circle at 85% 25%,#ffcf3a 0 5px,transparent 6px),linear-gradient(160deg,#141b31,#050811)' },
-  { id: 'red', cs: 'Derby', en: 'Derby', bg: 'repeating-linear-gradient(115deg,#E4002B 0 18px,#A8001F 18px 26px)' },
-  { id: 'retro', cs: 'Retro', en: 'Retro', bg: 'repeating-linear-gradient(90deg,#b81d3a 0 14px,#f4f7fb 14px 20px,#1b4fd1 20px 34px)' },
-  { id: 'gun', cs: 'Kanonýr', en: 'Sniper', bg: 'linear-gradient(120deg,#ff4455,#1a1f29)', need: s => (s.goals ?? 0) >= 100, how: ['100 gólů', '100 goals'] },
-  { id: 'vet', cs: 'Veterán', en: 'Veteran', bg: 'linear-gradient(120deg,#FFB020,#7a5015)', need: s => (s.games_played ?? 0) >= 100, how: ['100 zápasů', '100 games'] },
-  { id: 'ace', cs: 'Eso', en: 'Ace', bg: 'radial-gradient(circle at 30% 50%,#7FD4FF 0 10%,transparent 11%),linear-gradient(120deg,#0b2a4a,#050A14)', need: s => (s.wins ?? 0) >= 50, how: ['50 výher', '50 wins'] }];
-const TITLES = [   // odemčení jen ze statistik, které server už vede (stats: goals, assists, saves, games_played, wins)
-  { id: 'rookie', cs: 'Nováček', en: 'Rookie', ic: 'star', need: () => true },
-  { id: 'scorer', cs: 'Střelec', en: 'Scorer', ic: 'puck', need: s => (s.goals ?? 0) >= 25, how: ['25 gólů', '25 goals'] },
-  { id: 'setup', cs: 'Nahrávač', en: 'Playmaker', ic: 'pass', need: s => (s.assists ?? 0) >= 25, how: ['25 asistencí', '25 assists'] },
-  { id: 'winner', cs: 'Vítěz', en: 'Winner', ic: 'trophy', need: s => (s.wins ?? 0) >= 25, how: ['25 výher', '25 wins'] },
-  { id: 'vet', cs: 'Veterán', en: 'Veteran', ic: 'clock', need: s => (s.games_played ?? 0) >= 50, how: ['50 zápasů', '50 games'] },
-  { id: 'gun', cs: 'Kanonýr', en: 'Sniper', ic: 'target', need: s => (s.goals ?? 0) >= 100, how: ['100 gólů', '100 goals'] }];
 // Ikony (24×24, tah 2, currentColor) — jedna sada pro celou šatnu
 const IC = {
   gear: '<path d="M4 20 15 9"/><path d="m15 9 3-6 2 1-2 6"/><path d="M4 20h5"/>',
@@ -150,8 +135,8 @@ export function initLocker3(host, api) {
   const curKit = () => api.get().kit;
   const kitOf = i => { const K = KITS[i]; return { ...curKit(), jersey: K[2], stripe: K[3], helmet: K[3], gloves: K[4], shorts: K[4] }; };
   const sameKit = (a, b) => ['jersey', 'stripe', 'helmet', 'gloves'].every(k => (a[k] || '').toLowerCase() === (b[k] || '').toLowerCase());
-  const title = () => TITLES.find(x => x.id === S.title && x.need(stats)) || TITLES[0];
-  const banner = () => { const b = BANNERS.find(x => x.id === S.banner); return b && (!b.need || b.need(stats)) ? b : BANNERS[1]; };
+  const title = () => pickTitle(S.title, stats);
+  const banner = () => pickBanner(S.banner, stats);
 
   function avatarHTML(sz = 52) {
     const s = api.get(), a = S.avatar || 'head', u = api.getUser?.(), st = `width:${sz}px;height:${sz}px`;

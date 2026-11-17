@@ -217,7 +217,8 @@ function applyGuestLook() {
 }
 function profile() {
   const name = (nameInput.value || '').trim().slice(0, 14);
-  if (isGuestUI()) return { name, handed: chosenHand, size: chosenSize, number: null, ...DEFAULT_LOOK };
+  const _cos = (() => { try { const o = JSON.parse(localStorage.getItem('fh_lk3') || '{}'); return { banner: o.banner, title: o.title, avatar: o.avatar }; } catch { return {}; } })();   // gólová karta (server ověří odemčení)
+  if (isGuestUI()) return { name, handed: chosenHand, size: chosenSize, number: null, ...DEFAULT_LOOK, ..._cos };
   localStorage.setItem(NAME_KEY, name);
   localStorage.setItem(GK.helmet, swHelmet.get());
   localStorage.setItem(GK.jersey, swJersey.get());
@@ -233,7 +234,7 @@ function profile() {
   localStorage.setItem(GK.visor, swVisor.get());
   const n = parseInt(numInput.value, 10);
   return {
-    name, handed: chosenHand, size: chosenSize,
+    name, handed: chosenHand, size: chosenSize, ..._cos,
     number: Number.isFinite(n) ? Math.max(0, Math.min(99, n)) : null,
     helmet: swHelmet.get(), jersey: swJersey.get(), shorts: swShorts.get(), stripe: swStripe.get(), laces: swLaces.get(),
     gloves: swGloves.get(), tape: swTape.get(), trail: swTrail.get(),

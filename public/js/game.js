@@ -13,6 +13,7 @@ import { Passer } from './entities/Passer.js';
 import { Defender } from './entities/Defender.js';
 import { Rink } from './entities/Rink.js';
 import { SFX } from './sound.js';
+import { showGoalCard } from './goal-card.js';
 import { makeSteer, steerB2, steerR1 } from './steer.js';
 import { createMatch, stepMatch, applyClientInput, makeInput, faceoff, rebuildEntities, pendingFlags, DT as CORE_DT } from './match-core.js';
 import { makeBotBrain, hashSeed } from './bot.js';
@@ -87,6 +88,11 @@ export class NetGame {
       net.onSnap = s => this._onSnap(s);
       net.onGoal = g => {
         this._goalBanner(g.side || (String(g.text).includes('🔴') ? 'away' : 'home'), g.scorer || '');
+        if (g.card) {   // gólová karta střelce (banner, profilovka, titul) místo velkého textu
+          const side = g.side || 'home', tm = this.settings?.teams?.[side];
+          showGoalCard({ card: g.card, scorer: g.scorer, teamColor: tm?.color || (side === 'home' ? '#3a9fff' : '#ff4455'), ent: this.players.get(g.card.sid)?.ent, en: t('lk_p_size') === 'Size' });
+          this.goalText = '';
+        }
         SFX.goalWhistle();
         setTimeout(() => SFX.goalHorn(), 950);
         setTimeout(() => SFX.crowd(3), 700);
@@ -717,7 +723,7 @@ export class NetGame {
 
     this._drawFx(ctx, W, H);
 
-    if (this.goalFlash > 0) {
+    if (this.goalFlash > 0 && this.goalText) {
       const a = Math.min(1, this.goalFlash);
       ctx.fillStyle = `rgba(255,220,60,${a * 0.12})`; ctx.fillRect(0, 0, W, H);
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
