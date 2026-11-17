@@ -210,5 +210,12 @@ body.guest .lk-panel .lk-share { pointer-events: none; opacity: .35; filter: gra
 #lobby .st-wrap { padding: 0 0 64px; }
 #v-profile .lk-wrap { padding: 0 0 28px !important; height: auto; flex: 1 1 auto; min-height: 0; }
 #lobby #v-create, #lobby #v-stats { align-items: stretch; }
-/* Šatna v3 (dev) má vlastní pilulku ZPĚT → sdílenou hlavičku skryj, ať nejsou dvě */
-#v-profile.lk3-on > .v3-head { display: none; }
+/* Nízká obrazovka (notebook 768 px a méně místa s lištou prohlížeče): sdílená hlavička kompaktní na VŠECH podobrazovkách stejně —
+   ZPĚT vedle štítku, menší nadpis → obsah se vejde bez posouvání */
+@media (max-height: 820px) {
+  .v3-head { display: grid; grid-template-columns: auto 1fr; column-gap: 14px; align-items: center; padding-bottom: 10px; }
+  .back3 { margin-bottom: 0; grid-row: 1 / span 2; }
+  #lobby .v3-title { font-size: clamp(32px, 3vw, 40px); }
+}
+/* Šatna v3 (dev): sdílená hlavička (ZPĚT + štítek + nadpis) zůstává, obsah šatny pod ní (locker3.js nemá vlastní) */
+#v-profile.lk3-on { display: flex; flex-direction: column; height: 100%; min-height: 0; }

@@ -86,7 +86,7 @@ def run(base, dev, audit, sheet_shots):
                 m = page.evaluate(MEASURE, [vid, BACK_SEL])
                 if sheet_shots is not None:
                     sheet_shots.append((f'{name} {w}x{h}', page.screenshot()))
-                skip = dev and name == 'profile'
+                skip = False   # Šatna v3 (/dev) už používá sdílenou hlavičku → kontroluje se taky
                 errs = []
                 if not skip:
                     if len(m['backs']) != 1:

@@ -38,6 +38,12 @@ const IC = {
   hand: '<path d="M8 11V5a2 2 0 0 1 4 0v5M12 10V4a2 2 0 0 1 4 0v7M16 9a2 2 0 0 1 4 0v5a7 7 0 0 1-14 0v-3a2 2 0 0 1 4 0"/>',
   dice: '<rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1.2"/><circle cx="15" cy="15" r="1.2"/><circle cx="15" cy="9" r="1.2"/><circle cx="9" cy="15" r="1.2"/>',
 };
+// OBRÁZKOVÉ IKONY dlaždic (Ondřej: „chtěl jsem ikony, ne přímo hráče") — jednoduché tvary, výrazné, v barvách UI / sady
+const bigIc = inner => `<svg class="bic" viewBox="0 0 120 80" aria-hidden="true">${inner}</svg>`;
+const icSize = i => { const k = [0.72, 0.86, 1][i], cx = 60, by = 74; return bigIc(`<g transform="translate(${cx} ${by}) scale(${k}) translate(${-cx} ${-by})" fill="currentColor"><circle cx="60" cy="18" r="11"/><path d="M38 74c0-22 9-40 22-40s22 18 22 40Z"/></g>`); };
+const icStick = i => { const L = [46, 62, 80][i]; return bigIc(`<g fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round"><path d="M${100 - L} 14 L94 58"/><path d="M94 58 q4 10 -10 12 h-26"/></g><circle cx="44" cy="70" r="6" fill="currentColor" opacity=".5"/>`); };
+const icHelm = v => bigIc(`<path d="M28 58a32 32 0 0 1 64 0v6H28Z" fill="currentColor"/>` + (v === 'visor' ? `<path d="M60 52h34v8H60Z" fill="#7FD4FF"/>` : v === 'cage' ? `<g stroke="currentColor" stroke-width="3.5" fill="none"><path d="M64 46h28v24H64Z"/><path d="M64 54h28M64 62h28M73 46v24M82 46v24"/></g>` : `<ellipse cx="80" cy="60" rx="10" ry="12" fill="#e8b896"/>`));
+const icKit = (j, s2, g) => bigIc(`<path d="M42 12 26 22l8 16 8-4v38h36V34l8 4 8-16-16-10a12 12 0 0 1-24 0Z" fill="${j}" stroke="rgba(255,255,255,.55)" stroke-width="2.5"/><path d="M42 50h36v7H42Z" fill="${s2}"/><path d="M26 22l8 16 8-4" fill="none" stroke="${g}" stroke-width="5"/><path d="M94 22l-8 16-8-4" fill="none" stroke="${g}" stroke-width="5"/>`);
 const ic = (n, s = 20) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n] || ''}</svg>`;
 const CS = { tabs: ['Výbava', 'Vzhled', 'Profil'], tabIc: ['gear', 'shirt', 'user'], eyebrow: 'Šatna', back: 'Menu',
   size: 'Velikost', sizes: ['Malý', 'Střední', 'Velký'], roles: ['Rychlík', 'Univerzál', 'Tank'], num: 'Číslo', grip: 'Držení', name: 'Jméno', stick: 'Hokejka',
@@ -57,9 +63,9 @@ const save = o => { try { localStorage.setItem(STORE, JSON.stringify(o)); } catc
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 const CSS = `
-#lk3{position:absolute;inset:0;padding:clamp(8px,2vh,24px) var(--a3-gut,48px) clamp(12px,2.5vh,28px);color:var(--a3-text,#F2F6FB);font-family:Barlow,system-ui,sans-serif;z-index:2;overflow:auto}
-#lk3 *{box-sizing:border-box}#lk3 button{font:inherit;color:inherit;cursor:pointer;margin:0;width:auto;height:auto;text-transform:none;letter-spacing:normal;box-shadow:none;filter:none}
-#lk3 .g{display:grid;grid-template-columns:clamp(340px,27vw,500px) minmax(0,1fr);gap:clamp(16px,2vw,32px);height:100%;min-height:600px}
+#lk3{position:relative;flex:1 1 auto;min-height:0;display:flex;flex-direction:column;padding:0 var(--a3-gut,48px) clamp(12px,2.5vh,28px);color:var(--a3-text,#F2F6FB);font-family:Barlow,system-ui,sans-serif;z-index:2;overflow:auto}
+#lk3 *{box-sizing:border-box}#lk3 :where(button:not(.back3)){font:inherit;color:inherit;cursor:pointer;margin:0;width:auto;height:auto;text-transform:none;letter-spacing:normal;box-shadow:none;filter:none}
+#lk3 .g{display:grid;grid-template-columns:clamp(340px,27vw,500px) minmax(0,1fr);gap:clamp(16px,2vw,32px);flex:1;min-height:0}
 #lk3 .c3{font-family:'Barlow Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase}
 #lk3 .k{font:italic 800 14px/1 'Barlow Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--a3-ice,#7FD4FF);display:flex;align-items:center;gap:8px}
 #lk3 .m{color:var(--a3-mute,#A9BBD1);font:500 13px/1.3 Barlow}
@@ -68,7 +74,7 @@ const CSS = `
 #lk3 .card::after{content:'';position:absolute;inset:0;pointer-events:none;background:var(--ban);opacity:.18;mix-blend-mode:screen;-webkit-mask:linear-gradient(90deg,#000 0,transparent 18%,transparent 82%,#000 100%);mask:linear-gradient(90deg,#000 0,transparent 18%,transparent 82%,#000 100%)}   /* banner prosvítá po stranách celé karty */
 #lk3 .card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:6px;background:linear-gradient(var(--a3-red,#E4002B),var(--a3-red2,#A8001F));z-index:2}
 #lk3 .cban{height:clamp(40px,6vh,70px);flex:none}
-#lk3 .chero{position:relative;z-index:1;flex:1 1 auto;min-height:150px;max-height:40vh;margin:0 18px 0 24px;box-shadow:0 0 0 1px rgba(255,255,255,.18);background:#dfeaf3;clip-path:polygon(0 0,100% 0,100% calc(100% - 18px),calc(100% - 18px) 100%,0 100%)}
+#lk3 .chero{position:relative;z-index:1;flex:1 1 auto;min-height:150px;max-height:36vh;margin:0 18px 0 24px;box-shadow:0 0 0 1px rgba(255,255,255,.18);background:#dfeaf3;clip-path:polygon(0 0,100% 0,100% calc(100% - 18px),calc(100% - 18px) 100%,0 100%)}
 #lk3 .chero canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 #lk3 .cnum{position:absolute;right:12px;bottom:6px;font:italic 900 clamp(48px,7vh,84px)/1 'Barlow Condensed';color:rgba(10,20,40,.13)}
 #lk3 .cbody{position:relative;z-index:1;padding:14px 18px 18px 24px;display:grid;gap:10px;flex:none}
@@ -95,13 +101,13 @@ const CSS = `
 #lk3 .tile{position:relative;padding:6px 6px 8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);text-align:center;font:italic 800 15px/1 'Barlow Condensed';letter-spacing:.06em;color:var(--a3-mute2);text-transform:uppercase;clip-path:var(--a3-cut)}
 #lk3 .tile:hover:not(:disabled){border-color:rgba(255,255,255,.35);color:#fff}
 #lk3 .tile.on{border-color:var(--a3-red);background:rgba(228,0,43,.14);color:#fff;box-shadow:inset 0 -3px 0 var(--a3-red)}
-#lk3 .tile canvas{display:block;width:100%;height:var(--th,clamp(64px,14vh,170px));margin:0 auto 6px;background:#dfeaf3}
+#lk3 .tile .bic{display:block;width:100%;height:var(--th,clamp(46px,9vh,110px));margin:0 auto 6px;color:var(--a3-mute2)}#lk3 .tile.on .bic{color:#fff}#lk3 .tile canvas{display:block;width:100%;height:var(--th,clamp(64px,14vh,170px));margin:0 auto 6px;background:#dfeaf3}
 #lk3 .tile .sub{display:flex;justify-content:center;gap:10px;margin-top:5px;font:italic 700 12px/1 'Barlow Condensed';letter-spacing:.06em}
 #lk3 .tile .sub span{display:inline-flex;align-items:center;gap:3px}
 #lk3 .up{color:#3DDC84}#lk3 .dn{color:#ff6b7f}
 #lk3 .tile:disabled{opacity:.5;cursor:not-allowed}
 #lk3 .lockb{position:absolute;inset:auto 6px 6px auto;color:var(--a3-amber)}
-#lk3 .inp{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--a3-line);border-bottom:2px solid var(--a3-red);padding:8px 12px;font:italic 900 28px/1 'Barlow Condensed';text-transform:uppercase;color:#fff;border-radius:0}
+#lk3 .inp{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--a3-line);border-bottom:2px solid var(--a3-red);padding:6px 12px;font:italic 900 24px/1 'Barlow Condensed';text-transform:uppercase;color:#fff;border-radius:0}
 #lk3 .seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:6px}
 #lk3 .seg button{padding:11px 0;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);font:italic 800 18px/1 'Barlow Condensed';color:var(--a3-mute2);clip-path:var(--a3-cut)}
 #lk3 .seg button.on{background:var(--a3-red);border-color:var(--a3-red);color:#fff}
@@ -164,8 +170,8 @@ export function initLocker3(host, api) {
   }
   function tabVybava() {
     const s = api.get(), l = L(), g = api.isGuest();
-    const sizes = l.sizes.map((n, i) => `<button type="button" class="tile ${s.size === i ? 'on' : ''}" data-size="${i}"><canvas data-pz="${i}" style="--th:clamp(70px,15vh,190px)"></canvas>${n}<div class="sub" style="color:var(--a3-mute)">${l.roles[i]}</div></button>`).join('');
-    const sticks = STICKS.map((k, i) => `<button type="button" class="tile ${S.stick === i ? 'on' : ''}" data-stick="${i}"><canvas data-pk="${i}" style="--th:clamp(56px,11vh,140px)"></canvas>${en() ? k.en : k.cs}
+    const sizes = l.sizes.map((n, i) => `<button type="button" class="tile ${s.size === i ? 'on' : ''}" data-size="${i}">${icSize(i)}${n}<div class="sub" style="color:var(--a3-mute)">${l.roles[i]}</div></button>`).join('');
+    const sticks = STICKS.map((k, i) => `<button type="button" class="tile ${S.stick === i ? 'on' : ''}" data-stick="${i}">${icStick(i)}${en() ? k.en : k.cs}
       <div class="sub">${k.eff.length ? k.eff.map(([e, v]) => `<span class="${v > 0 ? 'up' : 'dn'}">${ic(e, 13)}${v > 0 ? '+' : '−'} ${l.eff[e]}</span>`).join('') : `<span style="color:var(--a3-mute)">${ic('reach', 13)} 16</span>`}</div></button>`).join('');
     return `<div class="pnl" style="display:grid;grid-template-columns:minmax(0,1.4fr) 110px 170px;gap:14px;align-items:end">
       <label><div class="k" style="margin-bottom:8px">${ic('user', 16)}${l.name}</div><input class="inp" id="lk3-name" maxlength="14" value="${esc(s.name)}" ${g ? 'disabled' : ''}></label>
@@ -176,9 +182,9 @@ export function initLocker3(host, api) {
   }
   function tabVzhled() {
     const l = L(), c = curKit(), g = api.isGuest();
-    const kits = KITS.map((K, i) => `<button type="button" class="tile ${sameKit(c, kitOf(i)) ? 'on' : ''}" data-kit="${i}" ${g ? 'disabled' : ''}><canvas data-tk="${i}" style="--th:clamp(60px,13vh,170px)"></canvas>${en() ? K[1] : K[0]}</button>`).join('');
-    const helms = HELMS.map(([v, cs, e]) => `<button type="button" class="tile ${c.helmetType === v ? 'on' : ''}" data-helm="${v}" ${g ? 'disabled' : ''}><canvas data-th="${v}" style="--th:clamp(50px,10vh,130px)"></canvas>${en() ? e : cs}</button>`).join('');
-    const slots = S.slots.map((k, i) => k ? `<button type="button" class="tile ${sameKit(c, k) ? 'on' : ''}" data-slot="${i}" ${g ? 'disabled' : ''} title="2× klik = upravit"><canvas data-ts="${i}" style="--th:clamp(50px,10vh,130px)"></canvas>${en() ? 'Mine' : 'Moje'} #${i + 1}</button>`
+    const kits = KITS.map((K, i) => `<button type="button" class="tile ${sameKit(c, kitOf(i)) ? 'on' : ''}" data-kit="${i}" ${g ? 'disabled' : ''}>${icKit(K[2], K[3], K[4])}${en() ? K[1] : K[0]}</button>`).join('');
+    const helms = HELMS.map(([v, cs, e]) => `<button type="button" class="tile ${c.helmetType === v ? 'on' : ''}" data-helm="${v}" ${g ? 'disabled' : ''}>${icHelm(v)}${en() ? e : cs}</button>`).join('');
+    const slots = S.slots.map((k, i) => k ? `<button type="button" class="tile ${sameKit(c, k) ? 'on' : ''}" data-slot="${i}" ${g ? 'disabled' : ''} title="2× klik = upravit">${icKit(k.jersey, k.stripe, k.gloves)}${en() ? 'Mine' : 'Moje'} #${i + 1}</button>`
       : `<button type="button" class="tile" data-new="${i}" ${g ? 'disabled' : ''} style="display:grid;place-items:center;gap:6px;border-style:dashed;min-height:100%">${ic('plus', 28)}${l.create}</button>`).join('');
     return `${g ? `<div class="note">${ic('lock', 18)}${l.guest}</div>` : ''}
      <div class="pnl"><div class="k" style="margin-bottom:10px">${ic('shirt', 16)}${l.kits}</div><div class="tiles" style="grid-template-columns:repeat(4,minmax(0,1fr))">${kits}</div></div>
@@ -212,8 +218,8 @@ export function initLocker3(host, api) {
   }
   function render() {
     const l = L();
-    root.innerHTML = `<div class="g">${cardHTML()}<div class="right">
-      <div class="top"><button type="button" class="backb" data-back="1">${ic('back', 18)}${l.back}<kbd>Esc</kbd></button><div class="k" style="margin-left:4px">${l.eyebrow}</div></div>
+    root.innerHTML = `
+      <div class="g">${cardHTML()}<div class="right">
       <div class="tabs" role="tablist">${l.tabs.map((n, i) => `<button type="button" role="tab" aria-selected="${i === tab}" data-tab="${i}">${ic(l.tabIc[i], 20)}${n}</button>`).join('')}</div>
       <div class="body">${[tabVybava, tabVzhled, tabProfil][tab]()}</div></div></div>${editor ? editorHTML() : ''}`;
     fillHeads(); drawStatic();

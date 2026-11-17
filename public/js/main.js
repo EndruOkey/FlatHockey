@@ -1990,7 +1990,7 @@ function _lk3Toggle(name) {
       back: () => showView('main'),   // stejná akce jako Esc z podobrazovek
     });
     host.classList.add('lk3-on');
-    const st = document.createElement('style'); st.textContent = '#v-profile.lk3-on .lk-wrap{display:none}#v-profile.lk3-on{height:100%;min-height:0;position:relative}'; document.head.appendChild(st);
+    const st = document.createElement('style'); st.textContent = '#v-profile.lk3-on .lk-wrap{display:none}'; document.head.appendChild(st);
   }
   if (name === 'profile') _lk3.show(); else _lk3.hide();
 }
