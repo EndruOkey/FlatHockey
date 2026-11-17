@@ -23,7 +23,7 @@ import { updateStats, updateRankAndCredits, getRankPosition, getLeaderboard, get
 import { World } from './public/js/world.js';
 import { Player } from './public/js/entities/Player.js';
 import { pickBanner, pickTitle, pickAvatar } from './public/js/cosmetics.js';   // kosmetika profilu (banner/titul/profilovka) — ověření odemčení
-import { _detectFx, createMatch as coreCreateMatch, stepMatch, makeInput, applyClientInput, computeEdges, playerActions, rebuildEntities, faceoffAt, faceoff, pendingFlags, ms2ticks } from './public/js/match-core.js';
+import { _detectFx, createMatch as coreCreateMatch, stepMatch, makeInput, applyClientInput, computeEdges, playerActions, rebuildEntities, faceoffAt, faceoff, faceoffState, pendingFlags, ms2ticks } from './public/js/match-core.js';
 import { weekRuleFor, weekBonus } from './public/js/weekly.js';   // hlášky (kombo/skill) — sdílený detektor
 import { Puck } from './public/js/entities/Puck.js';
 import { Goalie } from './public/js/entities/Goalie.js';
@@ -446,6 +446,7 @@ function broadcast(match) {
     lock: match.world._goalLock ? 1 : 0,
     clk: Math.max(0, Math.ceil(match.clock)), per: match.period, pers: match.periods, end: match.ended ? 1 : 0,
     pnd: pendingFlags(match),
+    ...((f => f ? { fo: f } : {})(faceoffState(match))),   // buly: fáze, ticky do dropu, centři (kruh QTE u klienta)
     ...(match.weekRule ? { wr: match.weekRule } : {}),
     ...(match._fx && match._fx.length ? { fx: match._fx.splice(0) } : {}),
   });

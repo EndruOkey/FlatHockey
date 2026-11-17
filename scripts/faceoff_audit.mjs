@@ -1,6 +1,6 @@
 // Audit buly (deterministicky): pro každé buly v offline jádru (match-core) i serveru změří
 // rozestavení (hráči v hřišti, centr u bodu), čas do prvního dotyku, kdo vyhrál, zaseknutí (nikdo 3 s).
-// node scripts/faceoff_audit.mjs   (FH_TEAM=2 default)
+// node scripts/faceoff_audit.mjs   (FH_TEAM=2 default). Plná rubrika buly (QTE, centr = člověk, spam): npm run test:faceoff
 import { tmpdir } from 'os'; import { join } from 'path';
 process.env.PORT = process.env.PORT || '4627';
 process.env.DB_PATH = join(tmpdir(), `fh-fo-${process.pid}.db`);
@@ -33,7 +33,8 @@ function audit(make, label) {
     let fo = null, wasSetup = false;
     for (let t = 0; t < 300 * HZ && !m.ended; t++) {
       step();
-      if (m.setup && !wasSetup) {   // nové buly rozestaveno
+      const rdy = m.setup && (!m.fo || m.fo.ph >= 1);   // 2026-11-17: hráči nejdřív dojíždějí → měř až po dojezdu (fáze příprava)
+      if (rdy && !wasSetup) {   // nové buly rozestaveno
         const px = m.puck.x, py = m.puck.y; r.n++; if (Math.abs(py - RINK.h / 2) > 20) r.zone++;
         let bad = false, nearest = Infinity;
         for (const p of m.players.values()) { if (p.x < 8 || p.x > RINK.w - 8 || p.y < 8 || p.y > RINK.h - 8) bad = true; nearest = Math.min(nearest, Math.hypot(p.x - px, p.y - py)); }
@@ -47,7 +48,7 @@ function audit(make, label) {
         if (c || gh || m.world._goalLock) { if (c) { r[c.team]++; r.tFirst.push((t - fo.t0) / HZ); } else if (gh) r.goalie++; fo = null; }
         else if (t - fo.t0 > 3 * HZ) { r.stuck++; fo = null; }
       }
-      wasSetup = m.setup;
+      wasSetup = m.setup && (wasSetup || rdy);
     }
     done();
   }

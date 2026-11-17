@@ -15,7 +15,7 @@ import { Rink } from './entities/Rink.js';
 import { SFX } from './sound.js';
 import { showGoalCard } from './goal-card.js';
 import { makeSteer, steerB2, steerR1 } from './steer.js';
-import { createMatch, stepMatch, applyClientInput, makeInput, faceoff, rebuildEntities, pendingFlags, DT as CORE_DT } from './match-core.js';
+import { createMatch, stepMatch, applyClientInput, makeInput, faceoff, rebuildEntities, pendingFlags, faceoffState, DT as CORE_DT } from './match-core.js';
 import { makeBotBrain, hashSeed } from './bot.js';
 
 const CHARGE_RATE = 1.4; // pomalejší nápřah → slap shot je cítit (jen sandbox; online řídí server)
@@ -199,6 +199,7 @@ export class NetGame {
     this.locked = !!m.world._goalLock;
     if (wasLocked && !this.locked && !this.goalFlash) SFX.whistle();
     this.pnd = pendingFlags(m);
+    this._setFo(faceoffState(m));
   }
 
   // HLÁŠKY skillu / kombo (match-core _detectFx): plovoucí text nad hráčem; KOMBO GÓL velký pod GOAL.
@@ -312,6 +313,7 @@ export class NetGame {
       this.ended = !!s.end;
     }
     this.pnd = s.pnd || 0;
+    this._setFo(s.fo || null);
     // Detekce rozehrávky (lock → unlock): krátká píšťalka bez goalFlash = buly
     if (this.locked && !s.lock && !this.goalFlash) SFX.whistle();
     this.locked = !!s.lock;
@@ -393,7 +395,7 @@ export class NetGame {
       puck: { x: s.puck.x, y: s.puck.y },
       gl: s.gl ? { x: s.gl.x, y: s.gl.y, tilt: s.gl.t } : null,
       gr: s.gr ? { x: s.gr.x, y: s.gr.y, tilt: s.gr.t } : null };
-    for (const ps of s.players) if (ps.id !== this.myId)
+    for (const ps of s.players)   // i vlastní hráč: během zámku (buly, gól) ho vede server → jede z bufferu jako ostatní
       frame.ents.set(ps.id, { x: ps.x, y: ps.y, ba: ps.ba, aa: ps.aa, ca: ps.ca, sd: ps.sd });
     if (!this._buf) this._buf = [];
     // Zahoď snímky mimo pořadí (starší serverový čas než poslední) — jinak by rozbily interpolaci
@@ -485,6 +487,14 @@ export class NetGame {
 
     for (const e of this.players.values()) {
       const ent = e.ent;
+      if (e.isMe && this.locked) {
+        // ZÁMEK (buly / po gólu): server hráče vede sám (dojezd na buly) a vstupy nepohne → žádná predikce ani
+        // reconcile (dřív se odchylka < 80 px zahodila → vlastní hráč stál / skákal, „rozestavění hapruje").
+        const sm = samp(f => f.ents.get(ent.id));
+        if (sm) { ent.x = sm.x; ent.y = sm.y; ent.vx = sm.vx; ent.vy = sm.vy; if (sm.ba != null) ent.bodyAngle = sm.ba; }
+        this._recErr = null; this._predHist = null;
+        continue;
+      }
       if (e.isMe) {
         // predikce proběhla v _tick; jemně dotáhni k serveru
         // Plynule dorovnej skutečnou odchylku od serveru; velkou (buly, teleport) přeskoč najednou
@@ -641,6 +651,7 @@ export class NetGame {
     solids.push({ ent: this.goalieL, x: this.goalieL.x, y: this.goalieL.y, r: this.goalieL.radius });
     solids.push({ ent: this.goalieR, x: this.goalieR.x, y: this.goalieR.y, r: this.goalieR.radius });
     const ents = [...this.players.values()].map(e => e.ent);
+    this._drawFaceoff(ctx, cam, 0);
     this.puck.draw(ctx, cam);   // puk POD hráči → hokejka se kreslí navrch (puk leží na ledě u čepele)
     this._drawPassAim(ctx, cam);
     for (const e of this.players.values()) {
@@ -654,6 +665,56 @@ export class NetGame {
     this.goalieL.draw(ctx, cam);
     this.goalieR.draw(ctx, cam);
     this.rink.drawFront?.(ctx, cam, this.puck, [this.goalieL, this.goalieR]);   // tyčky, břevno a střecha sítě nad brankářem; vysoký puk nad brankou
+    this._drawFaceoff(ctx, cam, 1);
+  }
+
+  // BULY (match-core faceoffState): [fáze, ticků do dropu, délka smršťování, centr home, centr away, předčasně, vítěz, x, y]
+  // Okamžik dropu převedu na místní čas při příjmu (online je o ~½ pingu pozadu → stisk dorazí spíš pozdě, nikdy „předčasně" kvůli lagu).
+  _setFo(f) {
+    if (!f) { this._fo = null; return; }
+    const now = performance.now(), dropAt = now + f[1] * 1000 / 60;
+    const prev = this._fo;
+    // drop držím z prvního příjmu fáze (jitter snapshotů by kruhem cukal); nový buly / přeplánování = nový čas
+    const keep = prev && prev.a[0] >= 1 && f[0] >= 1 && prev.a[7] === f[7] && prev.a[8] === f[8] && Math.abs(prev.dropAt - dropAt) < 120;
+    this._fo = { a: f, dropAt: keep ? prev.dropAt : dropAt, D: f[2] * 1000 / 60, endAt: f[0] === 4 ? (prev && prev.a[0] === 4 ? prev.endAt : now) : 0 };
+  }
+
+  _drawFaceoff(ctx, cam, layer) {
+    const fo = this._fo; if (!fo || fo.a[0] < 1) return;
+    const [ph, , , ch, ca, early, win, fx, fy] = fo.a;
+    const s = cam.scale, x = cam.ox + fx * s, y = cam.oy + fy * s, now = performance.now();
+    const meC = this.myId === ch ? 'home' : this.myId === ca ? 'away' : null;
+    const myEarly = meC && (early & (meC === 'home' ? 1 : 2));
+    const R0 = 44, RED = '#E4002B';
+    ctx.save();
+    if (layer === 0) {
+      if (ph === 4) {   // výsledek: rozplývající se záblesk v barvě vítěze
+        const k = Math.min(1, (now - fo.endAt) / 450); if (k >= 1 || !win) { ctx.restore(); return; }
+        ctx.globalAlpha = 1 - k; ctx.strokeStyle = this.settings?.teams?.[win]?.color || RED; ctx.lineWidth = 4 * s * (1 - k) + 1;
+        ctx.beginPath(); ctx.arc(x, y, (8 + 40 * k) * s, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); return;
+      }
+      const left = fo.dropAt - now;                       // ms do dropu
+      const k = ph >= 3 || left <= 0 ? 1 : left > fo.D ? 0 : 1 - left / fo.D;
+      // vnější vodítko (cíl) + smršťující se kruh
+      ctx.setLineDash([4 * s, 4 * s]); ctx.lineWidth = 1.5 * s; ctx.strokeStyle = 'rgba(228,0,43,0.45)';
+      ctx.beginPath(); ctx.arc(x, y, R0 * s, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+      const r = (R0 - (R0 - 13) * k) * s;   // zavřený kruh těsně kolem centrů (ne pod nimi)
+      ctx.lineWidth = (2 + 2.5 * k) * s; ctx.strokeStyle = myEarly ? 'rgba(120,120,130,0.8)' : RED;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+      if (ph >= 3 && !myEarly) {   // drop: puls
+        const p = 0.5 + 0.5 * Math.sin(now / 60);
+        ctx.fillStyle = `rgba(228,0,43,${0.18 + 0.22 * p})`; ctx.beginPath(); ctx.arc(x, y, 11 * s, 0, Math.PI * 2); ctx.fill();
+      }
+    } else if (meC && ph <= 3) {
+      const txt = myEarly ? t('fo_early') : ph >= 3 ? t('fo_click') : t('fo_ready');
+      const big = ph >= 3 && !myEarly;
+      ctx.font = `italic ${big ? 900 : 800} ${Math.round((big ? 26 : 17) * Math.max(0.8, s))}px "Barlow Condensed", "Segoe UI", sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.lineJoin = 'round';
+      const ty = y - 84 * s;   // nad jmenovkami křídel (stojí ±54 px od bodu)
+      ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(10,14,22,0.85)'; ctx.strokeText(txt, x, ty);
+      ctx.fillStyle = myEarly ? '#c9ccd4' : big ? RED : '#ffffff'; ctx.fillText(txt, x, ty);
+    }
+    ctx.restore();
   }
 
   notify(text) { this._notice = { text, t: 3 }; }
