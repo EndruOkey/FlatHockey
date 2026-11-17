@@ -1,5 +1,5 @@
 import { VIS, HGT, hScale } from '../vis.js';
-import { RINK, PUCK, PLAYER } from '../constants.js';
+import { RINK, PUCK, PLAYER, reachOf } from '../constants.js';
 import { defaultRng } from '../rng.js';
 
 function _resolveCorners(puck) {
@@ -87,7 +87,7 @@ export class Puck {
   _cradlePos(owner, k, vis = false) {
     const stickAng   = (vis && owner._visStick != null) ? owner._visStick : (owner._stickDisp ?? owner.carryAngle ?? owner.aimAngle);
     const dispCharge = owner._dispCharge ?? 0;
-    let   reach      = (owner._dispReach ?? PLAYER.stickLen) * (1 - dispCharge * (vis ? PLAYER.windPull : 0.30)) * k;
+    let   reach      = (owner._dispReach ?? reachOf(owner)) * (1 - dispCharge * (vis ? PLAYER.windPull : 0.30)) * k;
     const grip       = owner.gripPoint ? owner.gripPoint : { x: owner.x, y: owner.y };
 
     // Oříznutí reach na zadní stěnu branky (stejná logika jako stickTip getter a rendering)

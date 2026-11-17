@@ -1,5 +1,5 @@
 import { makeRng } from './rng.js';
-import { PLAYER } from './constants.js';
+import { PLAYER, reachOf, stickOf } from './constants.js';
 
 export class World {
   constructor(entities, seed = 1) {
@@ -32,8 +32,8 @@ export class World {
   // Kontrola nosiče klesá s rychlostí jízdy a delší holí. Puk vyskočí ve směru tahu útočníkovy čepele.
   _stickFight(carrier, puck, dt) {
     const pvx = carrier.vx, pvy = carrier.vy;
-    const spd = Math.hypot(carrier.vx, carrier.vy), reach = carrier._dispReach ?? PLAYER.stickLen;
-    const ctrl = PLAYER.fightCtrl * (1 - 0.4 * Math.min(1, spd / 165)) * (1 + 0.6 * Math.max(0, 1 - reach / PLAYER.stickLen));
+    const spd = Math.hypot(carrier.vx, carrier.vy), reach = carrier._dispReach ?? reachOf(carrier);
+    const ctrl = PLAYER.fightCtrl * stickOf(carrier).ctrl * (1 - 0.4 * Math.min(1, spd / 165)) * (1 + 0.6 * Math.max(0, 1 - reach / reachOf(carrier)));
     const graceOk = (carrier._possT ?? 99) >= PLAYER.stealGrace;
     for (const p of this._fair(puck)) {
       if (p === carrier || p.team === carrier.team) continue;

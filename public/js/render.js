@@ -1,4 +1,4 @@
-import { RINK, PLAYER, PUCK } from './constants.js';
+import { RINK, PLAYER, PUCK, reachOf } from './constants.js';
 
 export function computeCamera(canvas) {
   const pad = 48;
@@ -209,8 +209,8 @@ function renderPlayer(ctx, p, cam) {
   ctx.fill();
 
   // Stick (behind body)
-  const tipX = ox + (p.x + Math.cos(p.aimAngle) * PLAYER.stickLen) * s;
-  const tipY = oy + (p.y + Math.sin(p.aimAngle) * PLAYER.stickLen) * s;
+  const tipX = ox + (p.x + Math.cos(p.aimAngle) * reachOf(p)) * s;
+  const tipY = oy + (p.y + Math.sin(p.aimAngle) * reachOf(p)) * s;
   ctx.beginPath();
   ctx.moveTo(sx, sy);
   ctx.lineTo(tipX, tipY);

@@ -91,6 +91,24 @@ export const SIZES = [
 // měření (jen Node): FH_SIZES='[{"speed":1.05},{},{"mass":1.4}]' přepíše čísla velikostí (scripts/size_balance.mjs)
 if (typeof process !== 'undefined' && process.env && process.env.FH_SIZES) JSON.parse(process.env.FH_SIZES).forEach((o, i) => Object.assign(SIZES[i], o));
 export const sizeOf = p => SIZES[p?.size ?? 1] || SIZES[1];
+// DÉLKY HOLE (2026-11-17, Ondřej): krátká = menší dosah, ale hbitější s pukem (otáčení s pukem + měkké držení);
+// dlouhá = větší dosah (obrání, převzetí), ale těžkopádnější s pukem. Střední = samé 1 → hra beze změny (test:determinism).
+// len = dosah hole na puk v px (škáluje PLAYER.stickLen, střední 16/16 = 1 → bit-identické; kreslená hůl = stejný dosah × stickDraw),
+// turn = otáčení bruslení S PUKEM (jako SIZES.turn), grip = práh měkkého držení PLAYER.gripV (vyšší = míň ztrát při kličce),
+// hand = rychlost otáčení hole (klička), ctrl = kontrola nosiče v souboji holí (world.js _stickFight), poke = dosah obrání (× PLAYER.stealR), recv = zóna převzetí volného puku (× PLAYER.pickupTipRadius).
+// Měřeno scripts/stick_balance.mjs (rubrika S1–S4): samotná délka role neukázala (dlouhá víc sbírá volné puky, ale její nosič má puk dál
+// od těla → obrání vyrovnaná, krátká drží méně) → přidány poke/ctrl (obrání vs. kontrola) a recv (převzetí). Podíl gólů 48,6–54,0 %
+// (2v2 120 + 3v3 60 seedů, ladicí 1001+ i čerstvé 3001+), dlouhá obere o 6–23 % víc než soupeř, krátká drží 50,3–51,0 %, stall dlouhé 20,9 %.
+export const STICKS = [
+  { id: 's', len: 15,   turn: 1.10, grip: 1.25, hand: 1.08, ctrl: 1.08, poke: 0.95, recv: 1.20 },
+  { id: 'm', len: 16,   turn: 1,    grip: 1,    hand: 1,    ctrl: 1,    poke: 1,    recv: 1 },
+  { id: 'l', len: 17.4, turn: 0.94, grip: 0.90, hand: 0.92, ctrl: 0.95, poke: 1.12, recv: 0.92 },
+];
+// měření (jen Node): FH_STICKS='[{"len":15},{},{"len":17.4}]' přepíše čísla holí (scripts/stick_balance.mjs)
+if (typeof process !== 'undefined' && process.env && process.env.FH_STICKS) JSON.parse(process.env.FH_STICKS).forEach((o, i) => Object.assign(STICKS[i], o));
+export const stickOf = p => STICKS[p?.stickId ?? 1] || STICKS[1];
+// dosah hole hráče (px) — místo PLAYER.stickLen všude, kde jde o konkrétního hráče
+export const reachOf = p => { const k = stickOf(p).len; return k === 16 ? PLAYER.stickLen : PLAYER.stickLen * k / 16; };
 
 
 export const PUCK = {

@@ -1,4 +1,4 @@
-import { RINK, PLAYER, PUCK } from './constants.js';
+import { RINK, PLAYER, PUCK, reachOf } from './constants.js';
 
 export function makePlayer(id, team) {
   const x = team === 'home' ? 400 : 1400;
@@ -93,8 +93,8 @@ export function pass(player, puck) {
 
 export function getStickTip(player) {
   return {
-    x: player.x + Math.cos(player.aimAngle) * PLAYER.stickLen,
-    y: player.y + Math.sin(player.aimAngle) * PLAYER.stickLen,
+    x: player.x + Math.cos(player.aimAngle) * reachOf(player),
+    y: player.y + Math.sin(player.aimAngle) * reachOf(player),
   };
 }
 
