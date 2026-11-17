@@ -181,6 +181,12 @@ export class PlayerBase {
     if (b >= 0 || disc < 0) return Infinity;
     return Math.max(0, (-b - Math.sqrt(disc)) / vv);
   }
+  // za kolik s je puk (přímkou, relativní rychlostí) v okně KICK_R v NĚKTERÉM tiku simulace (1/60 s); Infinity = v žádném do KICK_BUF
+  _kickTickEta(puck) {
+    const dx = puck.x - this.x, dy = puck.y - this.y, rvx = puck.vx - this.vx, rvy = puck.vy - this.vy;
+    for (let k = 1; k * Q_DT <= KICK_BUF + 1e-9; k++) if (Math.hypot(dx + rvx * k * Q_DT, dy + rvy * k * Q_DT) <= KICK_R - 1) return k * Q_DT;   // 1 px rezerva: rychlost hráče se mezi tiky mění
+    return Infinity;
+  }
   // ── TEČ NA Q (2026-11-12): čerstvá rána SPOLUHRÁČE (≤ DEFL_AGE s) a ty do DEFL_ZONE px od soupeřovy branky →
   // Q puk přesměruje holí kam míříš (kurzor; výška podle kurzoru za brankou), rychlost × 0,70–0,85 a chyba úhlu
   // deterministicky podle načasování (doba podržení stisku) a místa zásahu na čepeli. Bez rng. Mimo situaci Q = přikopnutí.
@@ -228,15 +234,31 @@ export class PlayerBase {
     this._deflFx = 0.3; this._deflN = (this._deflN || 0) + 1; this._deflQ_tq = tq;
     return true;
   }
-  trySkateKick(puck) {
+  // ── Q: JEDINÝ PREDIKÁT pro akci (trySkateKick, podržený stisk v update) i nápovědu (odznak Q v Player.draw) (2026-11-17).
+  // Dřív nápověda počítala okna zvlášť → odznak i u puku na cizí holi / u gólmana / při přerušení / v nápovědním okně 0,35 s,
+  // kde stisk jen zamkl Q (test/qhint.test.mjs). ctx = svět {players, goalies, _goalLock} (match.world / World / klientský pohled).
+  // Vrací null = Q nic neudělá, jinak { kind: 'deflect'|'kick', w: 1 = hned, 0 = stisk se podrží a puk do okna dojede }.
+  qWindow(puck, ctx) {
+    if (this.hasPuck || this.isDown || !qPuckLoose(puck, ctx)) return null;
     const dw = this.deflectWindow(puck);   // teč má přednost před přikopnutím (jen rána spoluhráče u soupeřovy branky)
-    if (dw === 1) { this._deflHeld = 0; return this._doDeflect(puck); }
-    if (dw === 0) { this._deflQ = DEFL_BUF; this._deflHeld = 0; return false; }
+    if (dw >= 0) return { kind: 'deflect', w: dw };
+    if ((this._kickCd || 0) > 0) return null;
+    const kw = this.kickWindow(puck);
+    if (kw === 1) return { kind: 'kick', w: 1 };
+    // o chvilku dřív: stisk podržíme, než puk dojede (ETA po tikách: puk, který okno KICK_R jen škrtne mezi tiky, se nepočítá)
+    if (kw === 0 && this.kickEta(puck) <= KICK_BUF && this._kickTickEta(puck) <= KICK_BUF) return { kind: 'kick', w: 0 };
+    return null;
+  }
+  trySkateKick(puck, ctx) {
+    const q = this.qWindow(puck, ctx);
+    if (q && q.kind === 'deflect') {
+      if (q.w === 1) { this._deflHeld = 0; return this._doDeflect(puck); }
+      this._deflQ = DEFL_BUF; this._deflHeld = 0; return false;
+    }
     if ((this._kickCd || 0) > 0 || this.hasPuck || this.isDown) return false;
     this._kickSwing(puck);   // kresba: brusle máchne (při zabrání ji hned převezme animace přikopnutí)
-    const w = this.kickWindow(puck);
-    if (w === 1) return this._doKick(puck);
-    if (w === 0 && this.kickEta(puck) <= KICK_BUF) { this._kickQ = KICK_BUF; return false; }   // o chvilku dřív: stisk podržíme, než puk dojede
+    if (q && q.w === 1) return this._doKick(puck);
+    if (q) { this._kickQ = KICK_BUF; this._kickQT = 0; return false; }
     this._kickCd = KICK_CD; return false;
   }
   // máchnutí naprázdno: noha na straně puku (bez puku na straně dolní ruky); jen časová osa pro kresbu
@@ -396,7 +418,7 @@ export class PlayerBase {
   // Tečování (deflection) — letící puk u čepele se odrazí pod jiným úhlem (gól z dorážky)
   tryDeflect(puck) {
     if (this.hasPuck || puck.isAirborne || this.isDown) return false;
-    if (this._deflQ > 0) return false;   // Q na teč nachystané → řídí to _doDeflect, ne náhodný odraz
+    if (this._deflQ > 0 || this._kickQ > 0) return false;   // Q nachystané (teč → _doDeflect; přikopnutí → puk jde pod brusli, hůl se neodrazí)
     if (this.charge > 0) return false; // nabíjí one-timer → puk chytí, netečuje
     if (this._shootCooldown > 0 || this._deflectCool > 0) return false;
     const inSpeed = Math.hypot(puck.vx, puck.vy);
@@ -696,10 +718,16 @@ export class Player extends PlayerBase {
     if (this._shieldT > 0) this._shieldT -= dt;
     if (this._shootCooldown > 0) this._shootCooldown -= dt;
     if (this._kickCd > 0) this._kickCd -= dt;
-    if (this._kickQ > 0) { this._kickQ -= dt; const pk = world?.puck; if (pk && this.kickWindow(pk) === 1) this._doKick(pk); else if (this._kickQ <= 0) this._kickCd = KICK_CD; }
+    // podržený stisk Q: dokud nápověda svítí (puk dál míří pod nohy do KICK_BUF s), stisk platí — nejdéle KICK_HOLD s
+    // (hráč i puk mění rychlost → přímkový odhad ETA se posouvá; dřív stisk při svítící nápovědě propadl, test/qhint.test.mjs)
+    if (this._kickQ > 0) { this._kickQ -= dt; this._kickQT = (this._kickQT || 0) + dt; const pk = world?.puck; const q = pk ? this.qWindow(pk, world) : null;
+      if (q && q.kind === 'kick' && q.w === 1) this._doKick(pk);
+      else if (this.hasPuck) this._kickQ = 0;   // puk dojel dřív na hůl → stisk splněn, žádný zámek
+      else if (q && q.kind === 'kick' && this._kickQT < KICK_HOLD) this._kickQ = Math.max(this._kickQ, 1e-6);
+      else if (this._kickQ <= 0) { this._kickQ = 0; this._kickCd = KICK_CD; } }
     if (this._kickFx > 0) this._kickFx -= dt;
     if (this._kickSw > 0) this._kickSw -= dt;
-    if (this._deflQ > 0) { const pk = world?.puck; this._deflHeld = (this._deflHeld || 0) + dt; const w = pk ? this.deflectWindow(pk) : -1;
+    if (this._deflQ > 0) { const pk = world?.puck; this._deflHeld = (this._deflHeld || 0) + dt; const q = pk ? this.qWindow(pk, world) : null, w = q && q.kind === 'deflect' ? q.w : -1;
       if (w === 1) this._doDeflect(pk); else if ((this._deflQ -= dt) <= 0 || w < 0) { this._deflQ = 0; this._kickCd = KICK_CD; } }
     if (this._deflFx > 0) this._deflFx -= dt;
     if (this._passCooldown  > 0) this._passCooldown  -= dt;
@@ -772,6 +800,18 @@ const DEFL_AGE = 1.2, DEFL_ZONE = 110, DEFL_VMIN = 80, DEFL_Z = 14, DEFL_R = 13,
 function _segDist(px, py, ax, ay, bx, by) { const dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy || 1, u = clamp(((px - ax) * dx + (py - ay) * dy) / L, 0, 1); return Math.hypot(px - ax - dx * u, py - ay - dy * u); }
 // PŘIKOPNUTÍ (Q): okno px od středu těla (tělo 7 + puk 3 + 1), nápověda s před vjezdem, zámek po minutí (s), podržení stisku (s),
 // délka animace přikopnutí a máchnutí naprázdno (s; jen kresba)
+// Puk je volný pro Q: nikdo ho nedrží (hráč holí / gólman v rukavici či pod sebou), hra neběží-li přerušení / buly.
+export function qPuckLoose(puck, ctx) {
+  if (!puck || puck.faceoffTimer > 0 || puck._inNet || puck.goalScored) return false;
+  if (puck._carrier && puck._carrier.hasPuck) return false;
+  if (!ctx) return true;
+  if (ctx._goalLock) return false;
+  for (const p of ctx.players || []) if (p && p.hasPuck) return false;
+  for (const g of ctx.goalies || []) if (g && (g._heldPuck || g._holdTimer > 0)) return false;
+  return true;
+}
+const Q_DT = 1 / 60;   // tik simulace (match-core DT)
+const KICK_HOLD = 0.25;   // nejdelší podržení stisku Q, dokud puk dál míří pod nohy
 const KICK_R = PLAYER.radius + PUCK.radius + 1, KICK_HINT = 0.35, KICK_CD = 0.4, KICK_BUF = 0.1, KICK_FX = 0.3, KICK_SW = 0.22;
 export const KICK = { R: KICK_R, HINT: KICK_HINT, CD: KICK_CD, BUF: KICK_BUF, FX: KICK_FX, SW: KICK_SW };
 let _brakeSfxAt = -1e9;   // globální omezovač zvuku brzdy cizích hráčů (jen kresba/zvuk, ne simulace)
@@ -2014,7 +2054,7 @@ function _renderPlayerUp(ctx, p, cam) {
 
   if (p._isLocal) _drawPickupAid(ctx, p, cam);
   if (p._isLocal && p._puckView) {   // nápověda přikopnutí (Q): odznak u puku, zelený v okně
-    const dw = p.deflectWindow(p._puckView), w = dw >= 0 ? dw : p.kickWindow(p._puckView);   // teč (rána spoluhráče u branky) má přednost
+    const q = p.qWindow(p._puckView, p._qCtx), w = q ? q.w : -1;   // stejný predikát jako akce (trySkateKick); _qCtx = pohled hry
     if (w >= 0) { const s = cam.scale, P = p._puckView, x = cam.ox + P.x * s, y = cam.oy + (P.y - 9) * s, on = w === 1;
       ctx.save(); ctx.font = `800 ${6.5 * s}px 'Segoe UI', sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.beginPath(); ctx.roundRect(x - 4.2 * s, y - 4.2 * s, 8.4 * s, 8.4 * s, 2 * s);

@@ -139,7 +139,7 @@ export function playerActions(p, inp, dt, match) {
   }
 
   if (inp.mmbJustPressed && !p.hasPuck) p.passReq = 0.9;
-  if (inp.kqJustPressed) p.trySkateKick(match.puck);   // Q: přikopnutí / zpracování puku bruslí do jízdy
+  if (inp.kqJustPressed) p.trySkateKick(match.puck, match.world);   // Q: přikopnutí / zpracování puku bruslí do jízdy
 }
 
 // Nadzvednutý pas: pomalejší, dopadne ~SAUCER_LAND dráhy před příjemce a dojede mu na hůl.
