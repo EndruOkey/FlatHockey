@@ -1,4 +1,4 @@
-// CI: audit pohybu těla pro obě varianty (hráči VIS.w 0, /dev VIS.w 1) s rozpočtem = stav 2026-11-17. Zlepšení → rozpočet snížit.
+// CI: audit pohybu těla pro obě varianty (od 2026-11-17 hráči = VIS.w 1, w0 = dřívější pohyb jako záloha) s rozpočtem = stav 2026-11-17. Zlepšení → rozpočet snížit.
 import { execFileSync } from 'child_process';
 const RUNS = [['w0', 816], ['w1', 0]];   // 2026-11-17: + A13 (obě nohy za tělem); hráči bokem opraveno (shX): 815 − 0 + A10 couvání 1 = 816
 let fail = 0;
