@@ -296,6 +296,7 @@ function buildPlayer(lobby, sid, m) {
   const p = new Player(sid, m.team, makeInput());
   p.name   = m.name;
   p.handed = m.handed;
+  p.size   = m.size ?? 1;
   p.num    = m.number;
   const ts = lobby.settings.teams[m.team] || {};
   p.color  = ts.color || null;
@@ -416,7 +417,7 @@ function snapPlayers(match) {
       x: r1(p.x), y: r1(p.y), ba: r3(p.bodyAngle), aa: r3(p.aimAngle), ca: r3(p.carryAngle),
       sd: r3(p._stickDisp), dr: r1(p._dispReach), dc: r2(p._dispCharge),
       fh: p.forehand ? 1 : 0, hp: p.hasPuck ? 1 : 0, ch: r2(p.charge),
-      hd: p.handed, cc: p.crossCheck ? 1 : 0, ln: r2(p._lean), ...(p.isDown || p._stagT > 0 ? { kd: [r2(p._downT), r2(p._upT), r2(p._fallA), r2(p._stagT), p._fallN, r2(p._fallB)] } : {}), ...(p._shieldT > 0 ? { shd: r2(p._shieldA) } : {}), ...(p._kickFx > 0 || p._kickSw > 0 ? { kk: [r2(Math.max(0, p._kickFx || 0)), r2(Math.max(0, p._kickSw || 0)), r1(p._kickOx || 0), r1(p._kickOy || 0), p._kickSide || 1, p._kickN || 0, p._kickSwN || 0] } : {}),
+      hd: p.handed, ...(p.size !== 1 ? { sz: p.size } : {}), cc: p.crossCheck ? 1 : 0, ln: r2(p._lean), ...(p.isDown || p._stagT > 0 ? { kd: [r2(p._downT), r2(p._upT), r2(p._fallA), r2(p._stagT), p._fallN, r2(p._fallB)] } : {}), ...(p._shieldT > 0 ? { shd: r2(p._shieldA) } : {}), ...(p._kickFx > 0 || p._kickSw > 0 ? { kk: [r2(Math.max(0, p._kickFx || 0)), r2(Math.max(0, p._kickSw || 0)), r1(p._kickOx || 0), r1(p._kickOy || 0), p._kickSide || 1, p._kickN || 0, p._kickSwN || 0] } : {}),
       col: p.color || null, num: p.num, js: p.jersey || 'solid', ...(p.stripe ? { st: p.stripe } : {}), ...(p.teamMark ? { tm: p.teamMark } : {}),
       hc: p.helmet || null, sh: p.shorts || null, gc: p.gloves || null, tc: p.tape || null,
       sk: p.stick || null, ty: p.tapeStyle || 'full', hy: p.helmetType || 'visor', vc: p.visor || null,
@@ -497,7 +498,7 @@ function memberFor(socket, profile, team) {
   const uid = socket.data.userId;
   let guest = true;
   try { guest = !uid || isGuestUser(uid); } catch {}
-  const m = makeMember(guest ? { handed: profile?.handed, code: profile?.code } : profile, team);
+  const m = makeMember(guest ? { handed: profile?.handed, size: profile?.size, code: profile?.code } : profile, team);   // velikost = herní volba → i host
   if (uid) { try { const u = getUserById(uid); if (u?.display_name) m.name = u.display_name; } catch {} }   // ikonka původu jen ve statistikách (Ondřej), ve hře jen barva týmu
   m.guest = guest;
   return m;
@@ -508,6 +509,7 @@ function makeMember(profile, team) {
     name:   String(profile.name || '').slice(0, 12),
     sponsor: isSponsorCode(profile.code),
     handed: (profile.handed === -1 || profile.handed === 1) ? profile.handed : 1,
+    size:   (profile.size === 0 || profile.size === 2) ? profile.size : 1,   // velikost hráče (constants.js SIZES), jiná hodnota = střední
     number: Number.isInteger(profile.number) ? Math.max(0, Math.min(99, profile.number)) : null,
     helmet: hex(profile.helmet, '#eef2f8'),  // osobní doplňky (helma/rukavice/páska)
     shorts: hex(profile.shorts, '#df2626'),

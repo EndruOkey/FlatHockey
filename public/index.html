@@ -2156,6 +2156,20 @@
       background: rgba(14,19,32,0.85); border: 1px solid rgba(182,196,255,0.14); border-radius: 12px;
       padding: 16px 18px 8px; min-width: 0;
     }
+    /* VELIKOST HRÁČE (2026-11-17) */
+    .lk-size { margin: 10px 0 4px; padding: 12px 14px; background: rgba(182,196,255,0.05); border: 1px solid rgba(182,196,255,0.14); border-radius: 6px; }
+    .lk-size[hidden] { display: none; }
+    .lk-size .lk-field-lbl { display: block; margin-bottom: 8px; }
+    .lk-size-seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .size-btn { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 9px 0 7px; border: 1px solid rgba(182,196,255,0.18); border-radius: 4px;
+      font: italic 800 15px/1 'Barlow Condensed', 'Arial Narrow', sans-serif; letter-spacing: .06em; color: #aeb6d6; background: rgba(10,14,30,0.4); cursor: pointer; text-transform: uppercase; }
+    .size-btn i { width: var(--d); height: var(--d); border-radius: 50%; background: currentColor; opacity: .8; margin-bottom: 5px; }
+    .size-btn.active { background: #3a9fff; border-color: #3a9fff; color: #fff; }
+    .size-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+    .lk-size-role { margin: 10px 0 8px; font-size: 13px; line-height: 1.3; color: #d7dcf0; }
+    .lk-size-st { display: grid; grid-template-columns: 92px 1fr; row-gap: 6px; align-items: center; font: 600 12px/1 'Space Mono', monospace; letter-spacing: .06em; color: #aeb6d6; text-transform: uppercase; }
+    .lk-size-st .pips { display: flex; gap: 4px; } .lk-size-st .pips b { width: 22px; height: 8px; border-radius: 2px; background: rgba(182,196,255,0.14); }
+    .lk-size-st .pips b.f { background: #3a9fff; }
     .lk-ident { display: grid; grid-template-columns: minmax(0,1fr) 88px auto; gap: 10px; margin-bottom: 8px; }
     .lk-ident .lk-field { align-items: stretch; text-align: left; background: rgba(182,196,255,0.05); border: 1px solid rgba(182,196,255,0.14); border-radius: 8px; padding: 8px 12px 6px; gap: 2px; min-width: 0; }
     .lk-ident .lk-input { text-align: left; font-size: 1.5rem; padding: 2px 0 4px; border-bottom: none; }
@@ -2907,6 +2921,17 @@
                 </div>
               </div>
                 <div class="lk-hint" data-i18n="hand_hint">Strana, na které držíš hokejku.</div>
+                <!-- VELIKOST HRÁČE (2026-11-17, zatím jen v dev playgroundu — odkryje main.js renderSize) -->
+                <div class="lk-size" id="lk-size" hidden>
+                  <span class="lk-field-lbl" data-i18n="lk_p_size">VELIKOST</span>
+                  <div class="lk-size-seg" role="radiogroup">
+                    <button type="button" class="size-btn" data-size="0" role="radio"><i style="--d:7px"></i><span data-i18n="size_s">MALÝ</span></button>
+                    <button type="button" class="size-btn" data-size="1" role="radio"><i style="--d:10px"></i><span data-i18n="size_m">STŘEDNÍ</span></button>
+                    <button type="button" class="size-btn" data-size="2" role="radio"><i style="--d:13px"></i><span data-i18n="size_l">VELKÝ</span></button>
+                  </div>
+                  <div class="lk-size-role" id="lk-size-role"></div>
+                  <div class="lk-size-st" id="lk-size-st"></div>
+                </div>
               <div class="lk-row">
                 <div class="lk-row-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3l-5 3 2 5 3-1v11h8V10l3 1 2-5-5-3a4 4 0 0 1-8 0z"/></svg></div>
                 <div class="lk-row-lbl" data-i18n="lk_p_jersey">Dres</div>

@@ -54,7 +54,7 @@ export function initLockerPreview(canvasId, getKit) {
     angle = (angle + 0.55 * dt) % (Math.PI * 2);
 
     const k = getKit();
-    p.handed = k.hand === -1 ? -1 : 1;
+    p.handed = k.hand === -1 ? -1 : 1; p.size = k.size ?? 1;
     p.color = k.jersey; p.helmet = k.helmet; p.gloves = k.gloves; p.tape = k.tape;
     p.stick = k.stick; p.tapeStyle = k.tapeStyle; p.helmetType = k.helmetType; p.visor = k.visor;
     const n = parseInt(k.num, 10);

@@ -1,4 +1,4 @@
-import { RINK, PLAYER, PUCK } from '../constants.js';
+import { RINK, PLAYER, PUCK, sizeOf } from '../constants.js';
 import { clamp, lerpAngle, angleDiff } from '../utils.js';
 import { SFX } from '../sound.js';
 import { defaultRng } from '../rng.js';
@@ -27,6 +27,7 @@ export class PlayerBase {
     this.handed     = team === 'away' ? -1 : 1; // pravák (+1) / levák (−1) → strana forehandu
     this._stickRel  = 0;   // úhel hole vůči tělu (scalar, drží se v předním kuželu)
     this.radius          = PLAYER.radius;
+    this.size            = 1;   // velikost hráče 0 malý / 1 střední / 2 velký (constants.js SIZES; volba v šatně)
     this.hasPuck         = false;
     this.forehand        = true;
     this.charge          = 0;
@@ -117,7 +118,7 @@ export class PlayerBase {
     // Ostatní hráči: hokejka neprojde tělem ani dříkem cizí hokejky (dřív šla skrz — scripts/stick_contact.mjs)
     if (this._others) for (const o of this._others) {
       if (o === this) continue;
-      if (_STK_BODY && !(_STK_MODE === 'opp' && o.team === this.team) && !(_STK_MODE === 'nopuck' && this.hasPuck)) t = _clipRayCircle(gx, gy, cos, sin, t, o.x, o.y, PLAYER.bodyRadius + _STK_BODY_PAD);
+      if (_STK_BODY && !(_STK_MODE === 'opp' && o.team === this.team) && !(_STK_MODE === 'nopuck' && this.hasPuck)) t = _clipRayCircle(gx, gy, cos, sin, t, o.x, o.y, PLAYER.bodyRadius * sizeOf(o).body + _STK_BODY_PAD);
       if (_STK_STICK && !o.crossCheck && !o.isDown && !(PLAYER.fight && o.hasPuck)) { const q = o.gripPoint, qd = o.carryAngle ?? o.aimAngle;
         t = _clipRayStick(gx, gy, cos, sin, t, q.x, q.y, Math.cos(qd), Math.sin(qd), o._dispReach ?? PLAYER.stickLen); }
     }
@@ -275,7 +276,7 @@ export class PlayerBase {
     if (carrier && PLAYER.shield > -1) {
       const px = puck.x - carrier.x, py = puck.y - carrier.y, ox = this.x - carrier.x, oy = this.y - carrier.y;
       const exposed = (px * ox + py * oy) / ((Math.hypot(px, py) || 1) * (Math.hypot(ox, oy) || 1));
-      const contact = PLAYER.shContact > 0 && Math.hypot(ox, oy) < PLAYER.bodyRadius * 2 + 6;
+      const contact = PLAYER.shContact > 0 && Math.hypot(ox, oy) < PLAYER.bodyRadius * (sizeOf(this).body + sizeOf(carrier).body) + 6;
       if (exposed < PLAYER.shield - (contact ? PLAYER.shContact : 0)) {   // kryto → zablokovaný pokus (jen v dosahu čepele) rozsvítí štít nosiče
         const tip = this.stickTip;
         if (Math.hypot(puck.x - tip.x, puck.y - tip.y) <= PLAYER.stealR) { carrier._shieldT = 0.35; carrier._shieldA = Math.atan2(oy, ox); }
@@ -326,7 +327,7 @@ export class PlayerBase {
     // ŽABIČKA (lehký tap) → PRDEL (plné nabití): rychlost i zdvih plynule rostou s nabitím.
     // Žabička = malá umístěná rána po ledě; slap = tvrdá rána, zvedne se a je lehce nepřesná.
     const c = clamp(charge, 0, 1);
-    const spd    = PUCK.minShotSpeed + (PUCK.maxShotSpeed - PUCK.minShotSpeed) * Math.pow(c, 0.85);
+    const spd    = (PUCK.minShotSpeed + (PUCK.maxShotSpeed - PUCK.minShotSpeed) * Math.pow(c, 0.85)) * sizeOf(this).shot;   // velikost hráče (SIZES.shot)
     const r = this.rng.next();                           // vždy odeber 1 číslo (determinismus nezávislý na perfect)
     const spread = perfect ? 0 : (r - 0.5) * c * 0.10;   // tvrdá rána je nepřesnější; v okně přesné rány bez rozptylu
     const dir    = this.carryAngle + spread;
@@ -445,31 +446,31 @@ export class PlayerBase {
 
   // Souboj těl — dva hráči se přetlačí (clona, box-out, scramble před brankou)
   collideWith(other) {
-    const minDist = 2 * PLAYER.bodyRadius;
+    const Za = sizeOf(this), Zb = sizeOf(other), wA = Zb.mass / (Za.mass + Zb.mass), wB = 1 - wA;   // velikost: lehčí se posune / odletí víc (stejné = 0,5)
+    const minDist = PLAYER.bodyRadius * (Za.body + Zb.body);
     const dx = other.x - this.x, dy = other.y - this.y;
     const dist = Math.hypot(dx, dy);
     if (dist >= minDist || dist === 0) return;
     const nx = dx / dist, ny = dy / dist, pen = minDist - dist;
-    this.x  -= nx * pen * 0.5; this.y  -= ny * pen * 0.5;
-    other.x += nx * pen * 0.5; other.y += ny * pen * 0.5;
+    this.x  -= nx * pen * wA; this.y  -= ny * pen * wA;
+    other.x += nx * pen * wB; other.y += ny * pen * wB;
     // utlum přibližování
     const rel = (other.vx - this.vx) * nx + (other.vy - this.vy) * ny;
     const closing = Math.max(0, -rel);   // rychlost srážky (px/s) — měřítko odrazu
     // Kdo koho sejmul: útočník = ten, kdo do druhého víc jede (složka rychlosti po normále); jen soupeři
     const aThis = this.vx * nx + this.vy * ny, aOther = -(other.vx * nx + other.vy * ny);
     if (rel < 0) {
-      const imp = rel * 0.5;
-      this.vx  += nx * imp; this.vy  += ny * imp;
-      other.vx -= nx * imp; other.vy -= ny * imp;
+      this.vx  += nx * rel * wA; this.vy  += ny * rel * wA;
+      other.vx -= nx * rel * wB; other.vy -= ny * rel * wB;
     }
     // Knockback úměrný síle srážky (dřív pevných 85 px/s i při lehkém doteku): lehký dotyk ≈ nic, plný náraz ≤ KB_MAX
     const KB = Math.min(PLAYER.kbMax, closing * PLAYER.kbFactor);
-    this.vx  -= nx * KB; this.vy  -= ny * KB;
-    other.vx += nx * KB; other.vy += ny * KB;
+    this.vx  -= nx * KB * 2 * wA; this.vy  -= ny * KB * 2 * wA;
+    other.vx += nx * KB * 2 * wB; other.vy += ny * KB * 2 * wB;
     this._knockT = other._knockT = 0.2; // dočasně zpomalí útlum, aby náraz dojel
     if (this.team !== other.team && closing >= PLAYER.kbMid) {
-      const lv = aThis >= aOther ? other : this, s = lv === other ? 1 : -1;
-      lv._lastHit = lv.takeHit(closing, nx * s, ny * s);
+      const lv = aThis >= aOther ? other : this, s = lv === other ? 1 : -1, at = lv === other ? Za : Zb, vc = lv === other ? Zb : Za;
+      lv._lastHit = lv.takeHit(closing * 2 * at.mass / (at.mass + vc.mass), nx * s, ny * s);   // velký udeří víc, malý méně (stejné = ×1)
     }
   }
 
@@ -520,11 +521,12 @@ export class PlayerBase {
     // Náraz — strčí soupeře (ne vystřelí): 120 < top speed 180, aby to nebylo „funny"; checker se lehce zbrzdí
     const nx = dx / dist;
     const ny = dy / dist;
-    const ccI = Math.max(0, -((other.vx - this.vx) * nx + (other.vy - this.vy) * ny)) + PLAYER.ccBonus;   // síla: rozjetý crosscheck > stojící
-    other.vx += nx * PLAYER.ccPush;
-    other.vy += ny * PLAYER.ccPush;
-    this.vx  -= nx * PLAYER.ccPush * 0.45;
-    this.vy  -= ny * PLAYER.ccPush * 0.45;
+    const Zc = sizeOf(this), Zo = sizeOf(other), mf = 2 * Zc.mass / (Zc.mass + Zo.mass);   // velikost: těžší crosscheck víc strčí
+    const ccI = (Math.max(0, -((other.vx - this.vx) * nx + (other.vy - this.vy) * ny)) + PLAYER.ccBonus) * mf;   // síla: rozjetý crosscheck > stojící
+    other.vx += nx * PLAYER.ccPush * mf;
+    other.vy += ny * PLAYER.ccPush * mf;
+    this.vx  -= nx * PLAYER.ccPush * 0.45 * (2 - mf);
+    this.vy  -= ny * PLAYER.ccPush * 0.45 * (2 - mf);
     other._knockT = 0.18; this._knockT = 0.1;
     if (this.team !== other.team) other._lastHit = other.takeHit(ccI, nx, ny);
   }
@@ -590,7 +592,7 @@ export class PlayerBase {
       const targetDir = Math.atan2(iy, ix);
       const dA = angleDiff(targetDir, heading);          // kolik chceš zatočit (-π..π)
       const ratio = clamp(sp / PLAYER.speed, 0, 1);
-      let turnRate = 6.5 - 3.5 * ratio;                  // ~6.5 rad/s pomalu → ~3.0 naplno (carve, ne pivot)
+      let turnRate = (6.5 - 3.5 * ratio) * sizeOf(this).turn;   // velikost (SIZES.turn)                  // ~6.5 rad/s pomalu → ~3.0 naplno (carve, ne pivot)
       if (crossChecking) turnRate *= 0.55;               // crosscheck = těžší zatočit, ale ne ochrnutý
       heading += clamp(dA, -turnRate * dt, turnRate * dt);
       // akcelerace k topSpeed
@@ -1503,11 +1505,19 @@ function _renderDown(ctx, p, cam, el) {
   }
   const { psi, P } = downPose(el, { id: p.id, n, v: VIS.u, fb: p._fallB ?? p.bodyAngle, fa, ba: p.bodyAngle, ca: p.carryAngle ?? p.aimAngle, h: p.handed ?? 1 }, PLAYER);
   const lx = Math.cos(-psi) * -0.7 - Math.sin(-psi) * -0.7, ly = Math.sin(-psi) * -0.7 + Math.cos(-psi) * -0.7;   // světlo vlevo nahoře, pevné ve světě
-  ctx.save(); ctx.translate(x, y); ctx.rotate(psi); ctx.scale(s, s);
+  const zk = sizeOf(p).draw;   // velikost hráče (ležící celý ×draw, puk už nemá)
+  ctx.save(); ctx.translate(x, y); ctx.rotate(psi); ctx.scale(s * zk, s * zk);
   drawDownBody(ctx, P, K, R, { v: VIS.u, stickL: PLAYER.stickLen * PLAYER.stickDraw, bladeSide: p.handed ?? 1, lx, ly });
   ctx.restore();
 }
 
+// Ruce při zvětšené kresbě (velikost hráče): úchop zůstává na holi ve světě. Tělo se kreslí jako zk·(bo' + l), bo' = posun těla
+// (bo + náklon), toL vrací svět − bo' → l = (toL + bo')/zk − bo'.
+function _zh(h, zk, bo, leanW) {
+  if (zk === 1) return h;
+  const bx = bo.x, by = leanW + bo.y;
+  return { x: (h.x + bx) / zk - bx, y: (h.y + by) / zk - by };
+}
 function _renderPlayerUp(ctx, p, cam) {
   const s     = cam.scale;
   const { ox, oy } = cam;
@@ -1635,8 +1645,10 @@ function _renderPlayerUp(ctx, p, cam) {
   const ba   = p.bodyAngle;
   const fcos = Math.cos(ba), fsin = Math.sin(ba);
 
+  const zk = sizeOf(p).draw;   // VELIKOST HRÁČE: brusle a tělo ×draw kolem středu; hůl zůstává ve světě (čepel na puku), ruce na ní
   ctx.save();
   ctx.translate(sx, sy);
+  if (zk !== 1) ctx.scale(zk, zk);
   ctx.rotate(ba); // lokálně: +x dopředu (facing), +y doprava
   // Náklon těla do zatáčky — v lokálním Y (= bok hráče)
   ctx.translate(0, (p._lean ?? 0) * r * 0.15);
@@ -1972,12 +1984,12 @@ function _renderPlayerUp(ctx, p, cam) {
     const toL = h => { const dx = h.x - p.x, dy = h.y - p.y; return { x: dx * fcos + dy * fsin - bo.x, y: -dx * fsin + dy * fcos - leanW - bo.y }; };
     const llx = Math.cos(-ba) * -0.7 - Math.sin(-ba) * -0.7, lly = Math.sin(-ba) * -0.7 + Math.cos(-ba) * -0.7;   // světlo vlevo nahoře, pevné ve světě
     ctx.save();
-    ctx.translate(sx, sy); ctx.rotate(ba); ctx.translate(bo.x * s, (leanW + bo.y) * s); ctx.scale(s, s);
+    ctx.translate(sx, sy); if (zk !== 1) ctx.scale(zk, zk); ctx.rotate(ba); ctx.translate(bo.x * s, (leanW + bo.y) * s); ctx.scale(s, s);
     K.headV = VIS.h;
     // DRES V RYCHLOSTI (2026-11-13): zadní lem se táhne proti jízdě a vlaje v rytmu kroku (fáze z ujeté dráhy → deterministické)
     const _jk = Math.max(0, Math.min(1, (_spd / PLAYER.speed - 0.35) / 0.65)), _jm = _k >= 3 ? (p._mLocS ?? _mLoc) : _mLoc;   // trup se v skinBody neotáčí o tw → směr vůči trupu = mLoc
     const _jd = _jk > 0 && VIS.b ? { mx: Math.cos(_jm), my: Math.sin(_jm), k: _jk, fl: _k === 4 ? 0 : Math.sin(2 * (p._skatePhase ?? 0)) } : null;   // K4: lem se jen táhne, nekmitá
-    const _B = { kv: VIS.w, feet: feetW.map(f => ({ x: f.x - bo.x, y: f.y - bo.y, side: f.side })), top: toL(topH), bot: toL(botH), hnd: p.handed ?? 1, tw: bo.tw + _bp.tw + (_pose.body.twT || 0), twT: _pose.body.twT || 0, ux: _bp.ux, uy: _bp.uy, hd: _bp.hd, hh: _pose.body.hh ?? _pose.body.h ?? 0, lx: llx, ly: lly, jd: _jd };
+    const _B = { kv: VIS.w, feet: feetW.map(f => ({ x: f.x - bo.x, y: f.y - bo.y, side: f.side })), top: _zh(toL(topH), zk, bo, leanW), bot: _zh(toL(botH), zk, bo, leanW), hnd: p.handed ?? 1, tw: bo.tw + _bp.tw + (_pose.body.twT || 0), twT: _pose.body.twT || 0, ux: _bp.ux, uy: _bp.uy, hd: _bp.hd, hh: _pose.body.hh ?? _pose.body.h ?? 0, lx: llx, ly: lly, jd: _jd };
     if (globalThis.__fhBodyDbg) p._dbgBody = _B;   // scripts/biomech_audit.mjs (klouby těla tak, jak se kreslí)
     skinBody(ctx, _B, K);
     ctx.restore();
@@ -2262,9 +2274,9 @@ const MV_OFF = _mvEnv("FH_MV", 1) === 0;
 PlayerBase.prototype._move = function (input, dt) {
   if (Math.max(0, (this._downT || 0) - dt) > 0) input = _NO_INPUT;   // rozplácnutý: stejný test jako v _baseMove (vstup nesmí projít ani sem)
   if (MV_OFF) return _baseMove.call(this, input, dt);
-  const accel0 = PLAYER.accel, speed0 = PLAYER.speed;
-  const sp = Math.hypot(this.vx, this.vy), top = speed0;
-  let acc = MV.acurve[0] + (MV.acurve[1] - MV.acurve[0]) * clamp(sp / top, 0, 1), spd = speed0;
+  const accel0 = PLAYER.accel, speed0 = PLAYER.speed, Z = sizeOf(this);   // velikost hráče: rychlost a rozjezd (SIZES)
+  const sp = Math.hypot(this.vx, this.vy), top = speed0 * Z.speed;
+  let acc = (MV.acurve[0] + (MV.acurve[1] - MV.acurve[0]) * clamp(sp / top, 0, 1)) * Z.accel, spd = top;
   const braking = !!(input.keys && input.keys.Space), il = Math.hypot(input.dx || 0, input.dy || 0);
   if (braking && sp > 0.5 * top) this._sgArm = true;
   if (!braking && this._sgArm) { this._sgArm = false; this._sgT = MV.stopgo.t; }

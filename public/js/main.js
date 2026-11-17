@@ -161,6 +161,23 @@ let chosenHand = parseInt(localStorage.getItem(HAND_KEY) || '1', 10);
 const refreshHand = () => handBtns.forEach(b => b.classList.toggle('active', parseInt(b.dataset.hand,10) === chosenHand));
 refreshHand();
 handBtns.forEach(b => b.addEventListener('click', () => { chosenHand = parseInt(b.dataset.hand,10); localStorage.setItem(HAND_KEY,String(chosenHand)); refreshHand(); drawPreview(); }));
+// VELIKOST HRÁČE (2026-11-17): volba v šatně, i pro hosty (herní volba, ne vzhled). Zatím jen /dev (window.FH_DEV).
+// Dílky (rychlost, obratnost, rána, souboj): součet 12 u všech → výměna, ne lepší/horší. Mechanika: constants.js SIZES.
+const SIZE_KEY = 'hockey_size', SIZE_PIPS = [[4, 5, 2, 1], [3, 3, 3, 3], [2, 1, 4, 5]], SIZE_HERO = [0.9, 1, 1.08];
+let chosenSize = globalThis.FH_DEV ? parseInt(localStorage.getItem(SIZE_KEY) ?? '1', 10) : 1;
+if (![0, 1, 2].includes(chosenSize)) chosenSize = 1;
+const sizeBtns = document.querySelectorAll('.size-btn');
+function renderSize() {
+  const box = $('lk-size'); if (!box) return;
+  box.hidden = !globalThis.FH_DEV;
+  sizeBtns.forEach(b => { const on = parseInt(b.dataset.size, 10) === chosenSize; b.classList.toggle('active', on); b.setAttribute('aria-checked', on ? 'true' : 'false'); });
+  $('lk-size-role').textContent = t(['size_role_s', 'size_role_m', 'size_role_l'][chosenSize]);
+  $('lk-size-st').innerHTML = ['size_st_spd', 'size_st_agi', 'size_st_shot', 'size_st_hit'].map((k, i) =>
+    `<span>${t(k)}</span><span class="pips">${[0, 1, 2, 3, 4].map(n => `<b class="${n < SIZE_PIPS[chosenSize][i] ? 'f' : ''}"></b>`).join('')}</span>`).join('');
+  const hs = $('hero-stage'); if (hs) { hs.style.transformOrigin = '50% 100%'; hs.style.transform = chosenSize === 1 ? '' : `scale(${SIZE_HERO[chosenSize]})`; }
+}
+sizeBtns.forEach(b => b.addEventListener('click', () => { chosenSize = parseInt(b.dataset.size, 10); localStorage.setItem(SIZE_KEY, String(chosenSize)); renderSize(); drawPreview(); }));
+renderSize();
 numInput.addEventListener('input', () => { localStorage.setItem(NUM_KEY, numInput.value); drawPreview(); });
 nameInput.addEventListener('input', drawPreview);
 
@@ -199,7 +216,7 @@ function applyGuestLook() {
 }
 function profile() {
   const name = (nameInput.value || '').trim().slice(0, 14);
-  if (isGuestUI()) return { name, handed: chosenHand, number: null, ...DEFAULT_LOOK };
+  if (isGuestUI()) return { name, handed: chosenHand, size: chosenSize, number: null, ...DEFAULT_LOOK };
   localStorage.setItem(NAME_KEY, name);
   localStorage.setItem(GK.helmet, swHelmet.get());
   localStorage.setItem(GK.jersey, swJersey.get());
@@ -215,7 +232,7 @@ function profile() {
   localStorage.setItem(GK.visor, swVisor.get());
   const n = parseInt(numInput.value, 10);
   return {
-    name, handed: chosenHand,
+    name, handed: chosenHand, size: chosenSize,
     number: Number.isFinite(n) ? Math.max(0, Math.min(99, n)) : null,
     helmet: swHelmet.get(), jersey: swJersey.get(), shorts: swShorts.get(), stripe: swStripe.get(), laces: swLaces.get(),
     gloves: swGloves.get(), tape: swTape.get(), trail: swTrail.get(),
@@ -699,7 +716,7 @@ function drawPreview() {
   const numEl = $('preview-num');
   if (numEl) numEl.textContent = numInput.value || '—';
   const p = previewPlayer;
-  p.handed = chosenHand;
+  p.handed = chosenHand; p.size = chosenSize;
   p.helmet = swHelmet.get(); p.gloves = swGloves.get(); p.tape = swTape.get();
   p.stick = swStick.get(); p.tapeStyle = chTapeStyle.get(); p.helmetType = chHelmetType.get(); p.visor = swVisor.get();
   p.color = swJersey.get();
@@ -730,7 +747,7 @@ function getCurrentKit() {
   for (const key in COLOR_SETTERS) k[key] = COLOR_SETTERS[key].get();
   k.tapeStyle = chTapeStyle.get();
   k.helmetType = chHelmetType.get();
-  k.hand = chosenHand;
+  k.hand = chosenHand; k.size = chosenSize;
   k.num = numInput.value;
   return k;
 }
@@ -1429,7 +1446,7 @@ $('vm-create-btn').onclick  = () => { if (!commitProfile()) return requireProfil
 function startTraining(drill = 0, packs = false) {
   if (!commitProfile()) return requireProfile();
   const g = new SandboxGame(canvas), pr = profile();
-  Object.assign(g.local, { name: pr.name, handed: pr.handed, num: pr.number, helmet: pr.helmet, jersey: pr.jersey, shorts: pr.shorts, stripe: pr.stripe, laces: pr.laces, gloves: pr.gloves, tape: pr.tape, trail: pr.trail, stick: pr.stick, tapeStyle: pr.tapeStyle, helmetType: pr.helmetType, visor: pr.visor });
+  Object.assign(g.local, { name: pr.name, handed: pr.handed, size: pr.size ?? 1, num: pr.number, helmet: pr.helmet, jersey: pr.jersey, shorts: pr.shorts, stripe: pr.stripe, laces: pr.laces, gloves: pr.gloves, tape: pr.tape, trail: pr.trail, stick: pr.stick, tapeStyle: pr.tapeStyle, helmetType: pr.helmetType, visor: pr.visor });
   g.local.color = pr.jersey;
   startGame(g);
   if (drill) g._setDrill(drill);
@@ -1473,7 +1490,7 @@ function playOffline() {
   });
   const me = g.local;
   if (me) {
-    Object.assign(me, { name: pr.name, handed: pr.handed, num: pr.number, helmet: pr.helmet, jersey: pr.jersey, shorts: pr.shorts, stripe: pr.stripe, laces: pr.laces, gloves: pr.gloves, tape: pr.tape, trail: pr.trail, stick: pr.stick, tapeStyle: pr.tapeStyle, helmetType: pr.helmetType, visor: pr.visor });
+    Object.assign(me, { name: pr.name, handed: pr.handed, size: pr.size ?? 1, num: pr.number, helmet: pr.helmet, jersey: pr.jersey, shorts: pr.shorts, stripe: pr.stripe, laces: pr.laces, gloves: pr.gloves, tape: pr.tape, trail: pr.trail, stick: pr.stick, tapeStyle: pr.tapeStyle, helmetType: pr.helmetType, visor: pr.visor });
     me.color = pr.jersey;
   }
   g.onExit = () => { stopGame(); showView('main'); };
@@ -1716,7 +1733,7 @@ function _startTutorial() {
   if (!hasName()) nameInput.value = suggestName();   // guest jméno pro hru
   const g = new TutorialGame(canvas);
   const pr = profile();
-  Object.assign(g.local, { name: pr.name, handed: pr.handed, num: pr.number, helmet: pr.helmet, jersey: pr.jersey, shorts: pr.shorts, stripe: pr.stripe, laces: pr.laces, gloves: pr.gloves, tape: pr.tape, trail: pr.trail, stick: pr.stick, tapeStyle: pr.tapeStyle, helmetType: pr.helmetType, visor: pr.visor });
+  Object.assign(g.local, { name: pr.name, handed: pr.handed, size: pr.size ?? 1, num: pr.number, helmet: pr.helmet, jersey: pr.jersey, shorts: pr.shorts, stripe: pr.stripe, laces: pr.laces, gloves: pr.gloves, tape: pr.tape, trail: pr.trail, stick: pr.stick, tapeStyle: pr.tapeStyle, helmetType: pr.helmetType, visor: pr.visor });
   g.local.color = pr.jersey;
   // Konec tutoriálu: „jdi hrát" → rovnou zápas; něco nešlo → trénink; přeskočeno → menu
   g.onComplete = (isFirst, skipped, missed) => {
@@ -1757,6 +1774,7 @@ window.addEventListener('beforeunload', () => net.leaveLobby());
 // ── Jazyk (CS/EN) ─────────────────────────────────────────────────────
 $('lang-btn').onclick = () => toggleLang();
 setOnChange(() => {
+  try { renderSize(); } catch {}
   try { m3Select(_m3Sel); } catch {}                 // po přepnutí jazyka přerenderuj z cache (bez probliknutí)
   if ($('v-browse').style.display !== 'none') renderLobbyList(lastLobbyList);
   if ($('v-wait').style.display !== 'none' && lastWaitState) renderWait(lastWaitState);

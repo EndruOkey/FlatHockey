@@ -1,4 +1,4 @@
-import { RINK, PLAYER, PUCK, TEMPO } from './constants.js';
+import { RINK, PLAYER, PUCK, TEMPO, sizeOf } from './constants.js';
 import { lerpAngle, clamp } from './utils.js';
 import { lerpSample, extrapSample } from './net-interp.js';
 import { t } from './i18n.js';
@@ -337,7 +337,7 @@ export class NetGame {
       // autoritativní diskrétní stav (pro všechny)
       const prevCh = ent.charge || 0;   // síla nápřahu PŘED snapshotem (v tiku výstřelu už server pošle 0)
       ent.team = ps.team; ent.forehand = !!ps.fh; ent.charge = ps.ch;
-      ent.handed = ps.hd; ent.name = ps.nm; ent.founder = !!ps.fn;
+      ent.handed = ps.hd; ent.size = ps.sz ?? 1; ent.name = ps.nm; ent.founder = !!ps.fn;
       ent.color = ps.col || null; ent.num = ps.num; ent.jersey = ps.js || 'solid'; ent.stripe = ps.st || null; ent.teamMark = ps.tm || null;
       ent.helmet = ps.hc || null; ent.shorts = ps.sh || null; ent.gloves = ps.gc || null; ent.tape = ps.tc || null;
       ent.stick = ps.sk || null; ent.tapeStyle = ps.ty || 'full'; ent.helmetType = ps.hy || 'visor'; ent.visor = ps.vc || null;
@@ -1049,7 +1049,7 @@ export class SandboxGame {
     if (this.input.lmb && !this._chargeBlocked && !(this.input.rmb && !this.local.hasPuck)) {
       if (!this._chargeDecaying) {
         const cap = (this.local.hasPuck && !this._oneTimer) ? 1 : 0.95;
-        this.local.charge = Math.min(cap, this.local.charge + CHARGE_RATE * dt);
+        this.local.charge = Math.min(cap, this.local.charge + CHARGE_RATE * sizeOf(this.local).charge * dt);
         if (this.local.charge >= 1 && this.local.hasPuck && !this._oneTimer) { this._chargeDecaying = true; this.local.overcharged = true; this._perfT = 0; }
       } else if (this.local.hasPuck) {
         // Okno přesné rány (stejně jako server playerActions); propásneš → puk ujede

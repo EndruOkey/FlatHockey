@@ -77,6 +77,21 @@ export const PLAYER = {
   passRecvMaxRel: _penv('FH_RECVREL', 560),  // ať jde chytit i rychlá přihrávka
   colors: { home: '#3a9fff', away: '#ff4455', passer: '#22cc88' },
 };
+// VELIKOSTI HRÁČE (2026-11-17, Ondřej: „malý rychlejší, ale bez takové rány; velký pomalejší, ale nemusí mít takovou rychlost na knock").
+// draw 0,88/1,12 → 0,85/1,15 (Ondřej: „na první dobrou není poznat velikost"). Volba v šatně. Střední = samé 1 → hra beze změny (test:determinism). draw = kresba, body = srážkové tělo (menší krok než kresba:
+// bodyRadius > 8 zasekává hru u puku, scripts/stall_only.mjs), speed/accel/turn = bruslení, shot = rychlost rány (výška beze změny —
+// maxShotVz je útesový knob), charge = rychlost nápřahu, mass = souboj (síla zásahu × 2·m_útočník/(m_útočník+m_oběť), odraz podle hmotnosti).
+// Čísla: návrh → size_balance.mjs (boti, 2v2 120 seedů + 3v3 60 seedů): malý nápřah 1,15 → 1,08 (nápřah rozhoduje nejvíc: bez něj malý 44 %,
+// bez slabší rány 61 %; rychlost u botů skoro nic), velký hmotnost 1,25 → 1,45 (jinak proti střednímu jen 1,1× knocků). Podíl gólů 47,8–54,3 %.
+export const SIZES = [
+  { id: 's', draw: 0.85, body: 0.94, speed: 1.07, accel: 1.10, turn: 1.10, shot: 0.92, charge: 1.08, mass: 0.80 },
+  { id: 'm', draw: 1,    body: 1,    speed: 1,    accel: 1,    turn: 1,    shot: 1,    charge: 1,    mass: 1 },
+  { id: 'l', draw: 1.15, body: 1.06, speed: 0.93, accel: 0.90, turn: 0.90, shot: 1.05, charge: 0.90, mass: 1.45 },
+];
+// měření (jen Node): FH_SIZES='[{"speed":1.05},{},{"mass":1.4}]' přepíše čísla velikostí (scripts/size_balance.mjs)
+if (typeof process !== 'undefined' && process.env && process.env.FH_SIZES) JSON.parse(process.env.FH_SIZES).forEach((o, i) => Object.assign(SIZES[i], o));
+export const sizeOf = p => SIZES[p?.size ?? 1] || SIZES[1];
+
 
 export const PUCK = {
   radius: 3,        // reálně 3″ — zvětšeno kvůli viditelnosti/hratelnosti

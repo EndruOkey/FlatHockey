@@ -6,7 +6,7 @@
 // Efekty, které nejsou čistá simulace (síť/DB/UI), jdou přes match.hooks:
 //   whistle(rule, lineX)  · goal(result, scoringTeam)  · period(period)  · gameover()
 // Server je naplní io.emit + statistikami; klient lokální obsluhou. Když hook chybí, jen se přeskočí.
-import { RINK, PUCK, TEMPO, passSpeedFor } from './constants.js';
+import { RINK, PUCK, TEMPO, passSpeedFor, sizeOf } from './constants.js';
 import { lerpAngle, clamp } from './utils.js';
 import { World } from './world.js';
 import { Player } from './entities/Player.js';
@@ -108,7 +108,7 @@ export function playerActions(p, inp, dt, match) {
   if (inp.lmb && !p._chargeBlocked && !(inp.rmb && !p.hasPuck)) {
     if (!p._chargeDecaying) {
       const cap = (p.hasPuck && !p._oneTimer) ? 1 : 0.95;
-      p.charge = Math.min(cap, p.charge + CHARGE_RATE * dt);
+      p.charge = Math.min(cap, p.charge + CHARGE_RATE * sizeOf(p).charge * dt);   // velikost: rychlost nápřahu
       if (p.charge >= 1 && p.hasPuck && !p._oneTimer) { p._chargeDecaying = true; p.overcharged = true; p._perfT = 0; }
     } else if (p.hasPuck) {
       // PLNÉ NABITÍ (2026-11-09): okno PERFECT_WIN s na PŘESNOU ránu (bez rozptylu). Propásneš → puk z čepele
