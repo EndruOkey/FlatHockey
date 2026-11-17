@@ -9,6 +9,7 @@ import { loadSession, onAuthChange, loginWithDiscord, logout, handleOAuthRedirec
 const FOUNDER_CROWN_SVG = '<svg width="13" height="11" viewBox="0 0 14 11" style="vertical-align:-1px" aria-hidden="true"><path d="M1 10 L1 3 L4 6 L7 1 L10 6 L13 3 L13 10 Z" fill="#FFB020" stroke="rgba(0,0,0,.4)" stroke-width="0.8" stroke-linejoin="round"/></svg>';
 import { makeRng, hashSeed } from './rng.js';
 import { initLockerPreview } from './locker-preview.js';
+import { initLocker3 } from './locker3.js';
 import { initMenuBg } from './menu-bg.js';
 
 const $ = id => document.getElementById(id);
@@ -1001,6 +1002,7 @@ function _syncMenuBg() {
   if (_menuView === 'main' || _menuView === 'splash') menuBg.start(true); else menuBg.stop();
 }
 function showView(name) {
+  try { _lk3Toggle(name); } catch {}
   _menuView = name; _syncMenuBg();
   document.documentElement.classList.remove('resume');   // splash už není skrytý (viz head skript v index.html)
   for (const [k, id] of Object.entries(VIEWS)) $(id).style.display = (k === name) ? '' : 'none';
@@ -1959,3 +1961,25 @@ loadSession().then(() => {
 });
 
 setInterval(() => { if (!inGame && $('v-browse').style.display !== 'none') net.listLobbies(); }, 4000);
+
+// ŠATNA v3 (zatím jen dev playground): vrstva nad původními ovládacími prvky šatny (locker3.js)
+let _lk3 = null;
+function _lk3Toggle(name) {
+  if (!globalThis.FH_DEV) return;
+  const host = $('v-profile'); if (!host) return;
+  if (!_lk3) {
+    _lk3 = initLocker3(host, {
+      t, getUser, loadServerStats, loadRankAndCredits, PALETTE, STICK_PALETTE, isGuest: isGuestUI,
+      get: () => ({ name: (nameInput.value || '').trim(), num: numInput.value === '' ? null : parseInt(numInput.value, 10), hand: chosenHand, size: chosenSize,
+        kit: { ...Object.fromEntries(Object.entries(COLOR_SETTERS).map(([k, v]) => [k, v.get()])), helmetType: chHelmetType.get() } }),
+      setName: v => { nameInput.value = v; nameInput.dispatchEvent(new Event('input')); },
+      setNum: v => { numInput.value = v; numInput.dispatchEvent(new Event('input')); },
+      setHand: h => { document.querySelector(`.hand-btn[data-hand="${h}"]`)?.click(); },
+      setSize: z => { document.querySelector(`.size-btn[data-size="${z}"]`)?.click(); },
+      applyKit: k => { applyKit(k); try { profile(); } catch {} },
+    });
+    host.classList.add('lk3-on');
+    const st = document.createElement('style'); st.textContent = '#v-profile.lk3-on .lk-wrap{visibility:hidden;pointer-events:none}'; document.head.appendChild(st);
+  }
+  if (name === 'profile') _lk3.show(); else _lk3.hide();
+}
