@@ -345,7 +345,7 @@ export class NetGame {
       // autoritativní diskrétní stav (pro všechny)
       const prevCh = ent.charge || 0;   // síla nápřahu PŘED snapshotem (v tiku výstřelu už server pošle 0)
       ent.team = ps.team; ent.forehand = !!ps.fh; ent.charge = ps.ch;
-      ent.handed = ps.hd; ent.size = ps.sz ?? 1; ent.name = ps.nm; ent.founder = !!ps.fn;
+      ent.handed = ps.hd; ent.size = ps.sz ?? 1; ent.stickId = ps.sl ?? 1; ent.name = ps.nm; ent.founder = !!ps.fn;
       ent.color = ps.col || null; ent.num = ps.num; ent.jersey = ps.js || 'solid'; ent.stripe = ps.st || null; ent.teamMark = ps.tm || null;
       ent.helmet = ps.hc || null; ent.shorts = ps.sh || null; ent.gloves = ps.gc || null; ent.tape = ps.tc || null;
       ent.stick = ps.sk || null; ent.tapeStyle = ps.ty || 'full'; ent.helmetType = ps.hy || 'visor'; ent.visor = ps.vc || null;

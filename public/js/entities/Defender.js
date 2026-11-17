@@ -1,5 +1,5 @@
 import { PlayerBase } from './Player.js';
-import { RINK, PLAYER } from '../constants.js';
+import { RINK, PLAYER, reachOf } from '../constants.js';
 import { SFX } from '../sound.js';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -39,7 +39,7 @@ function tipOf(ent) {
   const t = ent.stickTip;
   if (t) return t;
   const a = ent.aimAngle ?? ent.carryAngle ?? 0;
-  return { x: ent.x + Math.cos(a) * PLAYER.stickLen, y: ent.y + Math.sin(a) * PLAYER.stickLen };
+  return { x: ent.x + Math.cos(a) * reachOf(ent), y: ent.y + Math.sin(a) * reachOf(ent) };
 }
 
 //             gap   K    spd   cd    pokeR  pokeP  home
@@ -336,7 +336,7 @@ export class Defender extends PlayerBase {
           const dToTarget = Math.hypot(toTargetX, toTargetY) || 1;
           const dotBody   = (toTargetX / dToTarget) * Math.cos(wantAim)
                           + (toTargetY / dToTarget) * Math.sin(wantAim);
-          if (dotBody > 0.70 && dToTarget < PLAYER.stickLen + PLAYER.radius * 2) {
+          if (dotBody > 0.70 && dToTarget < reachOf(this) + PLAYER.radius * 2) {
             // Body roughly in stick direction — start shifting laterally
             const cross = Math.cos(wantAim) * toTargetY - Math.sin(wantAim) * toTargetX;
             const shiftDir = cross > 0 ? -1 : 1;   // swing around the nearer side

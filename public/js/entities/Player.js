@@ -1,4 +1,4 @@
-import { RINK, PLAYER, PUCK, sizeOf } from '../constants.js';
+import { RINK, PLAYER, PUCK, sizeOf, stickOf, reachOf } from '../constants.js';
 import { clamp, lerpAngle, angleDiff } from '../utils.js';
 import { SFX } from '../sound.js';
 import { defaultRng } from '../rng.js';
@@ -27,6 +27,7 @@ export class PlayerBase {
     this.handed     = team === 'away' ? -1 : 1; // pravák (+1) / levák (−1) → strana forehandu
     this._stickRel  = 0;   // úhel hole vůči tělu (scalar, drží se v předním kuželu)
     this.radius          = PLAYER.radius;
+    this.stickId         = 1;   // délka hole 0 krátká / 1 střední / 2 dlouhá (constants.js STICKS; volba v šatně)
     this.size            = 1;   // velikost hráče 0 malý / 1 střední / 2 velký (constants.js SIZES; volba v šatně)
     this.hasPuck         = false;
     this.forehand        = true;
@@ -60,7 +61,7 @@ export class PlayerBase {
     this._dispCharge += (tc - this._dispCharge) * Math.min(1, cRate * dt);
     // Vrstva C — STICKHANDLE: vzdálenost kurzoru řídí vysunutí hole/puku. Kurzor blízko =
     // puk schovaný u těla (chráníš, hbitější), daleko = natažená hůl (dosah, příprava střely).
-    const reachMin = PLAYER.stickLen * 0.62, reachMax = PLAYER.stickLen * 1.28;
+    const L0 = reachOf(this), reachMin = L0 * 0.62, reachMax = L0 * 1.28;   // délka hole (STICKS.len)
     const ad = this.aimDist ?? 60;
     const tReach = reachMin + (reachMax - reachMin) * clamp((ad - 22) / 95, 0, 1);
     this._dispReach += (tReach - this._dispReach) * Math.min(1, 14 * dt);
@@ -97,7 +98,7 @@ export class PlayerBase {
     const dir = this.carryAngle ?? this.aimAngle;
     const cos = Math.cos(dir);
     const sin = Math.sin(dir);
-    let t = this._dispReach ?? PLAYER.stickLen;  // dosah dle vysunutí (vrstva C)
+    let t = this._dispReach ?? reachOf(this);  // dosah dle vysunutí (vrstva C)
     const m = PUCK.radius;
 
     // Clip against rink walls
@@ -120,7 +121,7 @@ export class PlayerBase {
       if (o === this) continue;
       if (_STK_BODY && !(_STK_MODE === 'opp' && o.team === this.team) && !(_STK_MODE === 'nopuck' && this.hasPuck)) t = _clipRayCircle(gx, gy, cos, sin, t, o.x, o.y, PLAYER.bodyRadius * sizeOf(o).body + _STK_BODY_PAD);
       if (_STK_STICK && !o.crossCheck && !o.isDown && !(PLAYER.fight && o.hasPuck)) { const q = o.gripPoint, qd = o.carryAngle ?? o.aimAngle;
-        t = _clipRayStick(gx, gy, cos, sin, t, q.x, q.y, Math.cos(qd), Math.sin(qd), o._dispReach ?? PLAYER.stickLen); }
+        t = _clipRayStick(gx, gy, cos, sin, t, q.x, q.y, Math.cos(qd), Math.sin(qd), o._dispReach ?? reachOf(o)); }
     }
 
     t = Math.max(0, t);
@@ -146,7 +147,7 @@ export class PlayerBase {
     const intended = puck._passTo != null && puck._passTo === this.id;   // přihrávka je pro mě
     const dBody = Math.hypot(puck.x - this.x, puck.y - this.y);
     if (intended ? (Math.min(dTip, dBlade) > PLAYER.passRecvRadius && dBody > this.radius + 8)
-                 : Math.min(dTip, dBlade) > PLAYER.pickupTipRadius) return false;
+                 : Math.min(dTip, dBlade) > PLAYER.pickupTipRadius * stickOf(this).recv) return false;   // délka hole (STICKS.recv)
     // Při nabíjení (one-timer) přijmeš i rychlou nahrávku — usnadní načasování
     let maxRel = this.charge > 0 ? 9999 : (intended ? PLAYER.passRecvMaxRel : PLAYER.pickupMaxRelSpeed);
     // Čerstvá rána SOUPEŘE (≤ SHOT_EAT_T s): čistě převezmeš jen pomalý puk, i při nabíjení — jinak se od hole odrazí jako tečka
@@ -301,7 +302,7 @@ export class PlayerBase {
       const contact = PLAYER.shContact > 0 && Math.hypot(ox, oy) < PLAYER.bodyRadius * (sizeOf(this).body + sizeOf(carrier).body) + 6;
       if (exposed < PLAYER.shield - (contact ? PLAYER.shContact : 0)) {   // kryto → zablokovaný pokus (jen v dosahu čepele) rozsvítí štít nosiče
         const tip = this.stickTip;
-        if (Math.hypot(puck.x - tip.x, puck.y - tip.y) <= PLAYER.stealR) { carrier._shieldT = 0.35; carrier._shieldA = Math.atan2(oy, ox); }
+        if (Math.hypot(puck.x - tip.x, puck.y - tip.y) <= PLAYER.stealR * stickOf(this).poke) { carrier._shieldT = 0.35; carrier._shieldA = Math.atan2(oy, ox); }
         return false;
       }
     }
@@ -309,7 +310,7 @@ export class PlayerBase {
     const bladeDir = (this.carryAngle ?? this.aimAngle) + (this.handed ?? 1) * Math.PI / 6.5;
     const bx = tip.x + Math.cos(bladeDir) * 6, by = tip.y + Math.sin(bladeDir) * 6;
     const d = Math.min(Math.hypot(puck.x - tip.x, puck.y - tip.y), Math.hypot(puck.x - bx, puck.y - by));
-    return d <= PLAYER.stealR;
+    return d <= PLAYER.stealR * stickOf(this).poke;   // délka hole (STICKS.poke)
   }
 
   stealFrom(carrier, puck) {
@@ -380,7 +381,7 @@ export class PlayerBase {
     const manoeuvrability = clamp(ad / 60, 0, 1);  // 0=kurzor na hráči, 1=kurzor daleko
     const spd  = Math.hypot(this.vx, this.vy);
     const baseRate = 14 - Math.min(1, spd / 180) * 7;
-    const rate = baseRate * (1.4 - 0.4 * manoeuvrability) * dt * ((this.charge ?? 0) > 0.05 ? PLAYER.chargeTurnK : 1);  // blízko = rychlejší rotace hole; nápřah = pomaleji
+    const rate = baseRate * stickOf(this).hand * (1.4 - 0.4 * manoeuvrability) * dt * ((this.charge ?? 0) > 0.05 ? PLAYER.chargeTurnK : 1);  // blízko = rychlejší rotace hole; nápřah = pomaleji
     const prevCarry = this.carryAngle;
     this.carryAngle += clamp(angleDiff(targetAbs, this.carryAngle), -rate, rate);
     const rel = angleDiff(this.carryAngle, this.bodyAngle);
@@ -390,10 +391,10 @@ export class PlayerBase {
     // Při nabíjení threshold výrazně vyšší — otáčení těla s charge je záměrná mechanika.
     if (this.hasPuck && PLAYER.softCarry) {
       const relNow = angleDiff(this.carryAngle, this.bodyAngle);
-      const dA = PLAYER.softRel ? (this._relPrev != null ? angleDiff(relNow, this._relPrev) : 0) : angleDiff(this.carryAngle, prevCarry), reach = this._dispReach ?? PLAYER.stickLen;
+      const dA = PLAYER.softRel ? (this._relPrev != null ? angleDiff(relNow, this._relPrev) : 0) : angleDiff(this.carryAngle, prevCarry), reach = this._dispReach ?? reachOf(this);
       this._relPrev = relNow;
       const tv = Math.abs(dA) / Math.max(dt, 0.001) * reach;                        // obvodová rychlost čepele px/s
-      const grip = PLAYER.gripV * ((this.charge ?? 0) > 0.05 ? 2.5 : 1);
+      const grip = PLAYER.gripV * stickOf(this).grip * ((this.charge ?? 0) > 0.05 ? 2.5 : 1);   // délka hole (STICKS.grip)
       let ex = Math.max(0, tv - grip) * dt;
       if (ex > 0) { this._lag = (this._lag || 0) + ex; if (dA) this._lagDir = Math.sign(dA); }
       else this._lag = Math.max(0, (this._lag || 0) - PLAYER.lagRecover * dt);
@@ -614,7 +615,7 @@ export class PlayerBase {
       const targetDir = Math.atan2(iy, ix);
       const dA = angleDiff(targetDir, heading);          // kolik chceš zatočit (-π..π)
       const ratio = clamp(sp / PLAYER.speed, 0, 1);
-      let turnRate = (6.5 - 3.5 * ratio) * sizeOf(this).turn;   // velikost (SIZES.turn)                  // ~6.5 rad/s pomalu → ~3.0 naplno (carve, ne pivot)
+      let turnRate = (6.5 - 3.5 * ratio) * sizeOf(this).turn * (this.hasPuck ? stickOf(this).turn : 1);   // velikost (SIZES.turn), s pukem délka hole (STICKS.turn)                  // ~6.5 rad/s pomalu → ~3.0 naplno (carve, ne pivot)
       if (crossChecking) turnRate *= 0.55;               // crosscheck = těžší zatočit, ale ne ochrnutý
       heading += clamp(dA, -turnRate * dt, turnRate * dt);
       // akcelerace k topSpeed
@@ -826,7 +827,7 @@ const STICK_V = [
 const CC_BLEND = 0.15;
 function _ccGeom(p, base = p._stickDisp) {
   const dir = base + (p.handed ?? 1) * Math.PI / 2, c = Math.cos(dir), sn = Math.sin(dir);
-  const half = PLAYER.stickLen * 0.7 * PLAYER.stickDraw, hh = PLAYER.stickLen * 0.7;
+  const half = reachOf(p) * 0.7 * PLAYER.stickDraw, hh = reachOf(p) * 0.7;
   const cx = p.x + Math.cos(base) * (PLAYER.radius + 2), cy = p.y + Math.sin(base) * (PLAYER.radius + 2);
   return { dir, len: 2 * half, butt: { x: cx - c * half, y: cy - sn * half }, uT: (half - hh * 0.62) / (2 * half), uB: (half + hh * 0.42) / (2 * half) };
 }
@@ -1547,7 +1548,7 @@ function _renderDown(ctx, p, cam, el) {
   const lx = Math.cos(-psi) * -0.7 - Math.sin(-psi) * -0.7, ly = Math.sin(-psi) * -0.7 + Math.cos(-psi) * -0.7;   // světlo vlevo nahoře, pevné ve světě
   const zk = sizeOf(p).draw;   // velikost hráče (ležící celý ×draw, puk už nemá)
   ctx.save(); ctx.translate(x, y); ctx.rotate(psi); ctx.scale(s * zk, s * zk);
-  drawDownBody(ctx, P, K, R, { v: VIS.u, stickL: PLAYER.stickLen * PLAYER.stickDraw, bladeSide: p.handed ?? 1, lx, ly });
+  drawDownBody(ctx, P, K, R, { v: VIS.u, stickL: reachOf(p) * PLAYER.stickDraw, bladeSide: p.handed ?? 1, lx, ly });
   ctx.restore();
 }
 
@@ -1757,7 +1758,7 @@ function _renderPlayerUp(ctx, p, cam) {
     const stickDir  = baseDir + (p.handed ?? 1) * Math.PI / 2;   // čepel na straně DOLNÍ ruky (pravák vpravo, levák vlevo)
     const sDirCos   = Math.cos(stickDir);
     const sDirSin   = Math.sin(stickDir);
-    const halfLen   = PLAYER.stickLen * s * 0.7 * PLAYER.stickDraw; // kratší při crosschecku (+ vizuální zkrácení)
+    const halfLen   = reachOf(p) * s * 0.7 * PLAYER.stickDraw; // kratší při crosschecku (+ vizuální zkrácení)
     // Offset center to front edge of player body, podél _stickDisp
     const fwdCos    = Math.cos(baseDir);
     const fwdSin    = Math.sin(baseDir);
@@ -1818,7 +1819,7 @@ function _renderPlayerUp(ctx, p, cam) {
   const _rvA = VIS.r ? recvAim(p, _ccSd, _rdt(cam)) : 0;   // příjem: hůl se s předstihem natočí k průjezdu puku (RECV)
   const windAngle = p.crossCheck ? _ccSd : _ccSd + hnd * dcv * (0.85 + PLAYER.windBack) + follow + _rvA;
   p._visStick = windAngle;
-  const windLen   = (p._dispReach ?? PLAYER.stickLen) * (1 - dcv * PLAYER.windPull) * PLAYER.stickDraw;
+  const windLen   = (p._dispReach ?? reachOf(p)) * (1 - dcv * PLAYER.windPull) * PLAYER.stickDraw;
   const windCos   = Math.cos(windAngle);
   const windSin   = Math.sin(windAngle);
 
@@ -1846,7 +1847,7 @@ function _renderPlayerUp(ctx, p, cam) {
   // Cizí hokejky (vykreslený dřík): zkřížené hole se zastaví v bodě dotyku, neprolnou se
   if (p._others) for (const o of p._others) {
     if (o === p || o.crossCheck) continue;
-    const q = o.gripPoint, qd = o._stickDisp, ql = (o._dispReach ?? PLAYER.stickLen) * (1 - (o._dispCharge ?? 0) * 0.30);
+    const q = o.gripPoint, qd = o._stickDisp, ql = (o._dispReach ?? reachOf(o)) * (1 - (o._dispCharge ?? 0) * 0.30);
     wt = _clipRayStick(gxw, gyw, windCos, windSin, wt, q.x, q.y, Math.cos(qd), Math.sin(qd), ql);
   }
   wt = Math.max(0, wt - BLADE);   // stáhni zpět o čepel → čepel skončí přesně u překážky
@@ -2013,7 +2014,7 @@ function _renderPlayerUp(ctx, p, cam) {
     let topH, botH;
     if (_ccFull) {
       const baseDir = p._stickDisp, stickDir = baseDir + (p.handed ?? 1) * Math.PI / 2;
-      const sc = Math.cos(stickDir), ss = Math.sin(stickDir), half = PLAYER.stickLen * 0.7;
+      const sc = Math.cos(stickDir), ss = Math.sin(stickDir), half = reachOf(p) * 0.7;
       const cxW = p.x + Math.cos(baseDir) * (PLAYER.radius + 2), cyW = p.y + Math.sin(baseDir) * (PLAYER.radius + 2);
       topH = { x: cxW - sc * half * 0.62, y: cyW - ss * half * 0.62 };
       botH = { x: cxW + sc * half * 0.42, y: cyW + ss * half * 0.42 };
