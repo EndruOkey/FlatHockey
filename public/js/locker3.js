@@ -38,12 +38,26 @@ const IC = {
   hand: '<path d="M8 11V5a2 2 0 0 1 4 0v5M12 10V4a2 2 0 0 1 4 0v7M16 9a2 2 0 0 1 4 0v5a7 7 0 0 1-14 0v-3a2 2 0 0 1 4 0"/>',
   dice: '<rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1.2"/><circle cx="15" cy="15" r="1.2"/><circle cx="15" cy="9" r="1.2"/><circle cx="9" cy="15" r="1.2"/>',
 };
-// OBRÁZKOVÉ IKONY dlaždic (Ondřej: „chtěl jsem ikony, ne přímo hráče") — jednoduché tvary, výrazné, v barvách UI / sady
-const bigIc = inner => `<svg class="bic" viewBox="0 0 120 80" aria-hidden="true">${inner}</svg>`;
-const icSize = i => { const k = [0.72, 0.86, 1][i], cx = 60, by = 74; return bigIc(`<g transform="translate(${cx} ${by}) scale(${k}) translate(${-cx} ${-by})" fill="currentColor"><circle cx="60" cy="18" r="11"/><path d="M38 74c0-22 9-40 22-40s22 18 22 40Z"/></g>`); };
-const icStick = i => { const L = [46, 62, 80][i]; return bigIc(`<g fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round"><path d="M${100 - L} 14 L94 58"/><path d="M94 58 q4 10 -10 12 h-26"/></g><circle cx="44" cy="70" r="6" fill="currentColor" opacity=".5"/>`); };
-const icHelm = v => bigIc(`<path d="M28 58a32 32 0 0 1 64 0v6H28Z" fill="currentColor"/>` + (v === 'visor' ? `<path d="M60 52h34v8H60Z" fill="#7FD4FF"/>` : v === 'cage' ? `<g stroke="currentColor" stroke-width="3.5" fill="none"><path d="M64 46h28v24H64Z"/><path d="M64 54h28M64 62h28M73 46v24M82 46v24"/></g>` : `<ellipse cx="80" cy="60" rx="10" ry="12" fill="#e8b896"/>`));
-const icKit = (j, s2, g) => bigIc(`<path d="M42 12 26 22l8 16 8-4v38h36V34l8 4 8-16-16-10a12 12 0 0 1-24 0Z" fill="${j}" stroke="rgba(255,255,255,.55)" stroke-width="2.5"/><path d="M42 50h36v7H42Z" fill="${s2}"/><path d="M26 22l8 16 8-4" fill="none" stroke="${g}" stroke-width="5"/><path d="M94 22l-8 16-8-4" fill="none" stroke="${g}" stroke-width="5"/>`);
+// OBRÁZKOVÉ IKONY dlaždic (Ondřej: „ikony, ne hráči" → „musí se hodit do vizuálu hry"): styl hráčů ve hře —
+// pohled shora, tlustý tmavý obrys (#0b1220), plné barvy, světlý odlesk; barvy = aktuální výbava hráče (k) nebo sada
+const OL = 'stroke="#0b1220" stroke-width="4.5" stroke-linejoin="round" stroke-linecap="round"';
+const bigIc = inner => `<svg class="bic" viewBox="0 0 120 80" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><rect x="0" y="0" width="120" height="80" fill="#dfeaf3"/><path d="M60 0V80" stroke="rgba(204,34,51,.35)" stroke-width="2"/><circle cx="60" cy="40" r="30" fill="none" stroke="rgba(30,79,209,.22)" stroke-width="2"/>${inner}</svg>`;   // podklad = led (jako ve hře)
+const topPlayer = (cx, cy, k, j, h) => `<g transform="translate(${cx} ${cy}) scale(${k})">
+  <path d="M15 -10 L22 -30 q2 -7 -6 -7" fill="none" stroke="#0b1220" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <ellipse cx="0" cy="6" rx="25" ry="14" fill="${j}" ${OL}/><path d="M-14 10 q14 7 28 0" stroke="#fff" stroke-width="3.5" opacity=".28" fill="none"/>
+  <circle cx="-15" cy="-6" r="5.5" fill="#1a1f29" ${OL.replace('4.5', '3')}/><circle cx="15" cy="-8" r="5.5" fill="#1a1f29" ${OL.replace('4.5', '3')}/>
+  <circle cx="0" cy="0" r="10" fill="${h}" ${OL}/><path d="M-6 -6a9 9 0 0 1 12 0" fill="none" stroke="#7FD4FF" stroke-width="4" stroke-linecap="round"/><circle cx="-3" cy="2" r="2.5" fill="#fff" opacity=".6"/></g>`;
+const icSize = (i, kit) => bigIc(topPlayer(58, 46, [0.95, 1.15, 1.38][i], kit.jersey, kit.helmet));
+const icStick = (i, kit) => { const L = [44, 60, 76][i], x0 = 104 - L;
+  return bigIc(`<ellipse cx="62" cy="70" rx="40" ry="4" fill="#000" opacity=".2"/><path d="M${x0} 20 L92 56 q6 8 -6 10 h-22" fill="none" stroke="#0b1220" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M${x0} 20 L92 56 q6 8 -6 10 h-22" fill="none" stroke="${kit.stick}" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M86 66 h-20" stroke="${kit.tape}" stroke-width="5.5" stroke-linecap="round"/>
+  <ellipse cx="54" cy="66" rx="7.5" ry="5" fill="#15171c" ${OL.replace('4.5', '3')}/>`); };
+const icHelm = (v, kit) => bigIc(`<ellipse cx="60" cy="72" rx="24" ry="5" fill="#000" opacity=".25"/><circle cx="60" cy="40" r="26" fill="${kit.helmet}" ${OL}/><circle cx="51" cy="31" r="6" fill="#fff" opacity=".6"/>` +
+  (v === 'visor' ? `<path d="M76 22a26 26 0 0 1 0 36" fill="none" stroke="#0b1220" stroke-width="11" stroke-linecap="round"/><path d="M76 22a26 26 0 0 1 0 36" fill="none" stroke="#7FD4FF" stroke-width="6" stroke-linecap="round"/>`
+   : v === 'cage' ? `<path d="M74 18a28 28 0 0 1 0 44" fill="none" stroke="#1d2128" stroke-width="7" stroke-linecap="round"/><g stroke="#1d2128" stroke-width="3.5" stroke-linecap="round"><path d="M70 30h14M68 40h18M70 50h14M78 24v32"/></g>`
+   : `<ellipse cx="78" cy="40" rx="9" ry="13" fill="#e8b896" ${OL.replace('4.5', '3')}/>`));
+const icKit = (j, s2, g) => bigIc(`<ellipse cx="60" cy="74" rx="30" ry="4" fill="#000" opacity=".25"/><path d="M45 10 28 20l9 18 9-5v36h28V33l9 5 9-18-17-10a15 13 0 0 1-30 0Z" fill="${j}" ${OL}/>
+  <path d="M46 44h28v8H46Z" fill="${s2}"/><path d="M28 20l9 18" stroke="${g}" stroke-width="7" stroke-linecap="round"/><path d="M92 20l-9 18" stroke="${g}" stroke-width="7" stroke-linecap="round"/><path d="M50 20q6 10 0 30" stroke="#fff" stroke-width="4" opacity=".22" fill="none"/>`);
 const ic = (n, s = 20) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n] || ''}</svg>`;
 const CS = { tabs: ['Výbava', 'Vzhled', 'Profil'], tabIc: ['gear', 'shirt', 'user'], eyebrow: 'Šatna', back: 'Menu',
   size: 'Velikost', sizes: ['Malý', 'Střední', 'Velký'], roles: ['Rychlík', 'Univerzál', 'Tank'], num: 'Číslo', grip: 'Držení', name: 'Jméno', stick: 'Hokejka',
@@ -101,7 +115,7 @@ const CSS = `
 #lk3 .tile{position:relative;padding:6px 6px 8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);text-align:center;font:italic 800 15px/1 'Barlow Condensed';letter-spacing:.06em;color:var(--a3-mute2);text-transform:uppercase;clip-path:var(--a3-cut)}
 #lk3 .tile:hover:not(:disabled){border-color:rgba(255,255,255,.35);color:#fff}
 #lk3 .tile.on{border-color:var(--a3-red);background:rgba(228,0,43,.14);color:#fff;box-shadow:inset 0 -3px 0 var(--a3-red)}
-#lk3 .tile .bic{display:block;width:100%;height:var(--th,clamp(46px,9vh,110px));margin:0 auto 6px;color:var(--a3-mute2)}#lk3 .tile.on .bic{color:#fff}#lk3 .tile canvas{display:block;width:100%;height:var(--th,clamp(64px,14vh,170px));margin:0 auto 6px;background:#dfeaf3}
+#lk3 .tile .bic{display:block;width:100%;height:var(--th,clamp(58px,11.5vh,130px));margin:0 auto 6px;clip-path:polygon(0 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%)}#lk3 .tile.on .bic{color:#fff}#lk3 .tile canvas{display:block;width:100%;height:var(--th,clamp(64px,14vh,170px));margin:0 auto 6px;background:#dfeaf3}
 #lk3 .tile .sub{display:flex;justify-content:center;gap:10px;margin-top:5px;font:italic 700 12px/1 'Barlow Condensed';letter-spacing:.06em}
 #lk3 .tile .sub span{display:inline-flex;align-items:center;gap:3px}
 #lk3 .up{color:#3DDC84}#lk3 .dn{color:#ff6b7f}
@@ -170,8 +184,8 @@ export function initLocker3(host, api) {
   }
   function tabVybava() {
     const s = api.get(), l = L(), g = api.isGuest();
-    const sizes = l.sizes.map((n, i) => `<button type="button" class="tile ${s.size === i ? 'on' : ''}" data-size="${i}">${icSize(i)}${n}<div class="sub" style="color:var(--a3-mute)">${l.roles[i]}</div></button>`).join('');
-    const sticks = STICKS.map((k, i) => `<button type="button" class="tile ${S.stick === i ? 'on' : ''}" data-stick="${i}">${icStick(i)}${en() ? k.en : k.cs}
+    const sizes = l.sizes.map((n, i) => `<button type="button" class="tile ${s.size === i ? 'on' : ''}" data-size="${i}">${icSize(i, s.kit)}${n}<div class="sub" style="color:var(--a3-mute)">${l.roles[i]}</div></button>`).join('');
+    const sticks = STICKS.map((k, i) => `<button type="button" class="tile ${S.stick === i ? 'on' : ''}" data-stick="${i}">${icStick(i, s.kit)}${en() ? k.en : k.cs}
       <div class="sub">${k.eff.length ? k.eff.map(([e, v]) => `<span class="${v > 0 ? 'up' : 'dn'}">${ic(e, 13)}${v > 0 ? '+' : '−'} ${l.eff[e]}</span>`).join('') : `<span style="color:var(--a3-mute)">${ic('reach', 13)} 16</span>`}</div></button>`).join('');
     return `<div class="pnl" style="display:grid;grid-template-columns:minmax(0,1.4fr) 110px 170px;gap:14px;align-items:end">
       <label><div class="k" style="margin-bottom:8px">${ic('user', 16)}${l.name}</div><input class="inp" id="lk3-name" maxlength="14" value="${esc(s.name)}" ${g ? 'disabled' : ''}></label>
@@ -183,7 +197,7 @@ export function initLocker3(host, api) {
   function tabVzhled() {
     const l = L(), c = curKit(), g = api.isGuest();
     const kits = KITS.map((K, i) => `<button type="button" class="tile ${sameKit(c, kitOf(i)) ? 'on' : ''}" data-kit="${i}" ${g ? 'disabled' : ''}>${icKit(K[2], K[3], K[4])}${en() ? K[1] : K[0]}</button>`).join('');
-    const helms = HELMS.map(([v, cs, e]) => `<button type="button" class="tile ${c.helmetType === v ? 'on' : ''}" data-helm="${v}" ${g ? 'disabled' : ''}>${icHelm(v)}${en() ? e : cs}</button>`).join('');
+    const helms = HELMS.map(([v, cs, e]) => `<button type="button" class="tile ${c.helmetType === v ? 'on' : ''}" data-helm="${v}" ${g ? 'disabled' : ''}>${icHelm(v, c)}${en() ? e : cs}</button>`).join('');
     const slots = S.slots.map((k, i) => k ? `<button type="button" class="tile ${sameKit(c, k) ? 'on' : ''}" data-slot="${i}" ${g ? 'disabled' : ''} title="2× klik = upravit">${icKit(k.jersey, k.stripe, k.gloves)}${en() ? 'Mine' : 'Moje'} #${i + 1}</button>`
       : `<button type="button" class="tile" data-new="${i}" ${g ? 'disabled' : ''} style="display:grid;place-items:center;gap:6px;border-style:dashed;min-height:100%">${ic('plus', 28)}${l.create}</button>`).join('');
     return `${g ? `<div class="note">${ic('lock', 18)}${l.guest}</div>` : ''}
