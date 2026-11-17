@@ -14,6 +14,7 @@ import { Puck } from './entities/Puck.js';
 import { Goalie } from './entities/Goalie.js';
 import { Rink } from './entities/Rink.js';
 import { botThink } from './bot.js';
+import { makeRng } from './rng.js';
 
 const PERFECT_WIN = 0.3;      // s — okno přesné rány po plném nabití (pak puk ujede)
 const CHARGE_RATE = 1.2;       // pomalejší nápřah → slap shot je cítit jako wind-up (méně twitchy)
@@ -176,44 +177,187 @@ export function rebuildEntities(match) {
   match.world.entities = [match.rink, ...match.players.values(), match.goalieL, match.goalieR, match.puck];
 }
 
-// ── Vhazování ──────────────────────────────────────────────────────────────
+// ── Vhazování (buly) ───────────────────────────────────────────────────────
+// 2026-11-17 (Ondřej: „hráči na buly musí dojet, chvilka prodleva, rozehry random, rozestavění hapruje"):
+// FÁZE match.fo.ph:  0 DOJEZD (sim vede hráče na místa, max FO.skate; kdo nedojel → přesun)
+//                    1 PŘÍPRAVA (stojí, kruh u bodu)  2 VHAZOVÁNÍ (kruh se smršťuje k okamžiku dropu)
+//                    3 PO DROPU (čeká na první platný stisk LMB centrů, max FO.win; nikdo → volný puk jako dřív)  4 hotovo
+// Centr = člověk, je-li v týmu (jinak bot). Platí jen PRVNÍ stisk centra od fáze 1: před dropem = předčasně → prohrál
+// (spam se tak sám vyřadí), po dropu vyhrává nejdřívější. Boti reagují seedovaně FO.botMin..botMax po dropu.
+// Vše v ticích + world.rng → deterministické; match.setup a _goalLock drží po celou dobu (klient nepredikuje).
 const FO_X = 248, FO_Y = 114;   // buly body v pásmech (stejné jako kreslí Rink.js)
+export const FO = { skate: ms2ticks(1500), ready: ms2ticks(500), dropMin: ms2ticks(400), dropMax: ms2ticks(700),
+                    win: ms2ticks(1000), botMin: ms2ticks(180), botMax: ms2ticks(320), arrive: 6, vmax: 520, vmin: 90, gain: 6 };
+const FO_SPOTS = [
+  [16,   0],   // centr — na buly bodě
+  [26, -54],   // křídlo
+  [26,  54],   // křídlo
+  [86, -34],   // obránce
+  [86,  34],   // obránce
+];
+// Cíl mimo mantinel a mimo klec branky (rozšířený box kolem brankové čáry)
+function foClamp(x, y) {
+  x = clamp(x, 16, RINK.w - 16); y = clamp(y, 24, RINK.h - 24);
+  const gy1 = RINK.goalY - 16, gy2 = RINK.goalY + RINK.goalH + 16;
+  if (y > gy1 && y < gy2) {
+    if (x < RINK.goalLineLeft + 24) x = RINK.goalLineLeft + 24;
+    if (x > RINK.goalLineRight - 24) x = RINK.goalLineRight - 24;
+  }
+  return { x, y };
+}
+// Rozestavění: centr (člověk > bot), ostatní hladově na nejbližší volné místo (stabilní pořadí → deterministické)
+function foPlan(match) {
+  const fo = match.fo, fx = fo.x, fy = fo.y;
+  fo.plan = new Map(); fo.c = { home: null, away: null };
+  for (const team of ['home', 'away']) {
+    const dir = team === 'home' ? 1 : -1;
+    const arr = [...match.players.values()].filter(p => p.team === team);
+    if (!arr.length) continue;
+    const center = arr.find(p => !p.isBot) || arr[0];
+    fo.c[team] = center.id;
+    const spots = arr.map((_, i) => {
+      const s = FO_SPOTS[Math.min(i, FO_SPOTS.length - 1)];
+      const back = s[0] + (i >= FO_SPOTS.length ? (i - FO_SPOTS.length + 1) * 26 : 0);
+      const side = i >= FO_SPOTS.length ? ((i % 2) ? 1 : -1) : 1;
+      return foClamp(fx - dir * back, fy + s[1] * side);
+    });
+    fo.plan.set(center.id, spots[0]);
+    const rest = arr.filter(p => p !== center);
+    for (let si = 1; si < spots.length; si++) {
+      let bi = 0, bd = Infinity;
+      rest.forEach((p, i) => { const d = Math.hypot(p.x - spots[si].x, p.y - spots[si].y); if (d < bd) { bd = d; bi = i; } });
+      fo.plan.set(rest[bi].id, spots[si]); rest.splice(bi, 1);
+    }
+  }
+  fo.n = match.players.size;
+}
+function foFace(p, fo, k) {
+  const fa = Math.atan2(fo.y - p.y, fo.x - p.x);
+  p.bodyAngle = lerpAngle(p.bodyAngle ?? fa, fa, k); p.aimAngle = p.carryAngle = p.bodyAngle;
+  if (k >= 1) p.skateAngle = fa;
+}
+function foSnapAll(match) {
+  for (const p of match.players.values()) { const s = match.fo.plan.get(p.id); if (s) { p.x = s.x; p.y = s.y; } p.vx = p.vy = 0; foFace(p, match.fo, 1); }
+}
+// Vlastní seedovaná náhoda buly (seed zápasu × tick) → nesahá do world.rng, buly nemění průběh zbytku simulace
+const foRng = match => makeRng(((match.seed >>> 0) ^ Math.imul(match.tick + 1, 0x9E3779B1)) >>> 0);
+function foStartReady(match) {
+  const fo = match.fo, rng = foRng(match);
+  fo.ph = 1; fo.t1 = match.tick;
+  fo.drop = match.tick + FO.ready + Math.round(FO.dropMin + (FO.dropMax - FO.dropMin) * rng.next());
+  fo.press = { home: null, away: null };   // tick prvního stisku centra (od fáze 1); < drop = předčasně
+  fo.bot = {};
+  for (const team of ['home', 'away']) fo.bot[team] = Math.round(FO.botMin + (FO.botMax - FO.botMin) * rng.next());
+}
 export function faceoffAt(match, fx, fy) {
   for (const g of [match.goalieL, match.goalieR]) if (g) { g._holdTimer = 0; g._heldPuck = null; g._froze = false; g._waits = 0; }
-  const home = [], away = [];
-  for (const p of match.players.values()) (p.team === 'home' ? home : away).push(p);
-  const SPOTS = [
-    [16,   0],   // centr — na buly bodě
-    [26, -54],   // křídlo
-    [26,  54],   // křídlo
-    [86, -34],   // obránce
-    [86,  34],   // obránce
-  ];
-  const place = (arr, dir) => {   // dir: home = +1 (útočí vpravo), away = -1
-    arr.forEach((p, i) => {
-      const spot = SPOTS[Math.min(i, SPOTS.length - 1)];
-      const back = spot[0] + (i >= SPOTS.length ? (i - SPOTS.length + 1) * 26 : 0);
-      const sideMul = i >= SPOTS.length ? ((i % 2) ? 1 : -1) : 1;
-      // 2026-11-11: y podle buly bodu (dřív `(fy − h/2) * 0` → v pásmu stáli hráči uprostřed, puk u mantinelu; scripts/faceoff_audit.mjs 36/36)
-      p.x = Math.max(16, Math.min(RINK.w - 16, fx - dir * back));
-      p.y = Math.max(24, Math.min(RINK.h - 24, fy + spot[1] * sideMul));
-      p.vx = p.vy = 0; p.hasPuck = false; p.charge = 0;
-      p._chargeDecaying = false; p._oneTimer = false;
-      const fa = Math.atan2(fy - p.y, fx - p.x);   // čelem k buly bodu
-      p.bodyAngle = p.skateAngle = p.aimAngle = p.carryAngle = fa;
-    });
-  };
-  place(home, 1);
-  place(away, -1);
+  for (const p of match.players.values()) {
+    p.hasPuck = false; p.charge = 0; p._chargeDecaying = false; p._oneTimer = false; p.overcharged = false; p._rmbHold = 0;
+  }
   match.puck.reset();
-  match.puck.x = fx; match.puck.y = fy; match.puck.prevX = fx; match.puck.prevY = fy;
+  const pk = match.puck;
+  pk.x = fx; pk.y = fy; pk.prevX = fx; pk.prevY = fy; pk.vx = pk.vy = 0; pk.faceoffTimer = 0;
+  pk._passTo = null; pk._carrier = null;
   match.lastTouch = null; match.touchX = fx;
   match.icing = null; match.offside = null; match._goalAt = 0; match.stoppage = false; match._whistleAt = 0;
   match.setup = true;
-  match.faceoffUntil = match.tick + ms2ticks(900);
+  match.fo = { x: fx, y: fy, ph: 0, t0: match.tick, plan: null, c: null, n: 0, drop: 0, press: null, bot: null, win: null };
+  foPlan(match);
+  if (match.tick === 0) { foSnapAll(match); foStartReady(match); }   // start zápasu: hráči ještě nikde nestojí
+  match.faceoffUntil = match.tick + FO.skate + FO.ready + FO.dropMax + FO.win;   // horní mez (kompat)
   match.world._goalLock = true;
 }
 export function faceoff(match) { faceoffAt(match, RINK.centerX, RINK.h / 2); }
+
+// Jeden tick buly. Vrací true, dokud se nehraje (stepMatch pak skončí).
+function stepFaceoff(match) {
+  const fo = match.fo, t = match.tick;
+  // Hlídání sestavy: přišel/odešel hráč nebo zmizel centr / v týmu s botem-centrem se objevil člověk → nové rozestavění a dojezd
+  let changed = fo.n !== match.players.size;
+  if (!changed) for (const p of match.players.values()) if (!fo.plan.has(p.id)) { changed = true; break; }
+  if (!changed) for (const team of ['home', 'away']) {
+    const c = fo.c[team] && match.players.get(fo.c[team]);
+    if (fo.c[team] && !c) changed = true;
+    else if (c && c.isBot && [...match.players.values()].some(p => p.team === team && !p.isBot)) changed = true;
+  }
+  if (changed) { foPlan(match); fo.ph = 0; fo.t0 = t; fo.press = null; }
+
+  // Hrany vstupu lidí (stisk LMB) — boti vstup nemají, jejich reakce je seedovaná
+  for (const [id, p] of match.players) {
+    const inp = match.inputs.get(id);
+    if (!inp || p.isBot) continue;
+    if (inp._stamp && Date.now() - inp._stamp > 300) { inp.dx = 0; inp.dy = 0; inp.lmb = false; inp.rmb = false; inp.mmb = false; }
+    computeEdges(inp);
+    if (fo.ph >= 1 && fo.press && inp.lmbJustPressed) for (const team of ['home', 'away']) if (fo.c[team] === id && fo.press[team] == null) fo.press[team] = t;
+  }
+
+  if (fo.ph === 0) {   // DOJEZD
+    const left = Math.max(1, fo.t0 + FO.skate - t);
+    let all = true;
+    for (const p of match.players.values()) {
+      const s = fo.plan.get(p.id); if (!s) continue;
+      const dx = s.x - p.x, dy = s.y - p.y, d = Math.hypot(dx, dy);
+      if (d <= FO.arrive) { p.x = s.x; p.y = s.y; p.vx = p.vy = 0; foFace(p, fo, Math.min(1, 12 * DT)); continue; }
+      all = false;
+      const v = clamp(Math.max(d * FO.gain, d / (left * DT)), FO.vmin, FO.vmax);
+      const step = Math.min(d, v * DT);
+      p.vx = dx / d * v; p.vy = dy / d * v;
+      p.x += dx / d * step; p.y += dy / d * step;
+      const ma = Math.atan2(dy, dx); p.skateAngle = ma;
+      p.bodyAngle = lerpAngle(p.bodyAngle ?? ma, d > 40 ? ma : Math.atan2(fo.y - p.y, fo.x - p.x), Math.min(1, 10 * DT));
+      p.aimAngle = p.carryAngle = p.bodyAngle;
+    }
+    if (all || t - fo.t0 >= FO.skate) { foSnapAll(match); foStartReady(match); }
+    return true;
+  }
+  for (const p of match.players.values()) foFace(p, fo, Math.min(1, 12 * DT));
+  if (fo.ph === 1 && t >= fo.drop - FO.dropMin) fo.ph = 2;   // kruh se smršťuje posledních dropMin ticků
+  if (fo.ph === 2 && t >= fo.drop) fo.ph = 3;
+  if (fo.ph < 3) return true;
+
+  // PO DROPU: nejdřívější platný stisk (≥ drop) vyhrává; boti = drop + reakce
+  const valid = {};
+  for (const team of ['home', 'away']) {
+    const c = match.players.get(fo.c[team]); if (!c) continue;
+    if (c.isBot) { if (t >= fo.drop + fo.bot[team]) valid[team] = fo.drop + fo.bot[team]; }
+    else if (fo.press[team] != null && fo.press[team] >= fo.drop) valid[team] = fo.press[team];
+  }
+  let win = null;
+  if (valid.home != null && valid.away != null) win = valid.home < valid.away ? 'home' : valid.away < valid.home ? 'away' : (foRng(match).next() < 0.5 ? 'home' : 'away');
+  else if (valid.home != null) win = 'home'; else if (valid.away != null) win = 'away';
+  if (win) { foWin(match, win); return false; }
+  if (t - fo.drop >= FO.win) { foEnd(match, null); return false; }   // nikdo platně nestiskl → volný puk (závod jako dřív)
+  return true;
+}
+function foEnd(match, win) {
+  match.fo.win = win; match.fo.ph = 4; match.fo.end = match.tick;
+  match.setup = false; match.world._goalLock = false;
+}
+// Výhra buly: puk jde dozadu ke spoluhráči (nejdál za bodem = obránce), mírnou rychlostí; 1 hráč v týmu → jen kousek za centra
+function foWin(match, team) {
+  const fo = match.fo, dir = team === 'home' ? 1 : -1, pk = match.puck;
+  const center = match.players.get(fo.c[team]);
+  let tgt = null, bk = -Infinity;
+  for (const p of match.players.values()) if (p.team === team && p !== center) { const b = (fo.x - p.x) * dir; if (b > bk) { bk = b; tgt = p; } }
+  const tx = tgt ? tgt.x : fo.x - dir * 40, ty = tgt ? tgt.y : fo.y;
+  const d = Math.hypot(tx - pk.x, ty - pk.y) || 1;
+  const sp = tgt ? clamp(passSpeedFor(d) * 0.8, 140, 300) : 90;
+  pk.vx = (tx - pk.x) / d * sp; pk.vy = (ty - pk.y) / d * sp;
+  if (tgt) { pk._passTo = tgt.id; pk._passT = 1.2; if (center) center._shootCooldown = Math.max(center._shootCooldown || 0, 0.3); }
+  const loser = match.players.get(fo.c[team === 'home' ? 'away' : 'home']);
+  if (loser) loser._shootCooldown = Math.max(loser._shootCooldown || 0, 0.3);   // poražený centr puk hned „nesní"
+  match.lastTouch = team; match.touchX = fo.x;
+  foEnd(match, team);
+}
+// Stav buly pro klienta (snapshot / offline render):
+// [fáze, ticků do dropu, délka smršťování (ticky), centr home, centr away, předčasně bitmask (1 home, 2 away), vítěz, x, y]
+export function faceoffState(match) {
+  const fo = match.fo; if (!fo) return null;
+  if (fo.ph === 4 && match.tick - fo.end > ms2ticks(700)) return null;
+  const pr = fo.press || {};
+  const early = (pr.home != null && pr.home < fo.drop ? 1 : 0) | (pr.away != null && pr.away < fo.drop ? 2 : 0);
+  return [fo.ph, fo.ph >= 1 ? fo.drop - match.tick : 0, FO.dropMin, fo.c ? fo.c.home : null, fo.c ? fo.c.away : null, early, fo.win, Math.round(fo.x), Math.round(fo.y)];
+}
 
 // ── Pravidla: icing + offside ──────────────────────────────────────────────
 function anyInZone(match, team, pred) {
@@ -325,7 +469,8 @@ export function stepMatch(match) {
     faceoffAt(match, match._faceoff.x, match._faceoff.y);
   }
   if (match.setup) {
-    if (match.tick >= match.faceoffUntil) { match.setup = false; match.world._goalLock = false; }
+    if (match.fo) { if (stepFaceoff(match)) return; }   // dojezd → příprava → vhazování (QTE)
+    else if (match.tick >= match.faceoffUntil) { match.setup = false; match.world._goalLock = false; }
     else return;   // zmrazeno
   }
   if (match.icing && !match.stoppage) {
