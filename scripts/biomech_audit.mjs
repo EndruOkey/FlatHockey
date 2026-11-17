@@ -17,6 +17,8 @@
 //  A10 v jízdě (> 30 j/s, mimo stop) vždy aspoň jedna brusle na ledě (lift ≤ 0,05)
 //  A11 paže nepřetažená: rameno → rukavice ≤ 2,6 R (upřesněno po 1. běhu: 2,1 R bylo podhodnocené, paže rameno–zápěstí ≈ 2,4–3 R; odhad)
 //  A12 kroky navíc: zvednutí brusle za s ≤ 1,15 × očekávané kadence (rychlost / délka cyklu) + 0,5 /s
+//  A13 obě nohy za tělem (2026-11-17, Ondřej: „občas má hráč divně za sebou obě nohy"): přednější kotník ve směru boků ≥ −0,4 R
+//      (práh předem: hráči v jízdě vpřed nejhůř −0,38 R; předloha feet_behind_metrics — volná noha dopadá pod tělo)
 //      (upřesněno 2026-11-17: kadence vč. výbušného rozjezdu accHz — schválené rychlé krátké kroky, skate_anim R11)
 // Výstup: tabulka scénář × pravidlo (počet snímků mimo); „VŠE OK" jen když 0 všude. Dva běhy = stejný otisk (deterministické).
 import { createHash } from 'crypto';
@@ -50,7 +52,7 @@ const SCN = {
   'otočka na místě':  n => ({ dx: 0, dy: 0, aim: n * DT * 4 }),
   'ostrá zatáčka':    n => ({ dx: n < 60 ? 1 : 0, dy: n < 60 ? 0 : 1, aim: n < 60 ? 0 : Math.PI / 2 }),
 };
-const RULES = ['A1', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10', 'A11', 'A12'];
+const RULES = ['A1', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10', 'A11', 'A12', 'A13'];
 
 function run(name, fn) {
   const m = createMatch(7); m.clock = 999; m.period = 1; m.periods = 1; m.minutes = 99; m.setup = false; m.stoppage = false;
@@ -80,6 +82,7 @@ function run(name, fn) {
       const yl = -f.x * sh + f.y * ch; if (s * yl < -0.2 * R) note('A6', (-s * yl) / R - 0.2, n);
       const l = (f.lift || 0) > 0.05; if (l && !pl[s] && n >= 20) { lifts++; if (process.env.FH_A12DBG === name) console.log(`  krok ${name} tik ${n} strana ${s} v ${spd.toFixed(0)} stopT ${(P.stopT ?? 0).toFixed(2)} rot ${(H._rotSf ?? 0).toFixed(2)} fwB ${(H._fwB ?? 0).toFixed(2)} lb ${(H._lbS ?? 0).toFixed(2)}`); } pl[s] = l;
     }
+    { const ch = Math.cos(hh), sh = Math.sin(hh), fr = Math.max(...ank.map(a => (a.x * ch + a.y * sh) / R)); if (n >= 20 && fr < -0.4) note('A13', -fr, n); }   /* A13 obě nohy za tělem */
     const tw = Math.abs(ad(B.tw || 0, hh)); if (tw > 1.2) note('A7', tw, n);
     if (Math.abs(B.hd || 0) > 1.3) note('A8', Math.abs(B.hd), n);
     if (prev && n >= 20) for (let i = 0; i < 2; i++) {
