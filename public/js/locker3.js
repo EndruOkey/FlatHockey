@@ -10,7 +10,7 @@ const KITS = [   // [název cs, en, dres, pruh+helma, rukavice+kalhoty] — jen 
   ['Klasik', 'Classic', '#1b4fd1', '#f4f7fb', '#1a1f29'], ['Oheň', 'Fire', '#ff4455', '#1a1f29', '#1a1f29'], ['Noc', 'Night', '#1a1f29', '#ffcf3a', '#1a1f29'],
   ['Led', 'Ice', '#f4f7fb', '#1b4fd1', '#1b4fd1'], ['Les', 'Forest', '#0c7a4a', '#f4f7fb', '#1a1f29'], ['Švestka', 'Plum', '#9b5cff', '#f4f7fb', '#1a1f29'],
   ['Slunce', 'Sun', '#ff8a1e', '#1a1f29', '#1a1f29'], ['Retro', 'Retro', '#b81d3a', '#f4f7fb', '#1b4fd1']];
-const HELMS = [['visor', 'Kšilt', 'Visor'], ['cage', 'Mřížka', 'Cage'], ['shield', 'Plexi', 'Shield'], ['none', 'Bez', 'None']];
+const HELMS = [['visor', 'Kšilt', 'Visor'], ['cage', 'Mřížka', 'Cage'], ['none', 'Bez', 'None']];   // plexi zrušeno (shora jako kšilt)
 const PIPS = [[4, 5, 2, 1], [3, 3, 3, 3], [2, 1, 4, 5]];
 const BANNERS = [
   { id: 'ice', cs: 'Led', en: 'Ice', bg: 'linear-gradient(120deg,#cfe7f2,#7fb6d9 60%,#2c5d8c)' },
@@ -143,7 +143,7 @@ export function initLocker3(host, api) {
       : `<button type="button" class="tile" data-new="${i}" ${g ? 'disabled' : ''} style="border-style:dashed;padding:20px 0">${l.create}</button>`).join('');
     return `${g ? `<div class="note">${l.guest}</div>` : ''}
      <div class="pnl"><div class="k2" style="margin-bottom:8px">${l.kits}</div><div class="tiles" style="grid-template-columns:repeat(8,minmax(0,1fr))">${kits}</div></div>
-     <div class="pnl" style="display:grid;grid-template-columns:1fr 1.3fr;gap:16px"><div><div class="k2" style="margin-bottom:8px">${l.helm}</div><div class="tiles" style="grid-template-columns:repeat(4,minmax(0,1fr))">${helms}</div></div>
+     <div class="pnl" style="display:grid;grid-template-columns:1fr 1.3fr;gap:16px"><div><div class="k2" style="margin-bottom:8px">${l.helm}</div><div class="tiles" style="grid-template-columns:repeat(3,minmax(0,1fr))">${helms}</div></div>
       <div><div class="k2" style="margin-bottom:8px">${l.mine}</div><div class="tiles" style="grid-template-columns:repeat(3,minmax(0,1fr))">${slots}</div></div></div>`;
   }
   function tabProfil() {
@@ -197,9 +197,9 @@ export function initLocker3(host, api) {
       heroP.a += 0.012; const a = heroP.a, S0 = c.height / 46, hd = a + Math.PI / 2;
       g.fillStyle = '#dfeaf3'; g.fillRect(0, 0, c.width, c.height); g.strokeStyle = 'rgba(204,34,51,.45)'; g.lineWidth = c.width / 120; g.beginPath(); g.moveTo(c.width / 2, 0); g.lineTo(c.width / 2, c.height); g.stroke();
       g.strokeStyle = 'rgba(30,79,209,.35)'; g.beginPath(); g.arc(c.width / 2, c.height / 2, c.height * .3, 0, 7); g.stroke();
-      p.x = 500 + Math.cos(a) * R; p.y = 200 + Math.sin(a) * R; p.bodyAngle = p.skateAngle = hd; p.vx = Math.cos(hd) * 110; p.vy = Math.sin(hd) * 110; p.aimAngle = p.carryAngle = p._stickDisp = hd + 0.5; p.hasPuck = true;
+      p.x = 500 + Math.cos(a) * R; p.y = 200 + Math.sin(a) * R; p.bodyAngle = p.skateAngle = hd; p.vx = Math.cos(hd) * 110; p.vy = Math.sin(hd) * 110; p.aimAngle = p.carryAngle = p._stickDisp = hd + 0.5; p.hasPuck = false;
       const cam = { scale: S0, ox: c.width / 2 - 500 * S0, oy: c.height / 2 - 200 * S0, dt: 1 / 60 };
-      try { p.draw(g, cam); const t = p.stickTip; g.fillStyle = '#111'; g.beginPath(); g.arc(cam.ox + t.x * S0, cam.oy + t.y * S0, PUCK.radius * S0, 0, 7); g.fill(); } catch {}
+      try { p.draw(g, cam); } catch {}   // bez ručně kresleného puku (bod čepele nesedl na vyhlazenou kresbu hole — Ondřej: „puk je rozbitej na holi“)
     }
   }
   root.addEventListener('click', e => {

@@ -33,7 +33,7 @@ export function skaterKit(p, teamColor) {
   return {
     jersey, pattern: pat, accent: hex(p.stripe, luma(jersey) > 0.55 ? '#1a1f29' : '#f4f7fb'),
     pants: hex(p.shorts, shade(jersey, -0.62)), glove: hex(p.gloves, shade(jersey, -0.25)), cuff: '#f4f7fb',
-    helmet: hex(p.helmet, jersey), helmetType: ['visor', 'cage', 'shield', 'none'].includes(p.helmetType) ? p.helmetType : 'visor',
+    helmet: hex(p.helmet, jersey), helmetType: ['visor', 'cage', 'none'].includes(p.helmetType) ? p.helmetType : 'visor',   /* plexi (shield) zrušeno 2026-11-17 — shora splývalo s kšiltem → kšilt */
     visor: hex(p.visor, '#bfe0ff'), tape: hex(p.tape, '#111318'), tapeStyle: p.tapeStyle || 'full', blade: hex(p.blade, '#15171c'),
     stick: hex(p.stick, '#1b1f27'), laces: hex(p.laces, '#e9edf3'), num: p.num ?? autoNum(p.id),
   };
@@ -225,7 +225,11 @@ export function skinBody(c, B, K) {
   if (!lod) { c.beginPath(); c.moveTo(hx - hrx * 0.85, 0); c.lineTo(hx + hrx * 0.15, 0); c.strokeStyle = mix(K.helmet, K.helmet === K.jersey ? K.accent : K.jersey, 0.6); c.lineWidth = 0.9; c.stroke(); }   // hřebínek: tón, ne tvrdá linka
   if (!lod) { c.beginPath(); c.ellipse(hx + hlx * R * 0.22, hly * R * 0.22, R * 0.16, R * 0.1, 0, 0, Math.PI * 2); c.fillStyle = 'rgba(255,255,255,0.8)'; c.fill(); }
   const ht = K.helmetType;
-  if (ht === 'cage') { c.beginPath(); c.arc(hx, 0, hrx * 1.12, -0.9, 0.9); for (const yy of [-0.22, 0, 0.22]) { c.moveTo(hx + R * 0.34, R * yy); c.lineTo(hx + hrx * 1.12 * Math.cos(Math.asin(R * yy / (hrx * 1.12))), R * yy); } c.strokeStyle = '#2b2f36'; c.lineWidth = 0.5; c.stroke(); }
+  if (ht === 'cage') {   // 2026-11-17 (Ondřej: „mřížka nevynikne"): tmavý silný rám + mříž → čitelná proti světlému kšiltu (dřív čára 0,5 = ve hře zmizela)
+    const rr = hrx * 1.12; c.beginPath(); c.arc(hx, 0, rr, -0.95, 0.95); c.strokeStyle = '#1d2128'; c.lineWidth = 1.6; c.stroke();
+    c.beginPath(); for (const yy of [-0.24, 0, 0.24]) { c.moveTo(hx + R * 0.3, R * yy); c.lineTo(hx + rr * Math.cos(Math.asin(R * yy / rr)), R * yy); }
+    for (const xx of [0.55, 0.8]) { const ax = hx + rr * xx, ay = Math.sqrt(Math.max(0, rr * rr - (ax - hx) ** 2)); c.moveTo(ax, -ay); c.lineTo(ax, ay); }
+    c.lineWidth = 0.9; c.stroke(); }
   else if (ht === 'visor') { c.beginPath(); c.arc(hx, 0, hrx * 0.98, -0.85, 0.85); c.strokeStyle = K.visor; c.lineWidth = 1.5; c.stroke(); }
   else if (ht === 'shield') { c.beginPath(); c.arc(hx, 0, hrx * 1.04, -1.1, 1.1); c.closePath(); c.fillStyle = rgba(K.visor, 0.45); c.fill(); c.strokeStyle = shade(K.visor, -0.3); c.lineWidth = 0.6; c.stroke(); }
   else { c.beginPath(); c.ellipse(hx + hrx * 0.78, 0, R * 0.16, R * 0.26, 0, 0, Math.PI * 2); c.fillStyle = '#e8b896'; c.fill(); }
