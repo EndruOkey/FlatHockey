@@ -808,7 +808,8 @@ SKATE_K3.latA = 0.4; SKATE_K3.bwR = 3.5; SKATE_K3.bwA = 1.6; SKATE_K3.bwB = 2.5;
 // pod tělem na své straně (shX, shY0), ostří dopředu (špička lehce ven shA), odraz do strany o shY, návrat nad ledem (shL); váha podle
 // směru jízdy vůči tělu lbA–lbB (rad). scripts/side_skate_metrics.mjs
 SKATE_K3.cx = 0.3; SKATE_K3.cxW = 0.15;   // (cxW přepsáno níž na 0,25 — A13) cxW = VIS.w (/dev): dráha kroku o 0,15 R vzad → odraz vidět za zády (duck_metrics Z1 −0,72 → −0,87 R)   // posun celé soustavy nohou vůči tělu (×R), 2026-11-15 „nohy pozadu" — scripts/feet_behind_metrics.mjs
-SKATE_K3.lbA = 1.3; SKATE_K3.lbB = 1.55; SKATE_K3.shX = -0.2; SKATE_K3.shY0 = 1.3; SKATE_K3.shY = 0.6; SKATE_K3.shA = 0.15; SKATE_K3.shL = 0.3; SKATE_K3.shM = 0;
+SKATE_K3.lbA = 1.3; SKATE_K3.lbB = 1.55; SKATE_K3.shX = 0.05; SKATE_K3.shY0 = 1.3; SKATE_K3.shY = 0.6; SKATE_K3.shA = 0.15; SKATE_K3.shL = 0.3; SKATE_K3.shM = 0;
+// shX −0,2 → 0,05 (2026-11-17, Ondřej: „oprav to i u hráčů při jízdě bokem“): obě brusle byly 0,6 R za boky (biomech_audit A13 bokem 119, brzda 8 → 0)
 // HOKEJOVÝ STOP (2026-11-14): stopV 2 = předloha (Hockey Canada, MAHG, Riedell): boky otočené o 90°, obě ostří ROVNOBĚŽNĚ kolmo k jízdě,
 // brusle za sebou PODÉL jízdy na šíři ramen (hsD ×R), střed o hsLead ×R před tělem (váha vzad), o hsN ×R ke špičkám. stopV 1 = dřívější
 // (brusle vedle sebe po stranách těla, výchozí do 2026-11-14; teď stopV 3 níž) (stopV 2 schová brusle pod trup, viz stop_hockey_metrics H9).
