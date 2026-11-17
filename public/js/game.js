@@ -654,7 +654,9 @@ export class NetGame {
     this._drawFaceoff(ctx, cam, 0);
     this.puck.draw(ctx, cam);   // puk POD hráči → hokejka se kreslí navrch (puk leží na ledě u čepele)
     this._drawPassAim(ctx, cam);
+    const qCtx = { players: ents, goalies: [this.goalieL, this.goalieR], _goalLock: !!this.locked };   // nápověda Q (Player.qWindow): držený puk / přerušení
     for (const e of this.players.values()) {
+      e.ent._qCtx = qCtx;
       e.ent._solids = solids.filter(so => so.ent !== e.ent);
       e.ent._others = ents;   // kontakt hokejek (Player.draw / stickTip)
       e.ent._isLocal = e.isMe;   // charge arc kreslíme jen vlastnímu hráči (ostatní vidí nápřah hole)
@@ -1103,7 +1105,9 @@ export class SandboxGame {
       _updateAim(this.local, Math.atan2(ady, adx), dt);
     }
 
-    if (!_wasBuild && this.input.kqJustPressed) this.local.trySkateKick(this.puck);   // Q: přikopnutí puku do jízdy (stejně jako match-core)
+    // Q: přikopnutí / teč — stejný predikát jako match-core (Player.qWindow); pohled = kdo může držet puk + přerušení
+    this.local._qCtx = { players: [this.local, this.passer, this._defender].filter(Boolean), goalies: [this.goalie], _goalLock: this._goalLock || this.world._goalLock };
+    if (!_wasBuild && this.input.kqJustPressed) this.local.trySkateKick(this.puck, this.local._qCtx);
     this.local._puckView = this.puck;
     if (this.input.lmbJustPressed && !_uiClick) { this._chargeCancelled = false; this._oneTimer = !this.local.hasPuck; }
     if (!this.input.lmb) this._chargeBlocked = false;

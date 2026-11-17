@@ -26,6 +26,7 @@
     "test:deflect": "node test/deflect.test.mjs",
     "test:knock": "node test/knock.test.mjs",
     "test:faceoff": "node test/faceoff.test.mjs",
+    "test:qhint": "node test/qhint.test.mjs",
     "test": "echo \"Error: no test specified\" && exit 1",
     "test:netteleport": "node scripts/test_net_teleport.mjs",
     "test:biomech": "node scripts/biomech_ci.mjs"
