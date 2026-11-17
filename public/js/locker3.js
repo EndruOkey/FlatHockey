@@ -147,9 +147,10 @@ export function initLocker3(host, api) {
   const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
   const root = document.createElement('div'); root.id = 'lk3'; host.appendChild(root);
   let S = load(), tab = S.tab ?? 0, stats = {}, rank = null, raf = null, editor = null, ang = 0;
-  S.slots = S.slots || [null, null, null]; if (S.stick == null) S.stick = 1;
+  S.slots = S.slots || [null, null, null];
   const L = () => (api.t('lk_p_size') === 'Size' ? EN : CS), en = () => L() === EN;
   const persist = () => save(S);
+  const stk = () => { const v = api.get().stickLen; return [0, 1, 2].includes(v) ? v : 1; };   // délka hole = stav v main.js (posílá se do hry)
   const applyTo = (p, k) => { p.color = k.jersey; p.stripe = k.stripe; p.helmet = k.helmet; p.gloves = k.gloves; p.shorts = k.shorts; p.stick = k.stick; p.tape = k.tape; p.visor = k.visor; p.helmetType = k.helmetType; };
   const mkPlayer = (id, k, size) => { const p = new Player(id, 'home', null); p._dispReach = PLAYER.stickLen; p.charge = 0; p._dispCharge = 0; p.passReq = 0; p.crossCheck = false; p.name = ''; applyTo(p, k); p.size = size; return p; };
   const curKit = () => api.get().kit;
@@ -177,7 +178,7 @@ export function initLocker3(host, api) {
       <div class="chero"><canvas id="lk3-hero" width="900" height="600"></canvas><div class="cnum">${esc(s.num ?? '')}</div></div>
       <div class="cbody">
        <div style="display:flex;align-items:center;gap:12px;min-width:0">${avatarHTML()}<div style="min-width:0"><div class="name">${esc(s.name || '—')}</div><div class="ttl">${ic(ti.ic, 16)}${en() ? ti.en : ti.cs}</div></div></div>
-       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span class="chip">${ic('size', 16)}${l.sizes[s.size]} · ${l.roles[s.size]}</span><span class="m">${ic('stick', 14)} ${en() ? STICKS[S.stick].en : STICKS[S.stick].cs} · ELO ${elo}${pos}</span></div>
+       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span class="chip">${ic('size', 16)}${l.sizes[s.size]} · ${l.roles[s.size]}</span><span class="m">${ic('stick', 14)} ${en() ? STICKS[stk()].en : STICKS[stk()].cs} · ELO ${elo}${pos}</span></div>
        <div class="pips">${pips}</div>
        <div class="st4"><div><b>${ic('puck', 16)}${stats.goals ?? 0}</b><span>${l.stats[0]}</span></div><div><b>${ic('pass', 16)}${stats.assists ?? 0}</b><span>${l.stats[1]}</span></div><div><b>${ic('plusminus', 16)}${pm > 0 ? '+' + pm : pm}</b><span>${l.stats[2]}</span></div><div><b>${ic('trophy', 16)}${wp}</b><span>${l.stats[3]}</span></div></div>
       </div></div>`;
@@ -185,14 +186,14 @@ export function initLocker3(host, api) {
   function tabVybava() {
     const s = api.get(), l = L(), g = api.isGuest();
     const sizes = l.sizes.map((n, i) => `<button type="button" class="tile ${s.size === i ? 'on' : ''}" data-size="${i}">${icSize(i, s.kit)}${n}<div class="sub" style="color:var(--a3-mute)">${l.roles[i]}</div></button>`).join('');
-    const sticks = STICKS.map((k, i) => `<button type="button" class="tile ${S.stick === i ? 'on' : ''}" data-stick="${i}">${icStick(i, s.kit)}${en() ? k.en : k.cs}
+    const sticks = STICKS.map((k, i) => `<button type="button" class="tile ${stk() === i ? 'on' : ''}" data-stick="${i}">${icStick(i, s.kit)}${en() ? k.en : k.cs}
       <div class="sub">${k.eff.length ? k.eff.map(([e, v]) => `<span class="${v > 0 ? 'up' : 'dn'}">${ic(e, 13)}${v > 0 ? '+' : '−'} ${l.eff[e]}</span>`).join('') : `<span style="color:var(--a3-mute)">${ic('reach', 13)} 16</span>`}</div></button>`).join('');
     return `<div class="pnl" style="display:grid;grid-template-columns:minmax(0,1.4fr) 110px 170px;gap:14px;align-items:end">
       <label><div class="k" style="margin-bottom:8px">${ic('user', 16)}${l.name}</div><input class="inp" id="lk3-name" maxlength="14" value="${esc(s.name)}" ${g ? 'disabled' : ''}></label>
       <label><div class="k" style="margin-bottom:8px">${ic('hash', 16)}${l.num}</div><input class="inp" id="lk3-num" type="number" min="0" max="99" value="${esc(s.num ?? '')}" ${g ? 'disabled' : ''}></label>
       <div><div class="k" style="margin-bottom:8px">${ic('hand', 16)}${l.grip}</div><div class="seg">${[-1, 1].map((h, i) => `<button type="button" data-hand="${h}" class="${s.hand === h ? 'on' : ''}">${l.hand[i]}</button>`).join('')}</div></div></div>
      <div class="pnl"><div class="k" style="margin-bottom:10px">${ic('size', 16)}${l.size}</div><div class="tiles" style="grid-template-columns:repeat(3,minmax(0,1fr))">${sizes}</div></div>
-     <div class="pnl"><div class="k" style="margin-bottom:10px;justify-content:space-between"><span style="display:flex;gap:8px;align-items:center">${ic('stick', 16)}${l.stick}</span><span class="m" style="letter-spacing:0">${l.soon}</span></div><div class="tiles" style="grid-template-columns:repeat(3,minmax(0,1fr))">${sticks}</div></div>`;
+     <div class="pnl"><div class="k" style="margin-bottom:10px;justify-content:space-between"><span style="display:flex;gap:8px;align-items:center">${ic('stick', 16)}${l.stick}</span></div><div class="tiles" style="grid-template-columns:repeat(3,minmax(0,1fr))">${sticks}</div></div>`;
   }
   function tabVzhled() {
     const l = L(), c = curKit(), g = api.isGuest();
@@ -262,7 +263,7 @@ export function initLocker3(host, api) {
       if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
       const g = c.getContext('2d'), s = api.get();
       if (!c._p) c._p = mkPlayer(id, k, s.size);
-      const p = c._p; applyTo(p, k); p.size = s.size; p.num = s.num; p.handed = s.hand; p._dispReach = STICKS[S.stick].reach;
+      const p = c._p; applyTo(p, k); p.size = s.size; p.num = s.num; p.handed = s.hand; p._dispReach = STICKS[stk()].reach;
       const S0 = Math.min(H / 40, W / 46), hd = ang + Math.PI / 2;
       g.fillStyle = '#dfeaf3'; g.fillRect(0, 0, W, H); g.strokeStyle = 'rgba(204,34,51,.45)'; g.lineWidth = Math.max(2, W / 160); g.beginPath(); g.moveTo(W / 2, 0); g.lineTo(W / 2, H); g.stroke();
       g.strokeStyle = 'rgba(30,79,209,.35)'; g.beginPath(); g.arc(W / 2, H / 2, H * .32, 0, 7); g.stroke();
@@ -276,7 +277,7 @@ export function initLocker3(host, api) {
     if (d.tab != null) { tab = +d.tab; S.tab = tab; persist(); }
     else if (d.hand != null) api.setHand(+d.hand);
     else if (d.size != null) api.setSize(+d.size);
-    else if (d.stick != null) { S.stick = +d.stick; persist(); api.setStick?.(S.stick); }
+    else if (d.stick != null) api.setStick?.(+d.stick);
     else if (d.kit != null) api.applyKit(kitOf(+d.kit));
     else if (d.helm != null) api.applyKit({ ...curKit(), helmetType: d.helm });
     else if (d.slot != null) api.applyKit({ ...curKit(), ...S.slots[+d.slot] });
@@ -303,7 +304,7 @@ export function initLocker3(host, api) {
     },
     hide() { if (raf) cancelAnimationFrame(raf); raf = null; },
     refresh: render,
-    stick: () => S.stick,
+    stick: () => stk(),
   };
 }
 export const LOCKER3_KITS = KITS;
