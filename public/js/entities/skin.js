@@ -176,7 +176,8 @@ export function skinBody(c, B, K) {
   const gloves = new Path2D(); for (const g of gl) { const m = new DOMMatrix().translate(g.x, g.y).rotate(g.a * 180 / Math.PI); const q = new Path2D(); q.roundRect(-2.6 * GS + 0.6, -1.9 * GS, 4.6 * GS, 3.8 * GS, 1.5); gloves.addPath(q, m); }
   const helm = new Path2D(); { const q = new Path2D(); ellP(q, hx, 0, hrx, hry); helm.addPath(q, HM); }
   const hv = K.headV || 0;   // H0 helma v jedné cestě s tělem; H1/H2 samostatný tvar s vlastním obrysem (dev playground)
-  body.addPath(up); body.addPath(gloves); if (!hv) body.addPath(helm);
+  const NH = !!globalThis.__fhNoHead;   // jen měření (scripts/helmet_metrics.py): kresba bez hlavy → rozdíl = viditelná hlava
+  body.addPath(up); body.addPath(gloves); if (!hv && !NH) body.addPath(helm);
   // 2) obrys jednou (pod výplněmi) → zůstane jen vnější hrana
   c.lineJoin = 'round'; c.strokeStyle = SKIN_OUT; c.lineWidth = 2.0; c.stroke(body);
   // 3) výplně v pořadí zdola (y−z): štulpny, kalhoty, trup+paže (jedna barva = bez švu), vzor, číslo, rukavice, helma
@@ -201,7 +202,7 @@ export function skinBody(c, B, K) {
   c.fillStyle = K.glove; c.fill(gloves);   // ruce čte manžeta (záměrná linka), ne šev
   for (const g of gl) { c.save(); c.translate(g.x, g.y); c.rotate(g.a); c.fillStyle = mix(K.glove, K.cuff, 0.75); c.fillRect(-2.6 * GS + 0.6, -1.9 * GS + 0.3, 0.9, 3.8 * GS - 0.6); c.restore(); }
   // helma
-  if (!hv) { c.fillStyle = K.helmet === K.jersey ? shade(K.helmet, lt ? -0.18 : -0.24) : K.helmet; c.fill(helm); }   // helma v barvě dresu o tón tmavší = hlava se oddělí od ramen c.strokeStyle = shade(K.helmet, -0.38); c.lineWidth = 0.6; c.stroke(helm);   // okraj helmy = hlava a směr pohledu (informační linka)
+  if (!hv && !NH) { c.fillStyle = K.helmet === K.jersey ? shade(K.helmet, lt ? -0.18 : -0.24) : K.helmet; c.fill(helm); }   // helma v barvě dresu o tón tmavší = hlava se oddělí od ramen c.strokeStyle = shade(K.helmet, -0.38); c.lineWidth = 0.6; c.stroke(helm);   // okraj helmy = hlava a směr pohledu (informační linka)
   // 4) jedno stínování přes celé tělo (světlo pevné ve světě, předané v lokálu)
   const lx = B.lx ?? -0.5, ly = B.ly ?? -0.5;
   const g = c.createRadialGradient(ux + lx * R * 0.7, uy + ly * R * 0.7, R * 0.2, ux, uy, R * 1.9);
@@ -209,6 +210,8 @@ export function skinBody(c, B, K) {
   c.save(); c.clip(body); c.fillStyle = g; c.fillRect(-R * 2.5, -R * 2.5, R * 5, R * 5); c.restore();
   c.save(); c.setTransform(c.getTransform().multiply(HM));   // helma a linky obličeje v rámci hlavy
   const hlx = lx * Math.cos(hd) + ly * Math.sin(hd), hly = -lx * Math.sin(hd) + ly * Math.cos(hd);   // světlo v rámci hlavy
+  if (globalThis.__fhHeadMask && hv && hv < 3) { const q = new Path2D(); ellP(q, hx, 0, hrx, hry); c.lineWidth = 2.0; c.strokeStyle = c.fillStyle = '#ff00ff'; c.stroke(q); c.fill(q); c.restore(); return; }   // jen měření: maska hlavy
+  if (NH || hv >= 3) { if (!NH) headDir(c, K, hv, hx, hrx, hry, hlx, hly, lod, lt); c.restore(); return; }   // H3–H6: směry vzhledu helmy (/dev, 2026-11-17)
   const helmL = new Path2D(); ellP(helmL, hx, 0, hrx, hry);
   if (hv) {   // H1: tón odlišený od dresu; H2: světlá helma jako dřív (pokud hráč nemá vlastní barvu helmy)
     const own = K.helmet !== K.jersey;
@@ -234,6 +237,55 @@ export function skinBody(c, B, K) {
   else if (ht === 'shield') { c.beginPath(); c.arc(hx, 0, hrx * 1.04, -1.1, 1.1); c.closePath(); c.fillStyle = rgba(K.visor, 0.45); c.fill(); c.strokeStyle = shade(K.visor, -0.3); c.lineWidth = 0.6; c.stroke(); }
   else { c.beginPath(); c.ellipse(hx + hrx * 0.78, 0, R * 0.16, R * 0.26, 0, 0, Math.PI * 2); c.fillStyle = '#e8b896'; c.fill(); }
   c.restore();
+}
+
+// ── SMĚRY HELMY H3–H6 (2026-11-17, Ondřej: „nejsem spokojený s vizuálem helmy"; jen /dev, výchozí H1 beze změny).
+// Měřeno scripts/helmet_metrics.py (podíl plochy, kontrast helma↔dres, posun předních prvků ve směru hlavy, odlišnost typů).
+// Rámec hlavy: +x = obličej, střed (hx, 0). H3 plochá ikona · H4 skořepina · H5 týmový pruh · H6 hloubka (větší + stín).
+const HD_SMOKE = '#18202c';
+function wcag(a, b) { const x = luma(a), y = luma(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+function contrastTone(base, against, minC) {   // nejbližší tón base (světlejší/tmavší), který má vůči against kontrast ≥ minC
+  for (let k = 0; k <= 1.0001; k += 0.05) for (const a of [k, -k]) { const t = shade(base, a); if (wcag(t, against) >= minC) return t; }
+  return luma(against) > 0.3 ? '#151a24' : '#f4f7fb';
+}
+function headDir(c, K, hv, hx, hrx, hry, hlx, hly, lod, lt) {
+  const own = K.helmet !== K.jersey, ht = K.helmetType, sm = mix(K.visor, HD_SMOKE, 0.78);
+  let rx = hrx, ry = hry, cx = hx;
+  if (hv === 6) { rx *= 1.2; ry *= 1.2; cx += hrx * 0.08; }
+  // tvar: H4 vejčitý (delší vpřed-vzad, záda užší), jinak elipsa
+  const shell = new Path2D();
+  if (hv === 4) { rx *= 1.08; ry *= 0.97; const n = 28; for (let i = 0; i <= n; i++) { const t = i / n * Math.PI * 2, x = Math.cos(t), y = Math.sin(t) * (x < 0 ? 1 + 0.16 * x : 1); i ? shell.lineTo(cx + rx * x, ry * y) : shell.moveTo(cx + rx * x, ry * y); } shell.closePath(); }
+  else ellP(shell, cx, 0, rx, ry);
+  // barva skořepiny
+  const hc = own ? K.helmet : hv === 3 ? contrastTone(K.jersey, K.jersey, 3) : hv === 4 ? K.pants : hv === 5 ? shade(K.jersey, lt ? -0.3 : -0.35) : K.jersey;
+  // H6: vrhá stín na ramena (od světla) → hlava se oddělí hloubkou i v barvě dresu
+  if (globalThis.__fhHeadMask) { c.lineWidth = hv === 3 ? 2.8 : 2.2; c.strokeStyle = c.fillStyle = '#ff00ff'; c.stroke(shell); c.fill(shell); return; }   // jen měření: maska hlavy (bez stínu)
+  if (hv === 6) { c.save(); c.translate(-hlx * 1.6, -hly * 1.6); c.fillStyle = 'rgba(8,12,30,0.38)'; c.fill(shell); c.restore(); }
+  c.lineJoin = 'round'; c.strokeStyle = SKIN_OUT; c.lineWidth = hv === 3 ? 2.8 : 2.2; c.stroke(shell);
+  c.fillStyle = hc; c.fill(shell);
+  c.save(); c.clip(shell);
+  if (hv === 4) {   // dvoutónové světlo s ostrou hranou (cel): osvětlená půlka světlejší, odvrácená tmavší
+    const L = Math.hypot(hlx, hly) || 1, ax = hlx / L, ay = hly / L; c.fillStyle = shade(hc, luma(hc) < 0.08 ? 0.28 : 0.2);
+    c.beginPath(); c.moveTo(cx - ay * 20, ax * 20); c.lineTo(cx + ay * 20, -ax * 20); c.lineTo(cx + ay * 20 + ax * 20, -ax * 20 + ay * 20); c.lineTo(cx - ay * 20 + ax * 20, ax * 20 + ay * 20); c.closePath(); c.fill();
+    if (!lod) { c.fillStyle = shade(hc, -0.45); for (const yy of [-0.42, 0.42]) { c.beginPath(); c.roundRect(cx - rx * 0.55, ry * yy - 0.35, rx * 0.55, 0.7, 0.35); c.fill(); }   // větrací otvory
+      c.strokeStyle = shade(hc, -0.3); c.lineWidth = 0.5; c.beginPath(); c.moveTo(cx - rx * 0.9, 0); c.lineTo(cx + rx * 0.35, 0); c.stroke(); }   // středový hřbet
+  }
+  if (hv === 5) {   // týmový pruh zezadu dopředu (akcent) — s kšiltem tvoří T
+    const sc = own ? (wcag(K.accent, hc) > 1.8 ? K.accent : K.jersey) : K.accent; c.fillStyle = sc; c.fillRect(cx - rx - 1, -ry * 0.3, rx * 2 + 2, ry * 0.6);
+  }
+  if (hv === 6 && !lod) { c.fillStyle = 'rgba(255,255,255,0.45)'; c.beginPath(); c.ellipse(cx + hlx * rx * 0.35, hly * ry * 0.35, rx * 0.3, ry * 0.2, 0, 0, Math.PI * 2); c.fill(); }
+  // přední výbava UVNITŘ obrysu: kšilt = pás přes přední třetinu, vždy v opačném jasu než skořepina (tmavá helma → světlý kšilt; měřeno: tmavý kšilt na tmavé helmě = asymetrie p/z 13–16)
+  const vz = luma(hc) < 0.12 ? mix(K.visor, '#ffffff', 0.35) : sm;
+  const fz = hv === 3 ? 0.28 : hv === 5 ? 0.42 : 0.38;   // od jaké části poloosy začíná kšilt
+  if (ht === 'visor') { c.fillStyle = vz; c.fillRect(cx + rx * fz, -ry - 1, rx * 2, ry * 2 + 2);
+    if (!lod || hv === 3) { c.strokeStyle = 'rgba(255,255,255,0.75)'; c.lineWidth = lod ? 0.7 : 0.5; c.beginPath(); c.moveTo(cx + rx * (fz + 0.2), -ry * 0.55); c.lineTo(cx + rx * (fz + 0.2), -ry * 0.1); c.stroke(); } }   // odlesk
+  c.restore();
+  if (ht === 'visor') { c.strokeStyle = SKIN_OUT; c.lineWidth = hv === 3 ? 1.0 : 0.6; c.beginPath(); const yv = ry * Math.sqrt(1 - fz * fz); c.moveTo(cx + rx * fz, -yv); c.lineTo(cx + rx * fz, yv); c.stroke(); }
+  // mřížka = VYSTRČENÁ před helmu (tvar „D" před obličejem); bez ochrany = obličej (kůže) před helmou
+  if (ht === 'cage') { const x0 = cx + rx * 0.55, x1 = cx + rx * 1.28, yy = ry * 0.82; const D = new Path2D(); D.moveTo(x0, -yy); D.quadraticCurveTo(x1 + rx * 0.1, -yy, x1, 0); D.quadraticCurveTo(x1 + rx * 0.1, yy, x0, yy);
+    c.fillStyle = 'rgba(20,24,32,0.35)'; c.fill(D); c.strokeStyle = '#141820'; c.lineWidth = 1.4; c.stroke(D);
+    c.lineWidth = 0.8; c.beginPath(); c.moveTo(x0, 0); c.lineTo(x1, 0); c.moveTo((x0 + x1) / 2, -yy * 0.85); c.lineTo((x0 + x1) / 2, yy * 0.85); c.stroke(); }
+  else if (ht === 'none') { c.beginPath(); c.ellipse(cx + rx * 0.95, 0, rx * 0.3, ry * 0.55, 0, 0, Math.PI * 2); c.fillStyle = '#e8b896'; c.fill(); c.strokeStyle = SKIN_OUT; c.lineWidth = 0.7; c.stroke(); }
 }
 
 // ── GÓLMAN (lokál gólmana: −X = k puku, +Y = dolů; po ctx.scale(−inX·s, s)). G = goalieGeom(...) ze simulace (beze změny).
