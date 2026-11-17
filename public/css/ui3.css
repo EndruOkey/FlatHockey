@@ -181,3 +181,34 @@ body.guest .lk-panel .lk-share { pointer-events: none; opacity: .35; filter: gra
   .sv-stats-title-area .lk-title-line { font-size: 36px !important; }
   #v-stats, #v-store { overflow-x: hidden; }
 }
+/* ── Podobrazovky: sdílená hlavička (2026-11-17) ─────────────────────
+   Pravidlo: každá podobrazovka = .v3-head (ZPĚT + štítek + nadpis) vlevo na ose --a3-gut, stejně jako logo a hlavní menu.
+   ZPĚT (.back3) vkládá main.js mountBack() — stejný vzhled jako pilulka Šatny v3 (sklo, linka, šipka + MENU + Esc, seříznutí). */
+:root { --a3-nav: 96px; }
+@media (max-width: 640px) { :root { --a3-nav: 72px; } }
+#lobby.on-browse #v-browse, #lobby.on-profile #v-profile, #lobby.on-create #v-create,
+#lobby.on-wait #v-wait, #lobby.on-stats #v-stats, #lobby.on-store #v-store { top: var(--a3-nav) !important; }
+.v3-head { flex: none; align-self: stretch; position: relative; z-index: 2; box-sizing: border-box; width: 100%;
+  padding: 8px var(--a3-gut) 18px; display: flex; flex-direction: column; align-items: flex-start; text-align: left; }
+.back3 { all: unset; box-sizing: border-box; cursor: pointer; display: inline-flex; align-items: center; gap: 10px; height: 40px; padding: 0 30px 0 12px; margin-bottom: 16px;
+  background: var(--a3-glass); border: 1px solid var(--a3-line); clip-path: var(--a3-cut); color: var(--a3-text);
+  font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 800; font-size: 17px; letter-spacing: .08em; text-transform: uppercase; transition: background .15s; }
+.back3 svg { width: 16px; height: 16px; color: var(--a3-ice); }
+.back3 kbd { min-width: 0; padding: 0 6px; font-size: 12px; line-height: 18px; font-style: normal; letter-spacing: 0; text-transform: none; }
+.back3:hover { background: rgba(127,212,255,.14); }
+#lobby .back3:focus-visible { outline: 3px solid var(--a3-ice); outline-offset: -3px; }
+.v3-eyebrow { margin: 0 0 4px; }
+#lobby .v3-title { margin: 0; padding: 0; border: 0; font-weight: 800; font-size: clamp(44px, 4.4vw, 64px); line-height: .95; color: var(--a3-text); letter-spacing: .01em; }
+.v3-title-2 { color: var(--a3-ice); }
+.v3-title-2:empty { display: none; }
+/* obsah pod hlavičkou na stejné ose (dřív každý pohled jinak vystředěný) */
+#lobby .sv-create-one, #lobby .sv-body-browse, #lobby .st-wrap, #lobby .sv-body-stats, #v-profile .lk-wrap {
+  margin-left: var(--a3-gut) !important; margin-right: auto !important; width: calc(100% - 2 * var(--a3-gut)) !important; }
+#lobby .sv-create-one { padding: 0 0 32px; }
+#lobby .sv-browse-hero { padding: 0 0 8px !important; }
+#lobby .sv-browse-list { padding: 8px 0 32px !important; }
+#lobby .st-wrap { padding: 0 0 64px; }
+#v-profile .lk-wrap { padding: 0 0 28px !important; height: auto; flex: 1 1 auto; min-height: 0; }
+#lobby #v-create, #lobby #v-stats { align-items: stretch; }
+/* Šatna v3 (dev) má vlastní pilulku ZPĚT → sdílenou hlavičku skryj, ať nejsou dvě */
+#v-profile.lk3-on > .v3-head { display: none; }

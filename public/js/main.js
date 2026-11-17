@@ -1029,11 +1029,20 @@ function showView(name) {
     $('splash-return').style.display = tutorialDone ? '' : 'none';
   }
 }
-document.querySelectorAll('.back').forEach(b => b.addEventListener('click', () => {
-  if (!b.dataset.to) return;                           // tlačítka s vlastní logikou (profile-done)
-  showView(b.dataset.to);
-  if (b.dataset.to === 'browse') net.listLobbies();   // čerstvý seznam při návratu
-}));
+// ── ZPĚT do menu: jedna komponenta pro všechny podobrazovky (UI v3, stejná jako pilulka v Šatně v3) ──
+// Odvozeno z VIEWS: každý pohled kromě úvodu, menu a čekárny (tam je ODEJÍT) dostane do své .v3-head stejné tlačítko.
+// Klik = Esc (backToMenu); pozici i vzhled drží jen .back3 v ui3.css. Ověření: scripts/menu_consistency.py.
+const NO_BACK = new Set(['splash', 'main', 'wait']);
+const backToMenu = () => showView('main');
+function mountBack(viewId) {
+  const head = $(viewId)?.querySelector(':scope > .v3-head'); if (!head || head.querySelector('.back3')) return;
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'back3';
+  b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="square"/></svg><span>MENU</span><kbd>Esc</kbd>';
+  b.addEventListener('click', backToMenu);
+  head.prepend(b);
+}
+for (const [k, id] of Object.entries(VIEWS)) if (!NO_BACK.has(k)) mountBack(id);
 
 // ── Nav tab clicks ────────────────────────────────────────────────────
 document.querySelectorAll('.mn-tab').forEach(tab => {
@@ -1765,7 +1774,7 @@ window.addEventListener('keydown', e => {
   if ($('settings-dropdown').classList.contains('open')) { $('settings-dropdown').classList.remove('open'); return; }
   $('auth-dropdown').classList.remove('open');
   // UI v3: Esc = Zpět do hlavního menu z podobrazovek (ne z čekárny — tam je Odejít)
-  if (['v-profile','v-browse','v-create','v-stats','v-store'].some(id => $(id) && $(id).style.display !== 'none')) showView('main');
+  if (Object.entries(VIEWS).some(([k, id]) => !NO_BACK.has(k) && $(id) && $(id).style.display !== 'none')) backToMenu();
 });
 window.addEventListener('keydown', e => { if (e.key !== 'Escape' || !inGame) return; if (currentGame?._activeTab === 'build') return;
   if (currentGame?._catalogOpen) { currentGame._catalogOpen = false; return; }   // Esc nejdřív zavře knihovnu cvičení, ne pauza přes ni
