@@ -196,9 +196,9 @@ export function initLocker3(host, api) {
   }
   function tabVzhled() {
     const l = L(), c = curKit(), g = api.isGuest();
-    const kits = KITS.map((K, i) => `<button type="button" class="tile ${sameKit(c, kitOf(i)) ? 'on' : ''}" data-kit="${i}" ${g ? 'disabled' : ''}>${icKit(K[2], K[3], K[4])}${en() ? K[1] : K[0]}</button>`).join('');
+    const kits = KITS.map((K, i) => `<button type="button" class="tile ${sameKit(c, kitOf(i)) ? 'on' : ''}" data-kit="${i}" ${g ? 'disabled' : ''}><canvas data-tk="${i}" style="--th:clamp(50px,10vh,170px)"></canvas>${en() ? K[1] : K[0]}</button>`).join('');
     const helms = HELMS.map(([v, cs, e]) => `<button type="button" class="tile ${c.helmetType === v ? 'on' : ''}" data-helm="${v}" ${g ? 'disabled' : ''}>${icHelm(v, c)}${en() ? e : cs}</button>`).join('');
-    const slots = S.slots.map((k, i) => k ? `<button type="button" class="tile ${sameKit(c, k) ? 'on' : ''}" data-slot="${i}" ${g ? 'disabled' : ''} title="2× klik = upravit">${icKit(k.jersey, k.stripe, k.gloves)}${en() ? 'Mine' : 'Moje'} #${i + 1}</button>`
+    const slots = S.slots.map((k, i) => k ? `<button type="button" class="tile ${sameKit(c, k) ? 'on' : ''}" data-slot="${i}" ${g ? 'disabled' : ''} title="2× klik = upravit"><canvas data-ts="${i}" style="--th:clamp(50px,10vh,130px)"></canvas>${en() ? 'Mine' : 'Moje'} #${i + 1}</button>`
       : `<button type="button" class="tile" data-new="${i}" ${g ? 'disabled' : ''} style="display:grid;place-items:center;gap:6px;border-style:dashed;min-height:100%">${ic('plus', 28)}${l.create}</button>`).join('');
     return `${g ? `<div class="note">${ic('lock', 18)}${l.guest}</div>` : ''}
      <div class="pnl"><div class="k" style="margin-bottom:10px">${ic('shirt', 16)}${l.kits}</div><div class="tiles" style="grid-template-columns:repeat(4,minmax(0,1fr))">${kits}</div></div>
