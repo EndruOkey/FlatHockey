@@ -248,7 +248,42 @@ function contrastTone(base, against, minC) {   // nejbližší tón base (světl
   for (let k = 0; k <= 1.0001; k += 0.05) for (const a of [k, -k]) { const t = shade(base, a); if (wcag(t, against) >= minC) return t; }
   return luma(against) > 0.3 ? '#151a24' : '#f4f7fb';
 }
+// H7 (2026-11-18, jen /dev): přesně podle Ondřejovy skici docs/ref/helma-predloha-ondrej.webp — neprůhledná skořepina se silným obrysem,
+// středový hřbet mezi dvěma podélnými drážkami (k čelu se rozšiřuje), po stranách 2 větrací štěrbiny nad sebou, tmavá ucha vyčnívají ze siluety,
+// vpředu plexi (tmavý pás s odlesky) nebo mřížka (mříž 3×3 vystrčená před helmu). Rámec hlavy: +x = obličej.
+function headH7(c, K, hx, hrx, hry, lt) {
+  const own = K.helmet !== K.jersey, hc = own ? K.helmet : shade(K.jersey, lt ? -0.45 : 0.42), ht = K.helmetType, dk = '#14171d';
+  const rx = hrx * 1.04, ry = hry * 1.04, cx = hx;
+  const shell = new Path2D(); ellP(shell, cx, 0, rx, ry);
+  if (globalThis.__fhHeadMask) { c.lineWidth = 2; c.strokeStyle = c.fillStyle = '#ff00ff'; c.stroke(shell); c.fill(shell); return; }
+  c.lineJoin = 'round';
+  // ucha (pod skořepinou, vyčnívají do stran)
+  for (const sd of [-1, 1]) { c.beginPath(); c.roundRect(cx - rx * 0.32, sd * ry * 1.02 - ry * 0.17, rx * 0.62, ry * 0.34, ry * 0.12); c.fillStyle = '#2a2f38'; c.fill(); c.strokeStyle = SKIN_OUT; c.lineWidth = 0.8; c.stroke(); }
+  // mřížka vystrčená před helmu (kreslí se pod skořepinu, aby ji skořepina překryla vzadu)
+  if (ht === 'cage') { const x0 = cx + rx * 0.35, x1 = cx + rx * 1.32, yy = ry * 0.86, D = new Path2D();
+    D.moveTo(x0, -yy); D.lineTo(x1 - rx * 0.18, -yy); D.quadraticCurveTo(x1, -yy, x1, -yy * 0.6); D.lineTo(x1, yy * 0.6); D.quadraticCurveTo(x1, yy, x1 - rx * 0.18, yy); D.lineTo(x0, yy); D.closePath();
+    c.fillStyle = 'rgba(20,24,32,0.55)'; c.fill(D);
+    c.save(); c.clip(D); c.beginPath(); for (const f of [0.38, 0.68]) { const x = x0 + (x1 - x0) * f; c.moveTo(x, -yy); c.lineTo(x, yy); } for (const f of [-1 / 3, 1 / 3]) { c.moveTo(x0, yy * 2 * f); c.lineTo(x1, yy * 2 * f); }
+    c.strokeStyle = '#9aa3ad'; c.lineWidth = 0.7; c.stroke(); c.restore(); c.strokeStyle = '#9aa3ad'; c.lineWidth = 0.9; c.stroke(D); }
+  c.strokeStyle = SKIN_OUT; c.lineWidth = 2.0; c.stroke(shell); c.fillStyle = hc; c.fill(shell);
+  c.save(); c.clip(shell);
+  c.fillStyle = 'rgba(10,16,40,0.10)'; c.fillRect(cx - rx, ry * 0.55, rx * 2, ry);   // spodní okraj o tón tmavší (skica)
+  // drážky hřbetu: vzadu blíž ose, k čelu se rozšiřují
+  c.strokeStyle = dk; c.lineWidth = 0.75; c.lineCap = 'butt'; c.beginPath();
+  for (const sd of [-1, 1]) { c.moveTo(cx - rx * 1.05, sd * ry * 0.34); c.lineTo(cx + rx * 0.62, sd * ry * 0.44); } c.stroke();
+  // větrací štěrbiny: 2 nad sebou na každé straně
+  c.fillStyle = dk; for (const sd of [-1, 1]) for (const [x0, len] of [[-0.62, 0.42], [-0.08, 0.36]]) { c.beginPath(); c.roundRect(cx + rx * x0, sd * ry * 0.66 - ry * 0.1, rx * len, ry * 0.2, 0.25); c.fill(); }
+  c.restore();
+  // plexi (Ondřej: „hranatější"): tmavý štít s ostrými rohy, přečnívá přes čelo do stran, šikmé odlesky
+  if (ht === 'visor' || ht === 'shield') { const x0 = cx + rx * 0.5, x1 = cx + rx * 1.12, yy = ry * 0.98, ch = rx * 0.16;
+    const V = new Path2D(); V.moveTo(x0, -yy); V.lineTo(x1 - ch, -yy); V.lineTo(x1, -yy + ch); V.lineTo(x1, yy - ch); V.lineTo(x1 - ch, yy); V.lineTo(x0, yy); V.closePath();
+    c.fillStyle = '#1f242c'; c.fill(V); c.strokeStyle = '#8b939c'; c.lineWidth = 0.8; c.stroke(V);
+    c.save(); c.clip(V); c.strokeStyle = 'rgba(255,255,255,0.6)'; c.lineWidth = 0.7; c.beginPath();
+    for (const yy0 of [-0.5, 0.1]) { c.moveTo(x0 + rx * 0.12, ry * (yy0 + 0.25)); c.lineTo(x0 + rx * 0.42, ry * (yy0 - 0.15)); } c.stroke(); c.restore(); }
+  else if (ht === 'none') { c.beginPath(); c.ellipse(cx + rx * 0.95, 0, rx * 0.3, ry * 0.55, 0, 0, Math.PI * 2); c.fillStyle = '#e8b896'; c.fill(); c.strokeStyle = SKIN_OUT; c.lineWidth = 0.7; c.stroke(); }
+}
 function headDir(c, K, hv, hx, hrx, hry, hlx, hly, lod, lt) {
+  if (hv === 7) return headH7(c, K, hx, hrx, hry, lt);
   const own = K.helmet !== K.jersey, ht = K.helmetType, sm = mix(K.visor, HD_SMOKE, 0.78);
   let rx = hrx, ry = hry, cx = hx;
   if (hv === 6) { rx *= 1.2; ry *= 1.2; cx += hrx * 0.08; }

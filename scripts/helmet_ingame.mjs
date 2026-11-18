@@ -2,7 +2,7 @@
 // Výřez kolem nejhustšího shluku hráčů 1:1 a 2× (nejbližší soused). Server: PORT=5850 node server.js → node scripts/helmet_ingame.mjs <out> [port]
 import { chromium } from 'playwright';
 import { writeFileSync } from 'fs';
-const OUT = process.argv[2] || '.', PORT = process.argv[3] || '5850', VARS = [1, 3, 4, 5, 6];
+const OUT = process.argv[2] || '.', PORT = process.argv[3] || '5850', VARS = (process.env.VARS || '1,3,4,5,6,7').split(',').map(Number);
 const b = await chromium.launch(); const ctx = await b.newContext({ viewport: { width: 1280, height: 760 }, deviceScaleFactor: 1 }); const p = await ctx.newPage();
 const errs = []; p.on('pageerror', e => errs.push(e.message));
 await p.clock.install({ time: new Date('2026-11-17T12:00:00Z') });
