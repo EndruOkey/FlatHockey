@@ -23,8 +23,10 @@ const CSS = `
 #fhpc .bl{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px}
 #fhpc .bl div{padding:8px;background:rgba(127,212,255,.08);border-left:3px solid var(--a3-ice,#7FD4FF);font:700 13px/1.3 Barlow;color:#A9BBD1;text-transform:uppercase}
 #fhpc .bl b{display:block;font:italic 800 18px/1.1 'Barlow Condensed';color:#fff}
-/* zavírací ✕ = stejná komponenta jako Nastavení (.set-close); jen tmavý podklad kvůli čitelnosti nad bannerem. Bez zkosení: --a3-cut ořezával 22 px z rohu 36px tlačítka i se znakem ✕ */
-#fhpc .x{position:absolute;right:10px;top:10px;z-index:2;display:grid;place-items:center;cursor:pointer;clip-path:none;background:rgba(5,10,20,.7)!important}
+/* zavření = systémové tlačítko Zpět (.back3 z ui3.css, stejné jako na všech obrazovkách menu, s nápovědou Esc) dole na kartě; ✕ v menu nikde jinde není.
+   Úpravy jen kvůli kartě: celá šířka a 44 px (cíl pro klik), obrys fokusu dovnitř (zkosení clip-path by vnější obrys uřízlo) */
+#fhpc .x{width:100%;height:44px;justify-content:center;margin:16px 0 0}
+#fhpc .x:focus-visible{outline:3px solid var(--a3-ice,#7FD4FF);outline-offset:-5px}
 `;
 export function showPlayerCard(r, en = false) {
   if (typeof document === 'undefined' || !r) return;
@@ -35,16 +37,16 @@ export function showPlayerCard(r, en = false) {
   const sz = [0, 1, 2].includes(r.size) ? r.size : 1, sl = [0, 1, 2].includes(r.stick_len) ? r.stick_len : 1, L = en ? 1 : 0;
   const gp = r.games_played ?? 0, wr = gp ? Math.round((r.wins ?? 0) / gp * 100) + '%' : '—';
   const el = document.createElement('div'); el.id = 'fhpc';
-  el.innerHTML = `<div class="pc" role="dialog" aria-label="${esc(r.display_name)}"><div class="bn" style="background:${bn.bg}"></div>
-    <button type="button" class="x set-close" aria-label="${en ? 'Close' : 'Zavřít'}">✕</button>
+  el.innerHTML = `<div class="pc" role="dialog" aria-modal="true" aria-label="${esc(r.display_name)}"><div class="bn" style="background:${bn.bg}"></div>
     <div class="hero"><canvas></canvas></div>${r.number != null ? `<div class="num">${esc(r.number)}</div>` : ''}
     <div class="bd"><div class="nm">${esc(r.display_name || 'Player')}</div><span class="tt">★ ${esc(en ? ti.en : ti.cs)}</span>
       <div class="st"><div><b>${r.rank_points ?? 1000}</b><span>ELO</span></div><div><b>${r.goals ?? 0}</b><span>${en ? 'Goals' : 'Góly'}</span></div><div><b>${r.assists ?? 0}</b><span>${en ? 'Assists' : 'Asist.'}</span></div>
         <div><b>${gp}</b><span>${en ? 'Games' : 'Zápasy'}</span></div><div><b>${wr}</b><span>${en ? 'Win %' : 'Výhry'}</span></div><div><b>${(r.plus_minus ?? 0) > 0 ? '+' : ''}${r.plus_minus ?? 0}</b><span>+/−</span></div></div>
-      <div class="bl"><div>${en ? 'Size' : 'Velikost'}<b>${SZ[sz][L]} · ${SZ[sz][L + 2]}</b></div><div>${en ? 'Stick' : 'Hokejka'}<b>${ST[sl][L]}</b></div></div></div></div>`;
+      <div class="bl"><div>${en ? 'Size' : 'Velikost'}<b>${SZ[sz][L]} · ${SZ[sz][L + 2]}</b></div><div>${en ? 'Stick' : 'Hokejka'}<b>${ST[sl][L]}</b></div></div>
+      <button type="button" class="back3 x"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="square"/></svg><span>${en ? 'Back' : 'Zpět'}</span><kbd>Esc</kbd></button></div></div>`;
   document.body.appendChild(el);
   const close = () => { el.remove(); removeEventListener('keydown', onKey, true); };
-  const onKey = e => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+  const onKey = e => { if (e.key === 'Escape') { e.stopPropagation(); close(); } else if (e.key === 'Tab') { e.preventDefault(); const x = el.querySelector('.x'); x.blur(); x.focus({ focusVisible: true }); } };   // Tab zůstává v kartě (jediný ovládací prvek)
   addEventListener('keydown', onKey, true);
   el.addEventListener('click', e => { if (e.target === el || e.target.closest('.x')) close(); });
   // hráč v jeho výbavě (stejný renderer jako hra a šatna)
@@ -56,6 +58,6 @@ export function showPlayerCard(r, en = false) {
   p.size = sz; const g = c.getContext('2d'), s0 = Math.min(c.height / 30, c.width / 36) * 0.85;
   for (let f = 0; f < 3; f++) { g.fillStyle = '#dfeaf3'; g.fillRect(0, 0, c.width, c.height); p._dispReach = ST[sl][2] ?? PLAYER.stickLen; p.x = 500; p.y = 200; p.bodyAngle = p.skateAngle = -Math.PI / 2; p.vx = p.vy = 0; p.aimAngle = p.carryAngle = p._stickDisp = -Math.PI / 2 + 0.6;
     try { p.draw(g, { scale: s0, ox: c.width / 2 - 500 * s0, oy: c.height * .58 - 200 * s0, dt: 1 / 60 }); } catch {} }
-  el.querySelector('.x').focus();
+  el.querySelector('.x').focus({ focusVisible: false });   // fokus kvůli Esc/Enter, ale bez bílého rámečku při otevření myší
   return el;
 }
