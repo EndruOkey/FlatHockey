@@ -1,5 +1,5 @@
 // Vlastnosti k účtu (2026-11-18): velikost, hůl, kosmetika karty, barvy dresu a vlastní sady se ukládají do DB s validací;
-// host nese všechny informace jako účet (2026-11-18); žebříček vrací data karty a nevrací interní id.
+// host smí jen herní volby + kosmetiku karty (ne vzhled dresu); žebříček vrací data karty a nevrací interní id.
 // Spuštění: npm run test:profile   (DB jen v tmpdir)
 import { spawn } from 'child_process';
 import { tmpdir } from 'os';
@@ -51,7 +51,7 @@ try {
   await post(guest, { size: 0, stick_len: 2, banner: 'ice', jersey: '#ff0000', number: 5 });
   const g = await get(guest);
   check(g.size === 0 && g.stick_len === 2 && g.banner === 'ice', 'host: herní volby a kosmetika karty uložené');
-  check(g.jersey === '#ff0000' && g.number === 5, 'host: vzhled dresu i číslo uložené (nese vše jako účet)');
+  check(g.jersey == null && g.number === 99, 'host: vzhled dresu ani číslo neuložené');
 
   const lb = await (await fetch(BASE + '/api/leaderboard')).json();
   const row = lb.find(r => r.display_name === 'Karta');

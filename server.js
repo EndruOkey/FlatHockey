@@ -311,8 +311,7 @@ function buildPlayer(lobby, sid, m) {
   const ts = lobby.settings.teams[m.team] || {};
   p.color  = ts.color || null;
   // RYCHLÁ HRA: hráč s účtem hraje ve vlastním dresu, tým ukazuje barevný kruh pod hráčem (tm). Host a bot = barva týmu.
-  if (lobby.settings.quick) { p.teamMark = ts.color || null; if (m.jersey) {   // host nese vzhled jako účet (2026-11-18)
-    p.color = m.jersey; p.stripe = m.stripe || null; } }
+  if (lobby.settings.quick) { p.teamMark = ts.color || null; if (m.jersey && !m.guest) { p.color = m.jersey; p.stripe = m.stripe || null; } }
   p.jersey = ts.style || 'solid';
   p.helmet = m.helmet; p.shorts = m.shorts; p.gloves = m.gloves; p.tape = m.tape; p.trail = m.trail;
   p.stick = m.stick; p.tapeStyle = m.tapeStyle; p.helmetType = m.helmetType; p.visor = m.visor;
@@ -505,12 +504,12 @@ const SPONSOR_HASH = '6ca63a5475d6396dc2c544b9b236d22eac7bced69b2a88c24135dccf29
 const isSponsorCode = (code) => typeof code === 'string' && code.length > 0 &&
   crypto.createHash('sha256').update(SPONSOR_SALT + code.trim().toUpperCase()).digest('hex') === SPONSOR_HASH;
 // Člen lobby za socket: jméno VŽDY z účtu (jedinečné, db.js claimName) — ne z prohlížeče; + ikonka původu.
-// Host nese všechny informace jako účet (Ondřej 2026-11-18; dřív vzhled zahazován). Jméno vždy z účtu zařízení.
+// Host (i bez účtu): žádný vlastní vzhled — server ho zahodí, ať to nejde obejít z prohlížeče (Ondřej 2026-11-13).
 function memberFor(socket, profile, team) {
   const uid = socket.data.userId;
   let guest = true;
   try { guest = !uid || isGuestUser(uid); } catch {}
-  const m = makeMember(profile, team);
+  const m = makeMember(guest ? { handed: profile?.handed, size: profile?.size, stickLen: profile?.stickLen, code: profile?.code } : profile, team);   // velikost a délka hole = herní volba → i host
   let stats = null, avUrl = null;
   if (uid) { try { const u = getUserById(uid); if (u?.display_name) m.name = u.display_name; avUrl = u?.avatar_url || null; stats = getStats(uid); } catch {} }
   // GÓLOVÁ KARTA (2026-11-17): banner / titul / profilovka — jen odemčené podle statistik v DB (jinak výchozí), i host
