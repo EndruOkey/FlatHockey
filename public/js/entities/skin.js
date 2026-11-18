@@ -276,7 +276,8 @@ function headH7(c, K, hx, hrx, hry, lt) {
   c.restore();
   // plexi (Ondřej: „hranatější"): tmavý štít s ostrými rohy, přečnívá přes čelo do stran, šikmé odlesky
   if (ht === 'visor' || ht === 'shield') { const x0 = cx + rx * 0.5, x1 = cx + rx * 1.12, yy = ry * 0.98, ch = rx * 0.16;
-    const V = new Path2D(); V.moveTo(x0, -yy); V.lineTo(x1 - ch, -yy); V.lineTo(x1, -yy + ch); V.lineTo(x1, yy - ch); V.lineTo(x1 - ch, yy); V.lineTo(x0, yy); V.closePath();
+    const R = rx * 1.12, A = 1.0, xb = cx + rx * 0.42, yb = R * Math.sin(A);   // jako skica: oblouk kopíruje čelo helmy, zadní hrana rovná (Ondřej: „moc hranaté, málo plexi“)
+    const V = new Path2D(); V.moveTo(xb, -yb); V.lineTo(cx + R * Math.cos(A), -yb); V.arc(cx, 0, R, -A, A); V.lineTo(xb, yb); V.closePath();
     c.fillStyle = 'rgba(205,228,245,0.38)'; c.fill(V); c.strokeStyle = '#7d8790'; c.lineWidth = 0.8; c.stroke(V);   // čiré sklo (Ondřej: „ne tmavé, normálně sklo“)
     c.save(); c.clip(V); c.strokeStyle = 'rgba(255,255,255,0.9)'; c.lineWidth = 0.7; c.beginPath();
     for (const yy0 of [-0.5, 0.1]) { c.moveTo(x0 + rx * 0.12, ry * (yy0 + 0.25)); c.lineTo(x0 + rx * 0.42, ry * (yy0 - 0.15)); } c.stroke(); c.restore(); }
