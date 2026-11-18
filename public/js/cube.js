@@ -10,7 +10,9 @@ import { PLAYER } from './constants.js';
 import { pickBanner, pickTitle } from './cosmetics.js';
 const W = 520, H = 170, RING = 30, UBH = 46, UBW = 364, CW = Math.round(W * 0.12);
 const UB_TOP = RING + H + 8;   // poloha underbelly v kostce; v klidu je kostka posunutá o −UB_TOP (vidět jen underbelly)
-const DUR = 1900;
+// 2026-11-18 Ondřej: „kostka je rychlá, nejde přečíst“ → karta střelce stojí navíc HOLD ms (vnitřní čas se v bodě FREEZE zastaví);
+// úvod (bliknutí GOAL) i odchod beze změny, ztmavení scény běží v reálném čase (nezakrývá buly 1,2 s po gólu)
+const FREEZE = 1600, HOLD = 1800, DUR = 1900 + HOLD;
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const cl = (x, a, b) => Math.max(a, Math.min(b, x));
 const eOutExpo = x => x >= 1 ? 1 : 1 - Math.pow(2, -10 * x), eIn = x => x * x * x, eOut = x => 1 - Math.pow(1 - x, 3);
@@ -88,8 +90,9 @@ export function initCube(t9n) {
   let goal = null, t0 = 0, raf = 0, score = { home: 0, away: 0 }, teams = null, shown = { home: 0, away: 0 };
   const paintScore = () => { $('fhc-hs').textContent = shown.home; $('fhc-as').textContent = shown.away; };
   // ČISTÁ FUNKCE PRŮBĚHU: t = ms od gólu (deterministické; test krokuje po 40 ms)
-  function set(t) {
-    const g = goal, on = !!g && t >= 0 && t < DUR;
+  function set(tr) {
+    const t = tr < FREEZE ? tr : tr < FREEZE + HOLD ? FREEZE : tr - HOLD;   // vnitřní čas původní 1,9s osy
+    const g = goal, on = !!g && tr >= 0 && tr < DUR;
     const p = !on ? 0 : t < 320 ? eOutExpo(t / 320) : t < 1650 ? 1 : t < 1900 ? 1 - eIn((t - 1650) / 250) : 0;
     const sway = (!on || reduce || t < 320 || t > 1650) ? 0 : 1.2 * Math.exp(-(t - 320) / 340) * Math.sin((t - 320) / 1000 * 2 * Math.PI * 1.5);
     $('fhc-g').style.transform = `translateY(${(p - 1) * UB_TOP}px) rotate(${sway}deg)`;
@@ -104,7 +107,7 @@ export function initCube(t9n) {
     $('fhc-ur').style.backgroundColor = $('fhc-lr').style.backgroundColor = on ? (red ? (g.color2 || '#1b4fd1') : '#0f2550') : '#0f2550';
     $('fhc-urt').style.transform = `translateX(${-((Math.floor(t / 90) * 9) % 90)}px)`;
     // hala: ztlumení + reflektory + blesky
-    const dimK = !on ? 0 : t < 200 ? t / 200 : t < 1400 ? 1 : t < 1700 ? 1 - (t - 1400) / 300 : 0;
+    const dimK = !on ? 0 : tr < 200 ? tr / 200 : tr < 1400 ? 1 : tr < 1700 ? 1 - (tr - 1400) / 300 : 0;
     dim.style.opacity = 0.28 * dimK;
     const sw = cl((t - 150) / 1300, 0, 1), vw = innerWidth;
     $('fhc-swL').style.left = (vw * .13 + sw * vw * .5) + 'px'; $('fhc-swR').style.left = (vw * .77 - sw * vw * .5) + 'px';
@@ -122,7 +125,7 @@ export function initCube(t9n) {
     if (!on || t >= 1050) shown = { ...score }; paintScore();
     $('fhc-hs').style.color = $('fhc-as').style.color = '';
     if (on && t >= 1050 && t < 1650 && g.side) $(g.side === 'home' ? 'fhc-hs' : 'fhc-as').style.color = '#FFB020';
-    if (on === false && goal && t >= DUR) goal = null;
+    if (on === false && goal && tr >= DUR) goal = null;
   }
   function loop() { const t = performance.now() - t0; set(t); if (t < DUR + 50) raf = requestAnimationFrame(loop); else { raf = 0; goal = null; set(DUR); } }
   return {
