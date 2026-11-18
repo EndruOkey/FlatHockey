@@ -254,35 +254,38 @@ function contrastTone(base, against, minC) {   // nejbližší tón base (světl
 function headH7(c, K, hx, hrx, hry, lt) {
   const own = K.helmet !== K.jersey, hc = own ? K.helmet : shade(K.jersey, lt ? -0.45 : 0.42), ht = K.helmetType, dk = '#14171d';
   const rx = hrx * 1.04, ry = hry * 1.04, cx = hx;
-  const shell = new Path2D(); ellP(shell, cx, 0, rx, ry);
-  if (globalThis.__fhHeadMask) { c.lineWidth = 2; c.strokeStyle = c.fillStyle = '#ff00ff'; c.stroke(shell); c.fill(shell); return; }
+  // helma je vpředu OTEVŘENÁ (Ondřej: „pod plexi a mřížkou má být obličej, ne helma“): oblouk elipsy za čelem, rovná hrana u obličeje
+  const fo = 0.42, t0 = Math.acos(fo), xb = cx + rx * fo;
+  const shell = new Path2D(); shell.ellipse(cx, 0, rx, ry, 0, t0, Math.PI * 2 - t0); shell.closePath();
+  if (globalThis.__fhHeadMask) { const q = new Path2D(); ellP(q, cx, 0, rx, ry); c.lineWidth = 2; c.strokeStyle = c.fillStyle = '#ff00ff'; c.stroke(q); c.fill(q); return; }
   c.lineJoin = 'round';
   // ucha (pod skořepinou, vyčnívají do stran)
   for (const sd of [-1, 1]) { c.beginPath(); c.roundRect(cx - rx * 0.32, sd * ry * 1.02 - ry * 0.17, rx * 0.62, ry * 0.34, ry * 0.12); c.fillStyle = '#2a2f38'; c.fill(); c.strokeStyle = SKIN_OUT; c.lineWidth = 0.8; c.stroke(); }
-  // mřížka vystrčená před helmu (kreslí se pod skořepinu, aby ji skořepina překryla vzadu)
-  if (ht === 'cage') { const x0 = cx + rx * 0.35, x1 = cx + rx * 1.32, yy = ry * 0.86, D = new Path2D();
-    D.moveTo(x0, -yy); D.lineTo(x1 - rx * 0.18, -yy); D.quadraticCurveTo(x1, -yy, x1, -yy * 0.6); D.lineTo(x1, yy * 0.6); D.quadraticCurveTo(x1, yy, x1 - rx * 0.18, yy); D.lineTo(x0, yy); D.closePath();
-    c.fillStyle = 'rgba(20,24,32,0.55)'; c.fill(D);
-    c.save(); c.clip(D); c.beginPath(); for (const f of [0.38, 0.68]) { const x = x0 + (x1 - x0) * f; c.moveTo(x, -yy); c.lineTo(x, yy); } for (const f of [-1 / 3, 1 / 3]) { c.moveTo(x0, yy * 2 * f); c.lineTo(x1, yy * 2 * f); }
-    c.strokeStyle = '#9aa3ad'; c.lineWidth = 0.7; c.stroke(); c.restore(); c.strokeStyle = '#9aa3ad'; c.lineWidth = 0.9; c.stroke(D); }
+  // obličej pod helmou (kůže), vpředu za plexi / mřížkou
+  const face = new Path2D(); face.ellipse(cx + rx * 0.5, 0, rx * 0.58, ry * 0.8, 0, 0, Math.PI * 2);
+  c.fillStyle = '#e8b896'; c.fill(face); c.strokeStyle = SKIN_OUT; c.lineWidth = 0.9; c.stroke(face);
   c.strokeStyle = SKIN_OUT; c.lineWidth = 2.0; c.stroke(shell); c.fillStyle = hc; c.fill(shell);
   c.save(); c.clip(shell);
   c.fillStyle = 'rgba(10,16,40,0.10)'; c.fillRect(cx - rx, ry * 0.55, rx * 2, ry);   // spodní okraj o tón tmavší (skica)
-  // drážky hřbetu: vzadu blíž ose, k čelu se rozšiřují
-  c.strokeStyle = dk; c.lineWidth = 0.75; c.lineCap = 'butt'; c.beginPath();
-  for (const sd of [-1, 1]) { c.moveTo(cx - rx * 1.05, sd * ry * 0.34); c.lineTo(cx + rx * 0.62, sd * ry * 0.44); } c.stroke();
-  // větrací štěrbiny: 2 nad sebou na každé straně
-  c.fillStyle = dk; for (const sd of [-1, 1]) for (const [x0, len] of [[-0.62, 0.42], [-0.08, 0.36]]) { c.beginPath(); c.roundRect(cx + rx * x0, sd * ry * 0.66 - ry * 0.1, rx * len, ry * 0.2, 0.25); c.fill(); }
+  c.strokeStyle = dk; c.lineWidth = 0.75; c.lineCap = 'butt'; c.beginPath();   // drážky hřbetu: vzadu blíž ose, k čelu se rozšiřují
+  for (const sd of [-1, 1]) { c.moveTo(cx - rx * 1.05, sd * ry * 0.34); c.lineTo(xb, sd * ry * 0.44); } c.stroke();
+  c.fillStyle = dk; for (const sd of [-1, 1]) for (const [x0, len] of [[-0.62, 0.42], [-0.08, 0.36]]) { c.beginPath(); c.roundRect(cx + rx * x0, sd * ry * 0.66 - ry * 0.1, rx * len, ry * 0.2, 0.25); c.fill(); }   // větrací štěrbiny
   c.restore();
-  // plexi (Ondřej: „hranatější"): tmavý štít s ostrými rohy, přečnívá přes čelo do stran, šikmé odlesky
-  if (ht === 'visor' || ht === 'shield') { const x0 = cx + rx * 0.5, x1 = cx + rx * 1.12, yy = ry * 0.98, ch = rx * 0.16;
-    const R = rx * 1.12, A = 1.0, xb = cx + rx * 0.42, yb = R * Math.sin(A);   // jako skica: oblouk kopíruje čelo helmy, zadní hrana rovná (Ondřej: „moc hranaté, málo plexi“)
+  if (ht === 'visor' || ht === 'shield') {   // plexi: skoro čiré sklo přes obličej, oblouk podle čela, jen rámeček a odlesky
+    const R = rx * 1.12, A = 1.0, yb = R * Math.sin(A);
     const V = new Path2D(); V.moveTo(xb, -yb); V.lineTo(cx + R * Math.cos(A), -yb); V.arc(cx, 0, R, -A, A); V.lineTo(xb, yb); V.closePath();
-    c.fillStyle = 'rgba(205,228,245,0.38)'; c.fill(V); c.strokeStyle = '#7d8790'; c.lineWidth = 0.8; c.stroke(V);   // čiré sklo (Ondřej: „ne tmavé, normálně sklo“)
-    c.save(); c.clip(V); c.strokeStyle = 'rgba(255,255,255,0.9)'; c.lineWidth = 0.7; c.beginPath();
-    for (const yy0 of [-0.5, 0.1]) { c.moveTo(x0 + rx * 0.12, ry * (yy0 + 0.25)); c.lineTo(x0 + rx * 0.42, ry * (yy0 - 0.15)); } c.stroke(); c.restore(); }
-  else if (ht === 'none') { c.beginPath(); c.ellipse(cx + rx * 0.95, 0, rx * 0.3, ry * 0.55, 0, 0, Math.PI * 2); c.fillStyle = '#e8b896'; c.fill(); c.strokeStyle = SKIN_OUT; c.lineWidth = 0.7; c.stroke(); }
+    c.fillStyle = 'rgba(225,238,248,0.16)'; c.fill(V);
+    c.save(); c.clip(V); c.strokeStyle = 'rgba(255,255,255,0.95)'; c.lineWidth = 0.75; c.beginPath();
+    for (const y0 of [-0.5, 0.1]) { c.moveTo(xb + rx * 0.14, ry * (y0 + 0.25)); c.lineTo(xb + rx * 0.44, ry * (y0 - 0.15)); } c.stroke(); c.restore();
+    c.strokeStyle = '#8b949e'; c.lineWidth = 0.7; c.stroke(V);
+  } else if (ht === 'cage') {   // mřížka přes obličej (kůže prosvítá), rám vystrčený před helmu
+    const x1 = cx + rx * 1.3, yy = ry * 0.86, D = new Path2D();
+    D.moveTo(xb, -yy); D.lineTo(x1 - rx * 0.18, -yy); D.quadraticCurveTo(x1, -yy, x1, -yy * 0.6); D.lineTo(x1, yy * 0.6); D.quadraticCurveTo(x1, yy, x1 - rx * 0.18, yy); D.lineTo(xb, yy); D.closePath();
+    c.save(); c.clip(D); c.beginPath(); for (const f of [0.38, 0.68]) { const x = xb + (x1 - xb) * f; c.moveTo(x, -yy); c.lineTo(x, yy); } for (const f of [-1 / 3, 1 / 3]) { c.moveTo(xb, yy * 2 * f); c.lineTo(x1, yy * 2 * f); }
+    c.strokeStyle = '#5f6872'; c.lineWidth = 0.7; c.stroke(); c.restore(); c.strokeStyle = '#5f6872'; c.lineWidth = 0.9; c.stroke(D);
+  }
 }
+
 function headDir(c, K, hv, hx, hrx, hry, hlx, hly, lod, lt) {
   if (hv === 7) return headH7(c, K, hx, hrx, hry, lt);
   const own = K.helmet !== K.jersey, ht = K.helmetType, sm = mix(K.visor, HD_SMOKE, 0.78);
