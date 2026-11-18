@@ -761,7 +761,7 @@ export class NetGame {
     const W = viewW(ctx.canvas), H = viewH(ctx.canvas);
     const tm = this.settings.teams;
     const cx = W / 2;
-    if (!this._cube && globalThis.FH_DEV && !this.offline) this._cube = initCube(t);   // kostka místo plátnové tabule (dev)
+    if (!this._cube && !this.offline) this._cube = initCube(t);   // kostka místo plátnové tabule (všem od 2026-11-18)
     if (this._cube) this._cube.update({ home: this.score.home, away: this.score.away, clock: this.clk, period: this.per, periods: this.pers, teams: tm });
     // scoreboard
     if (!this._cube) {
