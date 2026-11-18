@@ -23,7 +23,8 @@ const CSS = `
 #fhpc .bl{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px}
 #fhpc .bl div{padding:8px;background:rgba(127,212,255,.08);border-left:3px solid var(--a3-ice,#7FD4FF);font:700 13px/1.3 Barlow;color:#A9BBD1;text-transform:uppercase}
 #fhpc .bl b{display:block;font:italic 800 18px/1.1 'Barlow Condensed';color:#fff}
-#fhpc .x{position:absolute;right:10px;top:10px;z-index:2;width:36px;height:36px;border:0;background:rgba(5,10,20,.7);color:#fff;font:900 18px/1 Barlow;cursor:pointer;clip-path:var(--a3-cut,none)}
+/* zavírací ✕ = stejná komponenta jako Nastavení (.set-close); jen tmavý podklad kvůli čitelnosti nad bannerem. Bez zkosení: --a3-cut ořezával 22 px z rohu 36px tlačítka i se znakem ✕ */
+#fhpc .x{position:absolute;right:10px;top:10px;z-index:2;display:grid;place-items:center;cursor:pointer;clip-path:none;background:rgba(5,10,20,.7)!important}
 `;
 export function showPlayerCard(r, en = false) {
   if (typeof document === 'undefined' || !r) return;
@@ -35,7 +36,7 @@ export function showPlayerCard(r, en = false) {
   const gp = r.games_played ?? 0, wr = gp ? Math.round((r.wins ?? 0) / gp * 100) + '%' : '—';
   const el = document.createElement('div'); el.id = 'fhpc';
   el.innerHTML = `<div class="pc" role="dialog" aria-label="${esc(r.display_name)}"><div class="bn" style="background:${bn.bg}"></div>
-    <button type="button" class="x" aria-label="${en ? 'Close' : 'Zavřít'}">✕</button>
+    <button type="button" class="x set-close" aria-label="${en ? 'Close' : 'Zavřít'}">✕</button>
     <div class="hero"><canvas></canvas></div>${r.number != null ? `<div class="num">${esc(r.number)}</div>` : ''}
     <div class="bd"><div class="nm">${esc(r.display_name || 'Player')}</div><span class="tt">★ ${esc(en ? ti.en : ti.cs)}</span>
       <div class="st"><div><b>${r.rank_points ?? 1000}</b><span>ELO</span></div><div><b>${r.goals ?? 0}</b><span>${en ? 'Goals' : 'Góly'}</span></div><div><b>${r.assists ?? 0}</b><span>${en ? 'Assists' : 'Asist.'}</span></div>

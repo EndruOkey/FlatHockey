@@ -5,7 +5,7 @@ const ROWS = [
   { key: 'g', label: 'Branka', opts: [[5, 'Shora, přesně (kolize)'], [11, 'G11 NHL, rozevřené boky'], [12, 'G12 NHL, rovnoběžné boky'], [8, 'G8 tvar D (kandidát)'], [10, 'G10 = původní G8'], [9, 'G9 skutečný tvar, jen základna'], [6, 'G6 čistá'], [7, 'G7 výrazná'], [3, 'Shora s hloubkou'], [4, 'Shora, větší hloubka'], [1, 'Půdorys'], [0, 'Šikmý 3D'], [2, 'Nízký náklon']] },
   { key: 'p', label: 'Výška puku', opts: [[1, 'Shora (jako branka)'], [0, 'Šikmo nahoru (dřív)']] },
   { key: 'h', label: 'Hlava', opts: [[1, 'Oddělená helma'], [0, 'V barvě dresu'], [2, 'Světlá helma'], [3, 'H3 plochá ikona'], [4, 'H4 skořepina'], [5, 'H5 týmový pruh'], [6, 'H6 hloubka']] },
-  { key: 's', label: 'Hokejka', opts: [[3, 'Dnešní štíhlejší'], [0, 'Dnešní (původní)'], [1, 'Štíhlá'], [2, 'Lopatka']] },
+  { key: 's', label: 'Hokejka', opts: [[3, 'Dnešní štíhlejší'], [0, 'Dnešní (původní)'], [1, 'Štíhlá'], [2, 'Lopatka'], [4, 'S4 zúžená, štíhlejší'], [5, 'S5 zúžená, nejtenčí'], [6, 'S6 silné zúžení']] },
   { key: 'b', label: 'Tělo', opts: [[1, 'Živé tělo (nové)'], [0, 'Dřívější (strohé)']] },
   { key: 'k', label: 'Bruslení', opts: [[3, 'K3 plynulý krok (všem)'], [0, 'Dřívější'], [1, 'Krok do stran'], [2, 'Velký odraz'], [4, 'K4 celek + odraz (test)'], [5, 'K5 = K3 + celek z K4 (test)']] },
   { key: 'n', label: 'Nohy', opts: [[1, 'Ukotvené k ledu'], [0, 'Bez ukotvení']] },

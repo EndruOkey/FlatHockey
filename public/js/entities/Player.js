@@ -821,7 +821,19 @@ const STICK_V = [
   { out: 3.4, sh: 1.8, bl: 3.8, blo: 5.4, knob: 1 },
   { out: 3.6, sh: 2.0, bl: 4.2, blo: 5.8, knob: 1, hi: 1, sh2: 1, paddle: 1 },   // paddle = čepel jako plochá lopatka (vyplněný tvar)
   { out: 4.1, sh: 2.4, bl: 2.5, blo: 4.3 },   // S3 = dnešní, lehce štíhlejší (~15 %) — výchozí od 2026-11-12
+  // S4–S6 (2026-11-18, jen /dev): ZÚŽENÍ dříku od horní ruky k čepeli (Ondřej: „moc tučná, odzhora dolů by se měla opticky ztenčovat").
+  // sh = jádro u konce hole, tp = poměr jádra u paty čepele, out − sh = obrys (stejný po celé délce)
+  // bl/blo = páska/obrys čepele u paty, btp = poměr pásky u špičky (zúžení pokračuje do čepele; v dnešní S3 je čepel tlustší než dřík)
+  { out: 3.4, sh: 2.0, tp: 0.70, bl: 1.7, blo: 3.1, btp: 0.7 },   // S4 mírně štíhlejší + zúžení 30 %
+  { out: 2.9, sh: 1.7, tp: 0.65, bl: 1.4, blo: 2.6, btp: 0.7 },   // S5 nejtenčí
+  { out: 3.6, sh: 2.2, tp: 0.55, bl: 1.5, blo: 2.9, btp: 0.6 },   // S6 nahoře skoro jako dnes, výrazné zúžení 45 %
 ];
+// zúžená čára (kruhové konce): šířka w0 v (x0,y0) → w1 v (x1,y1); při w0 = w1 vypadá stejně jako stroke s lineCap round
+function _taperLine(ctx, x0, y0, x1, y1, w0, w1) {
+  if (w0 === w1) { ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = w0; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); return; }   // S0–S3 beze změny kresby
+  const a = Math.atan2(y1 - y0, x1 - x0), H = Math.PI / 2;
+  ctx.beginPath(); ctx.arc(x0, y0, w0 / 2, a + H, a + 3 * H); ctx.arc(x1, y1, w1 / 2, a - H, a + H); ctx.closePath(); ctx.fill();
+}
 // CROSSCHECK: délka prolnutí póz hůl ↔ napříč (s, jen kresba) a poloha hole napříč před tělem ve SVĚTĚ (jako blok crosschecku v kresbě):
 // konec hole (butt), pata čepele (heel), směr dříku, délka a ruce jako podíl délky od konce (uT horní, uB dolní)
 const CC_BLEND = 0.15;
@@ -1903,24 +1915,14 @@ function _renderPlayerUp(ctx, p, cam) {
 
   // ── Shaft ─────────────────────────────────────────────────────────────────
   ctx.lineCap = 'round';
+  const tp = SV.tp ?? 1, ring = (SV.out - SV.sh) * s, w0 = SV.sh * s, wAt = t => w0 * (1 - (1 - tp) * t);   // jádro podle polohy od konce (0) k patě (1)
+  const ptX = t => tx0 + (tipX - tx0) * t, ptY = t => ty0 + (tipY - ty0) * t;
   if (SV.sh2) {   // stín hole na ledu (světlo vlevo nahoře → stín vpravo dole)
-    const o = 1.6 * s; ctx.strokeStyle = 'rgba(20,40,70,0.22)'; ctx.lineWidth = SV.sh * s;
-    ctx.beginPath(); ctx.moveTo(tx0 + o, ty0 + o); ctx.lineTo(tipX + o, tipY + o); ctx.stroke();
+    const o = 1.6 * s; ctx.fillStyle = 'rgba(20,40,70,0.22)'; _taperLine(ctx, tx0 + o, ty0 + o, tipX + o, tipY + o, wAt(0), wAt(1));
   }
-  ctx.strokeStyle = SKIN_OUT; ctx.lineWidth = SV.out * s;   // obrys dříku (C-d2)
-  ctx.beginPath(); ctx.moveTo(tx0, ty0); ctx.lineTo(tipX, tipY); ctx.stroke();
-  ctx.beginPath();   // konec hole + omotávka (od horní ruky)
-  ctx.moveTo(tx0, ty0);
-  ctx.lineTo(tx0 + (tipX - tx0) * gripF, ty0 + (tipY - ty0) * gripF);
-  ctx.strokeStyle = _shade(stickCol, -0.55);
-  ctx.lineWidth   = SV.sh * s;
-  ctx.stroke();
-  ctx.beginPath();   // hlavní dřík
-  ctx.moveTo(tx0 + (tipX - tx0) * mainF, ty0 + (tipY - ty0) * mainF);
-  ctx.lineTo(tipX, tipY);
-  ctx.strokeStyle = stickCol;
-  ctx.lineWidth   = SV.sh * s;
-  ctx.stroke();
+  ctx.fillStyle = SKIN_OUT; _taperLine(ctx, tx0, ty0, tipX, tipY, wAt(0) + ring, wAt(1) + ring);   // obrys dříku (C-d2)
+  ctx.fillStyle = _shade(stickCol, -0.55); _taperLine(ctx, tx0, ty0, ptX(gripF), ptY(gripF), wAt(0), wAt(gripF));   // konec hole + omotávka (od horní ruky)
+  ctx.fillStyle = stickCol; _taperLine(ctx, ptX(mainF), ptY(mainF), tipX, tipY, wAt(mainF), wAt(1));   // hlavní dřík
   if (SV.hi) {   // odlesk podél dříku (na straně ke světlu)
     const nx = -(tipY - ty0), ny = tipX - tx0, nl = Math.hypot(nx, ny) || 1, k = (nx + ny < 0 ? 1 : -1) * 0.45 * s;
     ctx.beginPath(); ctx.moveTo(tx0 + (tipX - tx0) * 0.24 + nx / nl * k, ty0 + (tipY - ty0) * 0.24 + ny / nl * k);
@@ -1981,7 +1983,9 @@ function _renderPlayerUp(ctx, p, cam) {
   // Obrys čepele (C-d2, místo stínu)
   if (SV.sh2) { const o = 1.6 * s; ctx.beginPath(); ctx.moveTo(bStartX + o, bStartY + o); ctx.quadraticCurveTo(bCtrlX + o, bCtrlY + o, bEndX + o, bEndY + o);
     ctx.strokeStyle = 'rgba(20,40,70,0.22)'; ctx.lineWidth = SV.bl * s; ctx.lineCap = 'round'; ctx.stroke(); }
-  if (!SV.paddle) {
+  const btp = SV.btp ?? 1, bRing = (SV.blo - SV.bl) * s;
+  if (!SV.paddle && btp !== 1) _drawBlade(ctx, bStartX, bStartY, bCtrlX, bCtrlY, bEndX, bEndY, SKIN_OUT, 'full', SV.blo * s, null, SV.bl * btp * s + bRing);   // zúžený obrys čepele
+  else if (!SV.paddle) {
   ctx.beginPath();
   ctx.moveTo(bStartX, bStartY);
   ctx.quadraticCurveTo(bCtrlX, bCtrlY, bEndX, bEndY);
@@ -2005,7 +2009,7 @@ function _renderPlayerUp(ctx, p, cam) {
     ctx.fillStyle = tapeSty === 'full' || !tapeSty ? tapeCol : bladeCol; ctx.fill(blade);
     if (tapeSty && tapeSty !== 'full') { ctx.save(); ctx.clip(blade); _drawBlade(ctx, bStartX, bStartY, bCtrlX, bCtrlY, bEndX, bEndY, tapeCol, tapeSty, 5.2 * s, bladeCol); ctx.restore(); }
   } else
-  _drawBlade(ctx, bStartX, bStartY, bCtrlX, bCtrlY, bEndX, bEndY, tapeCol, tapeSty, SV.bl * s, bladeCol);
+  _drawBlade(ctx, bStartX, bStartY, bCtrlX, bCtrlY, bEndX, bEndY, tapeCol, tapeSty, SV.bl * s, bladeCol, SV.bl * btp * s);
   if (globalThis.__fhCcDbg) p._ccSt = { butt: buttW, heel: { x: (tipX - ox) / s, y: (tipY - oy) / s }, end: { x: (bEndX - ox) / s, y: (bEndY - oy) / s } };
   } // end běžná hůl / přechod do crosschecku
 
@@ -2193,8 +2197,19 @@ function _bezPt(x0, y0, cx, cy, x1, y1, t) {
   return [u * u * x0 + 2 * u * t * cx + t * t * x1, u * u * y0 + 2 * u * t * cy + t * t * y1];
 }
 // Čepel hokejky se stylem tapování: full (celá), toe (špička), heel (pata), candy (pruhy)
-function _drawBlade(ctx, x0, y0, cx, cy, x1, y1, tape, style, lw, bare = '#15171c') {
+function _drawBlade(ctx, x0, y0, cx, cy, x1, y1, tape, style, lw, bare = '#15171c', lw1 = lw) {
   ctx.lineCap = 'round';
+  if (lw1 !== lw) {   // zúžená čepel (S4–S6): úseky se šířkou od paty (lw) ke špičce (lw1)
+    const N = 12, col = t => !style || style === 'full' ? tape : style === 'toe' ? (t > 0.5 ? tape : bare) : style === 'heel' ? (t < 0.5 ? tape : bare)
+      : style === 'candy' ? ((Math.floor(t * 6) % 2 === 0) ? tape : '#f4f7fb') : tape;
+    let [px, py] = _bezPt(x0, y0, cx, cy, x1, y1, 0);
+    for (let i = 1; i <= N; i++) {
+      const t = i / N, [qx, qy] = _bezPt(x0, y0, cx, cy, x1, y1, t), m = (i - 0.5) / N;
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(qx, qy); ctx.lineWidth = lw + (lw1 - lw) * m; ctx.strokeStyle = col(m); ctx.stroke();
+      px = qx; py = qy;
+    }
+    return;
+  }
   if (!style || style === 'full') {
     ctx.beginPath(); ctx.moveTo(x0, y0); ctx.quadraticCurveTo(cx, cy, x1, y1);
     ctx.strokeStyle = tape; ctx.lineWidth = lw; ctx.stroke();
