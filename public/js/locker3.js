@@ -87,16 +87,17 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
 const CSS = `
 #lk3{position:relative;flex:1 1 auto;min-height:0;display:flex;flex-direction:column;padding:0 var(--a3-gut,48px) clamp(12px,2.5vh,28px);color:var(--a3-text,#F2F6FB);font-family:Barlow,system-ui,sans-serif;z-index:2;overflow:auto}
 #lk3 *{box-sizing:border-box}#lk3 :where(button:not(.back3)){font:inherit;color:inherit;cursor:pointer;margin:0;width:auto;height:auto;text-transform:none;letter-spacing:normal;box-shadow:none;filter:none}
-#lk3 .g{display:grid;grid-template-columns:clamp(340px,27vw,500px) minmax(0,1fr);gap:clamp(16px,2vw,32px);flex:1;min-height:0}
+#lk3 .g{display:grid;grid-template-columns:340px minmax(0,780px);gap:24px;align-items:start;justify-content:start}
+@media (min-width:1700px) and (min-height:900px){#lk3 .g{zoom:1.18}} @media (min-width:2300px) and (min-height:1250px){#lk3 .g{zoom:1.4}}   /* rešerše: na velkých monitorech neroztahovat, zvětšit ve stupních */
 #lk3 .c3{font-family:'Barlow Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase}
 #lk3 .k{font:italic 800 14px/1 'Barlow Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--a3-ice,#7FD4FF);display:flex;align-items:center;gap:8px}
-#lk3 .m{color:var(--a3-mute,#A9BBD1);font:500 13px/1.3 Barlow}
+#lk3 .m{color:var(--a3-mute,#A9BBD1);font:500 13px/1.3 Barlow}#lk3 .k2{font-size:13px}
 #lk3 .pnl{background:var(--a3-glass,rgba(8,16,30,.72));border:1px solid var(--a3-line,rgba(255,255,255,.14));clip-path:var(--a3-cut-panel);padding:clamp(12px,1.6vh,18px) clamp(14px,1.4vw,22px)}
 #lk3 .card{position:relative;display:flex;flex-direction:column;overflow:hidden;background:linear-gradient(180deg,rgba(5,10,20,0) 0,rgba(5,10,20,.35) 22%,rgba(5,10,20,.82) 52%,rgba(5,10,20,.94) 100%),var(--ban,#13203d);border:1px solid var(--a3-line);clip-path:var(--a3-cut-panel);min-height:0}
 #lk3 .card::after{content:'';position:absolute;inset:0;pointer-events:none;background:var(--ban);opacity:.18;mix-blend-mode:screen;-webkit-mask:linear-gradient(90deg,#000 0,transparent 18%,transparent 82%,#000 100%);mask:linear-gradient(90deg,#000 0,transparent 18%,transparent 82%,#000 100%)}   /* banner prosvítá po stranách celé karty */
 #lk3 .card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:6px;background:linear-gradient(var(--a3-red,#E4002B),var(--a3-red2,#A8001F));z-index:2}
 #lk3 .cban{height:clamp(40px,6vh,70px);flex:none}
-#lk3 .chero{position:relative;z-index:1;flex:1 1 auto;min-height:150px;max-height:36vh;margin:0 18px 0 24px;box-shadow:0 0 0 1px rgba(255,255,255,.18);background:#dfeaf3;clip-path:polygon(0 0,100% 0,100% calc(100% - 18px),calc(100% - 18px) 100%,0 100%)}
+#lk3 .chero{position:relative;z-index:1;flex:none;height:250px;margin:0 18px 0 24px;box-shadow:0 0 0 1px rgba(255,255,255,.18);background:#dfeaf3;clip-path:polygon(0 0,100% 0,100% calc(100% - 18px),calc(100% - 18px) 100%,0 100%)}
 #lk3 .chero canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 #lk3 .cnum{position:absolute;right:12px;bottom:6px;font:italic 900 clamp(48px,7vh,84px)/1 'Barlow Condensed';color:rgba(10,20,40,.13)}
 #lk3 .cbody{position:relative;z-index:1;padding:14px 18px 18px 24px;display:grid;gap:10px;flex:none}
@@ -120,11 +121,15 @@ const CSS = `
 #lk3 .tabs button[aria-selected=true]{background:var(--a3-red);border-color:var(--a3-red);color:#fff}
 #lk3 .body{display:grid;gap:clamp(8px,1.2vh,14px);align-content:start;flex:1;min-height:0}
 #lk3 .tiles{display:grid;gap:8px}
+#lk3 .tiles.fix{grid-template-columns:repeat(auto-fill,144px)!important}#lk3 .tiles.fix .tile{width:144px}
+#lk3 .srow{display:grid;grid-template-columns:64px 1fr 14px;gap:10px;align-items:center;padding:6px 8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);text-align:left;clip-path:var(--a3-cut)}
+#lk3 .srow b{display:block;font:italic 800 18px/1.1 'Barlow Condensed';text-transform:uppercase;color:#fff}#lk3 .srow .chev{font:900 20px/1 Barlow;color:var(--a3-mute)}
+#lk3 .srow.on{border-color:var(--a3-red);background:rgba(228,0,43,.14)}#lk3 .srow .sprev{display:grid;place-items:center;width:64px;height:48px;background:#dfeaf3;overflow:hidden}
 #lk3 .tile{position:relative;padding:6px 6px 8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);text-align:center;font:italic 800 15px/1 'Barlow Condensed';letter-spacing:.06em;color:var(--a3-mute2);text-transform:uppercase;clip-path:var(--a3-cut)}
 #lk3 .tile:hover:not(:disabled){border-color:rgba(255,255,255,.35);color:#fff}
 #lk3 .tile.on{border-color:var(--a3-red);background:rgba(228,0,43,.14);color:#fff;box-shadow:inset 0 -3px 0 var(--a3-red)}
-#lk3 .tile .bic{display:block;width:100%;height:var(--th,clamp(58px,11.5vh,130px));margin:0 auto 6px;clip-path:polygon(0 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%)}#lk3 .tile.on .bic{color:#fff}#lk3 .tile canvas{display:block;width:100%;height:var(--th,clamp(64px,14vh,170px));margin:0 auto 6px;background:#dfeaf3}
-#lk3 .tile .sub{display:flex;justify-content:center;gap:10px;margin-top:5px;font:italic 700 12px/1 'Barlow Condensed';letter-spacing:.06em}
+#lk3 .tile .bic{display:block;width:100%;height:var(--th,72px);margin:0 auto 6px;clip-path:polygon(0 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%)}#lk3 .tile.on .bic{color:#fff}#lk3 .tile canvas{display:block;width:100%;height:var(--th,clamp(64px,14vh,170px));margin:0 auto 6px;background:#dfeaf3}
+#lk3 .tile .sub{display:flex;flex-wrap:wrap;justify-content:center;gap:2px 8px;margin-top:5px;font:italic 700 12px/1 'Barlow Condensed';letter-spacing:.06em}
 #lk3 .tile .sub span{display:inline-flex;align-items:center;gap:3px}
 #lk3 .up{color:#3DDC84}#lk3 .dn{color:#ff6b7f}
 #lk3 .tile:disabled{opacity:.5;cursor:not-allowed}
@@ -200,20 +205,25 @@ export function initLocker3(host, api) {
       <label><div class="k" style="margin-bottom:8px">${ic('user', 16)}${l.name}</div><input class="inp" id="lk3-name" maxlength="14" value="${esc(s.name)}" ${g ? 'disabled' : ''}></label>
       <label><div class="k" style="margin-bottom:8px">${ic('hash', 16)}${l.num}</div><input class="inp" id="lk3-num" type="number" min="0" max="99" value="${esc(s.num ?? '')}" ${g ? 'disabled' : ''}></label>
       <div><div class="k" style="margin-bottom:8px">${ic('hand', 16)}${l.grip}</div><div class="seg">${[-1, 1].map((h, i) => `<button type="button" data-hand="${h}" class="${s.hand === h ? 'on' : ''}">${l.hand[i]}</button>`).join('')}</div></div></div>
-     <div class="pnl"><div class="k" style="margin-bottom:10px">${ic('size', 16)}${l.size}</div><div class="tiles" style="grid-template-columns:repeat(3,minmax(0,1fr))">${sizes}</div></div>
-     <div class="pnl"><div class="k" style="margin-bottom:10px;justify-content:space-between"><span style="display:flex;gap:8px;align-items:center">${ic('stick', 16)}${l.stick}</span></div><div class="tiles" style="grid-template-columns:repeat(3,minmax(0,1fr))">${sticks}</div></div>`;
+     <div class="pnl"><div class="k" style="margin-bottom:10px">${ic('size', 16)}${l.size}</div><div class="tiles fix">${sizes}</div></div>
+     <div class="pnl"><div class="k" style="margin-bottom:10px;justify-content:space-between"><span style="display:flex;gap:8px;align-items:center">${ic('stick', 16)}${l.stick}</span></div><div class="tiles fix">${sticks}</div></div>`;
   }
-  function tabVzhled() {
-    const l = L(), c = curKit(), g = api.isGuest();
-    const kits = KITS.map((K, i) => `<button type="button" class="tile ${sameKit(c, kitOf(i)) ? 'on' : ''}" data-kit="${i}" ${g ? 'disabled' : ''}><canvas data-tk="${i}" style="--th:clamp(50px,10vh,170px)"></canvas>${en() ? K[1] : K[0]}</button>`).join('');
-    const helms = HELMS.map(([v, cs, e]) => `<button type="button" class="tile ${c.helmetType === v ? 'on' : ''}" data-helm="${v}" ${g ? 'disabled' : ''}>${icHelm(v, c)}${en() ? e : cs}</button>`).join('');
-    const slots = S.slots.map((k, i) => k ? `<button type="button" class="tile ${sameKit(c, k) ? 'on' : ''}" data-slot="${i}" ${g ? 'disabled' : ''} title="2× klik = upravit"><canvas data-ts="${i}" style="--th:clamp(50px,10vh,130px)"></canvas>${en() ? 'Mine' : 'Moje'} #${i + 1}</button>`
-      : `<button type="button" class="tile" data-new="${i}" ${g ? 'disabled' : ''} style="display:grid;place-items:center;gap:6px;border-style:dashed;min-height:100%">${ic('plus', 28)}${l.create}</button>`).join('');
+  function tabVzhled() {   // A+B: seznam slotů (Sada / Helma / Číslo / Moje sady) s náhledem volby, výběr pod ním
+    const l = L(), c = curKit(), g = api.isGuest(), vz = S.vz || 'kit', ki = KITS.findIndex((K, i) => sameKit(c, kitOf(i)));
+    const hl = HELMS.find(h => h[0] === c.helmetType) || HELMS[0], filled = S.slots.filter(Boolean).length;
+    const slot = (id, label, prev, val) => `<button type="button" class="srow ${vz === id ? 'on' : ''}" data-vz="${id}" ${g ? 'disabled' : ''}><span class="sprev">${prev}</span><span><span class="k2">${label}</span><b>${val}</b></span><span class="chev">›</span></button>`;
+    const rows = slot('kit', l.kits.replace(/ —.*/, ''), `<canvas data-tk="${ki < 0 ? 0 : ki}" style="width:64px;height:48px"></canvas>`, ki < 0 ? (en() ? 'Custom' : 'Vlastní') : (en() ? KITS[ki][1] : KITS[ki][0]))
+      + slot('helm', l.helm, `<canvas data-hh="${hl[0]}" style="width:64px;height:48px"></canvas>`, en() ? hl[2] : hl[1])
+      + slot('mine', l.mine, `<span style="font:italic 900 26px/1 'Barlow Condensed'">${filled}/3</span>`, l.create);
+    let pick = '';
+    if (vz === 'kit') pick = `<div class="tiles fix">${KITS.map((K, i) => `<button type="button" class="tile ${ki === i ? 'on' : ''}" data-kit="${i}" ${g ? 'disabled' : ''}><canvas data-tk="${i}" style="--th:92px"></canvas>${en() ? K[1] : K[0]}</button>`).join('')}</div>`;
+    else if (vz === 'helm') pick = `<div class="tiles fix">${HELMS.map(([v, cs, e]) => `<button type="button" class="tile ${c.helmetType === v ? 'on' : ''}" data-helm="${v}" ${g ? 'disabled' : ''}><canvas data-hh="${v}" style="--th:104px"></canvas>${en() ? e : cs}</button>`).join('')}</div>`;
+    else pick = `<div class="tiles fix">${S.slots.map((k, i) => k ? `<button type="button" class="tile ${sameKit(c, k) ? 'on' : ''}" data-slot="${i}" ${g ? 'disabled' : ''} title="2× klik = upravit"><canvas data-ts="${i}" style="--th:92px"></canvas>${en() ? 'Mine' : 'Moje'} #${i + 1}</button>`
+      : `<button type="button" class="tile" data-new="${i}" ${g ? 'disabled' : ''} style="display:grid;place-items:center;gap:6px;border-style:dashed;height:128px">${ic('plus', 28)}${l.create}</button>`).join('')}</div>`;
     return `${g ? `<div class="note">${ic('lock', 18)}${l.guest}</div>` : ''}
-     <div class="pnl"><div class="k" style="margin-bottom:10px">${ic('shirt', 16)}${l.kits}</div><div class="tiles" style="grid-template-columns:repeat(4,minmax(0,1fr))">${kits}</div></div>
-     <div class="row" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
-      <div class="pnl"><div class="k" style="margin-bottom:10px">${ic('helmet', 16)}${l.helm}</div><div class="tiles" style="grid-template-columns:repeat(3,minmax(0,1fr))">${helms}</div></div>
-      <div class="pnl"><div class="k" style="margin-bottom:10px">${ic('palette', 16)}${l.mine}</div><div class="tiles" style="grid-template-columns:repeat(3,minmax(0,1fr))">${slots}</div></div></div>`;
+     <div class="row" style="grid-template-columns:260px minmax(0,1fr);align-items:start">
+      <div class="pnl" style="display:grid;gap:6px;padding:10px">${rows}</div>
+      <div class="pnl">${pick}</div></div>`;
   }
   function tabProfil() {
     const l = L(), u = api.getUser?.(), s = api.get(), ban = banner(), ti = title();
@@ -260,6 +270,7 @@ export function initLocker3(host, api) {
     root.querySelectorAll('canvas[data-tk]').forEach(c => drawP(c, kitOf(+c.dataset.tk)));
     root.querySelectorAll('canvas[data-ts]').forEach(c => drawP(c, S.slots[+c.dataset.ts]));
     root.querySelectorAll('canvas[data-th]').forEach(c => drawP(c, { ...k, helmetType: c.dataset.th }, { zoom: 2.3, cy: .62 }));
+    root.querySelectorAll('canvas[data-hh]').forEach(c => drawP(c, { ...k, helmetType: c.dataset.hh }, { zoom: 3.4, cy: .5, ang: -Math.PI / 2 - 0.4, aim: 1.2 }));   // helma přímo na hlavě hráče
     root.querySelectorAll('canvas[data-pz]').forEach(c => drawP(c, k, { size: +c.dataset.pz, zoom: .9 }));
     root.querySelectorAll('canvas[data-pk]').forEach(c => drawP(c, k, { reach: STICKS[+c.dataset.pk].reach, zoom: .95, cy: .55, ang: 0, aim: 0.05 }));
   }
@@ -286,6 +297,7 @@ export function initLocker3(host, api) {
     else if (d.hand != null) api.setHand(+d.hand);
     else if (d.size != null) api.setSize(+d.size);
     else if (d.stick != null) api.setStick?.(+d.stick);
+    else if (d.vz != null) { S.vz = d.vz; persist(); }
     else if (d.kit != null) api.applyKit(kitOf(+d.kit));
     else if (d.helm != null) api.applyKit({ ...curKit(), helmetType: d.helm });
     else if (d.slot != null) api.applyKit({ ...curKit(), ...S.slots[+d.slot] });
