@@ -11,6 +11,7 @@
     "test:server": "node test/server-hardening.test.mjs",
     "test:cg": "node test/crazygames.test.mjs",
     "test:accounts": "node test/accounts.test.mjs",
+    "test:profile": "node test/profile-sync.test.mjs",
     "test:botq": "node test/bot-quality.test.mjs",
     "test:determinism": "node test/determinism.test.mjs",
     "test:balance": "node test/balance.mjs",

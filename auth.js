@@ -254,9 +254,19 @@ router.get('/profile', requireAuth, (req, res) => {
 
 router.post('/profile', requireAuth, (req, res) => {
   // Host: jen držení hokejky (ovládání). Jméno ani vzhled si nemění — Šatna je pro účty (Ondřej 2026-11-13).
-  const allowed = isGuestUser(req.userId) ? ['handed'] : ['helmet','gloves','tape','trail','stick','tape_style','helmet_type','visor','handed','number'];
-  const fields = {};
-  for (const k of allowed) if (req.body?.[k] !== undefined) fields[k] = req.body[k];
+  // Host: držení + herní volby (velikost, hůl) + kosmetika karty (banner/titul/profilovka — odemčení ověří server při hře). Vzhled dresu jen účty.
+  const PLAY = ['handed', 'size', 'stick_len', 'banner', 'card_title', 'avatar'];
+  const allowed = isGuestUser(req.userId) ? PLAY : ['helmet','gloves','tape','trail','stick','tape_style','helmet_type','visor','number','jersey','stripe','shorts','kit_slots', ...PLAY];
+  const fields = {}, b = req.body || {}, HEX = /^#[0-9a-f]{6}$/i, ID = /^[a-z]{2,12}$/;
+  for (const k of allowed) {
+    const v = b[k]; if (v === undefined) continue;
+    if (k === 'size' || k === 'stick_len') { if ([0, 1, 2].includes(v)) fields[k] = v; continue; }   // validace (2026-11-18)
+    if (k === 'banner' || k === 'card_title') { if (typeof v === 'string' && ID.test(v)) fields[k] = v; continue; }
+    if (k === 'avatar') { if (['head', 'num', 'discord'].includes(v)) fields[k] = v; continue; }
+    if (k === 'jersey' || k === 'stripe' || k === 'shorts') { if (typeof v === 'string' && HEX.test(v)) fields[k] = v; continue; }
+    if (k === 'kit_slots') { try { const j = JSON.stringify(v); if (j.length <= 2000 && Array.isArray(v) && v.length <= 3) fields[k] = j; } catch {} continue; }
+    fields[k] = v;
+  }
   if (Object.keys(fields).length) saveProfile(req.userId, fields);
   res.json({ ok: true });
 });

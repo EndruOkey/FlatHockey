@@ -87,7 +87,9 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
 const CSS = `
 #lk3{position:relative;flex:1 1 auto;min-height:0;display:flex;flex-direction:column;padding:0 var(--a3-gut,48px) clamp(12px,2.5vh,28px);color:var(--a3-text,#F2F6FB);font-family:Barlow,system-ui,sans-serif;z-index:2;overflow:auto}
 #lk3 *{box-sizing:border-box}#lk3 :where(button:not(.back3)){font:inherit;color:inherit;cursor:pointer;margin:0;width:auto;height:auto;text-transform:none;letter-spacing:normal;box-shadow:none;filter:none}
-#lk3 .g{display:grid;grid-template-columns:340px minmax(0,780px);gap:24px;align-items:start;justify-content:start}
+#lk3 .g{display:grid;grid-template-columns:340px minmax(0,1fr);gap:24px;align-items:stretch;width:100%}   /* stejná šířka jako hlavička: karta pod nadpisem, panel k pravé hraně lišty → souměrně na střed; karta a panel stejně vysoké */
+#lk3 .pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}#lk3 .pair .tiles.fix{grid-template-columns:repeat(3,minmax(0,150px))!important}#lk3 .pair .tiles.fix .tile{width:auto}
+@media (max-width:1180px){#lk3 .pair{grid-template-columns:1fr}}
 @media (min-width:1700px) and (min-height:900px){#lk3 .g{zoom:1.18}} @media (min-width:2300px) and (min-height:1250px){#lk3 .g{zoom:1.4}}   /* rešerše: na velkých monitorech neroztahovat, zvětšit ve stupních */
 #lk3 .c3{font-family:'Barlow Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase}
 #lk3 .k{font:italic 800 14px/1 'Barlow Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--a3-ice,#7FD4FF);display:flex;align-items:center;gap:8px}
@@ -97,7 +99,7 @@ const CSS = `
 #lk3 .card::after{content:'';position:absolute;inset:0;pointer-events:none;background:var(--ban);opacity:.18;mix-blend-mode:screen;-webkit-mask:linear-gradient(90deg,#000 0,transparent 18%,transparent 82%,#000 100%);mask:linear-gradient(90deg,#000 0,transparent 18%,transparent 82%,#000 100%)}   /* banner prosvítá po stranách celé karty */
 #lk3 .card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:6px;background:linear-gradient(var(--a3-red,#E4002B),var(--a3-red2,#A8001F));z-index:2}
 #lk3 .cban{height:clamp(40px,6vh,70px);flex:none}
-#lk3 .chero{position:relative;z-index:1;flex:none;height:250px;margin:0 18px 0 24px;box-shadow:0 0 0 1px rgba(255,255,255,.18);background:#dfeaf3;clip-path:polygon(0 0,100% 0,100% calc(100% - 18px),calc(100% - 18px) 100%,0 100%)}
+#lk3 .chero{position:relative;z-index:1;flex:1 1 250px;min-height:220px;max-height:340px;margin:0 18px 0 24px;box-shadow:0 0 0 1px rgba(255,255,255,.18);background:#dfeaf3;clip-path:polygon(0 0,100% 0,100% calc(100% - 18px),calc(100% - 18px) 100%,0 100%)}
 #lk3 .chero canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 #lk3 .cnum{position:absolute;right:12px;bottom:6px;font:italic 900 clamp(48px,7vh,84px)/1 'Barlow Condensed';color:rgba(10,20,40,.13)}
 #lk3 .cbody{position:relative;z-index:1;padding:14px 18px 18px 24px;display:grid;gap:10px;flex:none}
@@ -205,8 +207,8 @@ export function initLocker3(host, api) {
       <label><div class="k" style="margin-bottom:8px">${ic('user', 16)}${l.name}</div><input class="inp" id="lk3-name" maxlength="14" value="${esc(s.name)}" ${g ? 'disabled' : ''}></label>
       <label><div class="k" style="margin-bottom:8px">${ic('hash', 16)}${l.num}</div><input class="inp" id="lk3-num" type="number" min="0" max="99" value="${esc(s.num ?? '')}" ${g ? 'disabled' : ''}></label>
       <div><div class="k" style="margin-bottom:8px">${ic('hand', 16)}${l.grip}</div><div class="seg">${[-1, 1].map((h, i) => `<button type="button" data-hand="${h}" class="${s.hand === h ? 'on' : ''}">${l.hand[i]}</button>`).join('')}</div></div></div>
-     <div class="pnl"><div class="k" style="margin-bottom:10px">${ic('size', 16)}${l.size}</div><div class="tiles fix">${sizes}</div></div>
-     <div class="pnl"><div class="k" style="margin-bottom:10px;justify-content:space-between"><span style="display:flex;gap:8px;align-items:center">${ic('stick', 16)}${l.stick}</span></div><div class="tiles fix">${sticks}</div></div>`;
+     <div class="pair"><div class="pnl"><div class="k" style="margin-bottom:10px">${ic('size', 16)}${l.size}</div><div class="tiles fix">${sizes}</div></div>
+     <div class="pnl"><div class="k" style="margin-bottom:10px;justify-content:space-between"><span style="display:flex;gap:8px;align-items:center">${ic('stick', 16)}${l.stick}</span></div><div class="tiles fix">${sticks}</div></div></div>`;
   }
   function tabVzhled() {   // A+B: seznam slotů (Sada / Helma / Číslo / Moje sady) s náhledem volby, výběr pod ním
     const l = L(), c = curKit(), g = api.isGuest(), vz = S.vz || 'kit', ki = KITS.findIndex((K, i) => sameKit(c, kitOf(i)));
@@ -324,6 +326,7 @@ export function initLocker3(host, api) {
     },
     hide() { if (raf) cancelAnimationFrame(raf); raf = null; },
     refresh: render,
+    reload() { S = load(); S.slots = S.slots || [null, null, null]; tab = S.tab ?? tab; render(); },   // po načtení vlastností z účtu
     stick: () => stk(),
   };
 }

@@ -105,6 +105,16 @@ for (const [table, col, def] of [
   ['stats',    'puck_credits', 'INTEGER NOT NULL DEFAULT 0'],
   ['stats',    'plus_minus',   'INTEGER NOT NULL DEFAULT 0'],
   ['profiles', 'title',        'TEXT'],
+  // 2026-11-18 vlastnosti k účtu (šatna v3): velikost, délka hole, kosmetika karty, barvy dresu, vlastní sady
+  ['profiles', 'size',         'INTEGER'],
+  ['profiles', 'stick_len',    'INTEGER'],
+  ['profiles', 'banner',       'TEXT'],
+  ['profiles', 'card_title',   'TEXT'],
+  ['profiles', 'avatar',       'TEXT'],
+  ['profiles', 'jersey',       'TEXT'],
+  ['profiles', 'stripe',       'TEXT'],
+  ['profiles', 'shorts',       'TEXT'],
+  ['profiles', 'kit_slots',    'TEXT'],
 ]) {
   const exists = db.prepare(`PRAGMA table_info(${table})`).all().some(r => r.name === col);
   if (!exists) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
@@ -457,7 +467,7 @@ export function isFounder(user_id) {
 }
 
 export function saveProfile(user_id, fields) {
-  const allowed = ['helmet','gloves','tape','trail','stick','tape_style','helmet_type','visor','handed','number'];
+  const allowed = ['helmet','gloves','tape','trail','stick','tape_style','helmet_type','visor','handed','number','size','stick_len','banner','card_title','avatar','jersey','stripe','shorts','kit_slots'];
   // Přeskoč prázdné hodnoty — number je NOT NULL, zápis null by shodil uložení (500) i otevření šatny
   const cols = Object.keys(fields).filter(k => allowed.includes(k) && fields[k] != null);
   if (!cols.length) return;
@@ -510,8 +520,10 @@ export function getLeaderboard(limit = 50) {
   return db.prepare(`
     SELECT u.display_name, u.avatar_url, s.rank_points, s.goals, s.assists,
            s.wins, s.losses, s.games_played, s.plus_minus,
+           p.number, p.handed, p.helmet, p.gloves, p.tape, p.stick, p.helmet_type, p.visor, p.jersey, p.stripe, p.shorts,
+           p.size, p.stick_len, p.banner, p.card_title, p.avatar,   -- karta hráče (profil v žebříčku)
            CASE WHEN EXISTS (SELECT 1 FROM identities i WHERE i.user_id = u.id AND i.provider = 'discord') THEN 'd' ELSE 'c' END AS badge
-    FROM stats s JOIN users u ON u.id = s.user_id
+    FROM stats s JOIN users u ON u.id = s.user_id LEFT JOIN profiles p ON p.user_id = u.id
     WHERE s.games_played > 0 AND EXISTS (SELECT 1 FROM identities i WHERE i.user_id = u.id AND i.provider IN ('discord','crazygames'))   -- jen účty (Discord / CrazyGames), hosté ne
     ORDER BY s.rank_points DESC
     LIMIT ?

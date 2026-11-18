@@ -4,8 +4,9 @@ import { NetGame, SandboxGame, TutorialGame } from './game.js';
 import { Player } from './entities/Player.js';
 import { PLAYER, RINK, reachOf } from './constants.js';
 import { t, applyI18n, toggleLang, setOnChange } from './i18n.js';
+import { showPlayerCard } from './player-card.js';   // karta hráče z žebříčku (dev)
 import { setVolume, getVolume } from './sound.js';
-import { loadSession, onAuthChange, loginWithDiscord, logout, handleOAuthRedirect, getUser, loadServerStats, saveServerProfile, loadRankAndCredits, getKind, requestLinkCode, redeemLinkCode, isFounder, hasProgress, loadStore, buyStoreItem, getGuestName } from './auth.js';
+import { loadSession, authFetch, onAuthChange, loginWithDiscord, logout, handleOAuthRedirect, getUser, loadServerStats, saveServerProfile, loadRankAndCredits, getKind, requestLinkCode, redeemLinkCode, isFounder, hasProgress, loadStore, buyStoreItem, getGuestName } from './auth.js';
 const FOUNDER_CROWN_SVG = '<svg width="13" height="11" viewBox="0 0 14 11" style="vertical-align:-1px" aria-hidden="true"><path d="M1 10 L1 3 L4 6 L7 1 L10 6 L13 3 L13 10 Z" fill="#FFB020" stroke="rgba(0,0,0,.4)" stroke-width="0.8" stroke-linejoin="round"/></svg>';
 import { makeRng, hashSeed } from './rng.js';
 import { initLockerPreview } from './locker-preview.js';
@@ -1128,6 +1129,9 @@ function commitProfile() {
       helmet: p.helmet, gloves: p.gloves, tape: p.tape, trail: p.trail, stick: p.stick,
       tape_style: p.tapeStyle, helmet_type: p.helmetType, visor: p.visor,
       handed: p.handed, number: p.number,
+      // 2026-11-18 vlastnosti k účtu (šatna v3): velikost, hůl, kosmetika karty, barvy dresu, vlastní sady
+      size: p.size, stick_len: p.stickLen, jersey: p.jersey, stripe: p.stripe, shorts: p.shorts,
+      ...(() => { try { const o = JSON.parse(localStorage.getItem('fh_lk3') || '{}'); return { banner: o.banner, card_title: o.title, avatar: o.avatar, kit_slots: Array.isArray(o.slots) ? o.slots : undefined }; } catch { return {}; } })(),
     });
   }
   setStatus('');
@@ -1435,7 +1439,8 @@ async function _renderLeaderboard(mode) {
       const gp = r.games_played ?? 0;          // server posílá display_name / rank_points / games_played
       const isMe = !!myName && r.display_name === myName;
       const wr = gp > 0 ? Math.round(r.wins / gp * 100) + '%' : '—';
-      return `<div class="sv-lb-row${isMe ? ' me' : ''}">
+      const cardOn = !!globalThis.FH_DEV;   // klik = karta hráče (zatím dev playground)
+      return `<div class="sv-lb-row${isMe ? ' me' : ''}"${cardOn ? ` data-pc="${i}" role="button" tabindex="0" style="cursor:pointer"` : ''}>
         <span class="sv-lb-rank${rank <= 3 ? ' top3' : ''}">${rank}</span>
         <span class="sv-lb-name">${esc(r.display_name || 'Player')}${r.badge ? `<span class="pb pb-${r.badge === 'd' ? 'd' : 'c'}" title="${r.badge === 'd' ? 'Discord' : 'CrazyGames'}">${r.badge === 'd' ? 'D' : 'CG'}</span>` : ''}</span>
         <span class="sv-lb-elo">${r.rank_points ?? 1000}</span>
@@ -1443,6 +1448,8 @@ async function _renderLeaderboard(mode) {
         <span class="sv-lb-gp">${gp}</span>
       </div>`;
     }).join('');
+    const open = e => { const row = e.target.closest('[data-pc]'); if (row) showPlayerCard(rows[+row.dataset.pc], t('lk_p_size') === 'Size'); };
+    list.onclick = open; list.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(e); } };
   } catch {
     list.innerHTML = `<div class="sv-lb-empty">${esc(t('lb_unavail'))}</div>`;
   }
@@ -1938,7 +1945,24 @@ $('discord-login-btn').addEventListener('click', loginWithDiscord);
 $('lk-guest-discord')?.addEventListener('click', loginWithDiscord);
 
 
-onAuthChange(updateAuthUI);
+onAuthChange(u => { updateAuthUI(u); syncProfileFromServer(u); });
+// VLASTNOSTI Z ÚČTU (2026-11-18): po přihlášení načti uložené volby (velikost, hůl, kosmetika karty, barvy, vlastní sady) → stejné na každém zařízení.
+// Server je zdroj pravdy jen pro to, co v DB je (null = nech místní). Jednou za přihlášeného uživatele.
+let _syncedUid = null;
+async function syncProfileFromServer(u) {
+  const uid = u?.id ?? (getKind() === 'guest' ? 'guest' : null); if (!uid || _syncedUid === uid) return; _syncedUid = uid;
+  try {
+    const r = await authFetch('/auth/profile'); if (!r.ok) return; const pr = await r.json();
+    if ([0, 1, 2].includes(pr.size)) { localStorage.setItem(SIZE_KEY, String(pr.size)); if (globalThis.FH_DEV) { chosenSize = pr.size; renderSize(); } }
+    if ([0, 1, 2].includes(pr.stick_len)) { localStorage.setItem(STICK_LEN_KEY, String(pr.stick_len)); if (globalThis.FH_DEV) chosenStick = pr.stick_len; }
+    const o = (() => { try { return JSON.parse(localStorage.getItem('fh_lk3') || '{}') || {}; } catch { return {}; } })();
+    if (pr.banner) o.banner = pr.banner; if (pr.card_title) o.title = pr.card_title; if (pr.avatar) o.avatar = pr.avatar;
+    if (pr.kit_slots) { try { const sl = JSON.parse(pr.kit_slots); if (Array.isArray(sl)) o.slots = sl; } catch {} }
+    localStorage.setItem('fh_lk3', JSON.stringify(o));
+    if (!isGuestUI()) applyKit({ helmet: pr.helmet, gloves: pr.gloves, tape: pr.tape, trail: pr.trail, stick: pr.stick, tapeStyle: pr.tape_style, helmetType: pr.helmet_type, visor: pr.visor, jersey: pr.jersey, stripe: pr.stripe, shorts: pr.shorts });
+    drawPreview(); _lk3?.reload?.();
+  } catch {}
+}
 initCgBridge({
   busy: () => inGame,
   onSwap: async () => { net.socket.disconnect(); net.socket.connect(); await loadSession(); },
