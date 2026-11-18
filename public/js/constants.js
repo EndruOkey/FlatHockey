@@ -83,8 +83,9 @@ export const PLAYER = {
 // maxShotVz je útesový knob), charge = rychlost nápřahu, mass = souboj (síla zásahu × 2·m_útočník/(m_útočník+m_oběť), odraz podle hmotnosti).
 // Čísla: návrh → size_balance.mjs (boti, 2v2 120 seedů + 3v3 60 seedů): malý nápřah 1,15 → 1,08 (nápřah rozhoduje nejvíc: bez něj malý 44 %,
 // bez slabší rány 61 %; rychlost u botů skoro nic), velký hmotnost 1,25 → 1,45 (jinak proti střednímu jen 1,1× knocků). Podíl gólů 47,8–54,3 %.
+// 2026-11-18 malý speed 1,07 → 1,03 (Ondřej: „malý je až moc rychlý"; scripts/speed_audit.mjs: střední dohnal malého nosiče jen o 2,6 px/s → 8,6; size_balance 52,5 / 52,9 / 54,0 %)
 export const SIZES = [
-  { id: 's', draw: 0.85, body: 0.94, speed: 1.07, accel: 1.10, turn: 1.10, shot: 0.92, charge: 1.08, mass: 0.80 },
+  { id: 's', draw: 0.85, body: 0.94, speed: 1.03, accel: 1.10, turn: 1.10, shot: 0.92, charge: 1.08, mass: 0.80 },
   { id: 'm', draw: 1,    body: 1,    speed: 1,    accel: 1,    turn: 1,    shot: 1,    charge: 1,    mass: 1 },
   { id: 'l', draw: 1.15, body: 1.06, speed: 0.93, accel: 0.90, turn: 0.90, shot: 1.05, charge: 0.90, mass: 1.45 },
 ];
