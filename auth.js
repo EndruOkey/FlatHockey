@@ -254,9 +254,9 @@ router.get('/profile', requireAuth, (req, res) => {
 
 router.post('/profile', requireAuth, (req, res) => {
   // Host: jen držení hokejky (ovládání). Jméno ani vzhled si nemění — Šatna je pro účty (Ondřej 2026-11-13).
-  // Host: držení + herní volby (velikost, hůl) + kosmetika karty (banner/titul/profilovka — odemčení ověří server při hře). Vzhled dresu jen účty.
+  // Host nese všechny informace jako účet (Ondřej 2026-11-18; dřív jen držení). Odemčení kosmetiky karty ověří server při hře.
   const PLAY = ['handed', 'size', 'stick_len', 'banner', 'card_title', 'avatar'];
-  const allowed = isGuestUser(req.userId) ? PLAY : ['helmet','gloves','tape','trail','stick','tape_style','helmet_type','visor','number','jersey','stripe','shorts','kit_slots', ...PLAY];
+  const allowed = ['helmet','gloves','tape','trail','stick','tape_style','helmet_type','visor','number','jersey','stripe','shorts','kit_slots', ...PLAY];
   const fields = {}, b = req.body || {}, HEX = /^#[0-9a-f]{6}$/i, ID = /^[a-z]{2,12}$/;
   for (const k of allowed) {
     const v = b[k]; if (v === undefined) continue;

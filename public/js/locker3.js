@@ -199,7 +199,7 @@ export function initLocker3(host, api) {
       </div></div>`;
   }
   function tabVybava() {
-    const s = api.get(), l = L(), g = api.isGuest();
+    const s = api.get(), l = L(), g = false;   // host nese všechny informace (2026-11-18)
     const sizes = l.sizes.map((n, i) => `<button type="button" class="tile ${s.size === i ? 'on' : ''}" data-size="${i}">${icSize(i, s.kit)}${n}<div class="sub" style="color:var(--a3-mute)">${l.roles[i]}</div></button>`).join('');
     const sticks = STICKS.map((k, i) => `<button type="button" class="tile ${stk() === i ? 'on' : ''}" data-stick="${i}">${icStick(i, s.kit)}${en() ? k.en : k.cs}
       <div class="sub">${k.eff.length ? k.eff.map(([e, v]) => `<span class="${v > 0 ? 'up' : 'dn'}">${ic(e, 13)}${v > 0 ? '+' : '−'} ${l.eff[e]}</span>`).join('') : `<span style="color:var(--a3-mute)">${ic('reach', 13)} 16</span>`}</div></button>`).join('');
@@ -211,7 +211,7 @@ export function initLocker3(host, api) {
      <div class="pnl"><div class="k" style="margin-bottom:10px;justify-content:space-between"><span style="display:flex;gap:8px;align-items:center">${ic('stick', 16)}${l.stick}</span></div><div class="tiles fix">${sticks}</div></div></div>`;
   }
   function tabVzhled() {   // A+B: seznam slotů (Sada / Helma / Číslo / Moje sady) s náhledem volby, výběr pod ním
-    const l = L(), c = curKit(), g = api.isGuest(), vz = S.vz || 'kit', ki = KITS.findIndex((K, i) => sameKit(c, kitOf(i)));
+    const l = L(), c = curKit(), g = false, vz = S.vz || 'kit', ki = KITS.findIndex((K, i) => sameKit(c, kitOf(i)));
     const hl = HELMS.find(h => h[0] === c.helmetType) || HELMS[0], filled = S.slots.filter(Boolean).length;
     const slot = (id, label, prev, val) => `<button type="button" class="srow ${vz === id ? 'on' : ''}" data-vz="${id}" ${g ? 'disabled' : ''}><span class="sprev">${prev}</span><span><span class="k2">${label}</span><b>${val}</b></span><span class="chev">›</span></button>`;
     const rows = slot('kit', l.kits.replace(/ —.*/, ''), `<canvas data-tk="${ki < 0 ? 0 : ki}" style="width:64px;height:48px"></canvas>`, ki < 0 ? (en() ? 'Custom' : 'Vlastní') : (en() ? KITS[ki][1] : KITS[ki][0]))

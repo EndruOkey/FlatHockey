@@ -213,17 +213,10 @@ function updateVisorRow() { /* gear panel removed — visor always available via
 const DEFAULT_LOOK = { helmet: '#f4f7fb', jersey: '#1b4fd1', shorts: '#1a1f29', stripe: '#f4f7fb', laces: '#f4f7fb', gloves: '#1a1f29',   // jen barvy z palet (set() jiné ignoruje)
   tape: '#f4f7fb', trail: TRAIL_GRAY, stick: '#1a1f29', tapeStyle: 'full', helmetType: 'visor', visor: '#bfe0ff' };
 const isGuestUI = () => !getUser();
-function applyGuestLook() {
-  const S = { helmet: swHelmet, jersey: swJersey, shorts: swShorts, stripe: swStripe, laces: swLaces, gloves: swGloves, tape: swTape, trail: swTrail, stick: swStick, visor: swVisor };
-  _suspendPreview = true;
-  try { for (const k in S) S[k].set(DEFAULT_LOOK[k]); chTapeStyle.set(DEFAULT_LOOK.tapeStyle); chHelmetType.set(DEFAULT_LOOK.helmetType); numInput.value = ''; }
-  finally { _suspendPreview = false; }
-  drawPreview();
-}
 function profile() {
   const name = (nameInput.value || '').trim().slice(0, 14);
   const _cos = (() => { try { const o = JSON.parse(localStorage.getItem('fh_lk3') || '{}'); return { banner: o.banner, title: o.title, avatar: o.avatar }; } catch { return {}; } })();   // gólová karta (server ověří odemčení)
-  if (isGuestUI()) return { name, handed: chosenHand, size: chosenSize, stickLen: chosenStick, number: null, ...DEFAULT_LOOK, ..._cos };
+  // host nese všechny informace jako účet (2026-11-18) — dřív výchozí vzhled bez čísla
   localStorage.setItem(NAME_KEY, name);
   localStorage.setItem(GK.helmet, swHelmet.get());
   localStorage.setItem(GK.jersey, swJersey.get());
@@ -1838,8 +1831,7 @@ function updateAuthUI(user) {
     nameInput.title = t('name_guest');
     isSponsor = false;
     document.body.classList.remove('sponsor');
-    applyGuestLook();
-  }
+  }   // host si nechává svůj vzhled (2026-11-18; dřív applyGuestLook = výchozí)
   document.body.classList.toggle('guest', !user);
   authDropdown.classList.remove('open');
   // Zobraz/skryj Discord login banner + stats sekci v profilu
@@ -1959,7 +1951,7 @@ async function syncProfileFromServer(u) {
     if (pr.banner) o.banner = pr.banner; if (pr.card_title) o.title = pr.card_title; if (pr.avatar) o.avatar = pr.avatar;
     if (pr.kit_slots) { try { const sl = JSON.parse(pr.kit_slots); if (Array.isArray(sl)) o.slots = sl; } catch {} }
     localStorage.setItem('fh_lk3', JSON.stringify(o));
-    if (!isGuestUI()) applyKit({ helmet: pr.helmet, gloves: pr.gloves, tape: pr.tape, trail: pr.trail, stick: pr.stick, tapeStyle: pr.tape_style, helmetType: pr.helmet_type, visor: pr.visor, jersey: pr.jersey, stripe: pr.stripe, shorts: pr.shorts });
+    applyKit({ helmet: pr.helmet, gloves: pr.gloves, tape: pr.tape, trail: pr.trail, stick: pr.stick, tapeStyle: pr.tape_style, helmetType: pr.helmet_type, visor: pr.visor, jersey: pr.jersey, stripe: pr.stripe, shorts: pr.shorts });
     drawPreview(); _lk3?.reload?.();
   } catch {}
 }
