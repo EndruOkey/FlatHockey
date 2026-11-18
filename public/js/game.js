@@ -14,6 +14,7 @@ import { Defender } from './entities/Defender.js';
 import { Rink } from './entities/Rink.js';
 import { SFX } from './sound.js';
 import { showGoalCard } from './goal-card.js';
+import { initCube } from './cube.js';   // kostka (center-hung) — zatím jen dev playground
 import { makeSteer, steerB2, steerR1 } from './steer.js';
 import { createMatch, stepMatch, applyClientInput, makeInput, faceoff, rebuildEntities, pendingFlags, faceoffState, DT as CORE_DT } from './match-core.js';
 import { makeBotBrain, hashSeed } from './bot.js';
@@ -88,7 +89,11 @@ export class NetGame {
       net.onSnap = s => this._onSnap(s);
       net.onGoal = g => {
         this._goalBanner(g.side || (String(g.text).includes('🔴') ? 'away' : 'home'), g.scorer || '');
-        if (g.card) {   // gólová karta střelce (banner, profilovka, titul) místo velkého textu
+        if (g.card && this._cube) {   // KOSTKA (dev): celá gólová sekvence místo karty a velkého textu
+          const side = g.side || 'home', sc = g.sc || this.score, before = { ...sc, [side]: Math.max(0, (sc[side] ?? 1) - 1) };
+          this._cube.goal({ card: g.card, scorer: g.scorer, side, ent: this.players.get(g.card.sid)?.ent, en: t('lk_p_size') === 'Size', before });
+          this.goalText = '';
+        } else if (g.card) {   // gólová karta střelce (banner, profilovka, titul) místo velkého textu
           const side = g.side || 'home', tm = this.settings?.teams?.[side];
           showGoalCard({ card: g.card, scorer: g.scorer, teamColor: tm?.color || (side === 'home' ? '#3a9fff' : '#ff4455'), ent: this.players.get(g.card.sid)?.ent, en: t('lk_p_size') === 'Size' });
           this.goalText = '';
@@ -240,7 +245,7 @@ export class NetGame {
     this.engine.run(this.renderWorld);
   }
 
-  stop() { this.engine.stop(); this.input.destroy?.(); }
+  stop() { this.engine.stop(); this.input.destroy?.(); this._cube?.destroy(); this._cube = null; }   // kostka pryč s koncem hry
 
   _tick(dt, cam) {
     this._cam = cam;
@@ -756,7 +761,10 @@ export class NetGame {
     const W = viewW(ctx.canvas), H = viewH(ctx.canvas);
     const tm = this.settings.teams;
     const cx = W / 2;
+    if (!this._cube && globalThis.FH_DEV && !this.offline) this._cube = initCube(t);   // kostka místo plátnové tabule (dev)
+    if (this._cube) this._cube.update({ home: this.score.home, away: this.score.away, clock: this.clk, period: this.per, periods: this.pers, teams: tm });
     // scoreboard
+    if (!this._cube) {
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.fillRect(cx - 150, 8, 300, 56);
     const mm = Math.floor(this.clk / 60), ss = this.clk % 60;
@@ -776,6 +784,10 @@ export class NetGame {
     ctx.font = '12px "Segoe UI", sans-serif';
     ctx.textAlign = 'right'; ctx.fillStyle = tm.home.color; ctx.fillText(this._clip(tm.home.name, 12), cx - 80, 24);
     ctx.textAlign = 'left';  ctx.fillStyle = tm.away.color; ctx.fillText(this._clip(tm.away.name, 12), cx + 80, 24);
+    } else if (this.weekRule) {   // týdenní pravidlo pod kostkou
+      ctx.font = '700 12px "Segoe UI", sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#ffcf3a';
+      ctx.fillText(t('week_rule', t('wr_' + this.weekRule)), cx, 66);
+    }
 
     if (this._notice) {                       // nenásilné upozornění (odpojení) — hra běží dál
       const a = Math.min(1, this._notice.t);

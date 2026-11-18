@@ -215,8 +215,14 @@ if (endLobbyPM) {
 }
 
 { const sh = match.puck._shot, sp = sh ? match.players.get(sh.id) : null, scorer = sp && sp.team === scoringTeam ? String(sp.name || '').slice(0, 24) : '';
-  const card = sp && sp.team === scoringTeam ? { sid: sp.id, bn: sp.banner, tt: sp.title, av: sp.avatar, au: sp.avatarUrl || null, num: sp.num ?? null } : null;   // gólová karta střelce
-  io.to(match.room).emit('goal', { text: result === 'goal-away' ? 'GOAL! 🔴' : 'GOAL! 🔵', side: scoringTeam, scorer, card }); }
+  let card = null;
+  if (sp && sp.team === scoringTeam) {   // gólová karta střelce (kostka): kosmetika + asistence + góly v zápase / sezóně
+    const gb = match._goalsBy || (match._goalsBy = new Map()); const gg = (gb.get(sp.id) || 0) + 1; gb.set(sp.id, gg);
+    const ap = match._prevTouchSid && match._prevTouchSid !== sp.id ? match.players.get(match._prevTouchSid) : null;
+    let sg = null; try { const uid = io.sockets.sockets.get(sp.id)?.data?.userId; if (uid && !isGuestUser(uid)) sg = (getStats(uid)?.goals || 0) + gg; } catch {}
+    card = { sid: sp.id, bn: sp.banner, tt: sp.title, av: sp.avatar, au: sp.avatarUrl || null, num: sp.num ?? null, as: ap && ap.team === scoringTeam ? String(ap.name || '').slice(0, 24) : null, gg, sg };
+  }
+  io.to(match.room).emit('goal', { text: result === 'goal-away' ? 'GOAL! 🔴' : 'GOAL! 🔵', side: scoringTeam, scorer, card, sc: { home: match.score.home, away: match.score.away } }); }   // sc = skóre po gólu (kostka přepíše až v doba 2)
 }
 
 // Konec zápasu (háček match-core gameover): síť, statistiky, odměny, auto-rematch — přesunuto ze serverového stepMatch (2026-11-12)
