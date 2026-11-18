@@ -38,20 +38,28 @@ const IC = {
   hand: '<path d="M8 11V5a2 2 0 0 1 4 0v5M12 10V4a2 2 0 0 1 4 0v7M16 9a2 2 0 0 1 4 0v5a7 7 0 0 1-14 0v-3a2 2 0 0 1 4 0"/>',
   dice: '<rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1.2"/><circle cx="15" cy="15" r="1.2"/><circle cx="15" cy="9" r="1.2"/><circle cx="9" cy="15" r="1.2"/>',
 };
-// OBRÁZKOVÉ IKONY dlaždic (Ondřej: „ikony, ne hráči" → „musí se hodit do vizuálu hry"): styl hráčů ve hře —
-// pohled shora, tlustý tmavý obrys (#0b1220), plné barvy, světlý odlesk; barvy = aktuální výbava hráče (k) nebo sada
+// IKONY velikosti a hokejky = sada „sprite v kruhu" (návrh 2026-11-18, Ondřej: „vypadají skvěle, jen nevím jestli do kruhu"):
+// hráč přesně jako ve hře (shora, obrys #0b1220, plné barvy), hokejka s pravítkem 1–3 dílků. Podoba: 'circle' | 'bare' | 'shadow'.
 const OL = 'stroke="#0b1220" stroke-width="4.5" stroke-linejoin="round" stroke-linecap="round"';
-const bigIc = inner => `<svg class="bic" viewBox="0 0 120 80" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><rect x="0" y="0" width="120" height="80" fill="#dfeaf3"/><path d="M60 0V80" stroke="rgba(204,34,51,.35)" stroke-width="2"/><circle cx="60" cy="40" r="30" fill="none" stroke="rgba(30,79,209,.22)" stroke-width="2"/>${inner}</svg>`;   // podklad = led (jako ve hře)
-const topPlayer = (cx, cy, k, j, h) => `<g transform="translate(${cx} ${cy}) scale(${k})">
-  <path d="M15 -10 L22 -30 q2 -7 -6 -7" fill="none" stroke="#0b1220" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
-  <ellipse cx="0" cy="6" rx="25" ry="14" fill="${j}" ${OL}/><path d="M-14 10 q14 7 28 0" stroke="#fff" stroke-width="3.5" opacity=".28" fill="none"/>
-  <circle cx="-15" cy="-6" r="5.5" fill="#1a1f29" ${OL.replace('4.5', '3')}/><circle cx="15" cy="-8" r="5.5" fill="#1a1f29" ${OL.replace('4.5', '3')}/>
-  <circle cx="0" cy="0" r="10" fill="${h}" ${OL}/><path d="M-6 -6a9 9 0 0 1 12 0" fill="none" stroke="#7FD4FF" stroke-width="4" stroke-linecap="round"/><circle cx="-3" cy="2" r="2.5" fill="#fff" opacity=".6"/></g>`;
-const icSize = (i, kit) => bigIc(topPlayer(58, 46, [0.95, 1.15, 1.38][i], kit.jersey, kit.helmet));
-const icStick = (i, kit) => { const L = [44, 60, 76][i], x0 = 104 - L;
-  return bigIc(`<ellipse cx="62" cy="70" rx="40" ry="4" fill="#000" opacity=".2"/><path d="M${x0} 20 L92 56 q6 8 -6 10 h-22" fill="none" stroke="#0b1220" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M${x0} 20 L92 56 q6 8 -6 10 h-22" fill="none" stroke="${kit.stick}" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M86 66 h-20" stroke="${kit.tape}" stroke-width="5.5" stroke-linecap="round"/>
-  <ellipse cx="54" cy="66" rx="7.5" ry="5" fill="#15171c" ${OL.replace('4.5', '3')}/>`); };
+const ICV = () => globalThis.__lk3IconVariant || 'shadow';   // vybráno 2026-11-18: stín na ledě (Ondřej)
+const svg64 = inner => `<svg class="bic" viewBox="0 0 64 64" preserveAspectRatio="xMidYMid meet" aria-hidden="true" style="overflow:visible">${inner}</svg>`;
+const NS = 'vector-effect="non-scaling-stroke"', HALO = 'rgba(223,234,243,.92)';
+const backdrop = (w = 22) => ICV() === 'circle' ? `<circle cx="32" cy="33" r="27" fill="rgba(127,212,255,.07)" stroke="rgba(127,212,255,.55)" stroke-width="2" stroke-dasharray="4 4"/>`
+  : ICV() === 'shadow' ? `<ellipse cx="32" cy="52" rx="${w}" ry="5" fill="#000" opacity=".35"/>` : '';
+const topP = (cx, cy, k, c) => `<g transform="translate(${cx} ${cy}) scale(${k})">
+  <g fill="${HALO}" stroke="${HALO}" stroke-width="8" ${NS}><ellipse cx="0" cy="5" rx="20" ry="12.5" ${NS}/><circle cx="-13" cy="-4" r="4.6" ${NS}/><circle cx="13" cy="-6" r="4.6" ${NS}/><circle cx="0" cy="0" r="8.5" ${NS}/></g>
+  <ellipse cx="0" cy="5" rx="20" ry="12.5" fill="${c.jersey}" stroke="#0b1220" stroke-width="3" ${NS}/><path d="M-12 9 q12 6 24 0" stroke="#fff" stroke-width="2" opacity=".3" fill="none" ${NS}/>
+  <circle cx="-13" cy="-4" r="4.6" fill="${c.gloves}" stroke="#0b1220" stroke-width="2.4" ${NS}/><circle cx="13" cy="-6" r="4.6" fill="${c.gloves}" stroke="#0b1220" stroke-width="2.4" ${NS}/>
+  <circle cx="0" cy="0" r="8.5" fill="${c.helmet}" stroke="#0b1220" stroke-width="3" ${NS}/><path d="M-5 -5.5a7.5 7.5 0 0 1 10 0" fill="none" stroke="#7FD4FF" stroke-width="2.6" stroke-linecap="round" ${NS}/><circle cx="-2.6" cy="2" r="2" fill="#fff" opacity=".7"/></g>`;
+const icSize = (i, kit) => svg64(backdrop([14, 17, 21][i]) + topP(32, 32, [0.74, 0.92, 1.1][i], kit));
+const icStick = (i, kit) => { const L = [30, 40, 52][i], hx = 44, hy = 42, x0 = hx - L * .72, y0 = hy - L * .7, tx = 58, ty = 45, w = 1.15;
+  const d = `M${x0} ${y0} L${hx} ${hy} Q${(hx + tx) / 2} ${hy + 4} ${tx} ${ty}`;
+  return svg64((ICV() === 'shadow' ? `<ellipse cx="${(x0 + tx) / 2 + 4}" cy="52" rx="${L * .55}" ry="4" fill="#000" opacity=".3"/>` : ICV() === 'circle' ? backdrop() : '') +
+    `<path d="${d}" fill="none" stroke="${HALO}" stroke-width="${13 * w}" stroke-linecap="round" stroke-linejoin="round"/><path d="${d}" fill="none" stroke="#0b1220" stroke-width="${8.5 * w}" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="${d}" fill="none" stroke="${kit.stick}" stroke-width="${4 * w}" stroke-linecap="round" stroke-linejoin="round"/><path d="M${hx + (tx - hx) * .35} ${hy + 2.2} Q${(hx + tx) / 2 + 2} ${hy + 4} ${tx} ${ty}" fill="none" stroke="${kit.tape}" stroke-width="${4 * w}" stroke-linecap="round"/>
+    <circle cx="${x0}" cy="${y0}" r="${3.4 * w}" fill="#0b1220"/>
+    <g transform="translate(6 56)">${[0, 1, 2].map(k => `<rect x="${k * 18}" y="0" width="15" height="5" fill="${k <= i ? '#7FD4FF' : 'rgba(255,255,255,.16)'}" stroke="#0b1220" stroke-width="1.5"/>`).join('')}</g>`); };
+const bigIc = inner => `<svg class="bic" viewBox="0 0 120 80" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><rect x="0" y="0" width="120" height="80" fill="#dfeaf3"/><path d="M60 0V80" stroke="rgba(204,34,51,.35)" stroke-width="2"/><circle cx="60" cy="40" r="30" fill="none" stroke="rgba(30,79,209,.22)" stroke-width="2"/>${inner}</svg>`;   // podklad led (helma)
 const icHelm = (v, kit) => bigIc(`<ellipse cx="60" cy="72" rx="24" ry="5" fill="#000" opacity=".25"/><circle cx="60" cy="40" r="26" fill="${kit.helmet}" ${OL}/><circle cx="51" cy="31" r="6" fill="#fff" opacity=".6"/>` +
   (v === 'visor' ? `<path d="M76 22a26 26 0 0 1 0 36" fill="none" stroke="#0b1220" stroke-width="11" stroke-linecap="round"/><path d="M76 22a26 26 0 0 1 0 36" fill="none" stroke="#7FD4FF" stroke-width="6" stroke-linecap="round"/>`
    : v === 'cage' ? `<path d="M74 18a28 28 0 0 1 0 44" fill="none" stroke="#1d2128" stroke-width="7" stroke-linecap="round"/><g stroke="#1d2128" stroke-width="3.5" stroke-linecap="round"><path d="M70 30h14M68 40h18M70 50h14M78 24v32"/></g>`
