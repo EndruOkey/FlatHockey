@@ -1609,7 +1609,17 @@ joinBtn.onclick = () => {
 joinInput.addEventListener('keydown', e => { if (e.key === 'Enter') joinBtn.click(); });
 
 // ── Čekárna ───────────────────────────────────────────────────────────
-function teamCol(tc, players) {
+if (globalThis.FH_DEV) document.documentElement.classList.add('fh-dev');   // vizuální návrhy jen na /dev
+function teamCol(tc, players, slots) {
+  if (globalThis.FH_DEV && slots) {   // /dev: soupiska jako sloty (obsazené = číslo v barvě týmu, volné = čárkovaný slot)
+    const rows = [];
+    for (let i = 0; i < Math.max(slots, players.length); i++) {
+      const p = players[i];
+      rows.push(p ? `<div class="wt-slot${p.dc ? ' wt-p-dc' : ''}"><span class="wt-num c3" style="background:${tc.color}">${p.number != null ? p.number : '–'}</span><span class="wt-nm c3">${p.dc ? '⚠ ' : ''}${esc(p.name || t('player'))}</span></div>`
+                  : `<div class="wt-slot wt-empty"><span class="wt-num c3">+</span><span class="wt-nm">${t('slot_free')}</span></div>`);
+    }
+    return `<div class="wt-col" style="border-color:${tc.color}"><h3 class="c3" style="color:${tc.color}">${esc(tc.name)}<small>${players.length}/${slots}</small></h3>${rows.join('')}</div>`;
+  }
   return `<div class="wt-col" style="border-color:${tc.color}"><h3 style="color:${tc.color}">${esc(tc.name)}</h3>` +
     players.map(p => `<div class="wt-p${p.dc ? ' wt-p-dc' : ''}">${p.dc ? '⚠ ' : ''}${p.number != null ? '#'+p.number+' ' : ''}${esc(p.name || t('player'))}</div>`).join('') + `</div>`;
 }
@@ -1621,8 +1631,8 @@ function renderWait(st) {
   const fmt = (st.settings.max/2) + 'v' + (st.settings.max/2);
   $('wait-info').textContent = `${fmt} · ${st.settings.periods}× ${st.settings.minutes} min · ${st.settings.rules ? t('mode_rules') : t('mode_arcade')}`;
   $('wait-teams').innerHTML =
-    teamCol(st.settings.teams.home, st.players.filter(p => p.team === 'home')) +
-    teamCol(st.settings.teams.away, st.players.filter(p => p.team === 'away'));
+    teamCol(st.settings.teams.home, st.players.filter(p => p.team === 'home'), st.settings.max / 2) +
+    teamCol(st.settings.teams.away, st.players.filter(p => p.team === 'away'), st.settings.max / 2);
   const isHost = st.hostId === net.id;
   const sb = $('start-btn');
   sb.style.display = isHost ? '' : 'none';

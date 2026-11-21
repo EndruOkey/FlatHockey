@@ -64,7 +64,7 @@ const DICT = {
     leave: 'ODEJÍT',
     player: 'hráč',
     mode_rules: 'pravidla',
-    mode_arcade: 'arkáda',
+    mode_arcade: 'arkáda', slot_free: 'Volné místo',
     // Pauza
     vol_label: 'Hlasitost',
     pause: 'PAUZA',
@@ -277,7 +277,7 @@ const DICT = {
     leave: 'LEAVE LOBBY',
     player: 'player',
     mode_rules: 'rules',
-    mode_arcade: 'arcade',
+    mode_arcade: 'arcade', slot_free: 'Open slot',
     vol_label: 'Volume',
     pause: 'PAUSE',
     resume: 'RESUME',
