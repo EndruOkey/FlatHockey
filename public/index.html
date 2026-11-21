@@ -139,7 +139,8 @@
     button {
       width: 100%; padding: 13px 18px;
       border: none; border-radius: 0;
-      color: #fff; font-size: 0.82rem; font-weight: 700;
+      color: #fff; font-size: 1rem; font-weight: 800;
+      font-family: 'Barlow Condensed', system-ui; font-style: italic;   /* jedno písmo tlačítek všude (vzor: šatna) */
       cursor: pointer; transition: filter 0.12s, box-shadow 0.12s, background 0.12s;
       margin-bottom: 8px; letter-spacing: 0.1em; text-transform: uppercase;
       background: rgba(255,255,255,0.04);
@@ -382,7 +383,7 @@
       background: rgba(5,6,14,0.9);
       z-index: 20;
     }
-    #pause-menu .box { min-width: 280px; }
+    #pause-menu .box { width: min(380px, calc(100vw - 32px)); box-sizing: border-box; }
     #pause-menu h2 {
       font-family: 'Barlow Condensed', system-ui;
       font-size: 1.5rem; font-weight: 900; letter-spacing: 0.14em;
@@ -397,7 +398,7 @@
       backdrop-filter: blur(8px);
     }
     .mr-card {
-      width: 480px; background: #080d1c;
+      width: min(560px, calc(100vw - 32px)); box-sizing: border-box; background: #0a0c1a;
       border: 1px solid rgba(255,255,255,0.06);
       display: flex; flex-direction: column;
       overflow: hidden;
@@ -542,7 +543,7 @@
       background: rgba(5,6,14,0.92);
     }
     #auth-modal.open, #pw-modal.open { display: flex; }
-    #auth-modal .box, #pw-modal .box { min-width: 300px; max-width: 340px; }
+    #auth-modal .box, #pw-modal .box { width: min(380px, calc(100vw - 32px)); box-sizing: border-box; }
     #pw-modal input { margin-bottom: 12px; }
     #pw-cancel { background: transparent; border: none; color: #758190; font-size: 0.75rem; margin-top: 2px; }
     #pw-cancel:hover { color: #738693; }
@@ -1423,7 +1424,7 @@
 
     /* STORE (2026-11-13) — položky z /api/store; kredity za online zápasy */
     #v-store { overflow-y: auto; }
-    .st-wrap { max-width: 980px; margin: 0 auto; padding: 96px 24px 64px; }
+    .st-wrap { max-width: none; margin: 0; padding: 96px 24px 64px; }
     .st-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap; margin-bottom: 22px; }
     .st-title { font-family: 'Barlow Condensed', system-ui; font-size: clamp(2.6rem,6vw,4rem); font-weight: 900; font-style: italic; line-height: .95; color: #e2e2eb; }
     .st-earn { font-family: 'Hanken Grotesk', sans-serif; font-size: .9rem; color: rgba(182,196,255,.75); max-width: 520px; line-height: 1.5; margin: 8px 0 0; }
@@ -1576,11 +1577,11 @@
     .sv-stats-title-area {
       flex-shrink: 0; padding: 20px 0 14px;
       border-bottom: 1px solid rgba(182,196,255,0.07);
-      background: transparent; width: 100%; max-width: 1280px;
+      background: transparent; width: 100%; max-width: none;
     }
     .sv-body-stats {
       grid-template-columns: 300px 1fr; overflow: hidden;
-      width: 100%; max-width: 1280px; flex: 1; min-height: 0;
+      width: 100%; max-width: none; flex: 1; min-height: 0;
     }
 
     .sv-stats-left {
@@ -1657,8 +1658,8 @@
     }
     .sv-lb-tab {
       padding: 6px 16px;
-      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 700;
-      letter-spacing: 0.16em; text-transform: uppercase;
+      font-family: 'Barlow Condensed', system-ui; font-style: italic; font-size: 0.95rem; font-weight: 800;
+      letter-spacing: 0.1em; text-transform: uppercase;
       background: none; border: none; cursor: pointer;
       color: rgba(182,196,255,0.6); transition: color 0.15s, background 0.15s;
     }
@@ -2524,7 +2525,7 @@
     .sv-teams-adv .tb-head { display: grid; grid-template-columns: 1fr 140px; gap: 8px; margin-bottom: 8px; }
     #lobby.on-create #create-go { margin-top: 6px; padding: 16px; }
     /* Procházet hry: stejná osa jako Nová hra (jeden sloupec, nadpis nahoře) */
-    .sv-body-browse { grid-template-columns: 1fr !important; grid-template-rows: auto 1fr; align-content: start; max-width: 720px; margin: 0 auto; width: 100%; background: transparent; }
+    .sv-body-browse { grid-template-columns: 1fr !important; grid-template-rows: auto 1fr; align-content: start; max-width: none; margin: 0; width: 100%; background: transparent; }
     .sv-browse-hero { justify-content: flex-start !important; background: transparent !important; border: none !important; padding: 32px 16px 8px !important; gap: 12px; align-items: stretch; }
     .sv-browse-hero .sv-back { align-self: flex-start; width: auto; padding: 8px 16px; }
     .sv-browse-hero .sv-eyebrow { display: none; }
@@ -2536,7 +2537,7 @@
       background: rgba(5,7,12,0.72) !important; border: none !important; box-shadow: none !important; border-radius: 0 !important; min-width: 0 !important; z-index: 200 !important;
       align-items: center; justify-content: center; padding: 24px 16px; }
     #settings-dropdown.open { display: flex !important; }
-    .set-panel { width: min(560px, 100%); max-height: calc(100vh - 48px); overflow-y: auto; background: #0f1220; border: 1px solid var(--ux-line); border-top: 2px solid var(--ux-primary); padding: 20px 24px 24px; text-align: left; }
+    .set-panel { width: min(560px, 100%); max-height: calc(100vh - 48px); overflow-y: auto; background: #0a0c1a; border: 1px solid var(--ux-line); border-top: 2px solid var(--ux-primary); padding: 20px 24px 24px; text-align: left; }
     .set-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
     .set-title { font: 900 italic 1.8rem 'Barlow Condensed', system-ui; color: #fff; letter-spacing: 0.02em; }
     .set-close { background: transparent !important; border: 1px solid var(--ux-line) !important; color: #dfe4f5 !important; width: 36px; height: 36px; padding: 0; font-size: 1rem; }
