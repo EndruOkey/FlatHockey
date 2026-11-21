@@ -273,14 +273,17 @@ button.ghost:hover:not(:disabled), .pick-btn:hover:not(:disabled), #mr-rematch-b
 html.fh-dev #lobby:not(.on-main) .scene3::after {
   background: linear-gradient(90deg, rgba(5,10,20,.94) 0%, rgba(5,10,20,.86) 45%, rgba(5,10,20,.42) 78%, rgba(5,10,20,.66) 100%),
               radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(0,0,0,.6) 100%); }
-html.fh-dev #lobby.on-wait .sv-wait-body { background: transparent; display: grid; grid-template-columns: minmax(0, 720px) minmax(300px, 520px);
-  justify-content: space-between; align-items: start; gap: 28px 48px; padding: clamp(16px, 5vh, 72px) var(--a3-gut) 120px; }
+html.fh-dev #lobby.on-wait .sv-wait-body { background: transparent; display: grid; grid-template-columns: minmax(0, 600px) minmax(300px, 720px);
+  grid-template-rows: auto auto 1fr; justify-content: space-between; align-items: start; gap: 24px 48px; padding: clamp(16px, 5vh, 72px) var(--a3-gut) 120px; }
+/* rozložení jako menu: VLEVO jeden sloupec akcí (START, týmy, Odejít), VPRAVO obsah (název, soupisky, pozvánka) */
+html.fh-dev .sv-wait-actions { grid-column: 1; grid-row: 1 / span 3; align-self: start; max-width: none; gap: 8px; align-items: stretch; }
+html.fh-dev .sv-wait-meta { grid-column: 2; grid-row: 1; text-align: left; }
+html.fh-dev .sv-wait-vs-wrap { grid-column: 2; grid-row: 2; max-width: none; }
+html.fh-dev #wait-invite-card { grid-column: 2; grid-row: 3; align-self: start; margin: 0 !important; max-width: none !important; }
 html.fh-dev .sv-wait-body::before { display: none; }
-html.fh-dev .sv-wait-meta { grid-column: 1; grid-row: 1; text-align: left; }
 html.fh-dev .sv-wait-eyebrow { justify-content: flex-start; font: italic 800 15px 'Barlow Condensed', sans-serif; letter-spacing: .14em; color: var(--a3-ice); margin-bottom: 6px; }
 html.fh-dev .sv-wait-lobby-name { font: italic 800 clamp(44px, 4.4vw, 64px)/.95 'Barlow Condensed', sans-serif; letter-spacing: .01em; color: var(--a3-text); }
 html.fh-dev #lobby.on-wait #wait-info { text-align: left; margin-top: 14px; font: 500 20px/1.4 'Barlow', sans-serif; letter-spacing: 0; text-transform: none; color: #D3DEEC; }
-html.fh-dev .sv-wait-vs-wrap { grid-column: 1; grid-row: 2; max-width: none; }
 html.fh-dev .sv-wait-vs-wrap::after { font-size: 64px; color: rgba(255,255,255,.9); top: 36px; text-shadow: 0 2px 0 rgba(0,0,0,.5); }
 html.fh-dev #lobby.on-wait #wait-teams { display: grid !important; grid-template-columns: 1fr 1fr; gap: 72px; }
 html.fh-dev #lobby.on-wait .wt-col { background: var(--a3-glass); border: none; border-left: 6px solid; clip-path: var(--a3-cut-panel); padding: 20px 24px 22px; min-height: 0; }
@@ -293,13 +296,11 @@ html.fh-dev .wt-nm { font-size: 24px; line-height: 1; color: var(--a3-text); }
 html.fh-dev .wt-empty { background: transparent; outline: 1px dashed rgba(255,255,255,.22); outline-offset: -1px; }
 html.fh-dev .wt-empty .wt-num { background: transparent; color: var(--a3-mute); font-size: 24px; }
 html.fh-dev .wt-empty .wt-nm { font: 600 16px 'Barlow', sans-serif; color: var(--a3-mute); }
-html.fh-dev .sv-wait-actions { grid-column: 2; grid-row: 1 / span 2; align-self: start; max-width: none; gap: 8px; align-items: stretch; }
 html.fh-dev #lobby.on-wait #team-pick { flex-direction: column; gap: 8px; order: 2; }
 html.fh-dev #lobby.on-wait .pick-btn { flex: none; min-height: 58px; font-size: 26px !important; padding: 0 36px 0 22px !important; }
 html.fh-dev #lobby.on-wait #start-btn { order: 1; width: 100%; min-height: 100px; font-size: clamp(44px, 4.2vw, 60px) !important; letter-spacing: .01em !important; padding: 0 40px 0 28px !important; margin-bottom: 8px; }
-html.fh-dev #wait-invite-card { grid-column: 2; grid-row: 2; align-self: end; margin: 0 !important; max-width: none !important; }
-html.fh-dev .sv-wait-actions { grid-row: 1 !important; }
 html.fh-dev .sv-wait-vs-wrap #wait-teams { width: 100%; }
-html.fh-dev #lobby.on-wait #wait-leave { grid-column: 1; grid-row: 3; justify-self: start; align-self: start; }
+html.fh-dev #lobby.on-wait #wait-leave { order: 3; width: auto; min-height: 58px; font-size: 26px !important; padding: 0 36px 0 22px !important; margin-top: 16px; }
+html.fh-dev #lobby.on-wait #wait-teams { gap: 56px; }
 @media (max-width: 1000px) { html.fh-dev #lobby.on-wait .sv-wait-body { grid-template-columns: 1fr; }
-  html.fh-dev .sv-wait-actions, html.fh-dev #wait-invite-card, html.fh-dev #lobby.on-wait #wait-leave { grid-column: 1; grid-row: auto; } }
+  html.fh-dev .sv-wait-actions, html.fh-dev .sv-wait-meta, html.fh-dev .sv-wait-vs-wrap, html.fh-dev #wait-invite-card { grid-column: 1; grid-row: auto; } }

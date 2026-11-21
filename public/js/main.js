@@ -1610,6 +1610,7 @@ joinInput.addEventListener('keydown', e => { if (e.key === 'Enter') joinBtn.clic
 
 // ── Čekárna ───────────────────────────────────────────────────────────
 if (globalThis.FH_DEV) document.documentElement.classList.add('fh-dev');   // vizuální návrhy jen na /dev
+if (globalThis.FH_DEV) { const wa = document.querySelector('.sv-wait-actions'), wl = document.getElementById('wait-leave'); if (wa && wl) wa.appendChild(wl); }   // /dev lobby: všechny akce v jednom sloupci jako menu (Odejít poslední)
 function teamCol(tc, players, slots) {
   if (globalThis.FH_DEV && slots) {   // /dev: soupiska jako sloty (obsazené = číslo v barvě týmu, volné = čárkovaný slot)
     const rows = [];
