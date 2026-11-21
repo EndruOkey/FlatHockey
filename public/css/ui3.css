@@ -284,7 +284,7 @@ html.fh-dev .sv-wait-body::before { display: none; }
 html.fh-dev .sv-wait-eyebrow { justify-content: flex-start; font: italic 800 15px 'Barlow Condensed', sans-serif; letter-spacing: .14em; color: var(--a3-ice); margin-bottom: 6px; }
 html.fh-dev .sv-wait-lobby-name { font: italic 800 clamp(44px, 4.4vw, 64px)/.95 'Barlow Condensed', sans-serif; letter-spacing: .01em; color: var(--a3-text); }
 html.fh-dev #lobby.on-wait #wait-info { text-align: left; margin-top: 14px; font: 500 20px/1.4 'Barlow', sans-serif; letter-spacing: 0; text-transform: none; color: #D3DEEC; }
-html.fh-dev .sv-wait-vs-wrap::after { font-size: 64px; color: rgba(255,255,255,.9); top: 36px; text-shadow: 0 2px 0 rgba(0,0,0,.5); }
+html.fh-dev .sv-wait-vs-wrap::after { font-size: 40px; letter-spacing: 0; color: rgba(255,255,255,.38); top: 50%; text-shadow: none; }   /* VS volně v mezeře mezi soupiskami, ne natlačené */
 html.fh-dev #lobby.on-wait #wait-teams { display: grid !important; grid-template-columns: 1fr 1fr; gap: 72px; }
 html.fh-dev #lobby.on-wait .wt-col { background: var(--a3-glass); border: none; border-left: 6px solid; clip-path: var(--a3-cut-panel); padding: 20px 24px 22px; min-height: 0; }
 html.fh-dev #lobby.on-wait .wt-col:nth-child(2) { clip-path: polygon(28px 0, 100% 0, 100% 100%, 0 100%, 0 28px); }
@@ -301,6 +301,6 @@ html.fh-dev #lobby.on-wait .pick-btn { flex: none; min-height: 58px; font-size: 
 html.fh-dev #lobby.on-wait #start-btn { order: 1; width: 100%; min-height: 100px; font-size: clamp(44px, 4.2vw, 60px) !important; letter-spacing: .01em !important; padding: 0 40px 0 28px !important; margin-bottom: 8px; }
 html.fh-dev .sv-wait-vs-wrap #wait-teams { width: 100%; }
 html.fh-dev #lobby.on-wait #wait-leave { order: 3; width: auto; min-height: 58px; font-size: 26px !important; padding: 0 36px 0 22px !important; margin-top: 16px; }
-html.fh-dev #lobby.on-wait #wait-teams { gap: 56px; }
+html.fh-dev #lobby.on-wait #wait-teams { gap: 88px; }
 @media (max-width: 1000px) { html.fh-dev #lobby.on-wait .sv-wait-body { grid-template-columns: 1fr; }
   html.fh-dev .sv-wait-actions, html.fh-dev .sv-wait-meta, html.fh-dev .sv-wait-vs-wrap, html.fh-dev #wait-invite-card { grid-column: 1; grid-row: auto; } }
