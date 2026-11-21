@@ -219,3 +219,48 @@ body.guest .lk-panel .lk-share { pointer-events: none; opacity: .35; filter: gra
 }
 /* Šatna v3 (dev): sdílená hlavička (ZPĚT + štítek + nadpis) zůstává, obsah šatny pod ní (locker3.js nemá vlastní) */
 #v-profile.lk3-on { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+
+/* ═══════════════════════════════════════════════════════════════
+   Ostatní obrazovky a okna ve vizuálním jazyce HLAVNÍHO MENU (2026-11-21)
+   Vzor = .m3-item / .m3-invite-btn / .g3: hlavní akce červená se seříznutým rohem, vedlejší = sklo s levou lištou,
+   panely = sklo se seříznutým pravým horním rohem, popisky = .k3 (ledová kurzíva). Stará fialková vrstva (UX v2) přemapovaná.
+   ═══════════════════════════════════════════════════════════════ */
+:root { --ux-primary: var(--a3-ice); --ux-primary-ink: var(--a3-bg); --ux-line: var(--a3-line); --ux-text-2: var(--a3-mute); }
+/* Hlavní akce: jako vybraná položka menu */
+button.primary, #create-btn, #start-btn, #resume-btn, #create-go, #pw-submit, #discord-login-btn, #mr-close-btn {
+  background: linear-gradient(90deg, var(--a3-red), var(--a3-red2)) !important; color: #fff !important;
+  border: none !important; border-left: 6px solid #fff !important; box-shadow: none !important; border-radius: 0 !important;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 18px) 100%, 0 100%) !important;
+  font: italic 800 22px/1 'Barlow Condensed', sans-serif !important; letter-spacing: .02em !important; text-transform: uppercase;
+  min-height: 52px; padding: 0 34px 0 22px !important; text-align: left; }
+button.primary:hover:not(:disabled), #create-btn:hover, #start-btn:hover:not(:disabled), #resume-btn:hover, #create-go:hover, #pw-submit:hover, #discord-login-btn:hover {
+  filter: brightness(1.12) !important; background: linear-gradient(90deg, var(--a3-red), var(--a3-red2)) !important; box-shadow: none !important; }
+#create-btn * { color: #fff !important; }
+/* Vedlejší akce: jako nevybraná položka menu */
+button.ghost, .pick-btn, #mr-rematch-btn, #mr-invite-btn, #leave-btn, #pw-cancel, #auth-close-btn, #wait-leave, #refresh-btn, #join-btn {
+  background: var(--a3-glass) !important; color: var(--a3-text) !important; border: none !important; border-left: 6px solid rgba(255,255,255,.18) !important;
+  border-radius: 0 !important; box-shadow: none !important; clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%) !important;
+  font: italic 800 18px/1 'Barlow Condensed', sans-serif !important; letter-spacing: .03em !important; text-transform: uppercase;
+  min-height: 44px; padding: 0 26px 0 18px !important; text-align: left; }
+button.ghost:hover:not(:disabled), .pick-btn:hover:not(:disabled), #mr-rematch-btn:hover, #mr-invite-btn:hover, #leave-btn:hover, #pw-cancel:hover, #auth-close-btn:hover, #wait-leave:hover, #refresh-btn:hover, #join-btn:hover {
+  background: rgba(255,255,255,.10) !important; border-left-color: var(--a3-ice) !important; color: #fff !important; filter: none !important; }
+#leave-btn:hover, #wait-leave:hover { border-left-color: var(--a3-red) !important; }
+/* Panely a okna: sklo se seříznutým rohem jako karty v menu */
+.set-panel, #auth-modal .box, #pw-modal .box, #pause-menu .box, .mr-card {
+  background: rgba(8,16,30,.94) !important; border: 1px solid var(--a3-line) !important; border-radius: 0 !important; box-shadow: none !important;
+  clip-path: var(--a3-cut-panel); padding: 28px 32px !important; }
+/* Popisky a sekce: .k3 */
+.set-sec h3, .lk-group-h, .lbl, .sv-eyebrow, .sv-lb-tab {
+  font-family: 'Barlow Condensed', sans-serif !important; font-style: italic; font-weight: 800 !important; letter-spacing: .14em !important; font-size: 15px !important; color: var(--a3-ice) !important; }
+.sv-lb-tab { color: var(--a3-mute) !important; } .sv-lb-tab.active { color: var(--a3-text) !important; background: rgba(127,212,255,.12) !important; }
+.set-title, #pause-menu h2, #auth-modal h2, #pw-modal h2 { font: italic 800 34px/1 'Barlow Condensed', sans-serif !important; text-transform: uppercase; color: var(--a3-text) !important; }
+/* Text a pole: Barlow jako popisky v menu, ne pod 15 px */
+.set-chk, .set-keys, .set-hint, .sv-create-one .chk, .sv-create-one .set-row label { font-family: 'Barlow', sans-serif !important; font-size: 15px !important; color: var(--a3-mute2) !important; }
+.set-keys dt { font: italic 800 16px 'Barlow Condensed', sans-serif !important; color: var(--a3-text) !important; }
+.sv-create-one select, .sv-create-one input[type=text], .sv-join-row input, #pw-modal input {
+  background: var(--a3-glass) !important; border: 1px solid var(--a3-line) !important; border-radius: 0 !important; color: var(--a3-text) !important;
+  font: 600 17px 'Barlow', sans-serif !important; min-height: 46px; }
+.set-chk input, .sv-create-one .chk input { accent-color: var(--a3-red); }
+.fmt-btn { font: italic 800 20px 'Barlow Condensed', sans-serif !important; }
+.fmt-btn.active { background: linear-gradient(90deg, var(--a3-red), var(--a3-red2)) !important; color: #fff !important; border-color: transparent !important; }
+.mr-card button { white-space: nowrap; font-size: 17px !important; padding: 0 22px 0 14px !important; }
