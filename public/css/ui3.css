@@ -330,3 +330,15 @@ html.fh-dev #lobby.on-browse .li-join:hover { background: linear-gradient(90deg,
 html.fh-dev #lobby.on-browse .lobby-empty { padding: 24px; outline: 1px dashed rgba(255,255,255,.22); outline-offset: -1px; font: 600 18px 'Barlow', sans-serif; color: var(--a3-mute); }
 @media (max-width: 1000px) { html.fh-dev #lobby.on-browse .sv-body-browse { grid-template-columns: 1fr !important; }
   html.fh-dev #lobby.on-browse .sv-browse-hero, html.fh-dev #lobby.on-browse .sv-browse-list { grid-column: 1; } }
+/* /dev Najít zápas v2 (méně chaosu): vlevo jen 2 bloky stejné šířky, kód + PŘIPOJIT jako jeden celek;
+   OBNOVIT zpět k seznamu; červená jen jednou (ZALOŽIT), PŘIPOJIT na kartách sklo; obě kolony začínají na stejné výšce */
+html.fh-dev #lobby.on-browse .sv-body-browse { grid-template-columns: minmax(0, 480px) minmax(300px, 760px) !important; }
+html.fh-dev #lobby.on-browse #create-btn { margin: 0 0 24px; clip-path: var(--a3-cut-panel); }
+html.fh-dev #lobby.on-browse .sv-join-row { flex-direction: row; gap: 0; }
+html.fh-dev #lobby.on-browse .sv-join-row #join-input { flex: 1; min-width: 0; }
+html.fh-dev #lobby.on-browse .sv-join-row #join-btn { align-self: stretch; min-height: 58px; font-size: 22px !important; padding: 0 28px 0 20px !important; }
+html.fh-dev #lobby.on-browse .sv-browse-list { padding-top: 0 !important; }
+html.fh-dev #lobby.on-browse .sv-browse-top { display: flex; align-items: center; min-height: 32px; }
+html.fh-dev #lobby.on-browse .sv-browse-top #refresh-btn { margin: 0; min-height: 32px; font-size: 16px !important; padding: 0 20px 0 12px !important; }
+html.fh-dev #lobby.on-browse .li-join { background: rgba(255,255,255,.08); border-left: 0; color: var(--a3-text); clip-path: none; }
+html.fh-dev #lobby.on-browse .lobby-item:hover .li-join, html.fh-dev #lobby.on-browse .li-join:hover { background: linear-gradient(90deg, var(--a3-red), var(--a3-red2)); filter: none; }
