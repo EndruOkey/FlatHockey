@@ -264,6 +264,33 @@ function headH7(c, K, hx, hrx, hry, lt) {
   // obličej pod helmou (kůže), vpředu za plexi / mřížkou
   const face = new Path2D(); face.ellipse(cx + rx * 0.5, 0, rx * 0.58, ry * 0.8, 0, 0, Math.PI * 2);
   c.fillStyle = '#e8b896'; c.fill(face); c.strokeStyle = SKIN_OUT; c.lineWidth = 0.9; c.stroke(face);
+  if (ht === 'visor' || ht === 'shield') {   // plexi: skoro čiré sklo přes obličej, oblouk podle čela, jen rámeček a odlesky
+    const vv = globalThis.__fhVisorV ?? 2, V = new Path2D();
+    if (vv === 1) {   // P1 pás jako skica: přes celou šířku helmy, přední hrana kopíruje obrys o kousek před ním, zaoblené rohy
+      const n = 16, yb = ry * 1.02; V.moveTo(xb, -yb);
+      for (let i = 0; i <= n; i++) { const t = -1 + 2 * i / n, y = t * yb, x = cx + (rx * 1.1) * Math.sqrt(Math.max(0, 1 - (y / (ry * 1.1)) ** 2)); V.lineTo(Math.max(xb + rx * 0.12, x), y); }
+      V.lineTo(xb, yb); V.closePath();
+    } else if (vv === 2) {   // P2 poloviční hledí: jen přes oči, užší a mělké
+      const yb = ry * 0.72, x1 = cx + rx * 1.06, xt = xb - rx * 0.12; V.moveTo(xt, -yb); V.lineTo(x1 - rx * 0.12, -yb); V.quadraticCurveTo(x1 + rx * 0.06, 0, x1 - rx * 0.12, yb); V.lineTo(xb, yb); V.closePath();
+    } else if (vv === 4 || vv === 5) {   // P4/P5 mezi P2 a P3: hledí přes oči, mírně obepíná helmu do stran (P5 víc k uším)
+      const A = vv === 4 ? 0.82 : 1.0, ro = 1.08, ri = 0.97;
+      V.ellipse(cx, 0, rx * ro, ry * ro, 0, -A, A); V.ellipse(cx, 0, rx * ri, ry * ri, 0, A * 0.96, -A * 0.96, true); V.closePath();
+    } else {   // P3 obepínající: kopíruje elipsu helmy a zabíhá do stran až k uchům
+      V.ellipse(cx, 0, rx * 1.1, ry * 1.08, 0, -1.25, 1.25); V.lineTo(cx + rx * 0.1, ry * 0.86); V.ellipse(cx, 0, rx * 0.98, ry * 0.86, 0, 1.15, -1.15, true); V.closePath();
+    }
+    c.fillStyle = 'rgba(225,238,248,0.16)'; c.fill(V);
+    c.save(); c.clip(V); c.strokeStyle = 'rgba(255,255,255,0.95)'; c.lineWidth = 0.75; c.beginPath();
+    for (const y0 of [-0.5, 0.1]) { c.moveTo(xb + rx * 0.14, ry * (y0 + 0.25)); c.lineTo(xb + rx * 0.44, ry * (y0 - 0.15)); } c.stroke(); c.restore();
+    c.strokeStyle = '#8b949e'; c.lineWidth = 0.7; c.stroke(V);
+  } else if (ht === 'cage') {   // mřížka: stejný tvar jako plexi P2, ale přes celý obličej; drátěný rám + pruty, obličej prosvítá; zadní okraj zastrčený pod helmou
+    const yy = ry * 0.84, x1 = cx + rx * 1.12, xt = xb - rx * 0.12, D = new Path2D();
+    D.moveTo(xt, -yy); D.lineTo(x1 - rx * 0.16, -yy); D.quadraticCurveTo(x1 + rx * 0.08, 0, x1 - rx * 0.16, yy); D.lineTo(xt, yy); D.closePath();
+    c.save(); c.clip(D); c.beginPath();
+    for (const f of [0.42, 0.72]) { const x = xb + (x1 - xb) * f; c.moveTo(x, -yy); c.lineTo(x, yy); }   // svislé pruty
+    for (const f of [-0.4, 0, 0.4]) { c.moveTo(xt, yy * f); c.lineTo(x1 + rx * 0.1, yy * f); }   // vodorovné pruty
+    c.strokeStyle = '#6b7480'; c.lineWidth = 0.55; c.stroke(); c.restore();
+    c.strokeStyle = '#5a636e'; c.lineWidth = 0.9; c.stroke(D);
+  }
   c.strokeStyle = SKIN_OUT; c.lineWidth = 2.0; c.stroke(shell); c.fillStyle = hc; c.fill(shell);
   c.save(); c.clip(shell);
   c.fillStyle = 'rgba(10,16,40,0.10)'; c.fillRect(cx - rx, ry * 0.55, rx * 2, ry);   // spodní okraj o tón tmavší (skica)
@@ -271,19 +298,7 @@ function headH7(c, K, hx, hrx, hry, lt) {
   for (const sd of [-1, 1]) { c.moveTo(cx - rx * 1.05, sd * ry * 0.34); c.lineTo(xb, sd * ry * 0.44); } c.stroke();
   c.fillStyle = dk; for (const sd of [-1, 1]) for (const [x0, len] of [[-0.62, 0.42], [-0.08, 0.36]]) { c.beginPath(); c.roundRect(cx + rx * x0, sd * ry * 0.66 - ry * 0.1, rx * len, ry * 0.2, 0.25); c.fill(); }   // větrací štěrbiny
   c.restore();
-  if (ht === 'visor' || ht === 'shield') {   // plexi: skoro čiré sklo přes obličej, oblouk podle čela, jen rámeček a odlesky
-    const R = rx * 1.12, A = 1.0, yb = R * Math.sin(A);
-    const V = new Path2D(); V.moveTo(xb, -yb); V.lineTo(cx + R * Math.cos(A), -yb); V.arc(cx, 0, R, -A, A); V.lineTo(xb, yb); V.closePath();
-    c.fillStyle = 'rgba(225,238,248,0.16)'; c.fill(V);
-    c.save(); c.clip(V); c.strokeStyle = 'rgba(255,255,255,0.95)'; c.lineWidth = 0.75; c.beginPath();
-    for (const y0 of [-0.5, 0.1]) { c.moveTo(xb + rx * 0.14, ry * (y0 + 0.25)); c.lineTo(xb + rx * 0.44, ry * (y0 - 0.15)); } c.stroke(); c.restore();
-    c.strokeStyle = '#8b949e'; c.lineWidth = 0.7; c.stroke(V);
-  } else if (ht === 'cage') {   // mřížka přes obličej (kůže prosvítá), rám vystrčený před helmu
-    const x1 = cx + rx * 1.3, yy = ry * 0.86, D = new Path2D();
-    D.moveTo(xb, -yy); D.lineTo(x1 - rx * 0.18, -yy); D.quadraticCurveTo(x1, -yy, x1, -yy * 0.6); D.lineTo(x1, yy * 0.6); D.quadraticCurveTo(x1, yy, x1 - rx * 0.18, yy); D.lineTo(xb, yy); D.closePath();
-    c.save(); c.clip(D); c.beginPath(); for (const f of [0.38, 0.68]) { const x = xb + (x1 - xb) * f; c.moveTo(x, -yy); c.lineTo(x, yy); } for (const f of [-1 / 3, 1 / 3]) { c.moveTo(xb, yy * 2 * f); c.lineTo(x1, yy * 2 * f); }
-    c.strokeStyle = '#5f6872'; c.lineWidth = 0.7; c.stroke(); c.restore(); c.strokeStyle = '#5f6872'; c.lineWidth = 0.9; c.stroke(D);
-  }
+
 }
 
 function headDir(c, K, hv, hx, hrx, hry, hlx, hly, lod, lt) {
