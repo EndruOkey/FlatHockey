@@ -304,3 +304,29 @@ html.fh-dev #lobby.on-wait #wait-leave { order: 3; width: auto; min-height: 58px
 html.fh-dev #lobby.on-wait #wait-teams { gap: 88px; }
 @media (max-width: 1000px) { html.fh-dev #lobby.on-wait .sv-wait-body { grid-template-columns: 1fr; }
   html.fh-dev .sv-wait-actions, html.fh-dev .sv-wait-meta, html.fh-dev .sv-wait-vs-wrap, html.fh-dev #wait-invite-card { grid-column: 1; grid-row: auto; } }
+/* NÁVRH /dev: Najít zápas — akce vlevo (Založit, kód, Obnovit), obsah vpravo (otevřená lobby jako karty) */
+html.fh-dev #lobby.on-browse .sv-body-browse { display: grid !important; grid-template-columns: minmax(0, 600px) minmax(300px, 720px) !important; grid-template-rows: auto; column-gap: clamp(32px, 4vw, 72px); align-items: start; background: transparent; }
+html.fh-dev #lobby.on-browse .sv-browse-hero { grid-column: 1; display: flex; flex-direction: column; gap: 8px; justify-content: flex-start; background: transparent; border: 0; overflow: visible; }
+html.fh-dev #lobby.on-browse .sv-browse-hero::before { display: none; }
+html.fh-dev #lobby.on-browse .sv-browse-list { grid-column: 2; background: transparent; overflow: visible; }
+html.fh-dev #lobby.on-browse #create-btn { width: 100%; min-height: 100px; padding: 0 40px 0 28px !important; margin-bottom: 8px; }
+html.fh-dev #lobby.on-browse #create-btn .vmcta-title { font: italic 800 clamp(40px, 3.8vw, 56px)/.95 'Barlow Condensed', sans-serif; letter-spacing: .01em; text-transform: uppercase; }
+html.fh-dev #lobby.on-browse #create-btn .vmcta-sub { font: 700 14px 'Barlow', sans-serif; letter-spacing: .12em; opacity: .85; margin-top: 4px; }
+html.fh-dev #lobby.on-browse #create-btn .vmcta-icon { font-size: 48px !important; }
+html.fh-dev #lobby.on-browse .sv-join-row { flex-direction: column; gap: 8px; margin: 0; border: 0; }
+html.fh-dev #lobby.on-browse .sv-join-row #join-input { flex: none; min-height: 58px !important; padding: 0 20px !important; background: var(--a3-glass) !important; border: 1px solid var(--a3-line) !important; border-left: 6px solid var(--a3-ice) !important; font: italic 800 22px "Barlow Condensed", sans-serif !important; letter-spacing: .08em; color: var(--a3-text); }
+html.fh-dev #lobby.on-browse .sv-join-row #join-input::placeholder { color: var(--a3-mute); }
+html.fh-dev #lobby.on-browse .sv-join-row #join-btn, html.fh-dev #lobby.on-browse #refresh-btn { width: auto; align-self: flex-start; min-height: 58px; font-size: 26px !important; padding: 0 36px 0 22px !important; color: var(--a3-text); }
+html.fh-dev #lobby.on-browse #refresh-btn { margin-top: 16px; }
+html.fh-dev #lobby.on-browse .sv-browse-top { margin: 0 0 12px; }
+html.fh-dev #lobby.on-browse .sv-browse-top .sv-section-lbl { font: italic 800 15px 'Barlow Condensed', sans-serif; letter-spacing: .14em; color: var(--a3-ice); }
+html.fh-dev #lobby.on-browse .lobby-item { min-height: 76px; padding: 0 0 0 22px; margin: 0 0 8px; background: var(--a3-glass); border: 0; border-left: 6px solid var(--a3-ice); clip-path: var(--a3-cut-panel); }
+html.fh-dev #lobby.on-browse .lobby-item:hover { background: rgba(127,212,255,.12); }
+html.fh-dev #lobby.on-browse .lobby-item .li-name { font: italic 800 30px/1 'Barlow Condensed', sans-serif; letter-spacing: .01em; color: var(--a3-text); }
+html.fh-dev #lobby.on-browse .lobby-item .li-sub { font: 500 16px 'Barlow', sans-serif; color: var(--a3-mute); margin-top: 4px; }
+html.fh-dev #lobby.on-browse .lobby-item .li-cnt { font: italic 800 26px 'Barlow Condensed', sans-serif; color: var(--a3-text); }
+html.fh-dev #lobby.on-browse .li-join { align-self: stretch; margin-left: 20px; padding: 0 34px 0 22px; border: 0; border-left: 6px solid #fff; background: linear-gradient(90deg, var(--a3-red), var(--a3-red2)); color: #fff; font-size: 24px; }
+html.fh-dev #lobby.on-browse .li-join:hover { background: linear-gradient(90deg, var(--a3-red), var(--a3-red2)); filter: brightness(1.12); }
+html.fh-dev #lobby.on-browse .lobby-empty { padding: 24px; outline: 1px dashed rgba(255,255,255,.22); outline-offset: -1px; font: 600 18px 'Barlow', sans-serif; color: var(--a3-mute); }
+@media (max-width: 1000px) { html.fh-dev #lobby.on-browse .sv-body-browse { grid-template-columns: 1fr !important; }
+  html.fh-dev #lobby.on-browse .sv-browse-hero, html.fh-dev #lobby.on-browse .sv-browse-list { grid-column: 1; } }
